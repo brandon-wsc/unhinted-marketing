@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #6366f1;
+  --color-primary-hover: #818cf8;
+  --color-destructive: #ef4444;
+  --color-ring: #6366f1;
+}
+
+:root,
+:root[data-theme="light"] {
+  --color-background: #fafafa;
+  --color-foreground: #18181b;
+  --color-muted: #71717a;
+  --color-border: #e4e4e7;
+  --color-card: #ffffff;
+  --color-hover: rgb(0 0 0 / 0.05);
+  --color-destructive-soft: rgb(239 68 68 / 0.1);
+  --color-destructive-text: #b91c1c;
+  --shadow-color: rgb(0 0 0 / 0.08);
+}
+
+:root.dark,
+:root[data-theme="dark"] {
+  --color-background: #0a0a0b;
+  --color-foreground: #fafafa;
+  --color-muted: #71717a;
+  --color-border: #27272a;
+  --color-card: #18181b;
+  --color-hover: rgb(255 255 255 / 0.05);
+  --color-destructive-soft: rgb(239 68 68 / 0.1);
+  --color-destructive-text: #fca5a5;
+  --shadow-color: rgb(0 0 0 / 0.35);
+}
+
+body {
+  @apply bg-[var(--color-background)] text-[var(--color-foreground)] font-sans antialiased min-h-screen transition-colors duration-200;
+}

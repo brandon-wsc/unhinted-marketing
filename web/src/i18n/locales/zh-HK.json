@@ -1,0 +1,70 @@
+{
+  "app": {
+    "name": "Unhinted",
+    "title": "Unhinted Marketing"
+  },
+  "common": {
+    "loading": "載入中…",
+    "email": "電郵",
+    "password": "密碼",
+    "showPassword": "顯示密碼",
+    "hidePassword": "隱藏密碼",
+    "notAvailable": "—"
+  },
+  "header": {
+    "menu": {
+      "guest": "訪客",
+      "language": "語言",
+      "theme": "主題"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "登入",
+      "subtitle": "使用你的帳戶存取 Unhinted Marketing Dashboard",
+      "submit": "登入",
+      "submitting": "登入中…",
+      "noAccount": "還未有帳戶？",
+      "registerLink": "立即註冊"
+    },
+    "register": {
+      "title": "建立帳戶",
+      "subtitle": "註冊後會自動建立你的公司 workspace",
+      "displayName": "顯示名稱",
+      "organizationName": "公司名稱（選填）",
+      "passwordHint": "密碼（至少 8 字）",
+      "confirmPassword": "確認密碼",
+      "submit": "建立帳戶",
+      "submitting": "建立中…",
+      "hasAccount": "已有帳戶？",
+      "loginLink": "返回登入"
+    },
+    "logout": "登出"
+  },
+  "dashboard": {
+    "title": "Marketing Dashboard",
+    "description": "你已登入。Phase 3 會在此顯示 HK 熱搜推薦問題、Chat Mode 同 Preview Mode。",
+    "workspace": "Workspace",
+    "account": "Account",
+    "role": "Role: {{role}}",
+    "userId": "ID: {{id}}…"
+  },
+  "theme": {
+    "label": "主題",
+    "light": "淺色模式",
+    "dark": "深色模式",
+    "system": "跟隨系統"
+  },
+  "errors": {
+    "loginFailed": "登入失敗",
+    "registrationFailed": "註冊失敗",
+    "invalidEmail": "電郵格式不正確",
+    "passwordTooShort": "密碼至少需要 8 個字元",
+    "passwordMismatch": "兩次輸入嘅密碼唔一致",
+    "emailAlreadyRegistered": "此電郵已被註冊",
+    "invalidCredentials": "電郵或密碼不正確",
+    "accountDisabled": "帳戶已被停用",
+    "invalidRefreshToken": "登入已過期，請重新登入",
+    "requestFailed": "請求失敗（{{status}}）"
+  }
+}
