@@ -1,0 +1,70 @@
+{
+  "app": {
+    "name": "Unhinted",
+    "title": "Unhinted Marketing"
+  },
+  "common": {
+    "loading": "Loading…",
+    "email": "Email",
+    "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "notAvailable": "—"
+  },
+  "header": {
+    "menu": {
+      "guest": "Guest",
+      "language": "Language",
+      "theme": "Theme"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "subtitle": "Sign in to access the Unhinted Marketing Dashboard",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "noAccount": "Don't have an account?",
+      "registerLink": "Create one"
+    },
+    "register": {
+      "title": "Create account",
+      "subtitle": "A company workspace will be created automatically after registration",
+      "displayName": "Display name",
+      "organizationName": "Company name (optional)",
+      "passwordHint": "Password (at least 8 characters)",
+      "confirmPassword": "Confirm password",
+      "submit": "Create account",
+      "submitting": "Creating…",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Sign in"
+    },
+    "logout": "Sign out"
+  },
+  "dashboard": {
+    "title": "Marketing Dashboard",
+    "description": "You're signed in. Phase 3 will show HK trending question recommendations, Chat Mode, and Preview Mode here.",
+    "workspace": "Workspace",
+    "account": "Account",
+    "role": "Role: {{role}}",
+    "userId": "ID: {{id}}…"
+  },
+  "theme": {
+    "label": "Theme",
+    "light": "Light mode",
+    "dark": "Dark mode",
+    "system": "System"
+  },
+  "errors": {
+    "loginFailed": "Sign in failed",
+    "registrationFailed": "Registration failed",
+    "invalidEmail": "Invalid email address",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordMismatch": "Passwords do not match",
+    "emailAlreadyRegistered": "This email is already registered",
+    "invalidCredentials": "Incorrect email or password",
+    "accountDisabled": "This account has been disabled",
+    "invalidRefreshToken": "Session expired. Please sign in again",
+    "requestFailed": "Request failed ({{status}})"
+  }
+}
