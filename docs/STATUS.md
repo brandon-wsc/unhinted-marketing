@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-07-19  
+> **Last updated:** 2026-07-20  
 > **Overall:** Phase 0 largely complete · Phase 1+ not started  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted`
 
@@ -20,7 +20,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | App header (logo + settings dropdown) | ✅ Done |
 | HK hot search ingestion | ⬜ Not started |
 | LangGraph session / preview / confirm | ⬜ Not started |
-| pgvector on dev DB | ⬜ Not installed yet |
+| pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
 **Current user-facing flow:** Register or login → protected dashboard placeholder. No marketing agent, chat, or publish yet.
 
@@ -89,7 +89,7 @@ API docs: http://localhost:8000/docs
 
 **Not migrated yet:** `sessions`, `raw_news_events`, `preview_drafts`, `recommended_questions`, etc.
 
-**pgvector:** Not installed on `192.168.5.20:5434` as of last check. Required before Phase 1 embeddings; ops will install on dev server.
+**pgvector:** Dev DB on Synology NAS runs **`pgvector/pgvector:pg18`** (PostgreSQL **18.4**). PG 18+ Docker images mount data at **`/var/lib/postgresql`** (not `/var/lib/postgresql/data`). After restore/migrate, run `CREATE EXTENSION vector;` on `unhinted`.
 
 ### Frontend (`web/`)
 
@@ -158,11 +158,10 @@ See `.env.example`. Local `.env` is gitignored.
 
 ## Known Gaps / Next Steps
 
-1. **Install pgvector** on dev PostgreSQL before Phase 1 migrations.
-2. **Phase 1:** Hot search worker (Google Trends HK + News RSS) → `raw_news_events`; question cache API.
-3. **Phase 2:** LangGraph session graph + `POST /sessions`, SSE preview updates, stub confirm.
-4. **Phase 3:** Replace dashboard placeholder with chat → agent → preview → confirm UI.
-5. **Hardening:** Auth rate limits, `JWT_SECRET` rotation guidance, basic API tests.
+1. **Phase 1:** Hot search worker (Google Trends HK + News RSS) → `raw_news_events`; question cache API.
+2. **Phase 2:** LangGraph session graph + `POST /sessions`, SSE preview updates, stub confirm.
+3. **Phase 3:** Replace dashboard placeholder with chat → agent → preview → confirm UI.
+4. **Hardening:** Auth rate limits, `JWT_SECRET` rotation guidance, basic API tests.
 
 ---
 

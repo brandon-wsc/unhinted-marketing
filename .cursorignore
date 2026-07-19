@@ -1,0 +1,4 @@
+# Local secrets (Cursor AI should not read these)
+.env
+.env.*
+!.env.example
