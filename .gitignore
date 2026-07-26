@@ -30,7 +30,7 @@ web/.vite/
 secrets/
 credentials.json
 
-# OKF / media cache (generated)
+# Media cache (generated)
 .cache/
 uploads/
 
