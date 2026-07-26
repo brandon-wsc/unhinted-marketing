@@ -64,11 +64,11 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 ### Phase 2 — LangGraph Session + API · **0%**
 
-Not started: `sessions`, `session_messages`, `preview_drafts`, LangGraph graph, SSE, confirm handler.
+Not started: `sessions`, `session_messages`, `preview_drafts`, LangGraph graph (see ROADMAP node list: `trend_searcher`, `brainstormer`, `executor_post`, `executor_image_*`, `reviewer`, …), SSE, confirm handler.
 
-### Phase 3 — React Dashboard (product UI) · **~10%**
+### Phase 3 — React Dashboard + Meta Signals (product UI) · **~10%**
 
-Shell only: auth pages, header, theme/i18n, dashboard cards showing user/org info. No chat, preview, or confirm UI.
+Shell only: auth pages, header, theme/i18n, dashboard cards showing user/org info. No chat, preview, confirm UI, or Meta signal ingest yet.
 
 ---
 
@@ -117,7 +117,7 @@ Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template
 | `entities` | Companies (and future entity types) |
 | `organization_members` | User ↔ company RBAC |
 | `refresh_tokens` | Hashed refresh token families |
-| `raw_news_events` | Ingested HK signals (Google Trends HK; Meta API in Phase 2) |
+| `raw_news_events` | Ingested HK signals (Google Trends HK; Meta API in Phase 3) |
 | `edges` | Graph links (signal → topic entities) |
 | `recommended_questions` | 12h cached landing question JSON |
 
@@ -195,8 +195,8 @@ See `.env.example`. Local `.env` is gitignored.
 
 ## Known Gaps / Next Steps
 
-1. **Phase 2:** Meta Graph API hot search worker; LangGraph session graph + `POST /sessions`, SSE preview updates, stub confirm.
-2. **Phase 3:** Replace dashboard placeholder with chat → agent → preview → confirm UI; wire recommended questions cards.
+1. **Phase 2:** LangGraph session graph (`trend_searcher` → `brainstormer` → `executor_post` → `reviewer` → `executor_image_*`); `POST /sessions`, SSE preview updates, stub confirm.
+2. **Phase 3:** Meta Graph API hot search worker; React dashboard (chat → preview → confirm UI); wire recommended questions cards.
 3. **Hardening:** Auth rate limits, `JWT_SECRET` rotation guidance, basic API tests.
 
 ---
@@ -209,7 +209,7 @@ From ROADMAP; current completion:
 2. Landing shows ≥5 recommended questions (~12h cache) — ✅ (API; UI in Phase 3)  
 3. User can register, login, access protected dashboard — ✅  
 4. Chat → can/cannot recommendation → preview — ⬜  
-5. Unlimited preview revisions + Critic gate — ⬜  
+5. Unlimited preview revisions + reviewer gate — ⬜  
 6. Confirm posts via platform API + receipt — ⬜  
 7. Claims traceable to `source_signal_ids` — ⬜ (signals stored; session grounding in Phase 2)  
 
