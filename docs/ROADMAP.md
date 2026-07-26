@@ -8,7 +8,7 @@
 
 ## Vision
 
-An AI marketing assistant that **continuously scans HK market signals** (Google Trends first; Meta & LIHKG later), surfaces **actionable content recommendations** tied to company profile and personas, and guides users through **iterative preview** until they confirm—at which point posts go out via **traditional platform APIs** (no LLM involved in publish).
+An AI marketing assistant that **continuously scans HK market signals** (Google Trends in MVP; Meta Graph API in Phase 2), surfaces **actionable content recommendations** tied to company profile and personas, and guides users through **iterative preview** until they confirm—at which point posts go out via **traditional platform APIs** (no LLM involved in publish).
 
 ---
 
@@ -21,7 +21,7 @@ An AI marketing assistant that **continuously scans HK market signals** (Google 
 | Autopilot vs session | Hot search & question batch = **background workers**; preview = **on-demand session** |
 | Grounding | All factual claims cite `source_signal_ids` verifiable in PostgreSQL |
 | BYOK | LiteLLM routes cheap models (scan/summary) vs strong models (strategy/critic) |
-| Knowledge split | PostgreSQL = operational + graph; OKF = curated news topics + personas (no PII) |
+| Knowledge | PostgreSQL only — signals, topics, personas, graph edges in JSONB |
 | Preview | **Revision chain** — user can keep requesting edits until satisfied |
 | Auth boundary | **JWT access + refresh**; all session APIs require authenticated user; Confirm validates user owns session |
 
@@ -140,9 +140,9 @@ NOT in graph: hot_search_worker · question_generator · POST /confirm · platfo
 | Agent | LangGraph + LiteLLM | Structured output via Pydantic |
 | DB | PostgreSQL 16+ | pgvector for signal similarity (MVP) |
 | Cache / queue | Redis (optional MVP) | Question cache, job queue, rate limits |
-| Media | S3 (Phase 2) | Generated images, OKF bundle archive |
+| Media | S3 (Phase 2) | Generated images, media archive |
 | Frontend | React + Vite + Tailwind + shadcn/ui | Login panel + dashboard |
-| Hot search | pytrends / SerpAPI, RSS | LIHKG scrape Phase 2 |
+| Hot search | pytrends / SerpAPI | Meta Graph API Phase 2 |
 
 ---
 
@@ -160,12 +160,11 @@ unhinted-marketing/
 │   ├── session/             # LangGraph graph, nodes, checkpointer
 │   ├── reasoning/           # critic, planner (autopilot)
 │   ├── tools/               # query_market_trends, publish adapters (stubs → real)
-│   ├── memory/              # PG repos, pgvector, OKF reader
+│   ├── memory/              # PG repos, pgvector, persona seed
 │   ├── reliability/         # validator, budget breaker, hallucination check
 │   └── llm/                 # LiteLLM router, BYOK config
 ├── schemas/                 # JSON Schema + Pydantic models
 ├── migrations/              # PostgreSQL (Alembic)
-├── knowledge/               # OKF bundle (news topics + personas)
 ├── web/                     # React dashboard + login panel
 └── docs/
     └── ROADMAP.md           # this file
@@ -181,7 +180,7 @@ unhinted-marketing/
 | `organization_members` | User ↔ company RBAC |
 | `refresh_tokens` | Rotating refresh token store (hashed) |
 | `raw_news_events` | Every ingested item (url, excerpt, url_hash, signal_id) |
-| `entities` | brands, topics, campaigns, personas, **companies** (`okf_path` bridge) |
+| `entities` | brands, topics, personas, campaigns, **companies** (`profile` JSONB) |
 | `edges` | MENTIONS, AFFECTS, TARGETS, PERFORMED_ON + source_signal_id |
 | `campaigns` | Operational campaign state |
 | `sessions` | User session state (mode, company_id, **user_id**) |
@@ -193,28 +192,27 @@ unhinted-marketing/
 
 ---
 
-## OKF Knowledge (Hybrid)
+## Knowledge (PostgreSQL)
 
-**In OKF:** curated news topics, marketing personas (no PII)  
-**In PostgreSQL:** raw feeds, operational state, embeddings
+All curated marketing knowledge lives in PostgreSQL — no markdown bundle in repo.
 
-```
-knowledge/
-  index.md
-  news/topics/{slug}.md      # promoted when velocity/confidence thresholds met
-  personas/{slug}.md         # 3–7 human-authored archetypes, cross-linked to news
-```
+| Store | Contents |
+|-------|----------|
+| `raw_news_events` | Ingested HK signals (title, excerpt, metrics, provenance) |
+| `entities` (type `topic`) | Promoted hot-search topics (`profile` JSONB) |
+| `entities` (type `persona`) | Marketing personas (`profile` JSONB; seeded defaults) |
+| `edges` | Graph links (`AFFECTS`, etc.) with `source_signal_id` |
 
----
+Personas are seeded on first question generation; promoted topics are created by the `promote` worker.
 
 ## Hot Search Sources (Phased)
 
 | Phase | Source | Method |
 |-------|--------|--------|
 | MVP | Google Trends HK | pytrends / SerpAPI |
-| MVP | Google News HK RSS | feedparser |
-| P2 | LIHKG hot | scrape (Playwright), graceful degrade |
-| P3 | Meta trending / insights | Graph API (business account) |
+| P2 | Meta trending / insights | Graph API (business account) |
+
+Google News RSS was evaluated and **removed** — poor HK relevance, redirect URLs, not true hot search. No news RSS in future phases.
 
 All metrics stored in PG with provenance before LLM reads them.
 
@@ -241,35 +239,36 @@ All metrics stored in PG with provenance before LLM reads them.
 
 ## Phase Plan
 
-### Phase 0 — Project Bootstrap ✅ (in progress)
+### Phase 0 — Project Bootstrap ✅
 
 - [x] Git repository initialized
 - [x] `docs/ROADMAP.md`
 - [x] User system design (users, org members, JWT auth)
-- [ ] `.env.example` (dev DB at `192.168.5.20:5434`)
-- [ ] Python project skeleton (`pyproject.toml`, `cmd/`, `internal/`)
-- [ ] Auth API: register, login, refresh, logout, me
-- [ ] Alembic migration: `users`, `organization_members`, `refresh_tokens`
-- [ ] React login panel (`web/`) — `/login`, `/register`, auth context
-- [ ] Minimal README
+- [x] `.env.example` (dev DB at `192.168.5.20:5434`)
+- [x] Python project skeleton (`pyproject.toml`, `cmd/`, `internal/`)
+- [x] Auth API: register, login, refresh, logout, me
+- [x] Alembic migration: `users`, `organization_members`, `refresh_tokens`
+- [x] React login panel (`web/`) — `/login`, `/register`, auth context
+- [x] Minimal README (+ GETTING_STARTED for dev setup)
 
-### Phase 1 — Data & Autopilot Backend
+### Phase 1 — Data & Autopilot Backend ✅
 
 **Goal:** Background ingestion + landing-page question cache; no UI yet (CLI/logs).
 
-- [ ] PostgreSQL migrations: `raw_news_events`, `entities`, `edges`, `recommended_questions`
-- [ ] `hot_search_worker` — Google Trends HK + News RSS → PG
-- [ ] `question_generator_worker` — company profile + signals → JSON, cache 12h
-- [ ] LiteLLM BYOK config loader
-- [ ] OKF scaffold: 1 sample news topic + 2 personas + cross-links
-- [ ] `news_promoter` worker — threshold → OKF topic markdown
+- [x] PostgreSQL migrations: `raw_news_events`, `entities`, `edges`, `recommended_questions`
+- [x] `hot_search_worker` — Google Trends HK → PG
+- [x] `question_generator_worker` — company profile + signals → JSON, cache 12h
+- [x] LiteLLM BYOK config loader
+- [x] Default personas in `entities` (type=persona, seeded on first use)
+- [x] `news_promoter` worker — threshold → topic entity + edge in PG
 
 **Exit criteria:** CLI shows top HK signals; cached recommended questions JSON served via API.
 
-### Phase 2 — LangGraph Session + API
+### Phase 2 — LangGraph Session + API + Meta Signals
 
-**Goal:** Full chat → agent → iterative preview loop; Confirm stubbed.
+**Goal:** Full chat → agent → iterative preview loop; Confirm stubbed; Meta Graph API for HK market signals.
 
+- [ ] Meta Graph API hot search worker (trending / page insights → `raw_news_events`)
 - [ ] Migrations: `sessions`, `session_messages`, `preview_drafts`
 - [ ] LangGraph graph: CHAT → AGENT → PREVIEW (revise loop) + PostgreSQL checkpointer
 - [ ] Nodes: `agent_recommend` (can_do / cannot_do), `classify_intent`, `edit_copy`, `critic`
@@ -295,10 +294,9 @@ All metrics stored in PG with provenance before LLM reads them.
 
 **Exit criteria:** End-to-end demo in browser for one platform (TBD: IG / FB / Threads).
 
-### Phase 4 — Live Publish & HK Sources
+### Phase 4 — Live Publish
 
 - [ ] Real Meta/IG Graph API integration in Confirm handler
-- [ ] LIHKG hot scrape worker
 - [ ] Budget circuit breaker (atomic PG updates)
 - [ ] Redis for queue + question cache (if not already)
 - [ ] S3 for media assets
@@ -308,7 +306,7 @@ All metrics stored in PG with provenance before LLM reads them.
 
 - [ ] Full `agent_orchestrator` autopilot loop (Scan → Triage → Plan → Critic → Execute)
 - [ ] `launch_ad_campaign` with approval_token
-- [ ] OKF Git sync + S3 bundle archive
+- [ ] Knowledge export API (optional JSON dump for admin)
 - [ ] Dedicated vector DB migration path from pgvector
 
 ---
@@ -335,7 +333,7 @@ All metrics stored in PG with provenance before LLM reads them.
 | 2 | First publish platform | Instagram (Meta Graph API) |
 | 3 | Image provider | OpenAI DALL-E 3 |
 | 4 | Redis in MVP | PG job queue fallback; add Redis when provisioned |
-| 5 | LIHKG | Phase 2 (after Google sources stable) |
+| 5 | Secondary HK signal source | Meta Graph API (Phase 2); no news RSS |
 | 6 | Migration tool | Alembic (Python-native) |
 | 7 | Auth provider (MVP) | Email/password JWT; OAuth Phase 4 |
 
@@ -357,5 +355,4 @@ All metrics stored in PG with provenance before LLM reads them.
 
 - [LangGraph docs](https://langchain-ai.github.io/langgraph/)
 - [LiteLLM](https://docs.litellm.ai/)
-- [OKF v0.1](./OKF.md) _(to be written)_
 - [API spec](./API.md) _(to be written)_

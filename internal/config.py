@@ -14,6 +14,21 @@ class Settings(BaseSettings):
     refresh_cookie_secure: bool = False
     refresh_cookie_samesite: str = "lax"
 
+    # LLM (BYOK via env; org keys in DB deferred to Phase 4)
+    openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
+    llm_api_base: str | None = None
+    llm_cheap_model: str = "gpt-4o-mini"
+    llm_medium_model: str = "gpt-4o-mini"
+    llm_strong_model: str = "gpt-4o"
+
+    # Perception / workers
+    question_cache_ttl_hours: int = 12
+    news_promote_trends_rank_max: int = 10
+    news_promote_window_hours: int = 24
+    scheduler_hot_search_interval_minutes: int = 60
+    scheduler_questions_interval_hours: int = 12
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

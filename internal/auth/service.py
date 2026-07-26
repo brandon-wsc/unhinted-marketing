@@ -14,7 +14,6 @@ from internal.auth.jwt import (
     hash_refresh_token,
     verify_password,
 )
-from internal.config import settings
 from internal.memory.models import Entity, OrganizationMember, RefreshToken, User
 
 EMAIL_RE = re.compile(r"^[^@\s]+@([^@\s]+\.)+[^@\s]+$")
