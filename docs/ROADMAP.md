@@ -8,7 +8,7 @@
 
 ## Vision
 
-An AI marketing assistant that **continuously scans HK market signals** (Google Trends in MVP; Meta Graph API in Phase 2), surfaces **actionable content recommendations** tied to company profile and personas, and guides users through **iterative preview** until they confirm—at which point posts go out via **traditional platform APIs** (no LLM involved in publish).
+An AI marketing assistant that **continuously scans HK market signals** (Google Trends in MVP; Meta Graph API in Phase 3), surfaces **actionable content recommendations** tied to company profile and personas, and guides users through **iterative preview** until they confirm—at which point posts go out via **traditional platform APIs** (no LLM involved in publish).
 
 ---
 
@@ -20,7 +20,7 @@ An AI marketing assistant that **continuously scans HK market signals** (Google 
 | Confirm / publish | **Traditional HTTP handler** — validate token, call platform API, write receipt. Zero LLM. |
 | Autopilot vs session | Hot search & question batch = **background workers**; preview = **on-demand session** |
 | Grounding | All factual claims cite `source_signal_ids` verifiable in PostgreSQL |
-| BYOK | LiteLLM routes cheap models (scan/summary) vs strong models (strategy/critic) |
+| BYOK | LiteLLM routes cheap models (scan/summary) vs strong models (strategy/reviewer) |
 | Knowledge | PostgreSQL only — signals, topics, personas, graph edges in JSONB |
 | Preview | **Revision chain** — user can keep requesting edits until satisfied |
 | Auth boundary | **JWT access + refresh**; all session APIs require authenticated user; Confirm validates user owns session |
@@ -90,18 +90,17 @@ Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly co
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Agent Mode                                                     │
-│  • Text recommendation split into:                              │
-│    - can_do[]   (e.g. social post, carousel copy)               │
-│    - cannot_do[] (e.g. offline event, brand collab)             │
-│  • draft_copy with grounding                                    │
-│  • User OK → generate image → enter Preview                     │
+│  • trend_searcher surfaces relevant HK signals                  │
+│  • brainstormer: can_do[] / cannot_do[] + brief ideas           │
+│  • executor_post: brief → grounded post copy                     │
+│  • User OK → executor_image_plan → executor_image_gen → Preview │
 └────────────────────────────┬────────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Preview Mode (iterative)                                       │
 │  • Layout: left chat (narrow) · right preview (wide)            │
 │  • User keeps requesting edits until satisfied                  │
-│  • Each edit → new revision → Critic gate → SSE update          │
+│  • Each edit → new revision → reviewer gate → SSE update        │
 │  • Chat "可以出" ≠ publish — UI Confirm button only           │
 └────────────────────────────┬────────────────────────────────────┘
                              ▼
@@ -120,13 +119,42 @@ Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly co
 LangGraph implements the **Session LLM Zone** only:
 
 ```
-nodes:  chat · agent_recommend · classify_intent · edit_copy · gen_image_prompt · critic · ack_confirm
-edges:  conditional on critic pass/fail, intent (revise | confirm_intent | chat)
-state:  messages, mode, draft, revision, pending_confirm
+flow:   route_intent → load_context → trend_searcher → brainstormer
+        → executor_post → grounding_check → reviewer
+        → executor_image_plan → executor_image_gen → preview
+        revise loop: edit_copy → reviewer → (optional) executor_image_plan → executor_image_gen
+
+nodes:
+  control:     route_intent · load_context · chat · ack_confirm
+  research:    trend_searcher          # session on-demand PG signal lookup (not background ingest)
+  strategy:    brainstormer            # brief ideas, can_do[] / cannot_do[], angles
+  execute:     executor_post           # brief → publish-ready post copy
+               executor_image_plan     # post + brand context → image prompt / layout spec
+               executor_image_gen      # dispatch image worker (no LLM; async job)
+  revise:      edit_copy
+  quality:     grounding_check · reviewer
+
+edges:  conditional on reviewer pass/fail, intent (chat | start | revise | confirm_intent)
+state:  messages, mode, brief, draft, revision, source_signal_ids, pending_confirm
 checkpoint: PostgreSQL (LangGraph checkpointer)
 
-NOT in graph: hot_search_worker · question_generator · POST /confirm · platform adapters
+NOT in graph: hot_search_worker · question_generator · DALL-E worker · POST /confirm · platform adapters
 ```
+
+| Node | Type | Output |
+|------|------|--------|
+| `route_intent` | LLM / classifier | Route: `chat` · `start` · `revise` · `confirm_intent` |
+| `load_context` | deterministic | Company profile + personas from PG |
+| `trend_searcher` | tool + LLM (cheap) | Ranked HK signals + `source_signal_ids` for session |
+| `chat` | LLM | Conversational reply; no deliverable |
+| `brainstormer` | LLM (medium) | Brief ideas, `can_do[]` / `cannot_do[]`, target persona |
+| `executor_post` | LLM (medium) | Full post copy (caption, hashtags, CTA) with grounding |
+| `executor_image_plan` | LLM (medium) | Structured image prompt + composition spec |
+| `executor_image_gen` | async dispatch | Enqueue worker → asset URL in `preview_drafts` |
+| `edit_copy` | LLM (medium) | Revised post copy (preview loop) |
+| `grounding_check` | deterministic | Verify `source_signal_ids` exist in PG |
+| `reviewer` | LLM (strong) | Compliance, tone, persona fit, platform rules |
+| `ack_confirm` | LLM (cheap) | Acknowledge publish intent; UI Confirm button only |
 
 ---
 
@@ -142,7 +170,7 @@ NOT in graph: hot_search_worker · question_generator · POST /confirm · platfo
 | Cache / queue | Redis (optional MVP) | Question cache, job queue, rate limits |
 | Media | S3 (Phase 2) | Generated images, media archive |
 | Frontend | React + Vite + Tailwind + shadcn/ui | Login panel + dashboard |
-| Hot search | pytrends / SerpAPI | Meta Graph API Phase 2 |
+| Hot search | pytrends / SerpAPI | Meta Graph API Phase 3 |
 
 ---
 
@@ -158,7 +186,7 @@ unhinted-marketing/
 │   ├── auth/                # JWT, password, deps, refresh tokens
 │   ├── perception/          # hot_search, news_scanner, news_promoter
 │   ├── session/             # LangGraph graph, nodes, checkpointer
-│   ├── reasoning/           # critic, planner (autopilot)
+│   ├── reasoning/           # reviewer helpers, planner (Phase 5 autopilot)
 │   ├── tools/               # query_market_trends, publish adapters (stubs → real)
 │   ├── memory/              # PG repos, pgvector, persona seed
 │   ├── reliability/         # validator, budget breaker, hallucination check
@@ -210,7 +238,7 @@ Personas are seeded on first question generation; promoted topics are created by
 | Phase | Source | Method |
 |-------|--------|--------|
 | MVP | Google Trends HK | pytrends / SerpAPI |
-| P2 | Meta trending / insights | Graph API (business account) |
+| P3 | Meta trending / insights | Graph API (business account) |
 
 Google News RSS was evaluated and **removed** — poor HK relevance, redirect URLs, not true hot search. No news RSS in future phases.
 
@@ -220,7 +248,7 @@ All metrics stored in PG with provenance before LLM reads them.
 
 ## External Tools (Schema-Validated)
 
-1. **`query_market_trends`** (read-only) — scanning worker, high frequency  
+1. **`query_market_trends`** (read-only) — background worker + `trend_searcher` node in session  
 2. **`publish_social_post`** — called only from Confirm handler, not LangGraph  
 3. **`launch_ad_campaign`** — Phase 3, requires `approval_token` + atomic budget cap  
 
@@ -231,7 +259,7 @@ All metrics stored in PG with provenance before LLM reads them.
 - Max daily ad spend & publish rate limits  
 - Topic/region blocklists  
 - `approval_token` required per preview revision before Confirm enabled  
-- Read-only degradation when Critic confidence below threshold  
+- Read-only degradation when reviewer confidence below threshold  
 - Outbound claims must cite verifiable `source_signal_ids`  
 - Session endpoints enforce `user_id` ownership  
 
@@ -264,25 +292,25 @@ All metrics stored in PG with provenance before LLM reads them.
 
 **Exit criteria:** CLI shows top HK signals; cached recommended questions JSON served via API.
 
-### Phase 2 — LangGraph Session + API + Meta Signals
+### Phase 2 — LangGraph Session + API
 
-**Goal:** Full chat → agent → iterative preview loop; Confirm stubbed; Meta Graph API for HK market signals.
+**Goal:** Full chat → agent → iterative preview loop; Confirm stubbed. HK signals from Google Trends (Phase 1) until Meta ingest lands in Phase 3.
 
-- [ ] Meta Graph API hot search worker (trending / page insights → `raw_news_events`)
 - [ ] Migrations: `sessions`, `session_messages`, `preview_drafts`
 - [ ] LangGraph graph: CHAT → AGENT → PREVIEW (revise loop) + PostgreSQL checkpointer
-- [ ] Nodes: `agent_recommend` (can_do / cannot_do), `classify_intent`, `edit_copy`, `critic`
+- [ ] Session nodes: `route_intent`, `load_context`, `trend_searcher`, `brainstormer`, `executor_post`, `executor_image_plan`, `executor_image_gen`, `edit_copy`, `grounding_check`, `reviewer`, `chat`, `ack_confirm`
 - [ ] FastAPI: `POST /sessions`, `POST /messages`, `GET /events` (SSE)
-- [ ] Image generation worker (prompt → asset URL in `preview_drafts`)
+- [ ] Image generation worker (`executor_image_gen` dispatches; DALL-E → asset URL in `preview_drafts`)
 - [ ] `POST /sessions/{id}/confirm` — **traditional handler**, stub platform adapter
 - [ ] Tool schema validators (Pydantic + JSON Schema) for `query_market_trends`
 
 **Exit criteria:** curl/HTTPie flow from question → draft → 3 revisions → confirm → receipt row.
 
-### Phase 3 — React Dashboard
+### Phase 3 — React Dashboard + Meta Signals
 
-**Goal:** Observability + session UI; Confirm is a button, not chat.
+**Goal:** Observability + session UI; Confirm is a button, not chat. Add Meta Graph API as secondary HK signal source.
 
+- [ ] Meta Graph API hot search worker (trending / page insights → `raw_news_events`)
 - [ ] Vite + React + Tailwind + shadcn/ui in `web/`
 - [ ] Protected routes; redirect unauthenticated → `/login`
 - [ ] Landing: recommended questions cards (poll or SSE refresh)
@@ -304,7 +332,7 @@ All metrics stored in PG with provenance before LLM reads them.
 
 ### Phase 5 — Autonomous Extensions (Optional)
 
-- [ ] Full `agent_orchestrator` autopilot loop (Scan → Triage → Plan → Critic → Execute)
+- [ ] Full `agent_orchestrator` autopilot loop (Scan → Triage → Plan → Review → Execute)
 - [ ] `launch_ad_campaign` with approval_token
 - [ ] Knowledge export API (optional JSON dump for admin)
 - [ ] Dedicated vector DB migration path from pgvector
@@ -317,10 +345,13 @@ All metrics stored in PG with provenance before LLM reads them.
 |------|------------|---------|
 | Hot search summarize | cheap | worker |
 | Recommended questions (12h) | cheap | worker |
-| can_do / cannot_do + draft copy | medium | LangGraph |
-| Preview edit (copy) | medium | LangGraph |
-| Critic / compliance | strong | LangGraph |
-| Image prompt | medium | worker |
+| Session trend search (`trend_searcher`) | cheap | LangGraph |
+| Brainstorm brief (`brainstormer`) | medium | LangGraph |
+| Brief → post (`executor_post`) | medium | LangGraph |
+| Preview edit (`edit_copy`) | medium | LangGraph |
+| Reviewer / compliance (`reviewer`) | strong | LangGraph |
+| Image plan (`executor_image_plan`) | medium | LangGraph |
+| Image render (`executor_image_gen`) | **none** | worker (dispatched from graph) |
 | **Confirm / publish** | **none** | **API handler** |
 
 ---
@@ -333,7 +364,7 @@ All metrics stored in PG with provenance before LLM reads them.
 | 2 | First publish platform | Instagram (Meta Graph API) |
 | 3 | Image provider | OpenAI DALL-E 3 |
 | 4 | Redis in MVP | PG job queue fallback; add Redis when provisioned |
-| 5 | Secondary HK signal source | Meta Graph API (Phase 2); no news RSS |
+| 5 | Secondary HK signal source | Meta Graph API (Phase 3); no news RSS |
 | 6 | Migration tool | Alembic (Python-native) |
 | 7 | Auth provider (MVP) | Email/password JWT; OAuth Phase 4 |
 
@@ -345,7 +376,7 @@ All metrics stored in PG with provenance before LLM reads them.
 2. Landing shows ≥5 recommended questions refreshed every ~12h  
 3. User can **register, login**, and access protected dashboard  
 4. User can chat, get can/cannot recommendation, enter preview  
-5. User can revise preview unlimited times; each revision Critic-gated  
+5. User can revise preview unlimited times; each revision reviewer-gated  
 6. Confirm posts via platform API with idempotency + receipt (no LLM)  
 7. All claims traceable to `source_signal_ids` in PostgreSQL  
 
