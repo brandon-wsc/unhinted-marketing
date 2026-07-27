@@ -1,0 +1,54 @@
+---
+description: Conventional Commits message format for this repo
+alwaysApply: true
+---
+
+# Commit Messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```text
+type(scope): summary
+
+optional body explaining why
+```
+
+## Format
+
+- `type` — required; see table below
+- `scope` — required; short area (`auth`, `signals`, `web`, `db`, `docs`, `ci`, …)
+- `summary` — imperative, lowercase after the colon, ≤72 chars total subject line, no trailing period
+- `body` — optional; explain **why**, not a file list. Use bullets for multi-part milestones
+
+```text
+✅ feat(signals): bootstrap Phase 1 autopilot for HK signal ingestion
+✅ refactor(db): replace hand-rolled Alembic IDs with standard hex revisions
+✅ chore(web): upgrade TypeScript 7 and document pgvector setup
+
+❌ Bootstrap Phase 1 autopilot backend…     # missing type(scope)
+❌ feat: add stuff                          # missing scope; vague summary
+❌ feat(signals): Added signal ingestion.   # past tense + trailing period
+```
+
+## Types
+
+| Type | When |
+|------|------|
+| `feat` | New user-facing capability or API |
+| `fix` | Bug fix |
+| `refactor` | Behavior-preserving code change |
+| `docs` | Docs / roadmap / status only |
+| `chore` | Tooling, deps, ignore files, misc |
+| `test` | Tests only |
+| `ci` | CI/CD config |
+| `perf` | Performance improvement |
+
+## Scopes
+
+Prefer domain names over roadmap phases: `auth`, `signals`, `sessions`, `web`, `db`, `llm`, `workers`, `docs`, `repo`.
+
+## Body
+
+- Prefer why over what
+- Keep Phase 0/1-style milestone bullets when the commit spans many areas
+- Never put secrets or env values in messages
