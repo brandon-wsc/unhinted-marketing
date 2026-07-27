@@ -1,0 +1,46 @@
+---
+description: Alembic migration revision and filename conventions
+globs: migrations/**/*.py
+alwaysApply: false
+---
+
+# Alembic Migration Naming
+
+Use Alembic defaults. Do **not** invent sequential IDs (`001_auth`, `002_phase1`).
+
+## Format
+
+```
+migrations/versions/{rev}_{slug}.py
+revision = "{rev}"
+```
+
+- `rev` — Alembic-generated hex ID (leave as generated)
+- `slug` — short `snake_case` intent from `-m` (domain/capability, not ROADMAP phase)
+- Filename stem starts with `revision`; do not rewrite `revision` to match a pretty name
+
+```text
+✅ 8791b607d5bc_auth.py       revision = "8791b607d5bc"
+✅ 5dae474953cd_signals.py    revision = "5dae474953cd"
+
+❌ 001_auth.py / revision "001_auth"     # hand-rolled sequential ID
+❌ 002_phase1_data.py                    # phase name + stem ≠ revision
+```
+
+## Creating migrations
+
+```bash
+alembic revision -m "sessions"
+# → versions/<hex>_sessions.py with revision = "<hex>"
+# keep the generated revision; only edit upgrade/downgrade
+```
+
+## Slug rules
+
+- Name the schema capability: `auth`, `signals`, `sessions`, `campaigns`
+- Not roadmap phases (`phase1`, `phase2`)
+- Do not list every table in the slug; docstring may list tables
+
+## Already-applied revisions
+
+Changing `revision` strings requires updating every DB `alembic_version` row (or `alembic stamp`). Prefer not rewriting history once shared.

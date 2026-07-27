@@ -1,6 +1,6 @@
 """users, organization_members, refresh_tokens, entities
 
-Revision ID: 001_auth
+Revision ID: 8791b607d5bc
 Revises:
 Create Date: 2026-07-19
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "001_auth"
+revision: str = "8791b607d5bc"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
