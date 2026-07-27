@@ -1,7 +1,7 @@
 """raw_news_events, edges, recommended_questions
 
-Revision ID: 002_phase1
-Revises: 001_auth
+Revision ID: 5dae474953cd
+Revises: 8791b607d5bc
 Create Date: 2026-07-20
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "002_phase1"
-down_revision: Union[str, None] = "001_auth"
+revision: str = "5dae474953cd"
+down_revision: Union[str, None] = "8791b607d5bc"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -40,7 +40,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | `.env.example` | ✅ | Points to dev DB `192.168.5.20:5434` |
 | `pyproject.toml` + Python skeleton | ✅ | FastAPI, SQLAlchemy, Alembic, JWT |
 | Auth API | ✅ | `/auth/register`, `/login`, `/refresh`, `/logout`, `/me` |
-| Alembic `001_auth` | ✅ | `users`, `entities`, `organization_members`, `refresh_tokens` |
+| Alembic `8791b607d5bc` (auth) | ✅ | `users`, `entities`, `organization_members`, `refresh_tokens` |
 | React web app | ✅ | Vite + React 19 + Tailwind v4 |
 | README | ✅ | Project intro; setup in GETTING_STARTED |
 | `docker-compose.yml` | ➖ | Removed — dev DB is external |
@@ -51,7 +51,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Alembic `002_phase1` | ✅ | `raw_news_events`, `edges`, `recommended_questions` |
+| Alembic `5dae474953cd` (signals) | ✅ | `raw_news_events`, `edges`, `recommended_questions` |
 | Hot search worker | ✅ | `python -m cmd.worker hot-search` (Google Trends HK) |
 | Question generator | ✅ | LiteLLM + 12h cache; template fallback without API key |
 | News promoter | ✅ | Top trends → topic `entities` + `edges` in PG |
@@ -166,7 +166,7 @@ unhinted-marketing/
 │   ├── perception/       # hot_search, question_generator, news_promoter
 │   └── config.py
 ├── schemas/              # Pydantic (auth, perception)
-├── migrations/           # Alembic (001_auth, 002_phase1)
+├── migrations/           # Alembic (auth → signals)
 ├── web/                  # React frontend
 └── docs/
     ├── ROADMAP.md
