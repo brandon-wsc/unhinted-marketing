@@ -8,6 +8,7 @@ import { DashboardPage } from "@/pages/dashboard";
 import { LoginPage } from "@/pages/login";
 import { RegisterPage } from "@/pages/register";
 import "@/i18n";
+import "streamdown/styles.css";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(

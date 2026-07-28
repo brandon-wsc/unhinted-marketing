@@ -41,13 +41,21 @@
     },
     "logout": "Sign out"
   },
-  "dashboard": {
-    "title": "Marketing Dashboard",
-    "description": "You're signed in. Phase 3 will show HK trending question recommendations, Chat Mode, and Preview Mode here.",
-    "workspace": "Workspace",
-    "account": "Account",
-    "role": "Role: {{role}}",
-    "userId": "ID: {{id}}…"
+  "chat": {
+    "empty": {
+      "title": "What are we marketing today?",
+      "subtitle": "Type a message to start — the assistant combines HK hot search signals with your company profile to discuss content directions."
+    },
+    "input": {
+      "placeholder": "Type a message… (Enter to send, Shift+Enter for a new line)"
+    },
+    "send": "Send",
+    "thinking": "Thinking…",
+    "live": "Live",
+    "offline": "Offline",
+    "error": {
+      "sendFailed": "Failed to send the message. Please try again."
+    }
   },
   "theme": {
     "label": "Theme",
