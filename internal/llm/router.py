@@ -21,6 +21,10 @@ def configure_litellm() -> None:
         litellm.anthropic_key = settings.anthropic_api_key
 
 
+def has_llm_credentials() -> bool:
+    return bool(settings.openai_api_key or settings.anthropic_api_key)
+
+
 def resolve_model(tier: ModelTier) -> str:
     mapping = {
         ModelTier.CHEAP: settings.llm_cheap_model,
@@ -30,6 +34,20 @@ def resolve_model(tier: ModelTier) -> str:
     return mapping[tier]
 
 
+def _base_kwargs(tier: ModelTier, temperature: float) -> dict:
+    configure_litellm()
+    kwargs: dict = {
+        "model": resolve_model(tier),
+        "temperature": temperature,
+        "timeout": settings.llm_timeout_seconds,
+    }
+    if settings.llm_api_base:
+        kwargs["api_base"] = settings.llm_api_base
+        if settings.openai_api_key:
+            kwargs["api_key"] = settings.openai_api_key
+    return kwargs
+
+
 async def complete_json(
     *,
     tier: ModelTier,
@@ -37,23 +55,33 @@ async def complete_json(
     user: str,
     temperature: float = 0.4,
 ) -> str:
-    configure_litellm()
-    model = resolve_model(tier)
-    kwargs: dict = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "temperature": temperature,
-        "response_format": {"type": "json_object"},
-    }
-    if settings.llm_api_base:
-        kwargs["api_base"] = settings.llm_api_base
-        if settings.openai_api_key:
-            kwargs["api_key"] = settings.openai_api_key
+    kwargs = _base_kwargs(tier, temperature)
+    kwargs["messages"] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    kwargs["response_format"] = {"type": "json_object"}
     response = await litellm.acompletion(**kwargs)
     content = response.choices[0].message.content
     if not content:
         raise RuntimeError("LLM returned empty content")
     return content
+
+
+async def complete_text(
+    *,
+    tier: ModelTier,
+    system: str,
+    user: str,
+    temperature: float = 0.5,
+) -> str:
+    kwargs = _base_kwargs(tier, temperature)
+    kwargs["messages"] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    response = await litellm.acompletion(**kwargs)
+    content = response.choices[0].message.content
+    if not content:
+        raise RuntimeError("LLM returned empty content")
+    return content.strip()
