@@ -10,11 +10,18 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
-from internal.llm.router import ModelTier, complete_json, complete_text, has_llm_credentials
+from internal.llm.router import (
+    ModelTier,
+    astream_text,
+    complete_json,
+    complete_text,
+    has_llm_credentials,
+)
 from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.repos import get_company, get_signals_by_ids, list_personas, list_top_signals
 from internal.session import prompts
 from internal.session.context import get_db
+from internal.session.events import session_event_bus
 from internal.session.io import (
     BriefOut,
     DraftOut,
@@ -176,19 +183,70 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
     return {"source_signal_ids": ranked_ids, "company_context": ctx}
 
 
+# Batch streamed pieces so a long reply cannot overflow the per-subscriber
+# SSE queue (events are put_nowait; full queues drop events).
+_DELTA_FLUSH_CHARS = 24
+
+
+async def _publish_deltas(
+    session_id: uuid.UUID, pending: list[str], *, force: bool = False
+) -> None:
+    text = "".join(pending)
+    if not text or (not force and len(text) < _DELTA_FLUSH_CHARS):
+        return
+    pending.clear()
+    try:
+        await session_event_bus.publish(session_id, "message.delta", {"content": text})
+    except Exception:
+        logger.exception("failed to publish message.delta")
+
+
+def _thread_uuid(state: SessionState) -> uuid.UUID | None:
+    thread_id = state.get("thread_id")
+    if not thread_id:
+        return None
+    try:
+        return uuid.UUID(str(thread_id))
+    except ValueError:
+        return None
+
+
+async def _chat_stream(state: SessionState, user: str) -> str | None:
+    """Stream the chat reply, publishing message.delta events live per turn."""
+    history = (state.get("messages") or [])[-8:]
+    payload = json.dumps({"history": history, "latest": user}, ensure_ascii=False)
+    tier = NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP
+    session_id = _thread_uuid(state)
+
+    parts: list[str] = []
+    pending: list[str] = []
+    async for piece in astream_text(tier=tier, system=prompts.CHAT, user=payload):
+        parts.append(piece)
+        pending.append(piece)
+        if session_id:
+            await _publish_deltas(session_id, pending)
+    if session_id:
+        await _publish_deltas(session_id, pending, force=True)
+    return "".join(parts).strip() or None
+
+
 async def chat(state: SessionState) -> dict[str, Any]:
     user = _last_user_text(state)
     reply: str | None = None
     if has_llm_credentials():
         try:
-            history = (state.get("messages") or [])[-8:]
-            reply = await complete_text(
-                tier=NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP,
-                system=prompts.CHAT,
-                user=json.dumps({"history": history, "latest": user}, ensure_ascii=False),
-            )
+            reply = await _chat_stream(state, user)
         except Exception:
-            logger.exception("chat LLM failed")
+            logger.exception("chat LLM stream failed — retrying without stream")
+            try:
+                history = (state.get("messages") or [])[-8:]
+                reply = await complete_text(
+                    tier=NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP,
+                    system=prompts.CHAT,
+                    user=json.dumps({"history": history, "latest": user}, ensure_ascii=False),
+                )
+            except Exception:
+                logger.exception("chat LLM failed")
     if not reply:
         chinese = any("\u4e00" <= c <= "\u9fff" for c in user)
         reply = (

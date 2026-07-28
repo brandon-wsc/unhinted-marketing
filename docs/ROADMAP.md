@@ -82,10 +82,19 @@ Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly co
 └────────────────────────────┬────────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Landing (Chat Mode)                                            │
+│  Landing (Chat Mode entry)                                      │
 │  • Recommended questions (JSON, cached ~12h)                    │
 │  • Based on: company profile + hot search + personas            │
 │  • User picks a question or free-form chat                      │
+│  • Build order: Landing UI after Chat shell + Agent UI          │
+└────────────────────────────┬────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Chat Mode (discussion)                                         │
+│  • Free-form Q&A via `chat` node                                │
+│  • Assistant text streams token-by-token over SSE               │
+│    (`message.delta` → final `message.assistant`)                │
+│  • UI: Streamdown for streaming + final markdown (zh-HK CJK)    │
 └────────────────────────────┬────────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -94,6 +103,8 @@ Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly co
 │  • brainstormer: can_do[] / cannot_do[] + brief ideas           │
 │  • executor_post: brief → grounded post copy                     │
 │  • User OK → executor_image_plan → executor_image_gen → Preview │
+│  • UI: `agent.progress` status (node + model tier/id) — do not  │
+│    stream structured JSON as chat markdown; then brief cards    │
 └────────────────────────────┬────────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -112,6 +123,9 @@ Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly co
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+**Phase 3 UI build order:** Chat shell → chat token stream → Agent progress/brief UI → Landing cards → Preview + Confirm.
+
+**Frontend chat stack:** hand-rolled React session client (`useSession` + `fetch` SSE with Bearer). No Vercel AI SDK `useChat`. Assistant markdown via standalone [Streamdown](https://streamdown.ai/) + `@streamdown/cjk`.
 ---
 
 ## LangGraph Scope
@@ -220,14 +234,14 @@ need_image            # bool — route reviewer → interrupt vs copy-only persi
 | `route_intent` | LLM / classifier | intent | — |
 | `load_context` | deterministic | company/persona context on state | — |
 | `trend_searcher` | tool + LLM (cheap) | `source_signal_ids`, ranked signals | `signals.updated` |
-| `chat` | LLM | `messages` | `message.assistant` |
-| `brainstormer` | LLM (medium) | `brief`, `mode=AGENT` | `brief.updated` |
-| `executor_post` | LLM (medium) | `draft` | `draft.copy_updated` |
-| `executor_image_plan` | LLM (medium) | `image_plan` | `draft.image_plan_updated` |
+| `chat` | LLM (stream) | `messages` | `message.delta` (tokens) → `message.assistant` |
+| `brainstormer` | LLM (medium) | `brief`, `mode=AGENT` | `agent.progress` → `brief.updated` |
+| `executor_post` | LLM (medium) | `draft` | `agent.progress` → `draft.copy_updated` |
+| `executor_image_plan` | LLM (medium) | `image_plan` | `agent.progress` → `draft.image_plan_updated` |
 | `executor_image_gen` | async dispatch | `image_url` | `draft.image_pending` → `draft.updated` |
-| `edit_copy` | LLM (medium) | `draft`, clear/adjust `need_image` | `draft.copy_updated` |
+| `edit_copy` | LLM (medium) | `draft`, clear/adjust `need_image` | `agent.progress` → `draft.copy_updated` |
 | `grounding_check` | deterministic | pass/fail on `source_signal_ids` | — |
-| `reviewer` | LLM (strong) | `reviewer_feedback`, `review_attempts` | `review.completed` |
+| `reviewer` | LLM (strong) | `reviewer_feedback`, `review_attempts` | `agent.progress` → `review.completed` |
 | `ack_confirm` | LLM (cheap) | `pending_confirm=true` | `confirm.pending` |
 | *(side-effect)* `persist_preview` | deterministic | `preview_drafts` row, `mode=PREVIEW`, `approval_token`, `revision++` | `preview.updated` |
 
@@ -244,7 +258,7 @@ need_image            # bool — route reviewer → interrupt vs copy-only persi
 | DB | PostgreSQL 16+ | pgvector for signal similarity (MVP) |
 | Cache / queue | Redis (optional MVP) | Question cache, job queue, rate limits |
 | Media | Placeholder / local path (Phase 2); S3 (Phase 4) | Phase 2 stores URL string on `preview_drafts`; archive later |
-| Frontend | React + Vite + Tailwind + shadcn/ui | Login panel + dashboard |
+| Frontend | React + Vite + Tailwind + Streamdown | Session UI; Streamdown for streaming MD; shadcn optional later |
 | Hot search | pytrends / SerpAPI | Meta Graph API Phase 3 |
 
 ---
@@ -384,13 +398,17 @@ All metrics stored in PG with provenance before LLM reads them.
 
 ### Phase 3 — React Dashboard + Meta Signals
 
-**Goal:** Observability + session UI; Confirm is a button, not chat. Add Meta Graph API as secondary HK signal source.
+**Goal:** Session UI with streaming chat + Agent progress; Confirm is a button, not chat. Add Meta Graph API as secondary HK signal source.
+
+**UI build order:** Chat shell → chat token stream → Agent UI → Landing cards → Preview + Confirm.
 
 - [ ] Meta Graph API hot search worker (trending / page insights → `raw_news_events`)
-- [ ] Vite + React + Tailwind + shadcn/ui in `web/`
-- [ ] Protected routes; redirect unauthenticated → `/login`
+- [x] Vite + React + Tailwind in `web/` (auth shell done; session UI next)
+- [x] Protected routes; redirect unauthenticated → `/login`
+- [x] Chat UI shell: `useSession` + composer + Streamdown message list (SSE via `fetch` + Bearer)
+- [x] Chat token stream: LiteLLM streaming on `chat` node → SSE `message.delta` → final `message.assistant`
+- [ ] Agent UI: SSE `agent.progress` `{node, model_tier, model}` status line + brief / interrupt cards (no Agent JSON as streamed chat MD)
 - [ ] Landing: recommended questions cards (poll or SSE refresh)
-- [ ] Chat Mode → Agent Mode transition
 - [ ] Preview Mode: left chat / right preview (right dominant)
 - [ ] Confirm button → calls `/confirm`, shows receipt status
 - [ ] BYOK settings page (masked keys, server-side storage)

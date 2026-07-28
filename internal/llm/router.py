@@ -1,5 +1,6 @@
 """LiteLLM routing with BYOK from environment (DB-backed keys in Phase 4)."""
 
+from collections.abc import AsyncIterator
 from enum import Enum
 
 import litellm
@@ -85,3 +86,27 @@ async def complete_text(
     if not content:
         raise RuntimeError("LLM returned empty content")
     return content.strip()
+
+
+async def astream_text(
+    *,
+    tier: ModelTier,
+    system: str,
+    user: str,
+    temperature: float = 0.5,
+) -> AsyncIterator[str]:
+    """Yield assistant text pieces as the model streams them."""
+    kwargs = _base_kwargs(tier, temperature)
+    kwargs["messages"] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    kwargs["stream"] = True
+    response = await litellm.acompletion(**kwargs)
+    async for chunk in response:
+        choices = getattr(chunk, "choices", None) or []
+        if not choices:
+            continue
+        piece = getattr(choices[0].delta, "content", None)
+        if piece:
+            yield piece

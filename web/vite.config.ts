@@ -13,6 +13,9 @@ export default defineConfig({
     proxy: {
       "/auth": { target: "http://localhost:8000", changeOrigin: true },
       "/health": { target: "http://localhost:8000", changeOrigin: true },
+      "/sessions": { target: "http://localhost:8000", changeOrigin: true },
+      "/companies": { target: "http://localhost:8000", changeOrigin: true },
+      "/signals": { target: "http://localhost:8000", changeOrigin: true },
     },
   },
 });

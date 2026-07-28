@@ -1,7 +1,7 @@
 # Unhinted Marketing — Project Status
 
 > **Last updated:** 2026-07-29  
-> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI next  
+> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **in progress** (chat shell + token stream done)  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted`
 
 This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). For architecture and phase plans, see ROADMAP.
@@ -22,11 +22,23 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Recommended questions cache + API | ✅ Done |
 | OKF knowledge scaffold | ➖ Removed — knowledge in PostgreSQL only |
 | LangGraph session / preview / confirm API | ✅ Soft-complete — enough for Phase 3 UI |
+| Chat UI shell (`useSession` + Streamdown) | ✅ Done |
+| Chat token stream (`message.delta`) | ✅ Done — live deltas via SSE, batched in node |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
-**Current user-facing flow:** Register or login → protected dashboard placeholder. Backend can run full session loop (chat → agent → interrupt → preview → stub confirm) via API + SSE. **No chat/preview/confirm UI yet — that is the Phase 3 focus.**
+**Current user-facing flow:** Register or login → `/` is the chat workspace — send a message, assistant replies stream token-by-token (chat intent) or run the Agent path (brief/draft events, cards UI still pending). Preview/Confirm UI next.
 
 **Decision (2026-07-29):** Remaining Phase 2 items are **held**; start Phase 3 product UI against the existing session APIs.
+
+**Decision (2026-07-29) — Phase 3 UI build order + UX:**
+
+1. Chat UI shell (REST + existing SSE, full messages)
+2. Chat token stream (`message.delta` on `chat` node only; Streamdown for streaming MD)
+3. Agent Mode UI (`agent.progress` status line + brief/interrupt cards — do **not** stream Agent JSON as chat MD)
+4. Landing recommended-question cards
+5. Preview (left chat / right draft) + Confirm button
+
+BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
 ---
 
@@ -83,15 +95,17 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 
 **Held Phase 2 work does not block Phase 3 UI.**
 
-### Phase 3 — React Dashboard + Meta Signals · **~10% · NEXT**
+### Phase 3 — React Dashboard + Meta Signals · **~35% · IN PROGRESS**
 
-**Focus now:** product UI on existing APIs. Meta ingest / BYOK page / trace viewer can follow after core chat → preview → confirm.
+**Focus now:** Agent Mode UI (see build order above). Meta ingest / BYOK / Trace after core agent → landing → preview → confirm.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Auth pages + protected shell | ✅ | Login / register / dashboard placeholder |
-| Landing: recommended questions cards | ⬜ | **Next** — wire `GET /companies/{id}/recommended-questions` |
-| Chat Mode → Agent Mode | ⬜ | `POST /sessions`, `/messages` |
+| Auth pages + protected shell | ✅ | Login / register; `/` is now the chat workspace |
+| Chat UI shell | ✅ | `web/src/features/session/` — `useSession` + message list / composer; Streamdown + `@streamdown/cjk`; Vite proxy covers `/sessions` `/companies` `/signals` |
+| Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
+| Agent Mode UI | ⬜ | **Next** — `agent.progress` status + brief / interrupt cards; needs live per-node publish (agent events currently fan out post-turn) |
+| Landing: recommended questions cards | ⬜ | After Agent — wire `GET /companies/{id}/recommended-questions` |
 | Preview Mode (left chat / right preview) | ⬜ | Consume SSE `preview.updated` + draft state |
 | Confirm button → `/confirm` | ⬜ | Show receipt status |
 | Meta Graph API hot search | ⏸ | Can wait until after core UI |
@@ -164,7 +178,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 |-------|-------------|
 | `/login` | Email/password login |
 | `/register` | Sign up + default workspace |
-| `/` | Protected dashboard (placeholder) |
+| `/` | Protected **chat workspace** — message list + composer, streaming assistant replies |
 
 **UX features:**
 
@@ -173,6 +187,8 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 - **Theme:** Light / dark / system, persisted in `localStorage`
 - **Form memory:** Last user email / display name / org name from `localStorage` (not fake placeholders)
 - **Auth:** Access token in memory; refresh via cookie; auto-refresh on app load
+- **Phase 3 (shipped):** Chat workspace at `/` — `useSession` REST-first + SSE enhancement; Streamdown (`mode="streaming"` + `@streamdown/cjk`) assistant MD; SSE `message.delta` live tokens; `agent.progress` (agent) still pending; no `useChat`
+- **Session client:** `web/src/features/session/` — `api.ts` (REST), `sse.ts` (`@microsoft/fetch-event-source` with Bearer), `use-session.ts`, `components/chat-panel.tsx`
 
 **Run:**
 
@@ -180,7 +196,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 cd web && npm install && npm run dev
 ```
 
-App: http://localhost:5173/login (Vite proxies `/auth` → `:8000`; extend proxy for `/sessions`, `/signals`, `/companies` as UI lands)
+App: http://localhost:5173/login (Vite proxies `/auth`, `/sessions`, `/signals`, `/companies`, `/health` → `:8000`)
 
 ---
 
@@ -232,7 +248,7 @@ See `.env.example`. Local `.env` is gitignored.
 
 ## Known Gaps / Next Steps
 
-1. **Phase 3 UI (active):** Landing recommended-question cards → chat → preview (left/right) → Confirm button using existing session APIs + SSE.
+1. **Phase 3 UI (active):** Agent progress/brief UI → Landing cards → Preview + Confirm. Chat shell + `message.delta` streaming shipped. Known gaps: no `GET /sessions/{id}/messages` (page refresh loses transcript); agent events still publish post-turn — live per-node publish needed for `agent.progress`.
 2. **Phase 2 held:** Image worker (replace `placeholder://`), `query_market_trends` JSON Schema, formal curl exit-criteria script.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer.
 4. **Hardening:** Auth rate limits, basic API tests, multi-worker SSE (Redis) if scaling beyond one API process.
@@ -246,7 +262,7 @@ From ROADMAP; current completion:
 1. HK hot search ingests automatically — ✅ (worker + scheduler)  
 2. Landing shows ≥5 recommended questions (~12h cache) — ✅ API; ⬜ UI (Phase 3)  
 3. User can register, login, access protected dashboard — ✅  
-4. Chat → can/cannot recommendation → preview — ✅ API; ⬜ UI (Phase 3)  
+4. Chat → can/cannot recommendation → preview — ✅ API; chat UI ✅ (streaming); brief/preview UI ⬜  
 5. Unlimited preview revisions + reviewer gate — ✅ API; ⬜ UI (Phase 3)  
 6. Confirm posts via platform API + receipt — 🟡 stub confirm + `tool_receipts`; real publish Phase 4; ⬜ UI button  
 7. Claims traceable to `source_signal_ids` — ✅ session grounding in graph; ⬜ UI trace links  
