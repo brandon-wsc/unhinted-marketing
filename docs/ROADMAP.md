@@ -116,14 +116,9 @@ Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly co
 
 ## LangGraph Scope
 
-LangGraph implements the **Session LLM Zone** only:
+LangGraph implements the **Session LLM Zone** only. **`preview` is not a graph node** — it is a mode + persist side-effect after image gen (or after a copy-only revise passes review): write `preview_drafts`, set `mode=PREVIEW`, emit SSE.
 
 ```
-flow:   route_intent → load_context → trend_searcher → brainstormer
-        → executor_post → grounding_check → reviewer
-        → executor_image_plan → executor_image_gen → preview
-        revise loop: edit_copy → reviewer → (optional) executor_image_plan → executor_image_gen
-
 nodes:
   control:     route_intent · load_context · chat · ack_confirm
   research:    trend_searcher          # session on-demand PG signal lookup (not background ingest)
@@ -134,27 +129,107 @@ nodes:
   revise:      edit_copy
   quality:     grounding_check · reviewer
 
-edges:  conditional on reviewer pass/fail, intent (chat | start | revise | confirm_intent)
-state:  messages, mode, brief, draft, revision, source_signal_ids, pending_confirm
-checkpoint: PostgreSQL (LangGraph checkpointer)
+checkpoint: PostgreSQL LangGraph checkpointer (PostgresSaver);
+            thread_id = session.id; checkpoint tables owned by checkpointer setup
+            (not hand-written into Alembic app migrations)
 
-NOT in graph: hot_search_worker · question_generator · DALL-E worker · POST /confirm · platform adapters
+NOT in graph: hot_search_worker · question_generator · DALL-E worker · POST /confirm ·
+              platform adapters · preview (mode + persist_preview side-effect)
 ```
 
-| Node | Type | Output |
-|------|------|--------|
-| `route_intent` | LLM / classifier | Route: `chat` · `start` · `revise` · `confirm_intent` |
-| `load_context` | deterministic | Company profile + personas from PG |
-| `trend_searcher` | tool + LLM (cheap) | Ranked HK signals + `source_signal_ids` for session |
-| `chat` | LLM | Conversational reply; no deliverable |
-| `brainstormer` | LLM (medium) | Brief ideas, `can_do[]` / `cannot_do[]`, target persona |
-| `executor_post` | LLM (medium) | Full post copy (caption, hashtags, CTA) with grounding |
-| `executor_image_plan` | LLM (medium) | Structured image prompt + composition spec |
-| `executor_image_gen` | async dispatch | Enqueue worker → asset URL in `preview_drafts` |
-| `edit_copy` | LLM (medium) | Revised post copy (preview loop) |
-| `grounding_check` | deterministic | Verify `source_signal_ids` exist in PG |
-| `reviewer` | LLM (strong) | Compliance, tone, persona fit, platform rules |
-| `ack_confirm` | LLM (cheap) | Acknowledge publish intent; UI Confirm button only |
+### Edge map
+
+```
+START → route_intent
+  ├── chat            → chat → END
+  ├── start           → load_context → trend_searcher → brainstormer → executor_post
+  │                     → grounding_check → reviewer
+  ├── revise          → edit_copy → grounding_check → reviewer
+  └── confirm_intent  → ack_confirm → END   # sets pending_confirm; does NOT publish
+
+reviewer:
+  ├── fail            → edit_copy (with reviewer_feedback)
+  │                     → grounding_check → reviewer
+  │                     (max_review_retries=2; exceed → END + error SSE)
+  ├── pass + need_image (first AGENT draft, or revise that changes image)
+  │                     → interrupt_before executor_image_plan
+  │                     → (user resume via POST /messages)
+  │                     → executor_image_plan → executor_image_gen
+  │                     → persist_preview (mode=PREVIEW, SSE) → END
+  └── pass + copy_only revise
+                        → persist_preview (mode=PREVIEW, SSE) → END
+```
+
+```mermaid
+flowchart TD
+  startNode[START] --> route_intent
+  route_intent -->|chat| chat
+  route_intent -->|start| load_context
+  route_intent -->|revise| edit_copy
+  route_intent -->|confirm_intent| ack_confirm
+  chat --> endChat[END]
+  ack_confirm --> endAck[END]
+  load_context --> trend_searcher --> brainstormer --> executor_post --> grounding_check --> reviewer
+  reviewer -->|fail| edit_copy
+  reviewer -->|pass_and_need_image| interruptWait[interrupt_before_image]
+  reviewer -->|pass_copy_only_revise| persistPreview[persist_preview_SSE]
+  interruptWait -->|user_resume| executor_image_plan --> executor_image_gen --> persistPreview
+  edit_copy --> grounding_check
+  persistPreview --> endPreview[END]
+```
+
+**Intent routing (`route_intent` outputs):**
+
+| Intent | When |
+|--------|------|
+| `chat` | No draft / still in conversational landing; free-form Q&A |
+| `start` | User picks a recommended question or explicitly asks for content |
+| `revise` | `mode=PREVIEW` and user requests copy/image edits |
+| `confirm_intent` | User says publish-like phrases (e.g. 「可以出」); only ack — UI Confirm button publishes |
+
+### Interrupts
+
+- Compile with **`interrupt_before=["executor_image_plan"]`**.
+- First AGENT path: after `reviewer` pass → checkpoint pauses before image plan.
+- Resume: next authenticated `POST /messages` on the same session (`thread_id = session.id`) continues into `executor_image_plan`.
+- Copy-only revise that does not need a new image skips the interrupt and goes to `persist_preview`.
+
+### State
+
+```text
+messages              # chat transcript
+mode                  # CHAT | AGENT | PREVIEW
+company_id, user_id, thread_id
+brief                 # brainstormer output (can_do[], cannot_do[], angles, persona)
+draft                 # post copy (caption, hashtags, CTA)
+image_plan            # structured image prompt / composition
+image_url             # placeholder/local path in Phase 2; S3 in Phase 4
+revision              # integer revision counter
+source_signal_ids     # grounding citations
+reviewer_feedback     # last fail reasons (or empty on pass)
+review_attempts       # retries toward max_review_retries=2
+pending_confirm       # set by ack_confirm; Confirm handler checks this + approval_token
+approval_token        # per-revision token written with preview_drafts
+need_image            # bool — route reviewer → interrupt vs copy-only persist
+```
+
+### Nodes
+
+| Node | Type | Writes | SSE (if any) |
+|------|------|--------|--------------|
+| `route_intent` | LLM / classifier | intent | — |
+| `load_context` | deterministic | company/persona context on state | — |
+| `trend_searcher` | tool + LLM (cheap) | `source_signal_ids`, ranked signals | `signals.updated` |
+| `chat` | LLM | `messages` | `message.assistant` |
+| `brainstormer` | LLM (medium) | `brief`, `mode=AGENT` | `brief.updated` |
+| `executor_post` | LLM (medium) | `draft` | `draft.copy_updated` |
+| `executor_image_plan` | LLM (medium) | `image_plan` | `draft.image_plan_updated` |
+| `executor_image_gen` | async dispatch | `image_url` | `draft.image_pending` → `draft.updated` |
+| `edit_copy` | LLM (medium) | `draft`, clear/adjust `need_image` | `draft.copy_updated` |
+| `grounding_check` | deterministic | pass/fail on `source_signal_ids` | — |
+| `reviewer` | LLM (strong) | `reviewer_feedback`, `review_attempts` | `review.completed` |
+| `ack_confirm` | LLM (cheap) | `pending_confirm=true` | `confirm.pending` |
+| *(side-effect)* `persist_preview` | deterministic | `preview_drafts` row, `mode=PREVIEW`, `approval_token`, `revision++` | `preview.updated` |
 
 ---
 
@@ -168,7 +243,7 @@ NOT in graph: hot_search_worker · question_generator · DALL-E worker · POST /
 | Agent | LangGraph + LiteLLM | Structured output via Pydantic |
 | DB | PostgreSQL 16+ | pgvector for signal similarity (MVP) |
 | Cache / queue | Redis (optional MVP) | Question cache, job queue, rate limits |
-| Media | S3 (Phase 2) | Generated images, media archive |
+| Media | Placeholder / local path (Phase 2); S3 (Phase 4) | Phase 2 stores URL string on `preview_drafts`; archive later |
 | Frontend | React + Vite + Tailwind + shadcn/ui | Login panel + dashboard |
 | Hot search | pytrends / SerpAPI | Meta Graph API Phase 3 |
 
@@ -296,12 +371,13 @@ All metrics stored in PG with provenance before LLM reads them.
 
 **Goal:** Full chat → agent → iterative preview loop; Confirm stubbed. HK signals from Google Trends (Phase 1) until Meta ingest lands in Phase 3.
 
-- [ ] Migrations: `sessions`, `session_messages`, `preview_drafts`
-- [ ] LangGraph graph: CHAT → AGENT → PREVIEW (revise loop) + PostgreSQL checkpointer
-- [ ] Session nodes: `route_intent`, `load_context`, `trend_searcher`, `brainstormer`, `executor_post`, `executor_image_plan`, `executor_image_gen`, `edit_copy`, `grounding_check`, `reviewer`, `chat`, `ack_confirm`
-- [ ] FastAPI: `POST /sessions`, `POST /messages`, `GET /events` (SSE)
-- [ ] Image generation worker (`executor_image_gen` dispatches; DALL-E → asset URL in `preview_drafts`)
-- [ ] `POST /sessions/{id}/confirm` — **traditional handler**, stub platform adapter
+- [x] Migrations: `sessions`, `session_messages`, `preview_drafts`, `tool_receipts`
+- [x] LangGraph graph: CHAT → AGENT → PREVIEW (revise loop) + PostgreSQL checkpointer (`thread_id = session.id`)
+- [x] Session nodes: `route_intent`, `load_context`, `trend_searcher`, `brainstormer`, `executor_post`, `executor_image_plan`, `executor_image_gen`, `edit_copy`, `grounding_check`, `reviewer`, `chat`, `ack_confirm` (+ `persist_preview` side-effect; not a node)
+- [x] Graph interrupt: `interrupt_before=["executor_image_plan"]`; resume via `POST /messages`
+- [x] FastAPI: `POST /sessions`, `POST /messages`, `GET /events` (SSE)
+- [ ] Image generation worker (`executor_image_gen` dispatches; placeholder/local URL in `preview_drafts` for MVP)
+- [x] `POST /sessions/{id}/confirm` — **traditional handler**, stub platform adapter → writes `tool_receipts` row
 - [ ] Tool schema validators (Pydantic + JSON Schema) for `query_market_trends`
 
 **Exit criteria:** curl/HTTPie flow from question → draft → 3 revisions → confirm → receipt row.

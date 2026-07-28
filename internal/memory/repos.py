@@ -6,7 +6,17 @@ from sqlalchemy import delete, desc, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from internal.memory.models import Edge, Entity, OrganizationMember, RawNewsEvent, RecommendedQuestions
+from internal.memory.models import (
+    Edge,
+    Entity,
+    OrganizationMember,
+    PreviewDraft,
+    RawNewsEvent,
+    RecommendedQuestions,
+    Session,
+    SessionMessage,
+    ToolReceipt,
+)
 
 
 def url_hash(value: str) -> str:
@@ -198,3 +208,132 @@ async def reset_market_signals(db: AsyncSession) -> dict[str, int]:
         "raw_news_events": signals.rowcount,
         "topic_entities": topics.rowcount,
     }
+
+
+async def create_session(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    company_id: uuid.UUID,
+    mode: str = "CHAT",
+) -> Session:
+    row = Session(user_id=user_id, company_id=company_id, mode=mode, state={})
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def get_session(db: AsyncSession, session_id: uuid.UUID) -> Session | None:
+    return await db.scalar(select(Session).where(Session.id == session_id))
+
+
+async def add_session_message(
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID,
+    role: str,
+    content: str,
+    metadata: dict | None = None,
+) -> SessionMessage:
+    row = SessionMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+        metadata_=metadata or {},
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def list_session_messages(
+    db: AsyncSession, session_id: uuid.UUID
+) -> list[SessionMessage]:
+    result = await db.scalars(
+        select(SessionMessage)
+        .where(SessionMessage.session_id == session_id)
+        .order_by(SessionMessage.created_at)
+    )
+    return list(result.all())
+
+
+async def upsert_preview_draft(
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID,
+    revision: int,
+    copy: dict,
+    image_url: str | None,
+    image_plan: dict | None,
+    source_signal_ids: list[str],
+    approval_token: str,
+    platform: str | None = None,
+) -> PreviewDraft:
+    row = PreviewDraft(
+        session_id=session_id,
+        revision=revision,
+        copy=copy,
+        image_url=image_url,
+        image_plan=image_plan,
+        source_signal_ids=source_signal_ids,
+        approval_token=approval_token,
+        platform=platform,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def get_latest_preview_draft(
+    db: AsyncSession, session_id: uuid.UUID
+) -> PreviewDraft | None:
+    return await db.scalar(
+        select(PreviewDraft)
+        .where(PreviewDraft.session_id == session_id)
+        .order_by(desc(PreviewDraft.revision))
+        .limit(1)
+    )
+
+
+async def get_preview_draft_by_token(
+    db: AsyncSession, session_id: uuid.UUID, approval_token: str
+) -> PreviewDraft | None:
+    return await db.scalar(
+        select(PreviewDraft).where(
+            PreviewDraft.session_id == session_id,
+            PreviewDraft.approval_token == approval_token,
+        )
+    )
+
+
+async def get_tool_receipt_by_idempotency(
+    db: AsyncSession, idempotency_key: str
+) -> ToolReceipt | None:
+    return await db.scalar(
+        select(ToolReceipt).where(ToolReceipt.idempotency_key == idempotency_key)
+    )
+
+
+async def create_tool_receipt(
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None,
+    user_id: uuid.UUID,
+    tool_name: str,
+    idempotency_key: str,
+    status: str,
+    request: dict,
+    response: dict,
+) -> ToolReceipt:
+    row = ToolReceipt(
+        session_id=session_id,
+        user_id=user_id,
+        tool_name=tool_name,
+        idempotency_key=idempotency_key,
+        status=status,
+        request=request,
+        response=response,
+    )
+    db.add(row)
+    await db.flush()
+    return row

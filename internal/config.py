@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     llm_cheap_model: str = "gpt-4o-mini"
     llm_medium_model: str = "gpt-4o-mini"
     llm_strong_model: str = "gpt-4o"
+    llm_timeout_seconds: float = 45.0
 
     # Perception / workers
     question_cache_ttl_hours: int = 12
