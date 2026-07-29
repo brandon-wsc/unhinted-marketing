@@ -46,13 +46,44 @@
       "title": "今日想推廣啲咩？",
       "subtitle": "輸入訊息開始對話 — AI 會結合香港熱搜同你嘅公司資料，同你傾內容方向。"
     },
+    "questions": {
+      "title": "推薦問題",
+      "loading": "載入推薦問題…",
+      "stale": "即將更新"
+    },
     "input": {
       "placeholder": "輸入訊息…（Enter 送出，Shift+Enter 換行）"
     },
     "send": "送出",
-    "thinking": "AI 諗緊…",
     "live": "即時連線",
     "offline": "未連線",
+    "agent": {
+      "nodes": {
+        "working": "處理緊…",
+        "route_intent": "理解緊你嘅需求…",
+        "load_context": "載入緊公司資料…",
+        "trend_searcher": "搜尋緊香港熱話…",
+        "brainstormer": "諗緊內容方向…",
+        "executor_post": "起草緊貼文…",
+        "grounding_check": "核對緊 signal 出處…",
+        "reviewer": "審核緊草稿…",
+        "edit_copy": "修訂緊文案…",
+        "executor_image_plan": "設計緊圖片方向…",
+        "executor_image_gen": "生成緊圖片…"
+      },
+      "brief": {
+        "title": "內容簡報",
+        "canDo": "可以做",
+        "cannotDo": "唔會做",
+        "angles": "切入角度"
+      },
+      "interrupt": {
+        "title": "文案已經準備好",
+        "subtitle": "繼續設計並生成圖片？",
+        "confirm": "生成圖片"
+      },
+      "imageOkMessage": "OK，幫我生成圖片。"
+    },
     "error": {
       "sendFailed": "訊息送出失敗，請再試一次"
     }

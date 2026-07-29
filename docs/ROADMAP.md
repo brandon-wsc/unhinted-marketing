@@ -407,8 +407,8 @@ All metrics stored in PG with provenance before LLM reads them.
 - [x] Protected routes; redirect unauthenticated → `/login`
 - [x] Chat UI shell: `useSession` + composer + Streamdown message list (SSE via `fetch` + Bearer)
 - [x] Chat token stream: LiteLLM streaming on `chat` node → SSE `message.delta` → final `message.assistant`
-- [ ] Agent UI: SSE `agent.progress` `{node, model_tier, model}` status line + brief / interrupt cards (no Agent JSON as streamed chat MD)
-- [ ] Landing: recommended questions cards (poll or SSE refresh)
+- [x] Agent UI: SSE `agent.progress` `{node, model_tier, model}` status line + brief / interrupt cards (no Agent JSON as streamed chat MD)
+- [x] Landing: recommended questions cards (poll or SSE refresh)
 - [ ] Preview Mode: left chat / right preview (right dominant)
 - [ ] Confirm button → calls `/confirm`, shows receipt status
 - [ ] BYOK settings page (masked keys, server-side storage)

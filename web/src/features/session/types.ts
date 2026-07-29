@@ -25,6 +25,37 @@ export type SessionEvent = {
   data: SessionEventData;
 };
 
+export type AgentProgress = {
+  node: string;
+  model_tier: string | null;
+  model: string | null;
+};
+
+export type SessionBrief = {
+  can_do: string[];
+  cannot_do: string[];
+  angles: string[];
+  persona: string | null;
+  summary: string;
+};
+
+export type RecommendedQuestion = {
+  id: string;
+  text: string;
+  rationale: string | null;
+  source_signal_ids: string[];
+  persona_slug: string | null;
+};
+
+export type RecommendedQuestionsResponse = {
+  company_id: string;
+  questions: RecommendedQuestion[];
+  source_signal_ids: string[];
+  generated_at: string;
+  expires_at: string;
+  is_stale: boolean;
+};
+
 export type PostMessageResponse = {
   session: Session;
   messages: ChatMessage[];

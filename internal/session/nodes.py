@@ -6,7 +6,8 @@ import json
 import logging
 import secrets
 import uuid
-from typing import Any, TypeVar
+from functools import wraps
+from typing import Any, Awaitable, Callable, TypeVar
 
 from pydantic import BaseModel
 
@@ -16,6 +17,7 @@ from internal.llm.router import (
     complete_json,
     complete_text,
     has_llm_credentials,
+    resolve_model,
 )
 from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.repos import get_company, get_signals_by_ids, list_personas, list_top_signals
@@ -102,6 +104,54 @@ async def _parse_llm_json(tier: ModelTier, system: str, user: str, model: type[T
         return None
 
 
+def _thread_uuid(state: SessionState) -> uuid.UUID | None:
+    thread_id = state.get("thread_id")
+    if not thread_id:
+        return None
+    try:
+        return uuid.UUID(str(thread_id))
+    except ValueError:
+        return None
+
+
+def _agent_progress_payload(node: str) -> dict[str, Any]:
+    tier = NODE_MODEL_TIERS.get(node)
+    return {
+        "node": node,
+        "model_tier": tier.value if tier else None,
+        "model": resolve_model(tier) if tier else None,
+    }
+
+
+async def publish_agent_progress(state: SessionState, node: str) -> None:
+    """Fan out agent.progress the moment a node starts (not post-turn)."""
+    session_id = _thread_uuid(state)
+    if not session_id:
+        return
+    try:
+        await session_event_bus.publish(session_id, "agent.progress", _agent_progress_payload(node))
+    except Exception:
+        logger.exception("failed to publish agent.progress (%s)", node)
+
+
+NodeFn = Callable[[SessionState], Awaitable[dict[str, Any]]]
+
+
+def agent_progress(node: str) -> Callable[[NodeFn], NodeFn]:
+    """Decorate a graph node to announce itself over SSE before it runs."""
+
+    def decorator(fn: NodeFn) -> NodeFn:
+        @wraps(fn)
+        async def wrapped(state: SessionState) -> dict[str, Any]:
+            await publish_agent_progress(state, node)
+            return await fn(state)
+
+        return wrapped
+
+    return decorator
+
+
+@agent_progress("route_intent")
 async def route_intent(state: SessionState) -> dict[str, Any]:
     payload = {
         "mode": state.get("mode", MODE_CHAT),
@@ -123,6 +173,7 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
     return {"intent": intent}
 
 
+@agent_progress("load_context")
 async def load_context(state: SessionState) -> dict[str, Any]:
     db = get_db()
     company_id = state.get("company_id")
@@ -147,6 +198,7 @@ async def load_context(state: SessionState) -> dict[str, Any]:
     }
 
 
+@agent_progress("trend_searcher")
 async def trend_searcher(state: SessionState) -> dict[str, Any]:
     db = get_db()
     signals = await list_top_signals(db, limit=20, region="HK")
@@ -201,16 +253,6 @@ async def _publish_deltas(
         logger.exception("failed to publish message.delta")
 
 
-def _thread_uuid(state: SessionState) -> uuid.UUID | None:
-    thread_id = state.get("thread_id")
-    if not thread_id:
-        return None
-    try:
-        return uuid.UUID(str(thread_id))
-    except ValueError:
-        return None
-
-
 async def _chat_stream(state: SessionState, user: str) -> str | None:
     """Stream the chat reply, publishing message.delta events live per turn."""
     history = (state.get("messages") or [])[-8:]
@@ -261,6 +303,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
     return {"messages": _append_assistant(state, reply), "mode": MODE_CHAT}
 
 
+@agent_progress("brainstormer")
 async def brainstormer(state: SessionState) -> dict[str, Any]:
     ctx = state.get("company_context") or {}
     payload = {
@@ -291,6 +334,7 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
     return {"mode": MODE_AGENT, "brief": brief}
 
 
+@agent_progress("executor_post")
 async def executor_post(state: SessionState) -> dict[str, Any]:
     ctx = state.get("company_context") or {}
     signal_ids = list(state.get("source_signal_ids") or [])
@@ -337,6 +381,7 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
     }
 
 
+@agent_progress("grounding_check")
 async def grounding_check(state: SessionState) -> dict[str, Any]:
     db = get_db()
     ids = list(state.get("source_signal_ids") or [])
@@ -367,6 +412,7 @@ async def grounding_check(state: SessionState) -> dict[str, Any]:
     return {"source_signal_ids": kept, "grounding_ok": True, "reviewer_feedback": ""}
 
 
+@agent_progress("reviewer")
 async def reviewer(state: SessionState) -> dict[str, Any]:
     attempts = int(state.get("review_attempts") or 0)
     if state.get("grounding_ok") is False:
@@ -408,6 +454,7 @@ async def reviewer(state: SessionState) -> dict[str, Any]:
     }
 
 
+@agent_progress("edit_copy")
 async def edit_copy(state: SessionState) -> dict[str, Any]:
     user = _last_user_text(state)
     feedback = state.get("reviewer_feedback") or ""
@@ -452,6 +499,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     }
 
 
+@agent_progress("executor_image_plan")
 async def executor_image_plan(state: SessionState) -> dict[str, Any]:
     payload = {
         "draft": state.get("draft") or {},
@@ -482,6 +530,7 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
     }
 
 
+@agent_progress("executor_image_gen")
 async def executor_image_gen(state: SessionState) -> dict[str, Any]:
     """Phase 2: placeholder URL only (real render / S3 in later phases)."""
     revision = int(state.get("revision") or 0) + 1
