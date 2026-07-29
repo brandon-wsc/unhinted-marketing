@@ -46,13 +46,44 @@
       "title": "What are we marketing today?",
       "subtitle": "Type a message to start — the assistant combines HK hot search signals with your company profile to discuss content directions."
     },
+    "questions": {
+      "title": "Suggested prompts",
+      "loading": "Loading suggestions…",
+      "stale": "Refreshing soon"
+    },
     "input": {
       "placeholder": "Type a message… (Enter to send, Shift+Enter for a new line)"
     },
     "send": "Send",
-    "thinking": "Thinking…",
     "live": "Live",
     "offline": "Offline",
+    "agent": {
+      "nodes": {
+        "working": "Working…",
+        "route_intent": "Understanding your request…",
+        "load_context": "Loading company context…",
+        "trend_searcher": "Searching HK trends…",
+        "brainstormer": "Brainstorming angles…",
+        "executor_post": "Drafting post copy…",
+        "grounding_check": "Checking signal grounding…",
+        "reviewer": "Reviewing draft…",
+        "edit_copy": "Revising copy…",
+        "executor_image_plan": "Planning the image…",
+        "executor_image_gen": "Generating the image…"
+      },
+      "brief": {
+        "title": "Content brief",
+        "canDo": "Can do",
+        "cannotDo": "Won't do",
+        "angles": "Angles"
+      },
+      "interrupt": {
+        "title": "Copy is ready",
+        "subtitle": "Continue to plan and generate the image?",
+        "confirm": "Generate image"
+      },
+      "imageOkMessage": "Looks good — please generate the image."
+    },
     "error": {
       "sendFailed": "Failed to send the message. Please try again."
     }

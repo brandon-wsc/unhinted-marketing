@@ -2,9 +2,39 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { apiCreateSession, apiPostSessionMessage } from "./api";
 import { SseAuthError, subscribeSessionEvents } from "./sse";
-import type { ChatMessage, Session } from "./types";
+import type { AgentProgress, ChatMessage, Session, SessionBrief } from "./types";
 
 type SseReadyHandle = { promise: Promise<void>; resolve: () => void };
+
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+export function parseBrief(data: unknown): SessionBrief | null {
+  if (!data || typeof data !== "object") return null;
+  const raw = data as Record<string, unknown>;
+  const summary = typeof raw.summary === "string" ? raw.summary : "";
+  const canDo = asStringList(raw.can_do);
+  const cannotDo = asStringList(raw.cannot_do);
+  const angles = asStringList(raw.angles);
+  if (!summary && !canDo.length && !cannotDo.length && !angles.length) return null;
+  return {
+    can_do: canDo,
+    cannot_do: cannotDo,
+    angles,
+    persona: typeof raw.persona === "string" ? raw.persona : null,
+    summary,
+  };
+}
+
+function parseAgentProgress(data: Record<string, unknown>): AgentProgress | null {
+  if (typeof data.node !== "string" || !data.node) return null;
+  return {
+    node: data.node,
+    model_tier: typeof data.model_tier === "string" ? data.model_tier : null,
+    model: typeof data.model === "string" ? data.model : null,
+  };
+}
 
 // The event bus does not replay: deltas published before the SSE subscriber
 // attaches are lost. After creating a session, wait for the stream to open
@@ -41,9 +71,44 @@ export function useSession(companyId: string | undefined) {
   const [sseConnected, setSseConnected] = useState(false);
   // In-flight assistant reply while message.delta events stream in; null when idle.
   const [streamingText, setStreamingText] = useState<string | null>(null);
+  // Latest agent.progress while a graph turn runs; null when idle.
+  const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null);
+  const [brief, setBrief] = useState<SessionBrief | null>(null);
+  // True while the graph sits at interrupt_before executor_image_plan.
+  const [awaitingImageOk, setAwaitingImageOk] = useState(false);
 
   const sessionId = session?.id ?? null;
   const sseReadyRef = useRef<SseReadyHandle | null>(null);
+
+  // Shared reducer for turn events — SSE delivers them live mid-turn, while the
+  // POST /messages response repeats them at the end for the no-SSE path.
+  const applyTurnEvent = useCallback(
+    (type: string, data: Record<string, unknown>) => {
+      if (type === "agent.progress") {
+        const progress = parseAgentProgress(data);
+        if (progress) setAgentProgress(progress);
+        return;
+      }
+      if (type === "brief.updated") {
+        const parsed = parseBrief(data);
+        if (parsed) setBrief(parsed);
+        return;
+      }
+      if (type === "draft.awaiting_image_ok") {
+        setAwaitingImageOk(true);
+        return;
+      }
+      if (type === "draft.updated" || type === "preview.updated") {
+        // Image gen finished / preview persisted — the interrupt is resolved.
+        setAwaitingImageOk(false);
+        return;
+      }
+      if (type === "message.assistant" || type === "review.failed" || type === "confirm.completed") {
+        setAgentProgress(null);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!sessionId || !accessToken) return;
@@ -66,6 +131,9 @@ export function useSession(companyId: string | undefined) {
       onEvent: (type, data) => {
         if (type === "session.snapshot") {
           if (typeof data.mode === "string") setMode(data.mode);
+          const state = data.state as Record<string, unknown> | undefined;
+          const snapshotBrief = parseBrief(state?.brief);
+          if (snapshotBrief) setBrief(snapshotBrief);
           return;
         }
         if (type === "message.delta") {
@@ -94,6 +162,7 @@ export function useSession(companyId: string | undefined) {
                 ],
           );
         }
+        applyTurnEvent(type, data);
       },
     }).catch((err) => {
       if (abort.signal.aborted) return;
@@ -107,7 +176,7 @@ export function useSession(companyId: string | undefined) {
       setSseConnected(false);
       abort.abort();
     };
-  }, [sessionId, accessToken, refreshAccessToken]);
+  }, [sessionId, accessToken, refreshAccessToken, applyTurnEvent]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -115,6 +184,9 @@ export function useSession(companyId: string | undefined) {
       if (!text || !accessToken || !companyId || sending) return;
       setSending(true);
       setStreamingText(null);
+      setAgentProgress(null);
+      // Any new message resumes an interrupted graph, so the card is stale.
+      setAwaitingImageOk(false);
 
       let optimistic: ChatMessage | null = null;
       try {
@@ -139,19 +211,36 @@ export function useSession(companyId: string | undefined) {
         setMessages(res.messages);
         setMode(res.mode);
         setStreamingText(null);
+        setAwaitingImageOk(res.interrupted);
+        for (const ev of res.events ?? []) {
+          applyTurnEvent(ev.type, ev.data ?? {});
+        }
+        setAgentProgress(null);
       } catch (err) {
         if (optimistic) {
           const failed = optimistic;
           setMessages((prev) => prev.filter((m) => m.id !== failed.id));
         }
         setStreamingText(null);
+        setAgentProgress(null);
         throw err;
       } finally {
         setSending(false);
       }
     },
-    [accessToken, companyId, sending, session],
+    [accessToken, companyId, sending, session, applyTurnEvent],
   );
 
-  return { session, messages, mode, sending, sseConnected, streamingText, sendMessage };
+  return {
+    session,
+    messages,
+    mode,
+    sending,
+    sseConnected,
+    streamingText,
+    agentProgress,
+    brief,
+    awaitingImageOk,
+    sendMessage,
+  };
 }

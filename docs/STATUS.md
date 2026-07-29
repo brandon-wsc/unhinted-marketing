@@ -97,16 +97,16 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 
 ### Phase 3 — React Dashboard + Meta Signals · **~35% · IN PROGRESS**
 
-**Focus now:** Agent Mode UI (see build order above). Meta ingest / BYOK / Trace after core agent → landing → preview → confirm.
+**Focus now:** Preview Mode + Confirm (see build order above). Meta ingest / BYOK / Trace after core preview → confirm.
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Auth pages + protected shell | ✅ | Login / register; `/` is now the chat workspace |
 | Chat UI shell | ✅ | `web/src/features/session/` — `useSession` + message list / composer; Streamdown + `@streamdown/cjk`; Vite proxy covers `/sessions` `/companies` `/signals` |
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
-| Agent Mode UI | ⬜ | **Next** — `agent.progress` status + brief / interrupt cards; needs live per-node publish (agent events currently fan out post-turn) |
-| Landing: recommended questions cards | ⬜ | After Agent — wire `GET /companies/{id}/recommended-questions` |
-| Preview Mode (left chat / right preview) | ⬜ | Consume SSE `preview.updated` + draft state |
+| Agent Mode UI | ✅ | `agent.progress` published live inside each graph node (decorator in `nodes.py`); status line w/ model tier/id + brief card + interrupt card (click resumes image gen via `POST /messages`) |
+| Landing: recommended questions cards | ✅ | Empty-state cards from `GET /companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
+| Preview Mode (left chat / right preview) | ⬜ | **Next** — Consume SSE `preview.updated` + draft state |
 | Confirm button → `/confirm` | ⬜ | Show receipt status |
 | Meta Graph API hot search | ⏸ | Can wait until after core UI |
 | BYOK settings page | ⏸ | After core UI |
@@ -187,7 +187,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 - **Theme:** Light / dark / system, persisted in `localStorage`
 - **Form memory:** Last user email / display name / org name from `localStorage` (not fake placeholders)
 - **Auth:** Access token in memory; refresh via cookie; auto-refresh on app load
-- **Phase 3 (shipped):** Chat workspace at `/` — `useSession` REST-first + SSE enhancement; Streamdown (`mode="streaming"` + `@streamdown/cjk`) assistant MD; SSE `message.delta` live tokens; `agent.progress` (agent) still pending; no `useChat`
+- **Phase 3 (shipped):** Chat workspace at `/` — `useSession` REST-first + SSE enhancement; Streamdown (`mode="streaming"` + `@streamdown/cjk`) assistant MD; SSE `message.delta` live tokens; Agent Mode UI: live `agent.progress` status line + brief / `draft.awaiting_image_ok` interrupt cards; no `useChat`
 - **Session client:** `web/src/features/session/` — `api.ts` (REST), `sse.ts` (`@microsoft/fetch-event-source` with Bearer), `use-session.ts`, `components/chat-panel.tsx`
 
 **Run:**
@@ -248,7 +248,7 @@ See `.env.example`. Local `.env` is gitignored.
 
 ## Known Gaps / Next Steps
 
-1. **Phase 3 UI (active):** Agent progress/brief UI → Landing cards → Preview + Confirm. Chat shell + `message.delta` streaming shipped. Known gaps: no `GET /sessions/{id}/messages` (page refresh loses transcript); agent events still publish post-turn — live per-node publish needed for `agent.progress`.
+1. **Phase 3 UI (active):** ~~Agent progress/brief UI~~ → ~~Landing cards~~ → Preview + Confirm. Chat shell + `message.delta` streaming + Agent progress/brief/interrupt cards + landing recommended questions shipped. Known gap: no `GET /sessions/{id}/messages` (page refresh loses transcript).
 2. **Phase 2 held:** Image worker (replace `placeholder://`), `query_market_trends` JSON Schema, formal curl exit-criteria script.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer.
 4. **Hardening:** Auth rate limits, basic API tests, multi-worker SSE (Redis) if scaling beyond one API process.
@@ -260,7 +260,7 @@ See `.env.example`. Local `.env` is gitignored.
 From ROADMAP; current completion:
 
 1. HK hot search ingests automatically — ✅ (worker + scheduler)  
-2. Landing shows ≥5 recommended questions (~12h cache) — ✅ API; ⬜ UI (Phase 3)  
+2. Landing shows ≥5 recommended questions (~12h cache) — ✅ API; ✅ UI (Phase 3 empty-state cards)  
 3. User can register, login, access protected dashboard — ✅  
 4. Chat → can/cannot recommendation → preview — ✅ API; chat UI ✅ (streaming); brief/preview UI ⬜  
 5. Unlimited preview revisions + reviewer gate — ✅ API; ⬜ UI (Phase 3)  

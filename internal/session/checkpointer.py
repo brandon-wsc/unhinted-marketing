@@ -23,16 +23,30 @@ def checkpoint_conninfo(database_url: str | None = None) -> str:
 
 
 async def open_postgres_checkpointer() -> tuple[AsyncConnectionPool, AsyncPostgresSaver]:
-    """Open a connection pool and AsyncPostgresSaver; run setup() for checkpoint tables."""
+    """Open a connection pool and AsyncPostgresSaver; run setup() for checkpoint tables.
+
+    Idle Postgres (or Docker) may close sockets the pool still thinks are live —
+    without ``check`` / keepalives, the next ``aget_state`` / ``ainvoke`` fails
+    with ``server closed the connection unexpectedly``.
+    """
     conninfo = checkpoint_conninfo()
     pool = AsyncConnectionPool(
         conninfo=conninfo,
         min_size=1,
         max_size=10,
+        # Recycle before common idle timeouts; validate every checkout.
+        max_idle=300,
+        max_lifetime=1800,
+        check=AsyncConnectionPool.check_connection,
         kwargs={
             "autocommit": True,
             "prepare_threshold": 0,
             "row_factory": dict_row,
+            # libpq TCP keepalives — detect silent server-side closes early.
+            "keepalives": 1,
+            "keepalives_idle": 60,
+            "keepalives_interval": 15,
+            "keepalives_count": 4,
         },
         open=False,
     )
