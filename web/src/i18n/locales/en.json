@@ -42,6 +42,9 @@
     "logout": "Sign out"
   },
   "chat": {
+    "mobile": {
+      "back": "Back"
+    },
     "empty": {
       "title": "What are we marketing today?",
       "subtitle": "Type a message to start — the assistant combines HK hot search signals with your company profile to discuss content directions."
@@ -58,6 +61,7 @@
     "live": "Live",
     "offline": "Offline",
     "agent": {
+      "actions": "Agent steps",
       "nodes": {
         "working": "Working…",
         "route_intent": "Understanding your request…",
@@ -85,7 +89,71 @@
       "imageOkMessage": "Looks good — please generate the image."
     },
     "error": {
-      "sendFailed": "Failed to send the message. Please try again."
+      "sendFailed": "Failed to send the message. Please try again.",
+      "llmFailed": "AI service error",
+      "retry": "Retry"
+    },
+    "history": {
+      "open": "Open history",
+      "collapse": "Collapse history",
+      "title": "Chat history",
+      "subtitle": "Resume a past session or start a new one",
+      "close": "Close",
+      "new": "New chat",
+      "search": "Search chats…",
+      "refresh": "Refresh",
+      "loading": "Loading history…",
+      "empty": "No chats yet",
+      "untitled": "Untitled chat",
+      "restoring": "Restoring chat…",
+      "openFailed": "Could not open that chat",
+      "more": "More options",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "rename": "Rename",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "deleting": "Deleting…",
+      "deleteTitle": "Delete this chat?",
+      "deleteBody": "This permanently removes the conversation and its drafts.",
+      "renameFailed": "Could not rename that chat",
+      "pinFailed": "Could not update pin",
+      "deleteFailed": "Could not delete that chat",
+      "group": {
+        "pinned": "Pinned",
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "week": "Previous 7 Days",
+        "older": "Older"
+      }
+    }
+  },
+  "preview": {
+    "title": "Post preview",
+    "readyBanner": "Post preview is ready — tap to open.",
+    "emptyMobile": "No preview yet — it will show up here once the draft is ready.",
+    "revision": "Revision {{n}}",
+    "dirty": "Unsaved",
+    "apply": "Apply",
+    "applySaving": "Saving…",
+    "confirm": "Confirm",
+    "confirmWorking": "Confirming…",
+    "confirmDone": "Confirmed",
+    "confirmReceipt": "Receipt status: {{status}}",
+    "confirmHint": "Saying so in chat does not publish. Confirm uses the saved revision (dirty edits are saved first).",
+    "fields": {
+      "caption": "Caption",
+      "hashtags": "Hashtags",
+      "cta": "CTA"
+    },
+    "mock": {
+      "sponsored": "Instagram preview",
+      "placeholder": "Image placeholder",
+      "more": "more"
+    },
+    "error": {
+      "saveFailed": "Failed to save the draft. Please try again.",
+      "confirmFailed": "Failed to confirm. Please try again."
     }
   },
   "theme": {

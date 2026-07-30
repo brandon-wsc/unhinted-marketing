@@ -52,7 +52,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173/login](http://localhost:5173/login). Vite proxies `/auth` → `:8000`.
+Open [http://localhost:5173/login](http://localhost:5173/login). Vite proxies `/auth`, `/sessions`, `/signals`, `/companies`, `/health` → `:8000`.
 
 ---
 
@@ -83,7 +83,7 @@ python -m cmd.scheduler --once
 python -m cmd.scheduler
 ```
 
-Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template fallbacks are used.
+Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template fallbacks are used. Optional `LLM_API_BASE` (OpenRouter / DeepSeek / etc.): bare `LLM_*_MODEL` ids are routed as `openai/<id>` against that base — see `.env.example`.
 
 ---
 
@@ -106,4 +106,18 @@ Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template
 | GET | `/signals/top` | Top HK market signals (auth required) |
 | GET | `/companies/{id}/recommended-questions` | Cached landing questions (12h TTL) |
 
-Full auth and session API specs: [ROADMAP.md](./ROADMAP.md).
+### Sessions (Phase 2–3)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/sessions?company_id=` | History list (pinned first; title or first-message preview) |
+| POST | `/sessions` | Create session |
+| PATCH | `/sessions/{id}` | Rename (`title` / `clear_title`) and/or `pinned` |
+| DELETE | `/sessions/{id}` | Delete session (+ cascaded messages/drafts) |
+| POST | `/sessions/{id}/messages` | User turn (LangGraph); returns `events` + `interrupted` |
+| GET | `/sessions/{id}/messages` | Hydrate transcript (`metadata.agent_actions` on user turns) |
+| POST | `/sessions/{id}/draft` | Manual draft revision (no LLM) |
+| GET | `/sessions/{id}/events` | SSE stream (snapshot includes `interrupted` for Generate-image CTA) |
+| POST | `/sessions/{id}/confirm` | Confirm stub publish |
+
+Full auth and session specs: [ROADMAP.md](./ROADMAP.md); what’s shipped: [STATUS.md](./STATUS.md).

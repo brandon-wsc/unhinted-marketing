@@ -10,7 +10,7 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <AppShell mainClassName="flex items-center justify-center">
+      <AppShell mainClassName="flex items-center justify-center overflow-y-auto">
         <p className="text-[var(--color-muted)]">{t("common.loading")}</p>
       </AppShell>
     );

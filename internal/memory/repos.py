@@ -227,6 +227,57 @@ async def get_session(db: AsyncSession, session_id: uuid.UUID) -> Session | None
     return await db.scalar(select(Session).where(Session.id == session_id))
 
 
+async def list_user_sessions(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    limit: int = 40,
+) -> list[tuple[Session, str | None]]:
+    """Return sessions pinned-first then newest, with display title."""
+    first_user = (
+        select(SessionMessage.content)
+        .where(
+            SessionMessage.session_id == Session.id,
+            SessionMessage.role == "user",
+        )
+        .order_by(SessionMessage.created_at.asc())
+        .limit(1)
+        .correlate(Session)
+        .scalar_subquery()
+    )
+    stmt = select(Session, first_user).where(Session.user_id == user_id)
+    if company_id is not None:
+        stmt = stmt.where(Session.company_id == company_id)
+    stmt = stmt.order_by(desc(Session.pinned), desc(Session.updated_at)).limit(limit)
+    rows = (await db.execute(stmt)).all()
+    return [(row[0], row[1]) for row in rows]
+
+
+async def update_session_meta(
+    db: AsyncSession,
+    session: Session,
+    *,
+    title: str | None = None,
+    clear_title: bool = False,
+    pinned: bool | None = None,
+) -> Session:
+    if clear_title:
+        session.title = None
+    elif title is not None:
+        cleaned = title.strip()[:200]
+        session.title = cleaned or None
+    if pinned is not None:
+        session.pinned = pinned
+    await db.flush()
+    return session
+
+
+async def delete_session(db: AsyncSession, session: Session) -> None:
+    await db.delete(session)
+    await db.flush()
+
+
 async def add_session_message(
     db: AsyncSession,
     *,

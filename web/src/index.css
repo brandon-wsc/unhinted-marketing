@@ -47,6 +47,16 @@
   --shadow-color: rgb(0 0 0 / 0.35);
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
-  @apply bg-[var(--color-background)] text-[var(--color-foreground)] font-sans antialiased min-h-screen transition-colors duration-200;
+  @apply bg-[var(--color-background)] text-[var(--color-foreground)] font-sans antialiased h-dvh overflow-hidden transition-colors duration-200;
+}
+
+#root {
+  @apply h-dvh overflow-hidden;
 }

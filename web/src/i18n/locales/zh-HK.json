@@ -42,6 +42,9 @@
     "logout": "登出"
   },
   "chat": {
+    "mobile": {
+      "back": "上一頁"
+    },
     "empty": {
       "title": "今日想推廣啲咩？",
       "subtitle": "輸入訊息開始對話 — AI 會結合香港熱搜同你嘅公司資料，同你傾內容方向。"
@@ -58,6 +61,7 @@
     "live": "即時連線",
     "offline": "未連線",
     "agent": {
+      "actions": "Agent 步驟",
       "nodes": {
         "working": "處理緊…",
         "route_intent": "理解緊你嘅需求…",
@@ -85,7 +89,71 @@
       "imageOkMessage": "OK，幫我生成圖片。"
     },
     "error": {
-      "sendFailed": "訊息送出失敗，請再試一次"
+      "sendFailed": "訊息送出失敗，請再試一次",
+      "llmFailed": "AI 服務錯誤",
+      "retry": "重試"
+    },
+    "history": {
+      "open": "打開紀錄",
+      "collapse": "收起紀錄",
+      "title": "對話紀錄",
+      "subtitle": "繼續以前嘅對話，或者開新 chat",
+      "close": "關閉",
+      "new": "新對話",
+      "search": "搜尋對話…",
+      "refresh": "重新整理",
+      "loading": "載入紀錄…",
+      "empty": "暫時未有對話",
+      "untitled": "未命名對話",
+      "restoring": "還原對話中…",
+      "openFailed": "打唔開呢個對話",
+      "more": "更多選項",
+      "pin": "置頂",
+      "unpin": "取消置頂",
+      "rename": "重新命名",
+      "delete": "刪除",
+      "cancel": "取消",
+      "deleting": "刪除緊…",
+      "deleteTitle": "刪除呢個對話？",
+      "deleteBody": "會永久刪除對話同相關草稿。",
+      "renameFailed": "重新命名失敗",
+      "pinFailed": "置頂更新失敗",
+      "deleteFailed": "刪除失敗",
+      "group": {
+        "pinned": "已置頂",
+        "today": "今日",
+        "yesterday": "昨日",
+        "week": "過去 7 日",
+        "older": "更早"
+      }
+    }
+  },
+  "preview": {
+    "title": "帖文預覽",
+    "readyBanner": "帖文預覽已準備好 — 撳呢度睇。",
+    "emptyMobile": "未有預覽 — 傾完草稿之後會喺呢度出現。",
+    "revision": "修訂 {{n}}",
+    "dirty": "未儲存",
+    "apply": "套用",
+    "applySaving": "儲存緊…",
+    "confirm": "確認發佈",
+    "confirmWorking": "確認緊…",
+    "confirmDone": "已確認",
+    "confirmReceipt": "回執狀態：{{status}}",
+    "confirmHint": "對話入面講「可以出」唔會發佈。確認會用已儲存嘅修訂（有未儲存改動會先自動儲存）。",
+    "fields": {
+      "caption": "文案",
+      "hashtags": "Hashtags",
+      "cta": "行動呼籲"
+    },
+    "mock": {
+      "sponsored": "Instagram 預覽",
+      "placeholder": "圖片佔位",
+      "more": "更多"
+    },
+    "error": {
+      "saveFailed": "草稿儲存失敗，請再試一次",
+      "confirmFailed": "確認失敗，請再試一次"
     }
   },
   "theme": {

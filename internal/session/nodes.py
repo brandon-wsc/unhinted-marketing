@@ -12,6 +12,7 @@ from typing import Any, Awaitable, Callable, TypeVar
 from pydantic import BaseModel
 
 from internal.llm.router import (
+    LlmProviderError,
     ModelTier,
     astream_text,
     complete_json,
@@ -99,9 +100,27 @@ async def _parse_llm_json(tier: ModelTier, system: str, user: str, model: type[T
     try:
         raw = await complete_json(tier=tier, system=system, user=user)
         return model.model_validate_json(raw)
+    except LlmProviderError:
+        # Provider/transport/auth/model failures must surface to the UI — do not
+        # silently fall back while credentials are configured.
+        raise
     except Exception:
         logger.exception("LLM JSON node failed (%s)", model.__name__)
         return None
+
+
+def _llm_failure_reply(exc: LlmProviderError, *, chinese: bool) -> str:
+    if chinese:
+        return (
+            f"AI 服務暫時唔可用（{exc.kind}"
+            + (f" · {exc.model}" if exc.model else "")
+            + f"）：{exc.message}"
+        )
+    return (
+        f"AI service unavailable ({exc.kind}"
+        + (f" · {exc.model}" if exc.model else "")
+        + f"): {exc.message}"
+    )
 
 
 def _thread_uuid(state: SessionState) -> uuid.UUID | None:
@@ -125,11 +144,13 @@ def _agent_progress_payload(node: str) -> dict[str, Any]:
 
 async def publish_agent_progress(state: SessionState, node: str) -> None:
     """Fan out agent.progress the moment a node starts (not post-turn)."""
+    payload = _agent_progress_payload(node)
     session_id = _thread_uuid(state)
     if not session_id:
         return
+    session_event_bus.record_turn_progress(session_id, "agent.progress", payload)
     try:
-        await session_event_bus.publish(session_id, "agent.progress", _agent_progress_payload(node))
+        await session_event_bus.publish(session_id, "agent.progress", payload)
     except Exception:
         logger.exception("failed to publish agent.progress (%s)", node)
 
@@ -275,9 +296,15 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
 async def chat(state: SessionState) -> dict[str, Any]:
     user = _last_user_text(state)
     reply: str | None = None
+    chinese = any("\u4e00" <= c <= "\u9fff" for c in user)
+    llm_error: str | None = None
     if has_llm_credentials():
         try:
             reply = await _chat_stream(state, user)
+        except LlmProviderError as exc:
+            logger.warning("chat LLM stream failed: %s", exc.message)
+            llm_error = exc.message
+            reply = _llm_failure_reply(exc, chinese=chinese)
         except Exception:
             logger.exception("chat LLM stream failed — retrying without stream")
             try:
@@ -287,10 +314,13 @@ async def chat(state: SessionState) -> dict[str, Any]:
                     system=prompts.CHAT,
                     user=json.dumps({"history": history, "latest": user}, ensure_ascii=False),
                 )
+            except LlmProviderError as exc:
+                logger.warning("chat LLM failed: %s", exc.message)
+                llm_error = exc.message
+                reply = _llm_failure_reply(exc, chinese=chinese)
             except Exception:
                 logger.exception("chat LLM failed")
     if not reply:
-        chinese = any("\u4e00" <= c <= "\u9fff" for c in user)
         reply = (
             "我可以幫你睇香港熱話同草擬社交貼文。想開始嘅話，揀一條推薦問題，"
             "或者直接講你想做咩內容。"
@@ -300,7 +330,10 @@ async def chat(state: SessionState) -> dict[str, Any]:
                 "Pick a recommended question or tell me what you want to create."
             )
         )
-    return {"messages": _append_assistant(state, reply), "mode": MODE_CHAT}
+    out: dict[str, Any] = {"messages": _append_assistant(state, reply), "mode": MODE_CHAT}
+    if llm_error:
+        out["error"] = llm_error
+    return out
 
 
 @agent_progress("brainstormer")
