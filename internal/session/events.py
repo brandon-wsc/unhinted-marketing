@@ -20,6 +20,21 @@ class SessionEventBus:
     def __init__(self) -> None:
         self._subs: dict[uuid.UUID, set[asyncio.Queue[dict[str, Any] | None]]] = defaultdict(set)
         self._lock = asyncio.Lock()
+        # Progress collected per session while a turn is in flight (REST replay).
+        self._turn_progress: dict[uuid.UUID, list[dict[str, Any]]] = {}
+
+    def begin_turn_progress(self, session_id: uuid.UUID) -> None:
+        self._turn_progress[session_id] = []
+
+    def record_turn_progress(
+        self, session_id: uuid.UUID, event_type: str, data: dict[str, Any]
+    ) -> None:
+        bucket = self._turn_progress.get(session_id)
+        if bucket is not None:
+            bucket.append({"type": event_type, "data": data})
+
+    def end_turn_progress(self, session_id: uuid.UUID) -> list[dict[str, Any]]:
+        return list(self._turn_progress.pop(session_id, []))
 
     async def publish(self, session_id: uuid.UUID, event_type: str, data: dict[str, Any] | None = None) -> None:
         payload = {"type": event_type, "data": data or {}}

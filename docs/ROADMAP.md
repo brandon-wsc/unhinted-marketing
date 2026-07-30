@@ -103,27 +103,42 @@ Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly co
 │  • brainstormer: can_do[] / cannot_do[] + brief ideas           │
 │  • executor_post: brief → grounded post copy                     │
 │  • User OK → executor_image_plan → executor_image_gen → Preview │
-│  • UI: `agent.progress` status (node + model tier/id) — do not  │
-│    stream structured JSON as chat markdown; then brief cards    │
+│  • UI: `agent.progress` action-record trail (node + model) —    │
+│    do not stream structured Agent JSON as chat markdown; then   │
+│    brief / interrupt cards                                      │
+│  • Persist trail on user turn:                                  │
+│    `session_messages.metadata.agent_actions`                    │
+│  • Interrupt CTA: `draft.awaiting_image_ok` + snapshot          │
+│    `interrupted` (graph checkpoint / `awaiting_image_ok`)       │
+│    so Generate-image survives refresh and failed resume         │
 └────────────────────────────┬────────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Preview Mode (iterative)                                       │
-│  • Layout: left chat (narrow) · right preview (wide)            │
-│  • User keeps requesting edits until satisfied                  │
-│  • Each edit → new revision → reviewer gate → SSE update        │
+│  • Desktop: left chat (narrow) · right preview (wide)           │
+│  • Mobile (< lg): Chat primary; Preview / Record as push pages  │
+│    (history icon → Record; ready banner → Preview; 上一頁 back) │
+│  • Canonical draft: caption / hashtags / cta / image_url        │
+│  • MVP skin: Instagram phone mock (FB/Threads skins later)      │
+│  • AI revise (chat) → reviewer → new revision → SSE             │
+│  • User edit: POST /sessions/{id}/draft (no LLM) → new token    │
 │  • Chat "可以出" ≠ publish — UI Confirm button only           │
 └────────────────────────────┬────────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Confirm (NO LangGraph, NO LLM)                                 │
 │  POST /sessions/{id}/confirm                                    │
-│  • Read latest preview_draft · validate approval_token          │
+│  • Dirty UI → auto POST /draft then confirm with new token      │
+│  • Read preview_draft · validate approval_token                 │
 │  • Platform API (Meta/IG/etc.) · idempotency_key · receipt      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Phase 3 UI build order:** Chat shell → chat token stream → Agent progress/brief UI → Landing cards → Preview + Confirm.
+**Phase 3 UI build order:** Chat shell → chat token stream → Agent progress/brief UI → Landing cards → Preview + Confirm → History (sidebar / mobile Record).
+
+**Preview UX (2026-07-30):** One shared draft across Meta siblings; Confirm auto-flushes dirty local fields; optional Apply saves without publishing. Not a markdown editor.
+
+**History UX (2026-07-31):** `sessions.title` + `pinned`; `GET /sessions` list; desktop Gemini-style sidebar; mobile Record push page.
 
 **Frontend chat stack:** hand-rolled React session client (`useSession` + `fetch` SSE with Bearer). No Vercel AI SDK `useChat`. Assistant markdown via standalone [Streamdown](https://streamdown.ai/) + `@streamdown/cjk`.
 ---
@@ -225,6 +240,7 @@ review_attempts       # retries toward max_review_retries=2
 pending_confirm       # set by ack_confirm; Confirm handler checks this + approval_token
 approval_token        # per-revision token written with preview_drafts
 need_image            # bool — route reviewer → interrupt vs copy-only persist
+awaiting_image_ok     # bool — mirrored into sessions.state when graph is parked at interrupt_before executor_image_plan (UI hydrate)
 ```
 
 ### Nodes
@@ -234,7 +250,7 @@ need_image            # bool — route reviewer → interrupt vs copy-only persi
 | `route_intent` | LLM / classifier | intent | — |
 | `load_context` | deterministic | company/persona context on state | — |
 | `trend_searcher` | tool + LLM (cheap) | `source_signal_ids`, ranked signals | `signals.updated` |
-| `chat` | LLM (stream) | `messages` | `message.delta` (tokens) → `message.assistant` |
+| `chat` | LLM (stream) | `messages` | `message.delta` (tokens) → `message.assistant`; `llm.failed` on provider/transport errors |
 | `brainstormer` | LLM (medium) | `brief`, `mode=AGENT` | `agent.progress` → `brief.updated` |
 | `executor_post` | LLM (medium) | `draft` | `agent.progress` → `draft.copy_updated` |
 | `executor_image_plan` | LLM (medium) | `image_plan` | `agent.progress` → `draft.image_plan_updated` |
@@ -300,8 +316,8 @@ unhinted-marketing/
 | `entities` | brands, topics, personas, campaigns, **companies** (`profile` JSONB) |
 | `edges` | MENTIONS, AFFECTS, TARGETS, PERFORMED_ON + source_signal_id |
 | `campaigns` | Operational campaign state |
-| `sessions` | User session state (mode, company_id, **user_id**) |
-| `session_messages` | Chat log (left panel) |
+| `sessions` | User session state (mode, company_id, **user_id**, title, pinned) |
+| `session_messages` | Chat log (left panel). User rows always; assistant rows for chat / ack / LLM errors — Agent brief/draft are not chat rows |
 | `preview_drafts` | Revision chain (copy, image, platform, approval_token) |
 | `tool_receipts` | Idempotent execution receipts |
 | `byok_config` | Encrypted provider keys (server-side only) |
@@ -403,14 +419,17 @@ All metrics stored in PG with provenance before LLM reads them.
 **UI build order:** Chat shell → chat token stream → Agent UI → Landing cards → Preview + Confirm.
 
 - [ ] Meta Graph API hot search worker (trending / page insights → `raw_news_events`)
-- [x] Vite + React + Tailwind in `web/` (auth shell done; session UI next)
+- [x] Vite + React + Tailwind in `web/` (auth + session workspace)
 - [x] Protected routes; redirect unauthenticated → `/login`
 - [x] Chat UI shell: `useSession` + composer + Streamdown message list (SSE via `fetch` + Bearer)
 - [x] Chat token stream: LiteLLM streaming on `chat` node → SSE `message.delta` → final `message.assistant`
-- [x] Agent UI: SSE `agent.progress` `{node, model_tier, model}` status line + brief / interrupt cards (no Agent JSON as streamed chat MD)
+- [x] Agent UI: SSE `agent.progress` `{node, model_tier, model}` → in-chat action-record trail (persisted on user message `metadata.agent_actions`; hydrate on reopen) + brief / interrupt cards; snapshot `interrupted` restores Generate-image CTA (no Agent JSON as streamed chat MD)
 - [x] Landing: recommended questions cards (poll or SSE refresh)
-- [ ] Preview Mode: left chat / right preview (right dominant)
-- [ ] Confirm button → calls `/confirm`, shows receipt status
+- [x] Preview Mode: desktop left chat / right IG mock + editable fields; mobile Preview push page (canonical draft; SSE `preview.updated` + copy)
+- [x] `POST /sessions/{id}/draft` — manual revision (no LLM); sync session.state + graph checkpoint
+- [x] Confirm button → dirty auto-flush then `/confirm`; shows stub receipt status
+- [x] `GET /sessions` + `GET /sessions/{id}/messages` — history list + hydrate after refresh
+- [x] `PATCH /sessions/{id}` + `DELETE /sessions/{id}` — rename / pin / delete (desktop sidebar; mobile Record page)
 - [ ] BYOK settings page (masked keys, server-side storage)
 - [ ] Trace viewer: session messages + revision timeline + signal grounding links
 

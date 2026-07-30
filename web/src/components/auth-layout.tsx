@@ -10,7 +10,7 @@ type AuthLayoutProps = {
 
 export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps) {
   return (
-    <AppShell mainClassName="flex items-center justify-center p-4">
+    <AppShell mainClassName="flex items-center justify-center overflow-y-auto p-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
