@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Node / React
+node_modules/
+web/dist/
+web/.vite/
+*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Runtime / secrets
+*.pem
+secrets/
+credentials.json
+
+# Media cache (generated)
+.cache/
+uploads/
+
+# Logs
+*.log
+logs/
+
+# PostgreSQL local
+pgdata/

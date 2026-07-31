@@ -1,0 +1,177 @@
+{
+  "app": {
+    "name": "Unhinted",
+    "title": "Unhinted Marketing"
+  },
+  "common": {
+    "loading": "Loading…",
+    "email": "Email",
+    "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "notAvailable": "—"
+  },
+  "header": {
+    "menu": {
+      "guest": "Guest",
+      "language": "Language",
+      "theme": "Theme"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "subtitle": "Sign in to access the Unhinted Marketing Dashboard",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "noAccount": "Don't have an account?",
+      "registerLink": "Create one"
+    },
+    "register": {
+      "title": "Create account",
+      "subtitle": "A company workspace will be created automatically after registration",
+      "displayName": "Display name",
+      "organizationName": "Company name (optional)",
+      "passwordHint": "Password (at least 8 characters)",
+      "confirmPassword": "Confirm password",
+      "submit": "Create account",
+      "submitting": "Creating…",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Sign in"
+    },
+    "logout": "Sign out"
+  },
+  "chat": {
+    "mobile": {
+      "back": "Back"
+    },
+    "empty": {
+      "title": "What are we marketing today?",
+      "subtitle": "Type a message to start — the assistant combines HK hot search signals with your company profile to discuss content directions."
+    },
+    "questions": {
+      "title": "Suggested prompts",
+      "loading": "Loading suggestions…",
+      "stale": "Refreshing soon"
+    },
+    "input": {
+      "placeholder": "Type a message… (Enter to send, Shift+Enter for a new line)"
+    },
+    "send": "Send",
+    "live": "Live",
+    "offline": "Offline",
+    "agent": {
+      "actions": "Agent steps",
+      "nodes": {
+        "working": "Working…",
+        "route_intent": "Understanding your request…",
+        "load_context": "Loading company context…",
+        "trend_searcher": "Searching HK trends…",
+        "brainstormer": "Brainstorming angles…",
+        "executor_post": "Drafting post copy…",
+        "grounding_check": "Checking signal grounding…",
+        "reviewer": "Reviewing draft…",
+        "edit_copy": "Revising copy…",
+        "executor_image_plan": "Planning the image…",
+        "executor_image_gen": "Generating the image…"
+      },
+      "brief": {
+        "title": "Content brief",
+        "canDo": "Can do",
+        "cannotDo": "Won't do",
+        "angles": "Angles"
+      },
+      "interrupt": {
+        "title": "Copy is ready",
+        "subtitle": "Continue to plan and generate the image?",
+        "confirm": "Generate image"
+      },
+      "imageOkMessage": "Looks good — please generate the image."
+    },
+    "error": {
+      "sendFailed": "Failed to send the message. Please try again.",
+      "llmFailed": "AI service error",
+      "retry": "Retry"
+    },
+    "history": {
+      "open": "Open history",
+      "collapse": "Collapse history",
+      "title": "Chat history",
+      "subtitle": "Resume a past session or start a new one",
+      "close": "Close",
+      "new": "New chat",
+      "search": "Search chats…",
+      "refresh": "Refresh",
+      "loading": "Loading history…",
+      "empty": "No chats yet",
+      "untitled": "Untitled chat",
+      "restoring": "Restoring chat…",
+      "openFailed": "Could not open that chat",
+      "more": "More options",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "rename": "Rename",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "deleting": "Deleting…",
+      "deleteTitle": "Delete this chat?",
+      "deleteBody": "This permanently removes the conversation and its drafts.",
+      "renameFailed": "Could not rename that chat",
+      "pinFailed": "Could not update pin",
+      "deleteFailed": "Could not delete that chat",
+      "group": {
+        "pinned": "Pinned",
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "week": "Previous 7 Days",
+        "older": "Older"
+      }
+    }
+  },
+  "preview": {
+    "title": "Post preview",
+    "readyBanner": "Post preview is ready — tap to open.",
+    "emptyMobile": "No preview yet — it will show up here once the draft is ready.",
+    "revision": "Revision {{n}}",
+    "dirty": "Unsaved",
+    "apply": "Apply",
+    "applySaving": "Saving…",
+    "confirm": "Confirm",
+    "confirmWorking": "Confirming…",
+    "confirmDone": "Confirmed",
+    "confirmReceipt": "Receipt status: {{status}}",
+    "confirmHint": "Saying so in chat does not publish. Confirm uses the saved revision (dirty edits are saved first).",
+    "fields": {
+      "caption": "Caption",
+      "hashtags": "Hashtags",
+      "cta": "CTA"
+    },
+    "mock": {
+      "sponsored": "Instagram preview",
+      "placeholder": "Image placeholder",
+      "more": "more"
+    },
+    "error": {
+      "saveFailed": "Failed to save the draft. Please try again.",
+      "confirmFailed": "Failed to confirm. Please try again."
+    }
+  },
+  "theme": {
+    "label": "Theme",
+    "light": "Light mode",
+    "dark": "Dark mode",
+    "system": "System"
+  },
+  "errors": {
+    "loginFailed": "Sign in failed",
+    "registrationFailed": "Registration failed",
+    "invalidEmail": "Invalid email address",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordMismatch": "Passwords do not match",
+    "emailAlreadyRegistered": "This email is already registered",
+    "invalidCredentials": "Incorrect email or password",
+    "accountDisabled": "This account has been disabled",
+    "invalidRefreshToken": "Session expired. Please sign in again",
+    "requestFailed": "Request failed ({{status}})"
+  }
+}
