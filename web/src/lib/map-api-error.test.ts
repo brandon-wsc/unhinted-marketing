@@ -1,0 +1,31 @@
+import { describe, expect, it, vi } from "vitest";
+import type { TFunction } from "i18next";
+import { mapApiError } from "@/lib/map-api-error";
+
+describe("mapApiError", () => {
+  const t = vi.fn((key: string, opts?: { status?: string }) => {
+    if (opts?.status !== undefined) return `${key}:${opts.status}`;
+    return `i18n:${key}`;
+  }) as unknown as TFunction;
+
+  it("maps known API messages to i18n keys", () => {
+    expect(mapApiError("Invalid email address", t)).toBe("i18n:errors.invalidEmail");
+    expect(mapApiError("Password must be at least 8 characters", t)).toBe(
+      "i18n:errors.passwordTooShort",
+    );
+    expect(mapApiError("Email already registered", t)).toBe(
+      "i18n:errors.emailAlreadyRegistered",
+    );
+    expect(mapApiError("Invalid email or password", t)).toBe(
+      "i18n:errors.invalidCredentials",
+    );
+  });
+
+  it("maps Request failed (N) to errors.requestFailed with status", () => {
+    expect(mapApiError("Request failed (404)", t)).toBe("errors.requestFailed:404");
+  });
+
+  it("passthroughs unknown messages", () => {
+    expect(mapApiError("Something unexpected", t)).toBe("Something unexpected");
+  });
+});
