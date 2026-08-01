@@ -1,8 +1,8 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-07-31  
-> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** (chat + agent + landing + Preview/Confirm + history; mobile Record/Chat/Preview; Meta/BYOK/Trace next)  
-> **Dev DB:** `192.168.5.20:5434` / database `unhinted`
+> **Last updated:** 2026-08-01  
+> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** (chat + agent + landing + Preview/Confirm + history; mobile Record/Chat/Preview; Meta/BYOK/Trace next) · Backend pytest **landed**  
+> **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
 This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). For architecture and phase plans, see ROADMAP.
 
@@ -81,7 +81,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | README | ✅ | Project intro; setup in GETTING_STARTED |
 | `docker-compose.yml` | ➖ | Removed — dev DB is external |
 | Auth rate limiting | ⬜ | Planned (Redis or in-memory) |
-| Automated tests | ⬜ | No `tests/` yet |
+| Automated tests | ✅ Backend | `tests/unit` + `tests/api` (needs `TEST_DATABASE_URL`); policy [TESTING.md](./TESTING.md). Frontend Vitest next (separate branch) |
 
 ### Phase 1 — Data & Autopilot Backend · **100%**
 
@@ -242,14 +242,16 @@ unhinted-marketing/
 │   └── config.py
 ├── schemas/              # Pydantic (auth, perception, session)
 ├── migrations/           # Alembic (auth → signals → sessions)
+├── tests/                # pytest: unit (no DB) + api (TEST_DATABASE_URL)
 ├── web/                  # React frontend (Phase 3 chat / agent / preview / history UI)
 └── docs/
     ├── ROADMAP.md
     ├── GETTING_STARTED.md
+    ├── TESTING.md            # path-tiered coverage gates
     └── STATUS.md             # this file
 ```
 
-**Not present yet:** `tests/`.
+**Tests:** `tests/unit` (no DB) · `tests/api` (requires `TEST_DATABASE_URL`). Policy: [TESTING.md](./TESTING.md). Frontend Vitest not started yet.
 
 ---
 
@@ -257,6 +259,7 @@ unhinted-marketing/
 
 | Variable | Purpose |
 |----------|---------|
+| `TEST_DATABASE_URL` | Isolated Postgres for `pytest tests/api` (skipped if unset) |
 | `DATABASE_URL` | Async PG URL → dev DB `192.168.5.20:5434/unhinted` |
 | `JWT_SECRET` | Sign access/refresh tokens — **change in prod** |
 | `CORS_ORIGINS` | Default `http://localhost:5173` |
@@ -276,7 +279,7 @@ See `.env.example`. Local `.env` is gitignored.
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
 2. **Phase 2 held:** Image worker (replace `placeholder://`), `query_market_trends` JSON Schema, formal curl exit-criteria script.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer; FB/Threads preview skins.
-4. **Hardening:** Auth rate limits, basic API tests, multi-worker SSE (Redis) if scaling beyond one API process.
+4. **Hardening:** Auth rate limits; ~~basic API tests~~ (backend suite landed — [TESTING.md](./TESTING.md)); frontend Vitest next; multi-worker SSE (Redis) if scaling beyond one API process; CI/CD after tests stabilize.
 
 ---
 
@@ -298,4 +301,5 @@ From ROADMAP; current completion:
 
 - [ROADMAP.md](./ROADMAP.md) — full architecture & phase plan
 - [GETTING_STARTED.md](./GETTING_STARTED.md) — local setup & run commands
+- [TESTING.md](./TESTING.md) — test tiers & path coverage gates
 - [README.md](../README.md) — project intro

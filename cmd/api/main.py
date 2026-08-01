@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,26 +28,32 @@ async def lifespan(app: FastAPI):
         await close_postgres_checkpointer(pool)
 
 
-app = FastAPI(
-    title="Unhinted Marketing API",
-    version="0.1.0",
-    lifespan=lifespan,
-)
+def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
+    """Build the API app. Tests pass a noop lifespan to skip Postgres checkpointer."""
+    application = FastAPI(
+        title="Unhinted Marketing API",
+        version="0.1.0",
+        lifespan=lifespan_fn,
+    )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-app.include_router(auth_router)
-app.include_router(signals_router)
-app.include_router(questions_router)
-app.include_router(sessions_router)
+    application.include_router(auth_router)
+    application.include_router(signals_router)
+    application.include_router(questions_router)
+    application.include_router(sessions_router)
+
+    @application.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return application
 
 
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+app = create_app()
