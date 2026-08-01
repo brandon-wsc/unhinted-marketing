@@ -143,8 +143,13 @@ pytest tests/api
 pytest tests/unit --cov=internal.auth.jwt --cov=schemas --cov-fail-under=85
 TEST_DATABASE_URL=... pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
 
-# Frontend gate today (Vitest later)
-cd web && npm run build
+# Frontend — Vitest (Tier 1 utils + Tier 2 shared components)
+cd web
+npm test
+npm run test:coverage
+npm run build
 ```
 
 API fixtures run `alembic upgrade head` against `TEST_DATABASE_URL` and truncate tables between tests. Do **not** point `TEST_DATABASE_URL` at your main `unhinted` dev database if you care about its data.
+
+Frontend component tests mock i18n / auth / theme; see [TESTING.md](./TESTING.md).
