@@ -1,0 +1,132 @@
+# Testing & Coverage Policy
+
+> **Status:** Backend Tier 1 unit + Tier 2 API landed (`tests/unit`, `tests/api`). Frontend Vitest and CI/CD are next (prefer a separate branch).  
+> **Principle:** path-tiered gates — **no single repo-wide 80%**. Utils and API earn hard floors; pages / large feature UI / LLM stay low or omitted.
+
+---
+
+## Why tiers differ
+
+| Layer | Why the bar is different |
+|-------|--------------------------|
+| **Utils** | Pure transforms, no UI/IO; cheap to unit-test; bugs fan out widely |
+| **API** | Product contract + auth/ownership boundaries; integration tests, not line-count vanity |
+| **Shared components** | Test **behavior** (toggle, menu, a11y), not every className |
+| **Pages** | Thin shells over lib/context; line coverage is a poor signal |
+| **Feature UI / hooks** | Large, SSE/LLM-coupled; brittle under shallow RTL — prefer smoke / later E2E |
+| **LLM / workers** | Expensive mocks, flaky; excluded from merge gates |
+
+---
+
+## Coverage targets by path
+
+Targets are **line coverage** unless noted. CI should enforce **per-path** (or per-job) floors — never one global `--cov-fail-under` for the whole tree.
+
+### Backend
+
+| Tier | Paths | Target | Gate |
+|------|-------|--------|------|
+| **1 — Utils** | `internal/auth/jwt.py` · `schemas/**` · pure helpers in `internal/session/service.py` (`normalize_draft_copy`, `preview_updated_payload`, …) · `internal/session/checkpointer.py` (`checkpoint_conninfo`) · `internal/session/tiers.py` · `internal/session/io.py` / `state.py` (pure bits) | **85–95%** | **Fail** |
+| **2 — API** | `cmd/api/routes/**` | **70–80%** | **Fail** — happy path per public endpoint + 401/403 + confirm invalid token / idempotency |
+| **3 — Domain** | `internal/auth/service.py` · `deps.py` · `org.py` · non-LLM parts of `internal/session/service.py` | **60–75%** | Soft / follow API tests |
+| **4 — Memory glue** | `internal/memory/repos.py` | Covered via API integration | Soft |
+| **5 — Omit / smoke** | `internal/session/nodes.py` · `graph.py` · `prompts.py` · `internal/llm/**` · `internal/perception/**` · `cmd/worker/**` · `cmd/scheduler/**` · `migrations/**` · `internal/config.py` | **Not in gate** | Optional smoke later |
+
+**API test priorities (behavior, not %)**:
+
+1. `GET /health`
+2. Auth: register → login → me → refresh → logout (+ duplicate email, bad password, missing Bearer)
+3. Sessions CRUD + ownership `403`
+4. Confirm stub: invalid `approval_token` → 400; idempotency replay
+5. Signals / questions: auth required
+
+Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
+
+### Frontend
+
+| Tier | Paths | Target | Gate |
+|------|-------|--------|------|
+| **1 — Utils** | `web/src/lib/**` · `features/session/session-storage.ts` · pure bits of `sse.ts` / `api.ts` | **85–95%** | **Fail** (once Vitest lands) |
+| **2 — Shared (behavioral)** | `components/password-box.tsx` · `components/user-menu-dropdown.tsx` | **50–70%** behavior | Soft → Fail when suite exists |
+| **3 — Shared (presentational)** | `app-header.tsx` · `app-logo.tsx` · mostly-layout `auth-layout.tsx` | **Omit** or snapshot optional | No gate |
+| **4 — Pages** | `web/src/pages/**` | **20–40%** or smoke only | No hard gate — logic lives in lib/context |
+| **5 — Feature UI** | `features/session/components/**` (`chat-panel`, `session-history`, …) | **15–30%** later | No gate in v1 CI |
+| **6 — Hooks** | `use-session.ts` (large) · related hooks | **25–40%** progressive | Prefer extract-pure + unit; full hook suite later |
+| **Static** | `npm run build` (`tsc -b && vite build`) | Must pass | **Fail** |
+
+---
+
+## CI gates (intended, when CI lands)
+
+Minimum merge checks:
+
+```text
+ruff check .
+pytest --cov=…   # path-tiered fail-under (see below)
+cd web && npm ci && npm run build
+# later: vitest run --coverage  (lib + selected components only)
+```
+
+**Do not** require whole-repo 80%. Prefer two (or more) coverage reports:
+
+```bash
+# Tier 1 utils (example)
+pytest --cov=internal.auth.jwt --cov=schemas \
+  --cov-report=term-missing --cov-fail-under=85
+
+# Tier 2 API routes (example)
+pytest --cov=cmd.api.routes \
+  --cov-report=term-missing --cov-fail-under=70
+```
+
+Frontend (when Vitest is added), restrict instrumentation:
+
+```text
+include: src/lib/** , selected shared components
+omit:   src/pages/** , src/features/session/components/** , src/main.tsx
+```
+
+---
+
+## Local commands
+
+```bash
+pip install -e ".[dev]"
+
+# Tier 1 unit — no Postgres
+pytest tests/unit
+
+# Tier 2 API — requires a dedicated test database (never use prod / shared dev blindly)
+export TEST_DATABASE_URL=postgresql+asyncpg://postgres:PASSWORD@HOST:PORT/unhinted_test
+pytest tests/api
+
+# Path-tiered coverage (examples — use dotted module paths)
+pytest tests/unit --cov=internal.auth.jwt --cov=schemas --cov-fail-under=85
+TEST_DATABASE_URL=... pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
+
+# Frontend quality gate today
+cd web && npm run build
+```
+
+If `TEST_DATABASE_URL` is unset, `tests/api` is **skipped**; `tests/unit` still runs.
+
+Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.toml`.
+
+---
+
+## Investment order
+
+1. ~~**Tier 1 utils** (BE jwt/helpers)~~ — `tests/unit`
+2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
+3. **Frontend Vitest** — `web/src/lib/**` then PasswordBox / UserMenuDropdown (separate branch)
+4. Hold: LangGraph nodes, SSE E2E, Playwright chat→preview→confirm; CI/CD after FE utils suite
+
+**Note:** pytest disables the `debugging` plugin (`-p no:debugging`) because the top-level package name `cmd` shadows the stdlib `cmd` module used by `pdb`.
+
+---
+
+## Related
+
+- Status checklist: [STATUS.md](./STATUS.md) (Automated tests)
+- Setup: [GETTING_STARTED.md](./GETTING_STARTED.md)
+- Architecture: [ROADMAP.md](./ROADMAP.md)
