@@ -121,3 +121,30 @@ Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template
 | POST | `/sessions/{id}/confirm` | Confirm stub publish |
 
 Full auth and session specs: [ROADMAP.md](./ROADMAP.md); what’s shipped: [STATUS.md](./STATUS.md).
+
+---
+
+## Tests
+
+Coverage is **path-tiered** (utils high, API mid, pages/feature UI low, LLM omitted) — see [TESTING.md](./TESTING.md).
+
+```bash
+pip install -e ".[dev]"
+
+# Unit (no DB)
+pytest tests/unit
+
+# API integration — dedicated DB only (see TEST_DATABASE_URL in .env.example)
+export TEST_DATABASE_URL=postgresql+asyncpg://postgres:PASSWORD@HOST:PORT/unhinted_test
+# create the empty database once, then:
+pytest tests/api
+
+# Path-tiered coverage examples
+pytest tests/unit --cov=internal.auth.jwt --cov=schemas --cov-fail-under=85
+TEST_DATABASE_URL=... pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
+
+# Frontend gate today (Vitest later)
+cd web && npm run build
+```
+
+API fixtures run `alembic upgrade head` against `TEST_DATABASE_URL` and truncate tables between tests. Do **not** point `TEST_DATABASE_URL` at your main `unhinted` dev database if you care about its data.

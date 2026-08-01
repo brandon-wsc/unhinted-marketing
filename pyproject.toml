@@ -25,6 +25,7 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
     "httpx>=0.28.0",
     "ruff>=0.8.0",
 ]
@@ -42,4 +43,36 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+# Project top-level package `cmd` shadows stdlib `cmd`; pytest's debugging plugin
+# imports pdb → stdlib cmd.Cmd and crashes. Disable that plugin for local/CI runs.
+addopts = "-p no:debugging"
+
+# Path-tiered coverage policy: docs/TESTING.md
+# Do NOT set a single global --cov-fail-under for the whole tree.
+# CI should run separate reports (utils ≥85%, api routes ≥70%).
+[tool.coverage.run]
+branch = true
+source = ["internal", "schemas", "cmd"]
+omit = [
+    "**/__init__.py",
+    "migrations/*",
+    "cmd/worker/*",
+    "cmd/scheduler/*",
+    "internal/session/nodes.py",
+    "internal/session/graph.py",
+    "internal/session/prompts.py",
+    "internal/llm/*",
+    "internal/perception/*",
+    "internal/config.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "\\.\\.\\.",
+]
