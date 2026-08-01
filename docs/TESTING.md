@@ -1,6 +1,6 @@
 # Testing & Coverage Policy
 
-> **Status:** Backend Tier 1 unit + Tier 2 API landed (`tests/unit`, `tests/api`). Frontend Vitest and CI/CD are next (prefer a separate branch).  
+> **Status:** Backend Tier 1 unit + Tier 2 API landed (`tests/unit`, `tests/api`). Frontend Vitest Tier 1 utils + Tier 2 shared components landed (`cd web && npm test`). CI/CD is next.  
 > **Principle:** path-tiered gates — **no single repo-wide 80%**. Utils and API earn hard floors; pages / large feature UI / LLM stay low or omitted.
 
 ---
@@ -46,8 +46,8 @@ Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 
 | Tier | Paths | Target | Gate |
 |------|-------|--------|------|
-| **1 — Utils** | `web/src/lib/**` · `features/session/session-storage.ts` · pure bits of `sse.ts` / `api.ts` | **85–95%** | **Fail** (once Vitest lands) |
-| **2 — Shared (behavioral)** | `components/password-box.tsx` · `components/user-menu-dropdown.tsx` | **50–70%** behavior | Soft → Fail when suite exists |
+| **1 — Utils** | `web/src/lib/**` (except deferred `api.ts` fetch wrappers) · `features/session/session-storage.ts` | **85–95%** | **Fail** |
+| **2 — Shared (behavioral)** | `components/password-box.tsx` · `components/user-menu-dropdown.tsx` | **50–70%** behavior | Soft floor (50%) in Vitest thresholds |
 | **3 — Shared (presentational)** | `app-header.tsx` · `app-logo.tsx` · mostly-layout `auth-layout.tsx` | **Omit** or snapshot optional | No gate |
 | **4 — Pages** | `web/src/pages/**` | **20–40%** or smoke only | No hard gate — logic lives in lib/context |
 | **5 — Feature UI** | `features/session/components/**` (`chat-panel`, `session-history`, …) | **15–30%** later | No gate in v1 CI |
@@ -63,8 +63,8 @@ Minimum merge checks:
 ```text
 ruff check .
 pytest --cov=…   # path-tiered fail-under (see below)
-cd web && npm ci && npm run build
-# later: vitest run --coverage  (lib + selected components only)
+cd web && npm ci && npm test && npm run build
+# coverage: vitest run --coverage  (lib + selected components only)
 ```
 
 **Do not** require whole-repo 80%. Prefer two (or more) coverage reports:
@@ -79,11 +79,12 @@ pytest --cov=cmd.api.routes \
   --cov-report=term-missing --cov-fail-under=70
 ```
 
-Frontend (when Vitest is added), restrict instrumentation:
+Frontend Vitest instrumentation (see `web/vite.config.ts`):
 
 ```text
-include: src/lib/** , selected shared components
-omit:   src/pages/** , src/features/session/components/** , src/main.tsx
+include: src/lib/** , session-storage.ts , password-box.tsx , user-menu-dropdown.tsx
+omit:   src/pages/** , src/features/session/components/** , src/main.tsx ,
+        use-session.ts , src/lib/api.ts (fetch wrappers deferred)
 ```
 
 ---
@@ -104,13 +105,19 @@ pytest tests/api
 pytest tests/unit --cov=internal.auth.jwt --cov=schemas --cov-fail-under=85
 TEST_DATABASE_URL=... pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
 
-# Frontend quality gate today
-cd web && npm run build
+# Frontend
+cd web
+npm test              # vitest run
+npm run test:watch    # vitest
+npm run test:coverage # vitest run --coverage (path-tiered thresholds)
+npm run build
 ```
 
 If `TEST_DATABASE_URL` is unset, `tests/api` is **skipped**; `tests/unit` still runs.
 
 Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.toml`.
+
+**Frontend notes:** component tests mock `react-i18next` / auth / theme contexts (no full i18n provider). RTL cleanup runs in `web/src/test/setup.ts`. `src/lib/api.ts` fetch wrappers are deferred from the coverage gate.
 
 ---
 
@@ -118,7 +125,7 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 
 1. ~~**Tier 1 utils** (BE jwt/helpers)~~ — `tests/unit`
 2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
-3. **Frontend Vitest** — `web/src/lib/**` then PasswordBox / UserMenuDropdown (separate branch)
+3. ~~**Frontend Vitest**~~ — Tier 1 `web/src/lib/**` + Tier 2 PasswordBox / UserMenuDropdown
 4. Hold: LangGraph nodes, SSE E2E, Playwright chat→preview→confirm; CI/CD after FE utils suite
 
 **Note:** pytest disables the `debugging` plugin (`-p no:debugging`) because the top-level package name `cmd` shadows the stdlib `cmd` module used by `pdb`.
