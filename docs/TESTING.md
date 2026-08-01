@@ -1,6 +1,6 @@
 # Testing & Coverage Policy
 
-> **Status:** Backend Tier 1 unit + Tier 2 API landed (`tests/unit`, `tests/api`). Frontend Vitest Tier 1 utils + Tier 2 shared components landed (`cd web && npm test`). CI/CD is next.  
+> **Status:** Backend Tier 1 unit + Tier 2 API landed (`tests/unit`, `tests/api`). Frontend Vitest Tier 1 utils + Tier 2 shared components landed (`cd web && npm test`). GitHub Actions CI in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).  
 > **Principle:** path-tiered gates — **no single repo-wide 80%**. Utils and API earn hard floors; pages / large feature UI / LLM stay low or omitted.
 
 ---
@@ -56,27 +56,25 @@ Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 
 ---
 
-## CI gates (intended, when CI lands)
+## CI gates
 
-Minimum merge checks:
+Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — runs on `push` to `main` and all PRs.
 
-```text
-ruff check .
-pytest --cov=…   # path-tiered fail-under (see below)
-cd web && npm ci && npm test && npm run build
-# coverage: vitest run --coverage  (lib + selected components only)
-```
+| Job | Checks |
+|-----|--------|
+| `lint` | `ruff check .` |
+| `backend-unit` | `pytest tests/unit` + utils cov ≥85% |
+| `backend-api` | `pgvector/pgvector:pg18` service + `pytest tests/api` + routes cov ≥70% |
+| `frontend` | `npm ci` → `npm run test:coverage` → `npm run build` |
 
-**Do not** require whole-repo 80%. Prefer two (or more) coverage reports:
+**Do not** require whole-repo 80%. Local equivalents:
 
 ```bash
-# Tier 1 utils (example)
-pytest --cov=internal.auth.jwt --cov=schemas \
-  --cov-report=term-missing --cov-fail-under=85
+# Tier 1 utils
+pytest tests/unit --cov=internal.auth.jwt --cov=schemas --cov-fail-under=85
 
-# Tier 2 API routes (example)
-pytest --cov=cmd.api.routes \
-  --cov-report=term-missing --cov-fail-under=70
+# Tier 2 API routes (needs TEST_DATABASE_URL)
+pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
 ```
 
 Frontend Vitest instrumentation (see `web/vite.config.ts`):
@@ -126,7 +124,8 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 1. ~~**Tier 1 utils** (BE jwt/helpers)~~ — `tests/unit`
 2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
 3. ~~**Frontend Vitest**~~ — Tier 1 `web/src/lib/**` + Tier 2 PasswordBox / UserMenuDropdown
-4. Hold: LangGraph nodes, SSE E2E, Playwright chat→preview→confirm; CI/CD after FE utils suite
+4. ~~**CI/CD**~~ — `.github/workflows/ci.yml` (ruff + pytest unit/API + Vitest + build)
+5. Hold: LangGraph nodes, SSE E2E, Playwright chat→preview→confirm; branch protection requiring CI
 
 **Note:** pytest disables the `debugging` plugin (`-p no:debugging`) because the top-level package name `cmd` shadows the stdlib `cmd` module used by `pdb`.
 
