@@ -1,7 +1,7 @@
 # Unhinted Marketing — Project Status
 
 > **Last updated:** 2026-08-02  
-> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** (chat + agent + landing + Preview/Confirm + history; mobile Record/Chat/Preview; Meta/BYOK/Trace next) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅  
+> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** (chat + agent + landing + Preview/Confirm + history; mobile Record/Chat/Preview; Meta/BYOK/Trace next) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
 This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). For architecture and phase plans, see ROADMAP.
@@ -81,7 +81,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | README | ✅ | Project intro; setup in GETTING_STARTED |
 | `docker-compose.yml` | ➖ | Removed — dev DB is external |
 | Auth rate limiting | ⬜ | Planned (Redis or in-memory) |
-| Automated tests | ✅ Backend + FE Tier 1/2 | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && npm test` (Vitest + RTL — lib utils + PasswordBox / UserMenuDropdown). Policy [TESTING.md](./TESTING.md). CI next |
+| Automated tests | ✅ Backend + FE Tier 1/2 + CI | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && npm test` (Vitest + RTL — lib utils + PasswordBox / UserMenuDropdown). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
 ### Phase 1 — Data & Autopilot Backend · **100%**
 
@@ -279,7 +279,7 @@ See `.env.example`. Local `.env` is gitignored.
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
 2. **Phase 2 held:** Image worker (replace `placeholder://`), `query_market_trends` JSON Schema, formal curl exit-criteria script.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer; FB/Threads preview skins.
-4. **Hardening:** Auth rate limits; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ ([TESTING.md](./TESTING.md)); multi-worker SSE (Redis) if scaling beyond one API process; CI/CD next.
+4. **Hardening:** Auth rate limits; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); multi-worker SSE (Redis) if scaling beyond one API process; enable branch protection requiring CI checks.
 
 ---
 
