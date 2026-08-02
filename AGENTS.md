@@ -36,15 +36,19 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 3. Prefer extending `schemas/` over ad-hoc `dict` payloads for new API or SSE fields.
 4. Do not add a second streaming-markdown stack; UI uses Streamdown + `@streamdown/cjk`.
 
-## Next foundation (out of this branch)
+## Graph node tests (mock LLM)
 
-Graph node I/O records, mock-LLM node tests, and CI gates for those tests are a **follow-up branch**. Live LLM evals stay optional / manual — not required PR checks.
+- CI gates **mock** `complete_json` / repos — **no** `OPENAI_API_KEY` required on GitHub.
+- Opt-in step I/O buffer: `node_trace_recording()` in `internal/session/trace.py` (not persisted yet).
+- Live LLM evals stay optional / manual — never a required PR check.
 
 ## Quick commands
 
 ```bash
 pip install -e ".[dev]"
 pytest tests/unit
+pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
+  --cov=internal.session.nodes --cov=internal.session.trace --cov-fail-under=70
 python -m scripts.export_contracts   # OpenAPI + JSON Schema under docs/
 cd web && npm test && npm run build
 ```

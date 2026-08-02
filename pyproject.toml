@@ -64,7 +64,7 @@ ignore = [
 "migrations/**" = ["UP035", "UP007", "I001"]
 "tests/**" = ["S101", "BLE001"]
 # LLM / graph glue: broad catch is intentional around optional checkpoint sync
-"internal/llm/**" = ["UP042"]
+"internal/llm/**" = ["UP042", "I001"]  # I001: pydantic.root_model must import before litellm
 "internal/perception/**" = ["BLE001"]
 "internal/session/service.py" = ["BLE001", "RUF005"]
 "cmd/api/routes/sessions.py" = ["BLE001"]
@@ -95,7 +95,6 @@ omit = [
     "migrations/*",
     "cmd/worker/*",
     "cmd/scheduler/*",
-    "internal/session/nodes.py",
     "internal/session/graph.py",
     "internal/session/prompts.py",
     "internal/llm/*",

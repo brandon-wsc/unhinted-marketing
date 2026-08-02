@@ -37,6 +37,7 @@ from internal.session.io import (
 )
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW, SessionState
 from internal.session.tiers import NODE_MODEL_TIERS
+from internal.session.trace import record_node_step
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,9 @@ def agent_progress(node: str) -> Callable[[NodeFn], NodeFn]:
         @wraps(fn)
         async def wrapped(state: SessionState) -> dict[str, Any]:
             await publish_agent_progress(state, node)
-            return await fn(state)
+            out = await fn(state)
+            record_node_step(node, dict(state), out)
+            return out
 
         return wrapped
 
@@ -334,6 +337,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
     out: dict[str, Any] = {"messages": _append_assistant(state, reply), "mode": MODE_CHAT}
     if llm_error:
         out["error"] = llm_error
+    record_node_step("chat", dict(state), out)
     return out
 
 
@@ -595,22 +599,26 @@ async def ack_confirm(state: SessionState) -> dict[str, Any]:
                 "Saying so in chat does not publish."
             )
         )
-    return {
+    out = {
         "messages": _append_assistant(state, reply),
         "pending_confirm": True,
     }
+    record_node_step("ack_confirm", dict(state), out)
+    return out
 
 
 async def persist_preview(state: SessionState) -> dict[str, Any]:
     revision = int(state.get("revision") or 0) + 1
     token = secrets.token_urlsafe(24)
-    return {
+    out = {
         "mode": MODE_PREVIEW,
         "revision": revision,
         "approval_token": token,
         "need_image": False,
         "pending_confirm": False,
     }
+    record_node_step("persist_preview", dict(state), out)
+    return out
 
 
 def route_after_intent(state: SessionState) -> str:
@@ -645,8 +653,10 @@ def review_exhausted(state: SessionState) -> dict[str, Any]:
         state,
         f"草稿未能通過審核（已重試 {MAX_REVIEW_RETRIES} 次）：{feedback}",
     )
-    return {
+    out = {
         "messages": messages,
         "error": f"Reviewer failed after {MAX_REVIEW_RETRIES} retries",
         "review_attempts": int(state.get("review_attempts") or 0) + 1,
     }
+    record_node_step("review_exhausted", dict(state), out)
+    return out

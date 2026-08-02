@@ -3,6 +3,9 @@
 from collections.abc import AsyncIterator
 from enum import Enum
 
+# Import before litellm: some litellm builds hit KeyError on pydantic.root_model
+# during RootModel generic construction if that module is not loaded yet.
+import pydantic.root_model  # noqa: F401
 import litellm
 from litellm.exceptions import (
     APIConnectionError,
