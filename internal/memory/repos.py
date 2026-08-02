@@ -308,6 +308,24 @@ async def list_session_messages(
     return list(result.all())
 
 
+async def delete_session_messages_by_ids(
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    message_ids: list[uuid.UUID],
+) -> int:
+    """Delete specific messages belonging to a session. Returns rows deleted."""
+    if not message_ids:
+        return 0
+    result = await db.execute(
+        delete(SessionMessage).where(
+            SessionMessage.session_id == session_id,
+            SessionMessage.id.in_(message_ids),
+        )
+    )
+    await db.flush()
+    return int(result.rowcount or 0)
+
+
 async def upsert_preview_draft(
     db: AsyncSession,
     *,

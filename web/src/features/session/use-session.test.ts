@@ -7,6 +7,8 @@ const {
   apiGetSessionMessages,
   apiCreateSession,
   apiPostSessionMessage,
+  apiResumeSessionImage,
+  apiStopSessionTurn,
   apiUpdateSession,
   apiDeleteSession,
   apiUpdateSessionDraft,
@@ -20,6 +22,8 @@ const {
   apiGetSessionMessages: vi.fn(),
   apiCreateSession: vi.fn(),
   apiPostSessionMessage: vi.fn(),
+  apiResumeSessionImage: vi.fn(),
+  apiStopSessionTurn: vi.fn(),
   apiUpdateSession: vi.fn(),
   apiDeleteSession: vi.fn(),
   apiUpdateSessionDraft: vi.fn(),
@@ -42,6 +46,8 @@ vi.mock("@/features/session/api", () => ({
   apiGetSessionMessages,
   apiCreateSession,
   apiPostSessionMessage,
+  apiResumeSessionImage,
+  apiStopSessionTurn,
   apiUpdateSession,
   apiDeleteSession,
   apiUpdateSessionDraft,
@@ -215,7 +221,12 @@ describe("useSession", () => {
     });
 
     expect(apiCreateSession).toHaveBeenCalledWith("tok", "co-1");
-    expect(apiPostSessionMessage).toHaveBeenCalledWith("tok", "sess-1", "plan a post");
+    expect(apiPostSessionMessage).toHaveBeenCalledWith(
+      "tok",
+      "sess-1",
+      "plan a post",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(result.current.session?.id).toBe("sess-1");
     expect(result.current.mode).toBe("AGENT");
     expect(result.current.brief?.summary).toBe("Brief");
@@ -385,5 +396,146 @@ describe("useSession", () => {
     expect(result.current.streamingText).toBeNull();
     expect(result.current.messages.some((m) => m.id === "a-live")).toBe(true);
     expect(result.current.brief?.summary).toBe("Live brief");
+  });
+
+  it("resumeImage calls resume-image and clears awaiting when done", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [
+        {
+          id: "u1",
+          session_id: "sess-1",
+          role: "user",
+          content: "make a post",
+          created_at: "2026-01-01T00:00:01Z",
+        },
+      ],
+    });
+    apiPostSessionMessage.mockResolvedValue({
+      session: { ...sessionFixture, mode: "AGENT" },
+      messages: [
+        {
+          id: "u1",
+          session_id: "sess-1",
+          role: "user",
+          content: "make a post",
+          created_at: "2026-01-01T00:00:01Z",
+        },
+      ],
+      interrupted: true,
+      mode: "AGENT",
+      revision: null,
+      pending_confirm: false,
+      approval_token: null,
+      events: [{ type: "draft.awaiting_image_ok", data: { awaiting: true } }],
+    });
+    apiResumeSessionImage.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [
+        {
+          id: "u1",
+          session_id: "sess-1",
+          role: "user",
+          content: "make a post",
+          created_at: "2026-01-01T00:00:01Z",
+        },
+      ],
+      interrupted: false,
+      mode: "PREVIEW",
+      revision: 1,
+      pending_confirm: false,
+      approval_token: "tok-1",
+      events: [
+        {
+          type: "preview.updated",
+          data: {
+            revision: 1,
+            approval_token: "tok-1",
+            copy: { caption: "hi", hashtags: [], cta: "" },
+            image_url: "https://example.com/x.png",
+            platform: "instagram",
+          },
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    await act(async () => {
+      await result.current.sendMessage("park me");
+    });
+    expect(result.current.awaitingImageOk).toBe(true);
+    expect(result.current.composerLocked).toBe(true);
+
+    await act(async () => {
+      await result.current.resumeImage();
+    });
+
+    expect(apiResumeSessionImage).toHaveBeenCalledWith(
+      "tok",
+      "sess-1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(result.current.awaitingImageOk).toBe(false);
+    expect(result.current.mode).toBe("PREVIEW");
+  });
+
+  it("stopTurn discards parked turn and reloads messages", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u1",
+            session_id: "sess-1",
+            role: "user",
+            content: "make a post",
+            created_at: "2026-01-01T00:00:01Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [],
+      });
+    apiPostSessionMessage.mockResolvedValue({
+      session: sessionFixture,
+      messages: [
+        {
+          id: "u1",
+          session_id: "sess-1",
+          role: "user",
+          content: "make a post",
+          created_at: "2026-01-01T00:00:01Z",
+        },
+      ],
+      interrupted: true,
+      mode: "AGENT",
+      revision: null,
+      pending_confirm: false,
+      approval_token: null,
+      events: [{ type: "draft.awaiting_image_ok", data: { awaiting: true } }],
+    });
+    apiStopSessionTurn.mockResolvedValue({ status: "cancelled" });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    await act(async () => {
+      await result.current.sendMessage("make a post");
+    });
+    expect(result.current.awaitingImageOk).toBe(true);
+
+    await act(async () => {
+      await result.current.stopTurn();
+    });
+
+    expect(apiStopSessionTurn).toHaveBeenCalledWith("tok", "sess-1");
+    expect(result.current.awaitingImageOk).toBe(false);
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.composerLocked).toBe(false);
   });
 });

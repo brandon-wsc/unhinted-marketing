@@ -72,11 +72,37 @@ export async function apiPostSessionMessage(
   accessToken: string | null,
   sessionId: string,
   content: string,
+  init?: { signal?: AbortSignal },
 ): Promise<PostMessageResponse> {
   const res = await fetchWithAuth(accessToken, `/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),
+    signal: init?.signal,
+  });
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiResumeSessionImage(
+  accessToken: string | null,
+  sessionId: string,
+  init?: { signal?: AbortSignal },
+): Promise<PostMessageResponse> {
+  const res = await fetchWithAuth(accessToken, `/sessions/${sessionId}/resume-image`, {
+    method: "POST",
+    signal: init?.signal,
+  });
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiStopSessionTurn(
+  accessToken: string | null,
+  sessionId: string,
+): Promise<{ status: string }> {
+  const res = await fetchWithAuth(accessToken, `/sessions/${sessionId}/stop`, {
+    method: "POST",
   });
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();

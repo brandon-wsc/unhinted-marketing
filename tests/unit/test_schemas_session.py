@@ -11,11 +11,13 @@ from schemas.session import (
     MessageResponse,
     PostMessageRequest,
     PostMessageResponse,
+    ResumeImageResponse,
     SessionEvent,
     SessionListItem,
     SessionListResponse,
     SessionMessagesResponse,
     SessionResponse,
+    StopSessionResponse,
     UpdateDraftRequest,
     UpdateDraftResponse,
     UpdateSessionRequest,
@@ -103,6 +105,10 @@ def test_message_and_post_response() -> None:
     posted = PostMessageResponse(session=session, messages=[msg], mode="CHAT")
     assert posted.interrupted is False
     assert posted.events == []
+    stopped = StopSessionResponse(status="idle")
+    assert stopped.status == "idle"
+    resumed = ResumeImageResponse(session=session, messages=[msg], mode="PREVIEW")
+    assert resumed.interrupted is False
 
 
 def test_confirm_session_request_validation() -> None:

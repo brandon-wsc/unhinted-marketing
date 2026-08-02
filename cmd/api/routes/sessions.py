@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -14,8 +15,11 @@ from internal.memory.models import Session, User
 from internal.session.events import format_sse, session_event_bus
 from internal.session.service import (
     DEFAULT_PLATFORM,
+    SessionTurnConflict,
     normalize_draft_copy,
+    resume_image_turn,
     run_session_turn,
+    stop_session_turn,
     update_session_draft,
 )
 from schemas.session import (
@@ -25,10 +29,12 @@ from schemas.session import (
     MessageResponse,
     PostMessageRequest,
     PostMessageResponse,
+    ResumeImageResponse,
     SessionListItem,
     SessionListResponse,
     SessionMessagesResponse,
     SessionResponse,
+    StopSessionResponse,
     UpdateDraftRequest,
     UpdateDraftResponse,
     UpdateSessionRequest,
@@ -126,7 +132,13 @@ async def create_session(
 
     session = await repos.create_session(db, user_id=user.id, company_id=body.company_id)
     if body.initial_message:
-        await run_session_turn(db, session, user_content=body.initial_message)
+        try:
+            await run_session_turn(db, session, user_content=body.initial_message)
+        except SessionTurnConflict as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"reason": exc.reason, "message": exc.detail},
+            ) from exc
     await db.commit()
     await db.refresh(session)
     return _session_response(session)
@@ -189,7 +201,17 @@ async def post_message(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PostMessageResponse:
     session = await _require_owned_session(db, session_id, user)
-    result = await run_session_turn(db, session, user_content=body.content)
+    try:
+        result = await run_session_turn(db, session, user_content=body.content)
+    except SessionTurnConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"reason": exc.reason, "message": exc.detail},
+        ) from exc
+    except asyncio.CancelledError:
+        # Discard already committed inside run_session_turn.
+        await db.rollback()
+        raise
     await db.commit()
     await db.refresh(session)
 
@@ -205,6 +227,54 @@ async def post_message(
         approval_token=values.get("approval_token"),
         events=result["events"],
     )
+
+
+@router.post("/{session_id}/resume-image", response_model=ResumeImageResponse)
+async def resume_image(
+    session_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ResumeImageResponse:
+    """Resume parked interrupt_before executor_image_plan (ADR 0004)."""
+    session = await _require_owned_session(db, session_id, user)
+    try:
+        result = await resume_image_turn(db, session)
+    except SessionTurnConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"reason": exc.reason, "message": exc.detail},
+        ) from exc
+    except asyncio.CancelledError:
+        await db.rollback()
+        raise
+    await db.commit()
+    await db.refresh(session)
+
+    all_msgs = await repos.list_session_messages(db, session.id)
+    values = result["values"]
+    return ResumeImageResponse(
+        session=_session_response(session),
+        messages=[_message_response(m) for m in all_msgs],
+        interrupted=result["interrupted"],
+        mode=session.mode,
+        revision=values.get("revision") or None,
+        pending_confirm=bool(values.get("pending_confirm")),
+        approval_token=values.get("approval_token"),
+        events=result["events"],
+    )
+
+
+@router.post("/{session_id}/stop", response_model=StopSessionResponse)
+async def stop_session(
+    session_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> StopSessionResponse:
+    """Discard in-flight or parked turn (ADR 0004)."""
+    session = await _require_owned_session(db, session_id, user)
+    result = await stop_session_turn(db, session)
+    await db.commit()
+    return StopSessionResponse(status=result["status"])
 
 
 @router.get("/{session_id}/messages", response_model=SessionMessagesResponse)

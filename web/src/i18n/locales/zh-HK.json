@@ -58,6 +58,8 @@
       "placeholder": "輸入訊息…（Enter 送出，Shift+Enter 換行）"
     },
     "send": "送出",
+    "stop": "停止",
+    "stopping": "停止中…",
     "live": "即時連線",
     "offline": "未連線",
     "agent": {
@@ -90,6 +92,7 @@
     },
     "error": {
       "sendFailed": "訊息送出失敗，請再試一次",
+      "stopFailed": "無法停止，請再試一次",
       "llmFailed": "AI 服務錯誤",
       "retry": "重試"
     },

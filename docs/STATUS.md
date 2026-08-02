@@ -110,7 +110,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 |------|--------|-------|
 | ROADMAP graph contract | ✅ | 12 nodes + `persist_preview`; edges + interrupt |
 | Migrations | ✅ | Alembic `526ca8643303` sessions tables; `86f20bd3cb7d` session `title` + `pinned` |
-| LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /messages` (blind resume while parked is a known follow-up) |
+| LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /resume-image` ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)); `POST /stop` discards turn |
 | Postgres checkpointer | ✅ | `AsyncPostgresSaver` + pool (`check` / keepalives / idle recycle); `setup()` on API lifespan; `thread_id = session.id` |
 | Node logic | ✅ | LiteLLM + structured I/O; heuristic fallbacks; PG load/grounding |
 | Session HTTP API | ✅ | `GET/POST /sessions`, `PATCH/DELETE /sessions/{id}`, `/messages`, `/draft`, `/confirm` |
@@ -130,7 +130,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Auth pages + protected shell | ✅ | Login / register; `/` is now the chat workspace |
 | Chat UI shell | ✅ | `web/src/features/session/` — `useSession` + message list / composer; Streamdown + `@streamdown/cjk`; Vite proxy covers `/sessions` `/companies` `/signals` |
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
-| Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume image gen via `POST /messages` — CTA kept on network/LLM fail while graph still parked |
+| Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer locked while in-flight or parked; Stop → `POST /stop` discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
 | Landing: recommended questions cards | ✅ | Empty-state cards from `GET /companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
 | Preview Mode (left chat / right preview) | ✅ | Desktop: IG mock + editable fields beside chat. Mobile (`< lg`): Preview is a push page with **上一頁**; open from chat ready banner |
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |
@@ -150,7 +150,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 - **Auth:** Full email/password flow with JWT access token (15 min) + refresh token (7 days, httpOnly cookie on `/auth`)
 - **Signals:** `GET /signals/top` — latest HK market signals from PostgreSQL
 - **Questions:** `GET /companies/{id}/recommended-questions` — cached 12h question batch
-- **Sessions:** `GET /sessions`, `POST /sessions`, `PATCH /sessions/{id}` (title / pinned), `DELETE /sessions/{id}`, `POST /sessions/{id}/messages`, `GET /sessions/{id}/messages`, `POST /sessions/{id}/draft`, `GET /sessions/{id}/events` (SSE), `POST /sessions/{id}/confirm`
+- **Sessions:** `GET /sessions`, `POST /sessions`, `PATCH /sessions/{id}` (title / pinned), `DELETE /sessions/{id}`, `POST /sessions/{id}/messages`, `GET /sessions/{id}/messages`, `POST /sessions/{id}/resume-image`, `POST /sessions/{id}/stop`, `POST /sessions/{id}/draft`, `GET /sessions/{id}/events` (SSE), `POST /sessions/{id}/confirm`
 - **LangGraph:** Session nodes + Postgres checkpointer; image URL still placeholder
 - **Security:** Argon2 password hashing, refresh token rotation + revoke on logout
 - **Multi-tenant bootstrap:** Register auto-creates `entities` (type `company`) + `organization_members` (role `owner`)
@@ -298,7 +298,7 @@ See `.env.example`. Local `.env` is gitignored.
 | ID | Risk | Status |
 |----|------|--------|
 | **H1** | Auth rate limit + known-default / weak `JWT_SECRET` | ✅ **Mitigated on this branch** — in-memory limit on register/login/refresh; `APP_ENV=production` refuses insecure JWT |
-| **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ⬜ Open — product decision + ADR before change |
+| **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ✅ **Mitigated** — [ADR 0004](./adr/0004-stop-discard-and-image-resume.md): composer lock; Stop discards; `POST /resume-image` only; `/messages` 409 while busy/parked |
 | **H3** | `use-session.ts` correctness concentrated & untested | ✅ **Mitigated** — pure helpers in `session-helpers.ts` (+ Tier 1 cov gate); `use-session.test.ts` covers restore / send / confirm / SSE merge |
 | **I1** | Confirm idempotency key global (cross-user receipt leak) | ✅ **Mitigated** — foreign key → 409; same session/user only replays |
 
@@ -307,7 +307,7 @@ See `.env.example`. Local `.env` is gitignored.
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
 2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + MinIO (`S3_*`) when configured; formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer; FB/Threads preview skins.
-4. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; multi-worker SSE (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks; persist node traces / live LLM eval harness later.
+4. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks; persist node traces / live LLM eval harness later.
 
 ---
 

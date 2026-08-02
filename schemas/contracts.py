@@ -83,6 +83,12 @@ class ReviewFailedData(BaseModel):
     error: str = ""
 
 
+class TurnCancelledData(BaseModel):
+    """Payload for `turn.cancelled` (ADR 0004 Stop discard)."""
+
+    reason: str = "stop"
+
+
 class ConfirmCompletedData(BaseModel):
     receipt_id: str
     status: str = "stubbed"
@@ -117,6 +123,7 @@ class SessionEventType(StrEnum):
     CONFIRM_COMPLETED = "confirm.completed"
     REVIEW_FAILED = "review.failed"
     LLM_FAILED = "llm.failed"
+    TURN_CANCELLED = "turn.cancelled"
 
 
 # Map event type → expected data model (documentation + export). Empty = {} only.
@@ -137,6 +144,7 @@ EVENT_PAYLOAD_MODELS: dict[SessionEventType, type[BaseModel] | None] = {
     SessionEventType.CONFIRM_COMPLETED: ConfirmCompletedData,
     SessionEventType.REVIEW_FAILED: ReviewFailedData,
     SessionEventType.LLM_FAILED: LlmFailedData,
+    SessionEventType.TURN_CANCELLED: TurnCancelledData,
 }
 
 

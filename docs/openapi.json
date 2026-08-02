@@ -578,6 +578,104 @@
         }
       }
     },
+    "/sessions/{session_id}/resume-image": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Resume Image",
+        "description": "Resume parked interrupt_before executor_image_plan (ADR 0004).",
+        "operationId": "resume_image_sessions__session_id__resume_image_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeImageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/stop": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Stop Session",
+        "description": "Discard in-flight or parked turn (ADR 0004).",
+        "operationId": "stop_session_sessions__session_id__stop_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StopSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{session_id}/events": {
       "get": {
         "tags": [
@@ -1154,6 +1252,71 @@
         ],
         "title": "RegisterRequest"
       },
+      "ResumeImageResponse": {
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/SessionResponse"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/schemas__session__MessageResponse"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "interrupted": {
+            "type": "boolean",
+            "title": "Interrupted",
+            "default": false
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "pending_confirm": {
+            "type": "boolean",
+            "title": "Pending Confirm",
+            "default": false
+          },
+          "approval_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Token"
+          },
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session",
+          "messages",
+          "mode"
+        ],
+        "title": "ResumeImageResponse"
+      },
       "SessionListItem": {
         "properties": {
           "id": {
@@ -1362,6 +1525,19 @@
           "ingested_at"
         ],
         "title": "SignalResponse"
+      },
+      "StopSessionResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "StopSessionResponse"
       },
       "TokenResponse": {
         "properties": {

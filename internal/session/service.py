@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import logging
 import secrets
 import uuid
@@ -17,11 +19,21 @@ from internal.session.context import session_db
 from internal.session.events import session_event_bus
 from internal.session.graph import get_session_graph
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
+from internal.session.turn_registry import TurnEntry, session_turn_registry
 from schemas.contracts import DraftCopy, PreviewUpdatedData
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PLATFORM = "instagram"
+
+
+class SessionTurnConflict(Exception):
+    """Busy or parked — caller should map to HTTP 409."""
+
+    def __init__(self, reason: str, detail: str) -> None:
+        self.reason = reason
+        self.detail = detail
+        super().__init__(detail)
 
 
 def _extract_llm_provider_error(exc: BaseException) -> LlmProviderError | None:
@@ -92,106 +104,113 @@ def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str,
     }
 
 
-async def run_session_turn(
+def _strip_discard_meta(state: dict[str, Any] | None) -> dict[str, Any]:
+    out = copy.deepcopy(state or {})
+    out.pop("turn_discard", None)
+    out.pop("awaiting_image_ok", None)
+    return out
+
+
+async def graph_is_parked(session_id: uuid.UUID) -> bool:
+    graph = get_session_graph()
+    snapshot = await graph.aget_state(_session_config(session_id))
+    return bool(snapshot.next)
+
+
+async def session_is_parked(session: Session) -> bool:
+    if bool((session.state or {}).get("awaiting_image_ok")):
+        return True
+    try:
+        return await graph_is_parked(session.id)
+    except Exception:
+        logger.debug("Could not read graph interrupt state", exc_info=True)
+        return False
+
+
+async def _adelete_graph_thread(session_id: uuid.UUID) -> None:
+    graph = get_session_graph()
+    saver = getattr(graph, "checkpointer", None)
+    if saver is None:
+        return
+    delete = getattr(saver, "adelete_thread", None)
+    if delete is None:
+        return
+    try:
+        await delete(str(session_id))
+    except Exception:
+        logger.warning(
+            "Failed to adelete_thread for session=%s",
+            session_id,
+            exc_info=True,
+        )
+
+
+async def _discard_turn_state(
     db: AsyncSession,
     session: Session,
     *,
-    user_content: str,
-) -> dict[str, Any]:
-    """Append user message, invoke/resume graph, persist assistant + draft side-effects."""
-    user_msg = await repos.add_session_message(
-        db, session_id=session.id, role="user", content=user_content
+    pre_state: dict[str, Any],
+    message_ids: list[uuid.UUID],
+) -> None:
+    """Restore pre-turn session.state, delete turn messages, wipe graph thread."""
+    session_event_bus.end_turn_progress(session.id)
+    restored = _strip_discard_meta(pre_state)
+    restored["awaiting_image_ok"] = False
+    session.state = restored
+    if message_ids:
+        await repos.delete_session_messages_by_ids(db, session.id, message_ids)
+    await _adelete_graph_thread(session.id)
+    await db.flush()
+    await session_event_bus.publish_many(
+        session.id,
+        [{"type": "turn.cancelled", "data": {"reason": "stop"}}],
     )
-    existing = await repos.list_session_messages(db, session.id)
-    message_dicts = [{"role": m.role, "content": m.content} for m in existing]
 
-    graph = get_session_graph()
-    config = _session_config(session.id)
 
-    provider_error: LlmProviderError | None = None
-    values: dict[str, Any] = {}
-    still_interrupted = False
-    progress_events: list[dict[str, Any]] = []
-
-    with session_db(db):
-        snapshot = await graph.aget_state(config)
-        interrupted = bool(snapshot.next)
-
-        session_event_bus.begin_turn_progress(session.id)
-        try:
-            if interrupted:
-                # Resume after interrupt_before=["executor_image_plan"]
-                result = await graph.ainvoke(None, config)
-            else:
-                result = await graph.ainvoke(_graph_values(session, message_dicts), config)
-
-            snapshot = await graph.aget_state(config)
-            values = dict(snapshot.values or result or {})
-            still_interrupted = bool(snapshot.next)
-        except Exception as exc:
-            provider_error = _extract_llm_provider_error(exc)
-            if provider_error is None:
-                raise
-            logger.warning(
-                "LLM provider error during session turn (session=%s model=%s kind=%s): %s",
-                session.id,
-                provider_error.model,
-                provider_error.kind,
-                provider_error.message,
-            )
-            # Keep whatever checkpoint state exists; do not pretend the turn succeeded.
-            snapshot = await graph.aget_state(config)
-            values = dict(snapshot.values or {})
-            still_interrupted = bool(snapshot.next)
-            chinese = any("\u4e00" <= c <= "\u9fff" for c in user_content)
-            fail_msg = (
-                f"AI 服務暫時唔可用（{provider_error.kind}"
-                + (f" · {provider_error.model}" if provider_error.model else "")
-                + f"）：{provider_error.message}"
-                if chinese
-                else (
-                    f"AI service unavailable ({provider_error.kind}"
-                    + (f" · {provider_error.model}" if provider_error.model else "")
-                    + f"): {provider_error.message}"
-                )
-            )
-            values["error"] = provider_error.message
-            values["messages"] = list(values.get("messages") or message_dicts) + [
-                {"role": "assistant", "content": fail_msg}
-            ]
-        finally:
-            progress_events = session_event_bus.end_turn_progress(session.id)
-
-    # Persist Cursor-style action trail on the user turn that triggered it
-    # (session_messages.metadata) so refresh / reopen can rebuild the UI.
-    agent_actions = [
-        ev.get("data") or {}
-        for ev in progress_events
-        if ev.get("type") == "agent.progress" and isinstance(ev.get("data"), dict)
-    ]
-    if agent_actions:
-        meta = dict(user_msg.metadata_ or {})
-        meta["agent_actions"] = agent_actions
-        user_msg.metadata_ = meta
-        flag_modified(user_msg, "metadata_")
+async def _persist_after_invoke(
+    db: AsyncSession,
+    session: Session,
+    *,
+    user_msg: Any | None,
+    message_dicts: list[dict[str, Any]],
+    values: dict[str, Any],
+    still_interrupted: bool,
+    progress_events: list[dict[str, Any]],
+    provider_error: LlmProviderError | None,
+    user_content: str,
+    pre_state: dict[str, Any],
+    entry: TurnEntry | None,
+) -> dict[str, Any]:
+    if user_msg is not None:
+        agent_actions = [
+            ev.get("data") or {}
+            for ev in progress_events
+            if ev.get("type") == "agent.progress" and isinstance(ev.get("data"), dict)
+        ]
+        if agent_actions:
+            meta = dict(user_msg.metadata_ or {})
+            meta["agent_actions"] = agent_actions
+            user_msg.metadata_ = meta
+            flag_modified(user_msg, "metadata_")
 
     prior_count = len(message_dicts)
     new_messages = (values.get("messages") or [])[prior_count:]
     saved_assistant: list = []
     for msg in new_messages:
         if msg.get("role") == "assistant":
-            saved_assistant.append(
-                await repos.add_session_message(
-                    db,
-                    session_id=session.id,
-                    role="assistant",
-                    content=str(msg.get("content") or ""),
-                )
+            saved = await repos.add_session_message(
+                db,
+                session_id=session.id,
+                role="assistant",
+                content=str(msg.get("content") or ""),
             )
+            saved_assistant.append(saved)
+            if entry is not None:
+                session_turn_registry.track_message(session.id, saved.id)
 
     mode = values.get("mode") or session.mode
     session.mode = mode
-    session.state = {
+    next_state: dict[str, Any] = {
         "brief": values.get("brief") or {},
         "draft": values.get("draft") or {},
         "image_plan": values.get("image_plan") or {},
@@ -209,13 +228,20 @@ async def run_session_turn(
         # UI hydrate: interrupt_before executor_image_plan
         "awaiting_image_ok": still_interrupted,
     }
+    if still_interrupted and user_msg is not None:
+        next_state["turn_discard"] = {
+            "pre_state": _strip_discard_meta(pre_state),
+            "user_message_id": str(user_msg.id),
+            "message_ids": [
+                str(mid) for mid in (entry.message_ids if entry else [user_msg.id])
+            ],
+        }
+    session.state = next_state
 
     events: list[dict[str, Any]] = list(progress_events)
     if provider_error:
         events.append({"type": "llm.failed", "data": provider_error.to_event_data()})
     elif values.get("error"):
-        # Node-level LLM failure (e.g. chat) without raising out of the graph.
-        # review_exhausted also sets error — keep review.failed for that path.
         err = str(values["error"])
         if "Reviewer failed" in err:
             events.append({"type": "review.failed", "data": {"error": err}})
@@ -247,7 +273,7 @@ async def run_session_turn(
             events.append(
                 {
                     "type": "draft.awaiting_image_ok",
-                    "data": {"message": "Resume with another message to generate image"},
+                    "data": {"awaiting": True},
                 }
             )
         elif values.get("image_url"):
@@ -314,6 +340,271 @@ async def run_session_turn(
     }
 
 
+async def _invoke_graph(
+    db: AsyncSession,
+    session: Session,
+    *,
+    graph_input: dict[str, Any] | None,
+    user_content: str,
+    message_dicts: list[dict[str, Any]],
+) -> tuple[dict[str, Any], bool, LlmProviderError | None, list[dict[str, Any]]]:
+    graph = get_session_graph()
+    config = _session_config(session.id)
+    provider_error: LlmProviderError | None = None
+    values: dict[str, Any] = {}
+    still_interrupted = False
+    progress_events: list[dict[str, Any]] = []
+
+    with session_db(db):
+        session_event_bus.begin_turn_progress(session.id)
+        try:
+            result = await graph.ainvoke(graph_input, config)
+            snapshot = await graph.aget_state(config)
+            values = dict(snapshot.values or result or {})
+            still_interrupted = bool(snapshot.next)
+        except asyncio.CancelledError:
+            progress_events = session_event_bus.end_turn_progress(session.id)
+            raise
+        except Exception as exc:
+            provider_error = _extract_llm_provider_error(exc)
+            if provider_error is None:
+                progress_events = session_event_bus.end_turn_progress(session.id)
+                raise
+            logger.warning(
+                "LLM provider error during session turn (session=%s model=%s kind=%s): %s",
+                session.id,
+                provider_error.model,
+                provider_error.kind,
+                provider_error.message,
+            )
+            snapshot = await graph.aget_state(config)
+            values = dict(snapshot.values or {})
+            still_interrupted = bool(snapshot.next)
+            chinese = any("\u4e00" <= c <= "\u9fff" for c in user_content)
+            fail_msg = (
+                f"AI 服務暫時唔可用（{provider_error.kind}"
+                + (f" · {provider_error.model}" if provider_error.model else "")
+                + f"）：{provider_error.message}"
+                if chinese
+                else (
+                    f"AI service unavailable ({provider_error.kind}"
+                    + (f" · {provider_error.model}" if provider_error.model else "")
+                    + f"): {provider_error.message}"
+                )
+            )
+            values["error"] = provider_error.message
+            values["messages"] = list(values.get("messages") or message_dicts) + [
+                {"role": "assistant", "content": fail_msg}
+            ]
+        finally:
+            if not progress_events:
+                progress_events = session_event_bus.end_turn_progress(session.id)
+
+    return values, still_interrupted, provider_error, progress_events
+
+
+async def run_session_turn(
+    db: AsyncSession,
+    session: Session,
+    *,
+    user_content: str,
+) -> dict[str, Any]:
+    """Append user message, invoke graph (never blind-resume), persist side-effects."""
+    if session_turn_registry.is_busy(session.id):
+        raise SessionTurnConflict("busy", "Session turn already in progress")
+    if await session_is_parked(session):
+        raise SessionTurnConflict(
+            "parked",
+            "Session is awaiting image confirmation — use resume-image or stop",
+        )
+
+    pre_state = _strip_discard_meta(session.state)
+    user_msg = await repos.add_session_message(
+        db, session_id=session.id, role="user", content=user_content
+    )
+    existing = await repos.list_session_messages(db, session.id)
+    message_dicts = [{"role": m.role, "content": m.content} for m in existing]
+
+    task = asyncio.current_task()
+    if task is None:
+        raise RuntimeError("run_session_turn requires a running asyncio task")
+    entry = await session_turn_registry.begin(
+        session.id,
+        task=task,
+        pre_state=pre_state,
+        user_message_id=user_msg.id,
+    )
+
+    try:
+        values, still_interrupted, provider_error, progress_events = await _invoke_graph(
+            db,
+            session,
+            graph_input=_graph_values(session, message_dicts),
+            user_content=user_content,
+            message_dicts=message_dicts,
+        )
+        return await _persist_after_invoke(
+            db,
+            session,
+            user_msg=user_msg,
+            message_dicts=message_dicts,
+            values=values,
+            still_interrupted=still_interrupted,
+            progress_events=progress_events,
+            provider_error=provider_error,
+            user_content=user_content,
+            pre_state=pre_state,
+            entry=entry,
+        )
+    except asyncio.CancelledError:
+        await _discard_turn_state(
+            db,
+            session,
+            pre_state=entry.pre_state,
+            message_ids=list(entry.message_ids),
+        )
+        # Commit before signaling Stop waiters (separate request/session).
+        await db.commit()
+        entry.discarded.set()
+        raise
+    finally:
+        if not entry.cancelling:
+            await session_turn_registry.clear(session.id, entry=entry)
+
+
+async def resume_image_turn(
+    db: AsyncSession,
+    session: Session,
+) -> dict[str, Any]:
+    """Resume parked graph at interrupt_before executor_image_plan (ADR 0004)."""
+    if session_turn_registry.is_busy(session.id):
+        raise SessionTurnConflict("busy", "Session turn already in progress")
+    if not await session_is_parked(session):
+        raise SessionTurnConflict("not_parked", "Session is not awaiting image confirmation")
+
+    pre_state = _strip_discard_meta(session.state)
+    # Prefer discard anchor from the turn that parked, if present.
+    anchor = (session.state or {}).get("turn_discard") or {}
+    if isinstance(anchor.get("pre_state"), dict):
+        pre_state = _strip_discard_meta(anchor["pre_state"])
+
+    existing = await repos.list_session_messages(db, session.id)
+    message_dicts = [{"role": m.role, "content": m.content} for m in existing]
+    # Synthetic id for registry bookkeeping (no new user row on resume).
+    resume_msg_id = uuid.uuid4()
+
+    task = asyncio.current_task()
+    if task is None:
+        raise RuntimeError("resume_image_turn requires a running asyncio task")
+    entry = await session_turn_registry.begin(
+        session.id,
+        task=task,
+        pre_state=pre_state,
+        user_message_id=resume_msg_id,
+    )
+    # Resume must not delete prior user messages on stop — only assistants added now.
+    entry.message_ids = []
+
+    try:
+        values, still_interrupted, provider_error, progress_events = await _invoke_graph(
+            db,
+            session,
+            graph_input=None,
+            user_content="",
+            message_dicts=message_dicts,
+        )
+        # On successful resume, clear parked discard anchor via persist.
+        result = await _persist_after_invoke(
+            db,
+            session,
+            user_msg=None,
+            message_dicts=message_dicts,
+            values=values,
+            still_interrupted=still_interrupted,
+            progress_events=progress_events,
+            provider_error=provider_error,
+            user_content="",
+            pre_state=pre_state,
+            entry=entry,
+        )
+        return result
+    except asyncio.CancelledError:
+        # Discard resume attempt: restore pre-agent state; keep prior user messages
+        # (entry.message_ids only tracks assistants added during this resume).
+        await _discard_turn_state(
+            db,
+            session,
+            pre_state=entry.pre_state,
+            message_ids=list(entry.message_ids),
+        )
+        await db.commit()
+        entry.discarded.set()
+        raise
+    finally:
+        if not entry.cancelling:
+            await session_turn_registry.clear(session.id, entry=entry)
+
+
+async def stop_session_turn(
+    db: AsyncSession,
+    session: Session,
+) -> dict[str, str]:
+    """Cancel in-flight turn or discard parked interrupt (ADR 0004)."""
+    entry = session_turn_registry.get(session.id)
+    if entry is not None and not entry.task.done():
+        if entry.cancelling:
+            await entry.discarded.wait()
+            await db.refresh(session)
+            return {"status": "cancelled"}
+        entry.cancelling = True
+        entry.task.cancel()
+        try:
+            await asyncio.wait_for(entry.discarded.wait(), timeout=60.0)
+        except TimeoutError:
+            logger.error("Timed out waiting for turn discard (session=%s)", session.id)
+            # Best-effort local discard if the other task never finished cleanup.
+            if not entry.discarded.is_set():
+                await _discard_turn_state(
+                    db,
+                    session,
+                    pre_state=entry.pre_state,
+                    message_ids=list(entry.message_ids),
+                )
+                entry.discarded.set()
+        await session_turn_registry.clear(session.id, entry=entry)
+        await db.refresh(session)
+        return {"status": "cancelled"}
+
+    # Parked discard (no in-flight task).
+    if await session_is_parked(session):
+        state = dict(session.state or {})
+        anchor = state.get("turn_discard") if isinstance(state.get("turn_discard"), dict) else {}
+        pre_state = anchor.get("pre_state") if isinstance(anchor.get("pre_state"), dict) else {}
+        pre_state = _strip_discard_meta(pre_state)
+        message_ids: list[uuid.UUID] = []
+        raw_ids = anchor.get("message_ids") or []
+        if isinstance(raw_ids, list):
+            for raw in raw_ids:
+                try:
+                    message_ids.append(uuid.UUID(str(raw)))
+                except ValueError:
+                    continue
+        if not message_ids and anchor.get("user_message_id"):
+            try:
+                message_ids.append(uuid.UUID(str(anchor["user_message_id"])))
+            except ValueError:
+                pass
+        await _discard_turn_state(
+            db,
+            session,
+            pre_state=pre_state,
+            message_ids=message_ids,
+        )
+        return {"status": "cancelled"}
+
+    return {"status": "idle"}
+
+
 async def update_session_draft(
     db: AsyncSession,
     session: Session,
@@ -362,6 +653,8 @@ async def update_session_draft(
     state["image_url"] = image_url
     state["pending_confirm"] = False
     state["need_image"] = False
+    state["awaiting_image_ok"] = False
+    state.pop("turn_discard", None)
     session.state = state
     session.mode = MODE_PREVIEW
 
