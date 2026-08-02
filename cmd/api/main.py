@@ -11,6 +11,7 @@ from cmd.api.routes.sessions import router as sessions_router
 from cmd.api.routes.signals import router as signals_router
 from internal.auth.rate_limit import assert_jwt_secret_safe
 from internal.config import settings
+from internal.llm.recorder import drain as drain_llm_records
 from internal.session.checkpointer import close_postgres_checkpointer, open_postgres_checkpointer
 from internal.session.graph import build_session_graph, set_session_graph
 
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         set_session_graph(None)
+        await drain_llm_records()
         await close_postgres_checkpointer(pool)
 
 

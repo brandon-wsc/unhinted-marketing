@@ -58,6 +58,8 @@ Stored per call: correlation (`session_id` / `user_id` / `company_id`, all nulla
 
 This ADR lands backend only: schema, privilege infra, recording. `GET /admin/llm-calls*` (gated by `require_platform_level(ADMIN)`), superadmin user management, and the web admin page are follow-up slices.
 
+> **Update (2026-08-03):** `/admin/llm-calls*` API and the web `/admin` records page have shipped (plus `drain()` on API shutdown). Still open: superadmin user management API, retention/purge policy, Trace viewer.
+
 ## Consequences
 
 - New Alembic revision adds `users.platform_level` + `llm_call_records`; existing users default to `MEMBER` (3). The owner must self-grant `SUPERADMIN` via the CLI after migrating.
