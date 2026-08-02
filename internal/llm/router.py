@@ -1,7 +1,12 @@
 """LiteLLM routing with BYOK from environment (DB-backed keys in Phase 4)."""
 
+from __future__ import annotations
+
+import asyncio
+import logging
 from collections.abc import AsyncIterator
 from enum import Enum
+from typing import Any
 
 # Import before litellm: some litellm builds hit KeyError on pydantic.root_model
 # during RootModel generic construction if that module is not loaded yet.
@@ -19,6 +24,8 @@ from litellm.exceptions import (
 )
 
 from internal.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class ModelTier(str, Enum):
@@ -231,6 +238,57 @@ def _is_provider_failure(exc: BaseException) -> bool:
     )
 
 
+async def _aclose_stream(stream: Any) -> None:
+    """Best-effort close of a LiteLLM/httpx streaming response (Stop / cancel)."""
+    if stream is None:
+        return
+    close = getattr(stream, "aclose", None)
+    if close is None:
+        close = getattr(stream, "close", None)
+    if close is None:
+        return
+    try:
+        result = close()
+        if asyncio.iscoroutine(result):
+            await result
+    except Exception:
+        logger.debug("LLM stream aclose failed", exc_info=True)
+
+
+def _delta_text(chunk: Any) -> str | None:
+    choices = getattr(chunk, "choices", None) or []
+    if not choices:
+        return None
+    delta = getattr(choices[0], "delta", None)
+    piece = getattr(delta, "content", None) if delta is not None else None
+    if piece:
+        return str(piece)
+    return None
+
+
+async def _astream_completion(
+    *,
+    model: str,
+    kwargs: dict[str, Any],
+) -> AsyncIterator[str]:
+    """Stream chat completion deltas; always aclose on exit (including CancelledError)."""
+    response: Any = None
+    try:
+        response = await litellm.acompletion(**kwargs)
+        async for chunk in response:
+            piece = _delta_text(chunk)
+            if piece:
+                yield piece
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        if _is_provider_failure(exc):
+            raise _wrap_provider_error(exc, model=model) from exc
+        raise
+    finally:
+        await _aclose_stream(response)
+
+
 async def complete_json(
     *,
     tier: ModelTier,
@@ -238,6 +296,7 @@ async def complete_json(
     user: str,
     temperature: float = 0.4,
 ) -> str:
+    """JSON completion via streaming so Stop can aclose mid-response."""
     kwargs = _base_kwargs(tier, temperature)
     model = str(kwargs["model"])
     kwargs["messages"] = [
@@ -245,13 +304,11 @@ async def complete_json(
         {"role": "user", "content": user},
     ]
     kwargs["response_format"] = {"type": "json_object"}
-    try:
-        response = await litellm.acompletion(**kwargs)
-    except Exception as exc:
-        if _is_provider_failure(exc):
-            raise _wrap_provider_error(exc, model=model) from exc
-        raise
-    content = response.choices[0].message.content
+    kwargs["stream"] = True
+    parts: list[str] = []
+    async for piece in _astream_completion(model=model, kwargs=kwargs):
+        parts.append(piece)
+    content = "".join(parts)
     if not content:
         raise RuntimeError("LLM returned empty content")
     return content
@@ -289,7 +346,7 @@ async def astream_text(
     user: str,
     temperature: float = 0.5,
 ) -> AsyncIterator[str]:
-    """Yield assistant text pieces as the model streams them."""
+    """Yield assistant text pieces as the model streams them; aclose on cancel."""
     kwargs = _base_kwargs(tier, temperature)
     model = str(kwargs["model"])
     kwargs["messages"] = [
@@ -297,19 +354,8 @@ async def astream_text(
         {"role": "user", "content": user},
     ]
     kwargs["stream"] = True
-    try:
-        response = await litellm.acompletion(**kwargs)
-        async for chunk in response:
-            choices = getattr(chunk, "choices", None) or []
-            if not choices:
-                continue
-            piece = getattr(choices[0].delta, "content", None)
-            if piece:
-                yield piece
-    except Exception as exc:
-        if _is_provider_failure(exc):
-            raise _wrap_provider_error(exc, model=model) from exc
-        raise
+    async for piece in _astream_completion(model=model, kwargs=kwargs):
+        yield piece
 
 
 async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:

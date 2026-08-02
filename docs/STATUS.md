@@ -298,7 +298,7 @@ See `.env.example`. Local `.env` is gitignored.
 | ID | Risk | Status |
 |----|------|--------|
 | **H1** | Auth rate limit + known-default / weak `JWT_SECRET` | ✅ **Mitigated on this branch** — in-memory limit on register/login/refresh; `APP_ENV=production` refuses insecure JWT |
-| **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ✅ **Mitigated** — [ADR 0004](./adr/0004-stop-discard-and-image-resume.md): composer lock; Stop discards; `POST /resume-image` only; `/messages` 409 while busy/parked |
+| **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ✅ **Mitigated** — [ADR 0004](./adr/0004-stop-discard-and-image-resume.md): composer lock; Stop discards; `POST /resume-image` only; `/messages` 409 while busy/parked; chat/JSON completions stream + `aclose` on cancel (best-effort upstream abort) |
 | **H3** | `use-session.ts` correctness concentrated & untested | ✅ **Mitigated** — pure helpers in `session-helpers.ts` (+ Tier 1 cov gate); `use-session.test.ts` covers restore / send / confirm / SSE merge |
 | **I1** | Confirm idempotency key global (cross-user receipt leak) | ✅ **Mitigated** — foreign key → 409; same session/user only replays |
 

@@ -1,7 +1,8 @@
-"""LLM router helpers — provider error wrapping (no live network)."""
+"""LLM router helpers — provider error wrapping + stream aclose (no live network)."""
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -78,3 +79,112 @@ async def test_generate_image_returns_url(monkeypatch: pytest.MonkeyPatch) -> No
 
     url = await R.generate_image(prompt="x")
     assert url == "https://cdn.example/a.png"
+
+
+class _FakeStream:
+    def __init__(self, pieces: list[str], *, fail_after: int | None = None):
+        self.pieces = pieces
+        self.fail_after = fail_after
+        self.aclose_calls = 0
+        self._i = 0
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self.fail_after is not None and self._i >= self.fail_after:
+            raise asyncio.CancelledError()
+        if self._i >= len(self.pieces):
+            raise StopAsyncIteration
+        text = self.pieces[self._i]
+        self._i += 1
+        chunk = MagicMock()
+        delta = MagicMock()
+        delta.content = text
+        choice = MagicMock()
+        choice.delta = delta
+        chunk.choices = [choice]
+        return chunk
+
+    async def aclose(self):
+        self.aclose_calls += 1
+
+
+@pytest.mark.asyncio
+async def test_astream_text_aclose_on_complete(monkeypatch: pytest.MonkeyPatch) -> None:
+    stream = _FakeStream(["Hel", "lo"])
+
+    async def fake_acompletion(**_kwargs):
+        return stream
+
+    monkeypatch.setattr(R, "configure_litellm", lambda: None)
+    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
+    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+
+    parts = [
+        p
+        async for p in R.astream_text(
+            tier=R.ModelTier.CHEAP, system="s", user="u"
+        )
+    ]
+    assert "".join(parts) == "Hello"
+    assert stream.aclose_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_astream_text_aclose_on_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
+    stream = _FakeStream(["a", "b", "c"], fail_after=1)
+
+    async def fake_acompletion(**_kwargs):
+        return stream
+
+    monkeypatch.setattr(R, "configure_litellm", lambda: None)
+    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
+    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+
+    gen = R.astream_text(tier=R.ModelTier.CHEAP, system="s", user="u")
+    first = await gen.__anext__()
+    assert first == "a"
+    with pytest.raises(asyncio.CancelledError):
+        await gen.__anext__()
+    # Generator cleanup (aclose finally) runs when the generator is closed.
+    await gen.aclose()
+    assert stream.aclose_calls >= 1
+
+
+@pytest.mark.asyncio
+async def test_complete_json_streams_and_aclose(monkeypatch: pytest.MonkeyPatch) -> None:
+    stream = _FakeStream(['{"ok":', " true}"])
+
+    async def fake_acompletion(**kwargs):
+        assert kwargs.get("stream") is True
+        assert kwargs.get("response_format") == {"type": "json_object"}
+        return stream
+
+    monkeypatch.setattr(R, "configure_litellm", lambda: None)
+    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
+    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+
+    raw = await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
+    assert raw == '{"ok": true}'
+    assert stream.aclose_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_complete_json_aclose_on_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
+    stream = _FakeStream(['{"a":', "1}"], fail_after=1)
+
+    async def fake_acompletion(**_kwargs):
+        return stream
+
+    monkeypatch.setattr(R, "configure_litellm", lambda: None)
+    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
+    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+
+    with pytest.raises(asyncio.CancelledError):
+        await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
+    assert stream.aclose_calls == 1
