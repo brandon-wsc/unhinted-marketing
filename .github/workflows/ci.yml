@@ -38,6 +38,13 @@ jobs:
           --cov=schemas
           --cov-report=term-missing
           --cov-fail-under=85
+      - name: Tier 1b session nodes mock-LLM (coverage ≥70%)
+        run: >
+          pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py
+          --cov=internal.session.nodes
+          --cov=internal.session.trace
+          --cov-report=term-missing
+          --cov-fail-under=70
 
   backend-api:
     name: Backend API

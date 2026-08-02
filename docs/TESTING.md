@@ -27,10 +27,11 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 | Tier | Paths | Target | Gate |
 |------|-------|--------|------|
 | **1 — Utils** | `internal/auth/jwt.py` · `schemas/**` · pure helpers in `internal/session/service.py` (`normalize_draft_copy`, `preview_updated_payload`, …) · `internal/session/checkpointer.py` (`checkpoint_conninfo`) · `internal/session/tiers.py` · `internal/session/io.py` / `state.py` (pure bits) | **85–95%** | **Fail** |
+| **1b — Session nodes (mock LLM)** | `internal/session/nodes.py` · `internal/session/trace.py` | **≥70%** | **Fail** — no live LLM; monkeypatch `complete_json` / repos |
 | **2 — API** | `cmd/api/routes/**` | **70–80%** | **Fail** — happy path per public endpoint + 401/403 + confirm invalid token / idempotency |
 | **3 — Domain** | `internal/auth/service.py` · `deps.py` · `org.py` · non-LLM parts of `internal/session/service.py` | **60–75%** | Soft / follow API tests |
 | **4 — Memory glue** | `internal/memory/repos.py` | Covered via API integration | Soft |
-| **5 — Omit / smoke** | `internal/session/nodes.py` · `graph.py` · `prompts.py` · `internal/llm/**` · `internal/perception/**` · `cmd/worker/**` · `cmd/scheduler/**` · `migrations/**` · `internal/config.py` | **Not in gate** | Optional smoke later |
+| **5 — Omit / smoke** | `internal/session/graph.py` · `prompts.py` · `internal/llm/**` · `internal/perception/**` · `cmd/worker/**` · `cmd/scheduler/**` · `migrations/**` · `internal/config.py` | **Not in gate** | Live LLM eval = manual / nightly only |
 
 **API test priorities (behavior, not %)**:
 
@@ -63,7 +64,7 @@ Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — runs on 
 | Job | Checks |
 |-----|--------|
 | `lint` | `ruff check .` |
-| `backend-unit` | `pytest tests/unit` + utils cov ≥85% |
+| `backend-unit` | `pytest tests/unit` + utils cov ≥85%; session nodes mock-LLM cov ≥70% |
 | `backend-api` | `pgvector/pgvector:pg18` service + `pytest tests/api` + routes cov ≥70% |
 | `frontend` | `npm ci` → `npm run test:coverage` → `npm run build` |
 
@@ -72,6 +73,10 @@ Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — runs on 
 ```bash
 # Tier 1 utils
 pytest tests/unit --cov=internal.auth.jwt --cov=schemas --cov-fail-under=85
+
+# Tier 1b session nodes (mock LLM — no API key)
+pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
+  --cov=internal.session.nodes --cov=internal.session.trace --cov-fail-under=70
 
 # Tier 2 API routes (needs TEST_DATABASE_URL)
 pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
@@ -125,8 +130,9 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
 3. ~~**Frontend Vitest**~~ — Tier 1 `web/src/lib/**` + Tier 2 PasswordBox / UserMenuDropdown
 4. ~~**CI/CD**~~ — `.github/workflows/ci.yml` (ruff + pytest unit/API + Vitest + build)
-5. Hold: LangGraph nodes (mock-LLM unit tests + CI — next branch), SSE E2E, Playwright chat→preview→confirm; branch protection requiring CI; live LLM eval = manual/nightly only
+5. Hold: SSE E2E, Playwright chat→preview→confirm; branch protection requiring CI; live LLM eval = manual/nightly only (`@pytest.mark.live_llm` — not yet wired)
 6. ~~**Contracts SSOT**~~ — `AGENTS.md`, ADRs, `schemas/contracts.py` / `tools.py`, `docs/contracts/` + OpenAPI export
+7. ~~**Graph mock-LLM node tests + CI**~~ — `tests/unit/test_session_nodes.py` + routing; opt-in `node_trace_recording()`; CI Tier 1b ≥70%
 
 **Contracts refresh:** after changing `schemas/contracts.py` or `schemas/tools.py` (or API routes), run `python -m scripts.export_contracts` and commit the updated `docs/contracts/` + `docs/openapi.json` mirrors.
 
