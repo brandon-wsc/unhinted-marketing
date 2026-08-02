@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "QueryMarketTrendsSignal": {
+      "properties": {
+        "signal_id": {
+          "title": "Signal Id",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region"
+        },
+        "metrics": {
+          "additionalProperties": true,
+          "title": "Metrics",
+          "type": "object"
+        }
+      },
+      "required": [
+        "signal_id",
+        "source",
+        "title"
+      ],
+      "title": "QueryMarketTrendsSignal",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "region": {
+      "title": "Region",
+      "type": "string"
+    },
+    "signals": {
+      "items": {
+        "$ref": "#/$defs/QueryMarketTrendsSignal"
+      },
+      "title": "Signals",
+      "type": "array"
+    },
+    "ranked_signal_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Ranked Signal Ids",
+      "type": "array"
+    },
+    "notes": {
+      "default": "",
+      "title": "Notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "region"
+  ],
+  "title": "QueryMarketTrendsResponse",
+  "type": "object"
+}

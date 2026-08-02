@@ -17,6 +17,7 @@ from internal.session.context import session_db
 from internal.session.events import session_event_bus
 from internal.session.graph import get_session_graph
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
+from schemas.contracts import DraftCopy, PreviewUpdatedData
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +44,11 @@ def normalize_draft_copy(copy: dict[str, Any] | None) -> dict[str, Any]:
     hashtags = raw.get("hashtags") or []
     if not isinstance(hashtags, list):
         hashtags = []
-    return {
-        "caption": str(raw.get("caption") or ""),
-        "hashtags": [str(h) for h in hashtags if str(h).strip()],
-        "cta": str(raw.get("cta") or ""),
-    }
+    return DraftCopy(
+        caption=str(raw.get("caption") or ""),
+        hashtags=[str(h) for h in hashtags if str(h).strip()],
+        cta=str(raw.get("cta") or ""),
+    ).model_dump()
 
 
 def preview_updated_payload(
@@ -58,13 +59,13 @@ def preview_updated_payload(
     copy: dict[str, Any] | None,
     platform: str | None = None,
 ) -> dict[str, Any]:
-    return {
-        "revision": revision,
-        "approval_token": approval_token,
-        "image_url": image_url,
-        "copy": normalize_draft_copy(copy),
-        "platform": platform or DEFAULT_PLATFORM,
-    }
+    return PreviewUpdatedData(
+        revision=revision,
+        approval_token=approval_token,
+        image_url=image_url,
+        draft_copy=DraftCopy.model_validate(normalize_draft_copy(copy)),
+        platform=platform or DEFAULT_PLATFORM,
+    ).model_dump(by_alias=True)
 
 
 def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str, Any]:

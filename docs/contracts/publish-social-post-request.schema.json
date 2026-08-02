@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "DraftCopy": {
+      "description": "Shared post copy across preview skins (ADR 0001).",
+      "properties": {
+        "caption": {
+          "default": "",
+          "title": "Caption",
+          "type": "string"
+        },
+        "hashtags": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 40,
+          "title": "Hashtags",
+          "type": "array"
+        },
+        "cta": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Cta",
+          "type": "string"
+        }
+      },
+      "title": "DraftCopy",
+      "type": "object"
+    }
+  },
+  "description": "Confirm-handler adapter input only — never invoked from LangGraph (ADR 0003).",
+  "properties": {
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "approval_token": {
+      "maxLength": 128,
+      "minLength": 8,
+      "title": "Approval Token",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "maxLength": 200,
+      "minLength": 8,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "platform": {
+      "default": "stub",
+      "maxLength": 40,
+      "title": "Platform",
+      "type": "string"
+    },
+    "copy": {
+      "$ref": "#/$defs/DraftCopy"
+    },
+    "image_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Image Url"
+    },
+    "revision": {
+      "minimum": 0,
+      "title": "Revision",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "session_id",
+    "approval_token",
+    "idempotency_key",
+    "copy",
+    "revision"
+  ],
+  "title": "PublishSocialPostRequest",
+  "type": "object"
+}

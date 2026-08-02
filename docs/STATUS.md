@@ -44,7 +44,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 4. ~~Landing recommended-question cards~~
 5. ~~Preview (left chat / right draft) + Confirm button~~
 
-**Decision (2026-07-30) — Preview Mode product contract:**
+**Decision (2026-07-30) — Preview Mode product contract:** → [ADR 0001](./adr/0001-preview-canonical-draft.md)
 
 - **Canonical draft** — shared `{ caption, hashtags, cta, image_url }`; not per-platform copies; not a markdown editor
 - **MVP preview skin = Instagram only** — phone-style feed mock; FB/Threads later as chrome swap on the same fields
@@ -59,6 +59,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Three pages on mobile** — Record / Chat / Preview as separate full-height views (not stacked)
 - **Navigation** — Chat shows top-left history icon → Record; Record / Preview show **上一頁** back to Chat; open Preview from in-chat ready banner (no auto-jump, no bottom tab bar)
 - **Still deferred** — history control in the app header top bar (icon currently overlays chat)
+
+**Decision (2026-08-02) — Contracts SSOT entry:** `AGENTS.md` + [ADRs](./adr/) + `schemas/contracts.py` / `schemas/tools.py` + generated `docs/contracts/` + `docs/openapi.json`. REST > SSE locked in [ADR 0002](./adr/0002-rest-source-of-truth-sse-enhancement.md); Confirm without LLM in [ADR 0003](./adr/0003-confirm-without-llm.md). Graph mock-LLM tests / CI are a follow-up branch.
 
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
@@ -112,7 +114,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Session HTTP API | ✅ | `GET/POST /sessions`, `PATCH/DELETE /sessions/{id}`, `/messages`, `/draft`, `/confirm` |
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform`; snapshot `interrupted` from graph checkpoint (+ `sessions.state.awaiting_image_ok`) |
 | Image generation worker | ⏸ **Held** | Still `placeholder://` URL — fine for UI mock preview |
-| `query_market_trends` tool schema | ⏸ **Held** | Signals already served; schema polish deferred |
+| `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
 | Curl exit-criteria script | ⏸ **Held** | Manual/API path works; formal curl checklist later |
 
 **Held Phase 2 work does not block Phase 3 UI.**
@@ -240,15 +242,20 @@ unhinted-marketing/
 │   ├── perception/       # hot_search, question_generator, news_promoter
 │   ├── session/          # LangGraph graph, nodes, Postgres checkpointer, SSE bus
 │   └── config.py
-├── schemas/              # Pydantic (auth, perception, session)
+├── schemas/              # Pydantic (auth, perception, session, contracts, tools)
+├── scripts/              # export_contracts → docs/openapi.json + docs/contracts/
 ├── migrations/           # Alembic (auth → signals → sessions)
 ├── tests/                # pytest: unit (no DB) + api (TEST_DATABASE_URL)
 ├── web/                  # React frontend (Phase 3 chat / agent / preview / history UI)
+├── AGENTS.md             # Coding-agent SSOT map
 └── docs/
     ├── ROADMAP.md
     ├── GETTING_STARTED.md
     ├── TESTING.md            # path-tiered coverage gates
-    └── STATUS.md             # this file
+    ├── STATUS.md             # this file
+    ├── adr/                  # Architecture Decision Records
+    ├── contracts/            # JSON Schema mirrors (generated)
+    └── openapi.json          # FastAPI OpenAPI (generated)
 ```
 
 **Tests:** `tests/unit` (no DB) · `tests/api` (requires `TEST_DATABASE_URL`) · `cd web && npm test` (Vitest Tier 1/2). Policy: [TESTING.md](./TESTING.md).
@@ -277,9 +284,9 @@ See `.env.example`. Local `.env` is gitignored.
 ## Known Gaps / Next Steps
 
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
-2. **Phase 2 held:** Image worker (replace `placeholder://`), `query_market_trends` JSON Schema, formal curl exit-criteria script.
+2. **Phase 2 held:** Image worker (replace `placeholder://`), formal curl exit-criteria script; `query_market_trends` **schema** landed (`schemas/tools.py`) — adapter wiring still held.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer; FB/Threads preview skins.
-4. **Hardening:** Auth rate limits; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); multi-worker SSE (Redis) if scaling beyond one API process; enable branch protection requiring CI checks.
+4. **Hardening:** Auth rate limits; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); multi-worker SSE (Redis) if scaling beyond one API process; enable branch protection requiring CI checks; **next:** mock-LLM graph node tests + CI gate.
 
 ---
 

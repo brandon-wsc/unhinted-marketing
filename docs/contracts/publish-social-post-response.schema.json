@@ -1,0 +1,34 @@
+{
+  "properties": {
+    "receipt_id": {
+      "format": "uuid",
+      "title": "Receipt Id",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "tool_name": {
+      "default": "publish_social_post",
+      "title": "Tool Name",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "platform": {
+      "default": "stub",
+      "title": "Platform",
+      "type": "string"
+    }
+  },
+  "required": [
+    "receipt_id",
+    "status",
+    "idempotency_key"
+  ],
+  "title": "PublishSocialPostResponse",
+  "type": "object"
+}

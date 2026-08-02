@@ -1,0 +1,47 @@
+{
+  "description": "Read-only market signal lookup (background ingest + session trend_searcher).",
+  "properties": {
+    "region": {
+      "default": "HK",
+      "maxLength": 8,
+      "minLength": 2,
+      "title": "Region",
+      "type": "string"
+    },
+    "limit": {
+      "default": 20,
+      "maximum": 50,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    },
+    "company_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company Id"
+    },
+    "user_request": {
+      "anyOf": [
+        {
+          "maxLength": 8000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "User Request"
+    }
+  },
+  "title": "QueryMarketTrendsRequest",
+  "type": "object"
+}

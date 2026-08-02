@@ -1,0 +1,26 @@
+{
+  "description": "Shared post copy across preview skins (ADR 0001).",
+  "properties": {
+    "caption": {
+      "default": "",
+      "title": "Caption",
+      "type": "string"
+    },
+    "hashtags": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 40,
+      "title": "Hashtags",
+      "type": "array"
+    },
+    "cta": {
+      "default": "",
+      "maxLength": 500,
+      "title": "Cta",
+      "type": "string"
+    }
+  },
+  "title": "DraftCopy",
+  "type": "object"
+}

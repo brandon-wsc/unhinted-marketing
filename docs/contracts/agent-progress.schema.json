@@ -1,0 +1,38 @@
+{
+  "description": "Payload for `agent.progress`.",
+  "properties": {
+    "node": {
+      "title": "Node",
+      "type": "string"
+    },
+    "model_tier": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Tier"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    }
+  },
+  "required": [
+    "node"
+  ],
+  "title": "AgentProgressData",
+  "type": "object"
+}

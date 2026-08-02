@@ -125,7 +125,10 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
 3. ~~**Frontend Vitest**~~ — Tier 1 `web/src/lib/**` + Tier 2 PasswordBox / UserMenuDropdown
 4. ~~**CI/CD**~~ — `.github/workflows/ci.yml` (ruff + pytest unit/API + Vitest + build)
-5. Hold: LangGraph nodes, SSE E2E, Playwright chat→preview→confirm; branch protection requiring CI
+5. Hold: LangGraph nodes (mock-LLM unit tests + CI — next branch), SSE E2E, Playwright chat→preview→confirm; branch protection requiring CI; live LLM eval = manual/nightly only
+6. ~~**Contracts SSOT**~~ — `AGENTS.md`, ADRs, `schemas/contracts.py` / `tools.py`, `docs/contracts/` + OpenAPI export
+
+**Contracts refresh:** after changing `schemas/contracts.py` or `schemas/tools.py` (or API routes), run `python -m scripts.export_contracts` and commit the updated `docs/contracts/` + `docs/openapi.json` mirrors.
 
 **Note:** pytest disables the `debugging` plugin (`-p no:debugging`) because the top-level package name `cmd` shadows the stdlib `cmd` module used by `pdb`.
 

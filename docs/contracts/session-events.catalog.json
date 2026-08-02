@@ -1,0 +1,70 @@
+{
+  "title": "Session SSE / turn event catalog",
+  "description": "Known event types for session bus (ADR 0002). payload_schema is null when the data object is empty or not yet a tight DTO.",
+  "events": [
+    {
+      "type": "heartbeat",
+      "payload_model": null
+    },
+    {
+      "type": "session.snapshot",
+      "payload_model": null
+    },
+    {
+      "type": "message.delta",
+      "payload_model": "MessageDeltaData"
+    },
+    {
+      "type": "message.assistant",
+      "payload_model": "MessageAssistantData"
+    },
+    {
+      "type": "agent.progress",
+      "payload_model": "AgentProgressData"
+    },
+    {
+      "type": "brief.updated",
+      "payload_model": "SessionBriefData"
+    },
+    {
+      "type": "signals.updated",
+      "payload_model": "SignalsUpdatedData"
+    },
+    {
+      "type": "draft.copy_updated",
+      "payload_model": "DraftCopy"
+    },
+    {
+      "type": "draft.image_plan_updated",
+      "payload_model": null
+    },
+    {
+      "type": "draft.awaiting_image_ok",
+      "payload_model": "DraftAwaitingImageOkData"
+    },
+    {
+      "type": "draft.updated",
+      "payload_model": "DraftImageUrlData"
+    },
+    {
+      "type": "preview.updated",
+      "payload_model": "PreviewUpdatedData"
+    },
+    {
+      "type": "confirm.pending",
+      "payload_model": null
+    },
+    {
+      "type": "confirm.completed",
+      "payload_model": "ConfirmCompletedData"
+    },
+    {
+      "type": "review.failed",
+      "payload_model": "ReviewFailedData"
+    },
+    {
+      "type": "llm.failed",
+      "payload_model": "LlmFailedData"
+    }
+  ]
+}

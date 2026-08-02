@@ -408,7 +408,7 @@ All metrics stored in PG with provenance before LLM reads them.
 - [x] FastAPI: `POST /sessions`, `POST /messages`, `GET /events` (SSE)
 - [ ] Image generation worker (`executor_image_gen` dispatches; placeholder/local URL in `preview_drafts` for MVP)
 - [x] `POST /sessions/{id}/confirm` — **traditional handler**, stub platform adapter → writes `tool_receipts` row
-- [ ] Tool schema validators (Pydantic + JSON Schema) for `query_market_trends`
+- [x] Tool schema validators (Pydantic + JSON Schema) for `query_market_trends` / `publish_social_post` / canonical draft + SSE catalog (`schemas/contracts.py`, `schemas/tools.py`; mirrors in `docs/contracts/`). Node wiring to tool adapters remains a follow-up.
 
 **Exit criteria:** curl/HTTPie flow from question → draft → 3 revisions → confirm → receipt row.
 
@@ -499,4 +499,7 @@ All metrics stored in PG with provenance before LLM reads them.
 
 - [LangGraph docs](https://langchain-ai.github.io/langgraph/)
 - [LiteLLM](https://docs.litellm.ai/)
-- [API spec](./API.md) _(to be written)_
+- [OpenAPI](./openapi.json) — generated; refresh with `python -m scripts.export_contracts`
+- [Contract JSON Schemas](./contracts/) — draft / SSE / tools
+- [ADRs](./adr/) — product decisions
+- [AGENTS.md](../AGENTS.md) — coding-agent SSOT map

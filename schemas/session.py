@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from schemas.contracts import DraftCopy
 
 
 class CreateSessionRequest(BaseModel):
@@ -90,14 +92,18 @@ class UpdateDraftRequest(BaseModel):
 
 
 class UpdateDraftResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     revision: int
     approval_token: str
-    copy: dict
+    draft_copy: DraftCopy = Field(alias="copy")
     image_url: str | None = None
     platform: str
     mode: str
 
 
 class SessionEvent(BaseModel):
+    """SSE / turn event envelope. Known `type` values: schemas.contracts.SessionEventType."""
+
     type: str
     data: dict = Field(default_factory=dict)
