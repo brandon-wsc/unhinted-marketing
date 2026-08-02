@@ -31,7 +31,7 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 | **2 — API** | `cmd/api/routes/**` | **70–80%** | **Fail** — happy path per public endpoint + 401/403 + confirm invalid token / idempotency |
 | **3 — Domain** | `internal/auth/service.py` · `deps.py` · `org.py` · non-LLM parts of `internal/session/service.py` | **60–75%** | Soft / follow API tests |
 | **4 — Memory glue** | `internal/memory/repos.py` | Covered via API integration | Soft |
-| **5 — Omit / smoke** | `internal/session/graph.py` · `prompts.py` · `internal/llm/**` · `internal/perception/**` · `cmd/worker/**` · `cmd/scheduler/**` · `migrations/**` · `internal/config.py` | **Not in gate** | Live LLM eval = manual / nightly only |
+| **5 — Omit / smoke** | `internal/session/graph.py` · `prompts.py` · `internal/llm/**` (except focused router unit tests) · `internal/perception/**` · `cmd/worker/**` · `cmd/scheduler/**` · `migrations/**` · `internal/config.py` | **Not in gate** | Live LLM eval = manual / nightly only; `tests/unit/test_llm_router.py` covers provider wrap + stream `aclose` / streamed `complete_json` (no live network) |
 
 **API test priorities (behavior, not %)**:
 
