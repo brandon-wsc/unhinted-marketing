@@ -20,6 +20,7 @@ from internal.session.context import session_db
 from internal.session.events import session_event_bus
 from internal.session.graph import get_session_graph
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
+from internal.session.trace import turn_trace
 from internal.session.turn_registry import TurnEntry, session_turn_registry
 from schemas.contracts import DraftCopy, PreviewUpdatedData
 
@@ -405,7 +406,14 @@ async def _invoke_graph(
     still_interrupted = False
     progress_events: list[dict[str, Any]] = []
 
-    with session_db(db):
+    with (
+        session_db(db),
+        turn_trace(
+            session_id=session.id,
+            user_id=session.user_id,
+            company_id=session.company_id,
+        ),
+    ):
         session_event_bus.begin_turn_progress(session.id)
         try:
             result = await graph.ainvoke(graph_input, config)

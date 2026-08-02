@@ -7,6 +7,7 @@ export type LlmCallRecordSummary = {
   caller: string;
   node: string | null;
   session_id: string | null;
+  turn_id: string | null;
   kind: string;
   tier: string | null;
   model: string | null;
@@ -39,9 +40,87 @@ export type LlmCallFilters = {
   node?: string;
   status?: string;
   fallbackOnly?: boolean;
+  turnId?: string;
+  sessionId?: string;
+};
+
+export type NodeStepSummary = {
+  id: string;
+  created_at: string;
+  session_id: string | null;
+  turn_id: string;
+  seq: number;
+  node: string;
+  mode_in: string | null;
+  mode_out: string | null;
+  intent_out: string | null;
+  source_signal_ids_in: unknown[];
+  source_signal_ids_out: unknown[];
+  output_keys: unknown[];
+};
+
+export type NodeStepDetail = NodeStepSummary & {
+  user_id: string | null;
+  company_id: string | null;
+  output: Record<string, unknown>;
+  llm_calls: LlmCallRecordSummary[];
+};
+
+export type NodeStepList = {
+  items: NodeStepSummary[];
+  limit: number;
+  offset: number;
+};
+
+export type NodeStepFilters = {
+  node?: string;
+  sessionId?: string;
+  turnId?: string;
+};
+
+export type SessionTrace = {
+  id: string;
+  mode: string;
+  status: string;
+  company_id: string;
+  user_id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string | null;
+  messages: Array<{
+    id: string;
+    role: string;
+    content: string;
+    metadata: Record<string, unknown> | null;
+    created_at: string;
+  }>;
+  draft_revisions: Array<{
+    id: string;
+    revision: number;
+    draft_copy: Record<string, unknown>;
+    image_url: string | null;
+    image_plan: Record<string, unknown> | null;
+    source_signal_ids: unknown[];
+    approval_token: string | null;
+    platform: string | null;
+    created_at: string;
+  }>;
+  signals: Array<{
+    signal_id: string;
+    source: string;
+    title: string;
+    url: string | null;
+    excerpt: string | null;
+  }>;
+  turns: Array<{
+    turn_id: string;
+    steps: NodeStepSummary[];
+    llm_calls: LlmCallRecordSummary[];
+  }>;
 };
 
 export const LLM_CALL_PAGE_SIZE = 50;
+export const NODE_STEP_PAGE_SIZE = 50;
 
 export function buildLlmCallQuery(
   filters: LlmCallFilters,
@@ -53,6 +132,23 @@ export function buildLlmCallQuery(
   if (node) params.set("node", node);
   if (filters.status) params.set("status", filters.status);
   if (filters.fallbackOnly) params.set("fallback_used", "true");
+  if (filters.turnId?.trim()) params.set("turn_id", filters.turnId.trim());
+  if (filters.sessionId?.trim()) params.set("session_id", filters.sessionId.trim());
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
+  return params.toString();
+}
+
+export function buildNodeStepQuery(
+  filters: NodeStepFilters,
+  limit: number,
+  offset: number,
+): string {
+  const params = new URLSearchParams();
+  const node = filters.node?.trim();
+  if (node) params.set("node", node);
+  if (filters.sessionId?.trim()) params.set("session_id", filters.sessionId.trim());
+  if (filters.turnId?.trim()) params.set("turn_id", filters.turnId.trim());
   params.set("limit", String(limit));
   params.set("offset", String(offset));
   return params.toString();
@@ -74,6 +170,35 @@ export async function apiAdminGetLlmCall(
   id: string,
 ): Promise<LlmCallRecordDetail> {
   const res = await fetchWithAuth(accessToken, `/admin/llm-calls/${id}`);
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiAdminListNodeSteps(
+  accessToken: string | null,
+  filters: NodeStepFilters,
+  offset = 0,
+): Promise<NodeStepList> {
+  const query = buildNodeStepQuery(filters, NODE_STEP_PAGE_SIZE, offset);
+  const res = await fetchWithAuth(accessToken, `/admin/node-steps?${query}`);
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiAdminGetNodeStep(
+  accessToken: string | null,
+  id: string,
+): Promise<NodeStepDetail> {
+  const res = await fetchWithAuth(accessToken, `/admin/node-steps/${id}`);
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiAdminGetSessionTrace(
+  accessToken: string | null,
+  sessionId: string,
+): Promise<SessionTrace> {
+  const res = await fetchWithAuth(accessToken, `/admin/sessions/${sessionId}/trace`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }

@@ -940,6 +940,23 @@
             }
           },
           {
+            "name": "turn_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Turn Id"
+            }
+          },
+          {
             "name": "fallback_used",
             "in": "query",
             "required": false,
@@ -1068,6 +1085,248 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LlmCallRecordDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/node-steps": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Node Steps",
+        "operationId": "list_node_steps_admin_node_steps_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "node",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Node"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "turn_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Turn Id"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeStepList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/node-steps/{step_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Node Step",
+        "operationId": "get_node_step_admin_node_steps__step_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "step_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Step Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeStepDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/sessions/{session_id}/trace": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Session Trace",
+        "operationId": "get_session_trace_admin_sessions__session_id__trace_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTrace"
                 }
               }
             }
@@ -1270,6 +1529,18 @@
               }
             ],
             "title": "Session Id"
+          },
+          "turn_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turn Id"
           },
           "kind": {
             "type": "string",
@@ -1534,6 +1805,18 @@
             ],
             "title": "Session Id"
           },
+          "turn_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turn Id"
+          },
           "kind": {
             "type": "string",
             "title": "Kind"
@@ -1665,6 +1948,268 @@
           "password"
         ],
         "title": "LoginRequest"
+      },
+      "NodeStepDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "turn_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Turn Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "node": {
+            "type": "string",
+            "title": "Node"
+          },
+          "mode_in": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode In"
+          },
+          "mode_out": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode Out"
+          },
+          "intent_out": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intent Out"
+          },
+          "source_signal_ids_in": {
+            "items": {},
+            "type": "array",
+            "title": "Source Signal Ids In"
+          },
+          "source_signal_ids_out": {
+            "items": {},
+            "type": "array",
+            "title": "Source Signal Ids Out"
+          },
+          "output_keys": {
+            "items": {},
+            "type": "array",
+            "title": "Output Keys"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "output": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output"
+          },
+          "llm_calls": {
+            "items": {
+              "$ref": "#/components/schemas/LlmCallRecordSummary"
+            },
+            "type": "array",
+            "title": "Llm Calls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "session_id",
+          "turn_id",
+          "seq",
+          "node",
+          "mode_in",
+          "mode_out",
+          "intent_out"
+        ],
+        "title": "NodeStepDetail"
+      },
+      "NodeStepList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NodeStepSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset"
+        ],
+        "title": "NodeStepList"
+      },
+      "NodeStepSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "turn_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Turn Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "node": {
+            "type": "string",
+            "title": "Node"
+          },
+          "mode_in": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode In"
+          },
+          "mode_out": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode Out"
+          },
+          "intent_out": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intent Out"
+          },
+          "source_signal_ids_in": {
+            "items": {},
+            "type": "array",
+            "title": "Source Signal Ids In"
+          },
+          "source_signal_ids_out": {
+            "items": {},
+            "type": "array",
+            "title": "Source Signal Ids Out"
+          },
+          "output_keys": {
+            "items": {},
+            "type": "array",
+            "title": "Output Keys"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "session_id",
+          "turn_id",
+          "seq",
+          "node",
+          "mode_in",
+          "mode_out",
+          "intent_out"
+        ],
+        "title": "NodeStepSummary"
       },
       "OrganizationSummary": {
         "properties": {
@@ -2181,6 +2726,99 @@
         ],
         "title": "SessionResponse"
       },
+      "SessionTrace": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/TraceMessage"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "draft_revisions": {
+            "items": {
+              "$ref": "#/components/schemas/TraceDraftRevision"
+            },
+            "type": "array",
+            "title": "Draft Revisions"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/TraceSignal"
+            },
+            "type": "array",
+            "title": "Signals"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/TraceTurn"
+            },
+            "type": "array",
+            "title": "Turns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "mode",
+          "status",
+          "company_id",
+          "user_id",
+          "created_at"
+        ],
+        "title": "SessionTrace"
+      },
       "SignalResponse": {
         "properties": {
           "signal_id": {
@@ -2317,6 +2955,202 @@
           "signals"
         ],
         "title": "TopSignalsResponse"
+      },
+      "TraceDraftRevision": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "draft_copy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Draft Copy"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "image_plan": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Plan"
+          },
+          "source_signal_ids": {
+            "items": {},
+            "type": "array",
+            "title": "Source Signal Ids"
+          },
+          "approval_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Token"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "revision",
+          "draft_copy",
+          "created_at"
+        ],
+        "title": "TraceDraftRevision"
+      },
+      "TraceMessage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "TraceMessage"
+      },
+      "TraceSignal": {
+        "properties": {
+          "signal_id": {
+            "type": "string",
+            "title": "Signal Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "signal_id",
+          "source",
+          "title"
+        ],
+        "title": "TraceSignal"
+      },
+      "TraceTurn": {
+        "properties": {
+          "turn_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Turn Id"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/NodeStepSummary"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "llm_calls": {
+            "items": {
+              "$ref": "#/components/schemas/LlmCallRecordSummary"
+            },
+            "type": "array",
+            "title": "Llm Calls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "turn_id"
+        ],
+        "title": "TraceTurn"
       },
       "UpdateDraftRequest": {
         "properties": {

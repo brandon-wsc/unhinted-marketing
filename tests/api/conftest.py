@@ -25,6 +25,7 @@ TRUNCATE_TABLES = (
     "tool_receipts",
     "preview_drafts",
     "session_messages",
+    "session_node_steps",
     "sessions",
     "llm_call_records",
     "recommended_questions",

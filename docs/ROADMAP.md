@@ -431,8 +431,9 @@ All metrics stored in PG with provenance before LLM reads them.
 - [x] `GET /sessions` + `GET /sessions/{id}/messages` — history list + hydrate after refresh
 - [x] `PATCH /sessions/{id}` + `DELETE /sessions/{id}` — rename / pin / delete (desktop sidebar; mobile Record page)
 - [x] LLM call records + platform levels + admin page ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)): every provider call → `llm_call_records`; `GET /admin/llm-calls` gated by `platform_level`; web `/admin` records viewer (filters, detail drawer)
+- [x] Admin Trace viewer ([ADR 0007](./adr/0007-admin-trace-viewer.md)): `session_node_steps` + turn correlation; admin tabs Node steps + Session Trace (messages, revisions, signal grounding)
+- [ ] Mount HTTP API under `/api/…` ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)) — fix same-origin SPA/proxy namespace collision class
 - [ ] BYOK settings page (masked keys, server-side storage)
-- [ ] Trace viewer: session messages + revision timeline + signal grounding links
 
 **Exit criteria:** End-to-end demo in browser for one platform (TBD: IG / FB / Threads).
 

@@ -82,11 +82,15 @@ function DetailSheet({
   loading,
   open,
   onOpenChange,
+  onOpenTurn,
+  onOpenSession,
 }: {
   detail: LlmCallRecordDetail | null;
   loading: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenTurn?: (turnId: string) => void;
+  onOpenSession?: (sessionId: string) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -150,10 +154,42 @@ function DetailSheet({
                       : t("admin.badges.parseFailed")}
                 </dd>
               </div>
+              {detail.turn_id && (
+                <div className="col-span-2">
+                  <dt className="text-muted-foreground">{t("admin.table.turnId")}</dt>
+                  <dd className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[10px] text-foreground">{detail.turn_id}</span>
+                    {onOpenTurn && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onOpenTurn(detail.turn_id!)}
+                      >
+                        {t("admin.openNodeSteps")}
+                      </Button>
+                    )}
+                  </dd>
+                </div>
+              )}
               {detail.session_id && (
                 <div className="col-span-2">
                   <dt className="text-muted-foreground">{t("admin.detail.session")}</dt>
-                  <dd className="font-mono text-[10px] text-foreground">{detail.session_id}</dd>
+                  <dd className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[10px] text-foreground">
+                      {detail.session_id}
+                    </span>
+                    {onOpenSession && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onOpenSession(detail.session_id!)}
+                      >
+                        {t("admin.openSessionTrace")}
+                      </Button>
+                    )}
+                  </dd>
                 </div>
               )}
               {detail.user_id && (
@@ -180,7 +216,12 @@ function DetailSheet({
   );
 }
 
-export function LlmCallRecords() {
+type LlmCallRecordsProps = {
+  onOpenTurn?: (turnId: string) => void;
+  onOpenSession?: (sessionId: string) => void;
+};
+
+export function LlmCallRecords({ onOpenTurn, onOpenSession }: LlmCallRecordsProps = {}) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
 
@@ -408,6 +449,8 @@ export function LlmCallRecords() {
         onOpenChange={(open) => {
           if (!open) setSelectedId(null);
         }}
+        onOpenTurn={onOpenTurn}
+        onOpenSession={onOpenSession}
       />
     </div>
   );

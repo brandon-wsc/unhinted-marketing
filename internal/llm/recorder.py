@@ -65,6 +65,7 @@ class LlmCallRecordBuilder:
     caller: str = ""
     node: str | None = None
     session_id: uuid.UUID | None = None
+    turn_id: uuid.UUID | None = None
     user_id: uuid.UUID | None = None
     company_id: uuid.UUID | None = None
     tier: str | None = None
@@ -111,6 +112,7 @@ class LlmCallRecordBuilder:
             caller=self.caller or "unknown",
             node=self.node,
             session_id=self.session_id,
+            turn_id=self.turn_id,
             user_id=self.user_id,
             company_id=self.company_id,
             kind=self.kind,
@@ -138,6 +140,7 @@ class CallContext:
     caller: str
     node: str | None = None
     session_id: uuid.UUID | None = None
+    turn_id: uuid.UUID | None = None
     user_id: uuid.UUID | None = None
     company_id: uuid.UUID | None = None
     records: list[LlmCallRecordBuilder] = field(default_factory=list)
@@ -149,14 +152,20 @@ def call_context(
     caller: str,
     node: str | None = None,
     session_id: Any = None,
+    turn_id: Any = None,
     user_id: Any = None,
     company_id: Any = None,
 ) -> Iterator[CallContext]:
     """Scope correlation for contained ``track`` calls; flush records on exit."""
+    # Prefer explicit turn_id; else inherit from session turn_trace ContextVar.
+    from internal.session.trace import current_turn_id
+
+    resolved_turn = _uuid_or_none(turn_id) or current_turn_id()
     ctx = CallContext(
         caller=caller,
         node=node,
         session_id=_uuid_or_none(session_id),
+        turn_id=resolved_turn,
         user_id=_uuid_or_none(user_id),
         company_id=_uuid_or_none(company_id),
     )
@@ -210,6 +219,7 @@ def track(
         rec.caller = ctx.caller
         rec.node = ctx.node
         rec.session_id = ctx.session_id
+        rec.turn_id = ctx.turn_id
         rec.user_id = ctx.user_id
         rec.company_id = ctx.company_id
 

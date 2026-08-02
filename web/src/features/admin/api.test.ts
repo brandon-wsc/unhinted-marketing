@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLlmCallQuery } from "@/features/admin/api";
+import { buildLlmCallQuery, buildNodeStepQuery } from "@/features/admin/api";
 
 describe("buildLlmCallQuery", () => {
   it("builds pagination-only query by default", () => {
@@ -17,8 +17,20 @@ describe("buildLlmCallQuery", () => {
     );
   });
 
-  it("skips empty node and undefined filters", () => {
-    const query = buildLlmCallQuery({ node: "   ", status: "", fallbackOnly: false }, 10, 5);
-    expect(query).toBe("limit=10&offset=5");
+  it("includes turn and session filters", () => {
+    const query = buildLlmCallQuery(
+      { turnId: " t1 ", sessionId: " s1 " },
+      10,
+      0,
+    );
+    expect(query).toBe("turn_id=t1&session_id=s1&limit=10&offset=0");
+  });
+});
+
+describe("buildNodeStepQuery", () => {
+  it("includes node turn session filters", () => {
+    expect(
+      buildNodeStepQuery({ node: "reviewer", turnId: "t1", sessionId: "s1" }, 50, 0),
+    ).toBe("node=reviewer&session_id=s1&turn_id=t1&limit=50&offset=0");
   });
 });

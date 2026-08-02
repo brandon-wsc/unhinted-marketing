@@ -58,7 +58,7 @@ Stored per call: correlation (`session_id` / `user_id` / `company_id`, all nulla
 
 This ADR lands backend only: schema, privilege infra, recording. `GET /admin/llm-calls*` (gated by `require_platform_level(ADMIN)`), superadmin user management, and the web admin page are follow-up slices.
 
-> **Update (2026-08-03):** `/admin/llm-calls*` API and the web `/admin` records page have shipped (plus `drain()` on API shutdown). Still open: superadmin user management API, retention/purge policy, Trace viewer.
+> **Update (2026-08-03):** `/admin/llm-calls*` API and the web `/admin` records page have shipped (plus `drain()` on API shutdown). Trace viewer / node-step persistence → [ADR 0007](./0007-admin-trace-viewer.md). Still open: superadmin user management API, retention/purge policy.
 
 ## Consequences
 

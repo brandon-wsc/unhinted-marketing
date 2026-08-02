@@ -224,6 +224,8 @@ class LlmCallRecord(Base):
     session_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # One graph.ainvoke / resume turn — joins to session_node_steps.
+    turn_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -248,6 +250,36 @@ class LlmCallRecord(Base):
     error: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     parse_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     fallback_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
+class SessionNodeStep(Base):
+    """One LangGraph node invocation within a turn (admin Trace viewer)."""
+
+    __tablename__ = "session_node_steps"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="SET NULL"), nullable=True
+    )
+    turn_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    node: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    mode_in: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    mode_out: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    intent_out: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_signal_ids_in: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    source_signal_ids_out: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    output_keys: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    output: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

@@ -14,6 +14,7 @@ from internal.config import settings
 from internal.llm.recorder import drain as drain_llm_records
 from internal.session.checkpointer import close_postgres_checkpointer, open_postgres_checkpointer
 from internal.session.graph import build_session_graph, set_session_graph
+from internal.session.trace import drain as drain_node_steps
 
 
 @asynccontextmanager
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
     finally:
         set_session_graph(None)
         await drain_llm_records()
+        await drain_node_steps()
         await close_postgres_checkpointer(pool)
 
 

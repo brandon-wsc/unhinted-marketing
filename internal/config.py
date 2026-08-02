@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 45.0
     # ADR 0005: persist every LLM call to llm_call_records (prompts, response, tokens).
     llm_record_enabled: bool = True
+    # Persist graph node-step I/O to session_node_steps (admin Trace viewer).
+    node_trace_enabled: bool = True
 
     # S3-compatible media (MinIO locally — see docker-compose `minio` service)
     s3_endpoint_url: str | None = None
