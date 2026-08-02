@@ -28,6 +28,7 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 2. **Canonical draft** — Shared `{ caption, hashtags, cta }` + `image_url`; not per-platform copy trees; not a markdown editor ([ADR 0001](docs/adr/0001-preview-canonical-draft.md)).
 3. **Knowledge** — PostgreSQL only (signals, entities, edges). No parallel knowledge store.
 4. **Graph scope** — LangGraph = session LLM zone. Preview persist / confirm are outside LLM publish.
+5. **Stop ≠ blind resume** — Parked image OK resumes only via `POST /resume-image`; Stop discards the turn ([ADR 0004](docs/adr/0004-stop-discard-and-image-resume.md)). Chat/JSON LLM calls stream + `aclose` on cancel (best-effort upstream abort).
 
 ## Before changing behavior
 

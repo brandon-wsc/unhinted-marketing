@@ -114,8 +114,10 @@ Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template
 | POST | `/sessions` | Create session |
 | PATCH | `/sessions/{id}` | Rename (`title` / `clear_title`) and/or `pinned` |
 | DELETE | `/sessions/{id}` | Delete session (+ cascaded messages/drafts) |
-| POST | `/sessions/{id}/messages` | User turn (LangGraph); returns `events` + `interrupted` |
+| POST | `/sessions/{id}/messages` | User turn (LangGraph); 409 if busy or parked awaiting image |
 | GET | `/sessions/{id}/messages` | Hydrate transcript (`metadata.agent_actions` on user turns) |
+| POST | `/sessions/{id}/resume-image` | Resume parked graph into image plan/gen ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
+| POST | `/sessions/{id}/stop` | Discard in-flight or parked turn |
 | POST | `/sessions/{id}/draft` | Manual draft revision (no LLM) |
 | GET | `/sessions/{id}/events` | SSE stream (snapshot includes `interrupted` for Generate-image CTA) |
 | POST | `/sessions/{id}/confirm` | Confirm stub publish |

@@ -7,6 +7,8 @@ import {
   apiGetSessionMessages,
   apiListSessions,
   apiPostSessionMessage,
+  apiResumeSessionImage,
+  apiStopSessionTurn,
   apiUpdateSession,
   apiUpdateSessionDraft,
 } from "./api";
@@ -47,6 +49,7 @@ export function useSession(companyId: string | undefined) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState<string>("CHAT");
   const [sending, setSending] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
   // In-flight assistant reply while message.delta events stream in; null when idle.
   const [streamingText, setStreamingText] = useState<string | null>(null);
@@ -81,6 +84,7 @@ export function useSession(companyId: string | undefined) {
   // does not race React's async setMessages / messagesRef update.
   const turnAnchorRef = useRef<string | null>(null);
   const restoreAttemptedRef = useRef<string | null>(null);
+  const sendAbortRef = useRef<AbortController | null>(null);
 
   const resetTransientUi = useCallback(() => {
     setStreamingText(null);
@@ -250,6 +254,18 @@ export function useSession(companyId: string | undefined) {
       if (type === "draft.awaiting_image_ok") {
         setAwaitingImageOk(true);
         setInterruptAfterMessageId(lastUserMessageId());
+        return;
+      }
+      if (type === "turn.cancelled") {
+        setAwaitingImageOk(false);
+        setInterruptAfterMessageId(null);
+        setBrief(null);
+        setBriefAfterMessageId(null);
+        setStreamingText(null);
+        setAgentProgress(null);
+        finishRunningActions();
+        setSending(false);
+        setStopping(false);
         return;
       }
       if (type === "draft.copy_updated") {
@@ -548,14 +564,16 @@ export function useSession(companyId: string | undefined) {
   const sendMessage = useCallback(
     async (content: string) => {
       const text = content.trim();
-      if (!text || !accessToken || !companyId || sending) return;
+      if (!text || !accessToken || !companyId || sending || stopping || awaitingImageOk) {
+        return;
+      }
       setSending(true);
       setStreamingText(null);
       setAgentProgress(null);
       setLlmError(null);
-      // Keep awaitingImageOk until the response settles — clearing eagerly hides the
-      // "Generate image" card, and a dropped request would never bring it back.
-      const wasAwaitingImageOk = awaitingImageOk;
+
+      const abort = new AbortController();
+      sendAbortRef.current = abort;
 
       let optimistic: ChatMessage | null = null;
       try {
@@ -580,7 +598,9 @@ export function useSession(companyId: string | undefined) {
         messagesRef.current = [...messagesRef.current, pending];
         setMessages(messagesRef.current);
 
-        const res = await apiPostSessionMessage(accessToken, active.id, text);
+        const res = await apiPostSessionMessage(accessToken, active.id, text, {
+          signal: abort.signal,
+        });
         messagesRef.current = res.messages;
         setMessages(res.messages);
         setMode(res.mode);
@@ -649,6 +669,10 @@ export function useSession(companyId: string | undefined) {
         turnAnchorRef.current = null;
         void refreshHistory();
       } catch (err) {
+        if (abort.signal.aborted) {
+          // Stop path owns UI reset via turn.cancelled / stopTurn refresh.
+          return;
+        }
         if (optimistic) {
           const failed = optimistic;
           setMessages((prev) => prev.filter((m) => m.id !== failed.id));
@@ -659,13 +683,10 @@ export function useSession(companyId: string | undefined) {
         }
         setStreamingText(null);
         finishRunningActions();
-        // Network / API drop while confirming image — restore the interrupt CTA.
-        if (wasAwaitingImageOk) {
-          setAwaitingImageOk(true);
-        }
         turnAnchorRef.current = null;
         throw err;
       } finally {
+        if (sendAbortRef.current === abort) sendAbortRef.current = null;
         setSending(false);
       }
     },
@@ -673,14 +694,135 @@ export function useSession(companyId: string | undefined) {
       accessToken,
       companyId,
       sending,
-      session,
+      stopping,
       awaitingImageOk,
+      session,
       applyTurnEvent,
       ensureOutcomeActions,
       finishRunningActions,
       refreshHistory,
     ],
   );
+
+  const applyTurnResponse = useCallback(
+    (res: {
+      messages: ChatMessage[];
+      mode: string;
+      interrupted: boolean;
+      events?: { type: string; data?: Record<string, unknown> }[];
+      approval_token?: string | null;
+      revision?: number | null;
+    }) => {
+      messagesRef.current = res.messages;
+      setMessages(res.messages);
+      setMode(res.mode);
+      setStreamingText(null);
+      setAwaitingImageOk(res.interrupted);
+      if (!res.interrupted) setInterruptAfterMessageId(null);
+
+      const serverLastUser = [...res.messages].reverse().find((m) => m.role === "user");
+      if (serverLastUser) {
+        turnAnchorRef.current = serverLastUser.id;
+        if (res.interrupted) setInterruptAfterMessageId(serverLastUser.id);
+        ensureOutcomeActions(res.events ?? [], serverLastUser.id);
+      }
+      for (const ev of res.events ?? []) {
+        applyTurnEvent(ev.type, ev.data ?? {});
+      }
+      if (
+        res.mode === "PREVIEW" &&
+        res.approval_token &&
+        typeof res.revision === "number"
+      ) {
+        const copyFromEvents = res.events
+          ?.map((ev) =>
+            ev.type === "preview.updated" || ev.type === "draft.copy_updated"
+              ? parseDraftCopy(ev.data)
+              : null,
+          )
+          .find(Boolean);
+        setDraft((prev) =>
+          mergePreviewDraft(prev, {
+            copy: copyFromEvents ?? prev?.copy ?? null,
+            approval_token: res.approval_token ?? null,
+            revision: res.revision ?? null,
+            image_url:
+              (res.events?.find((ev) => ev.type === "preview.updated")?.data
+                ?.image_url as string | undefined) ?? prev?.image_url,
+          }),
+        );
+      }
+      finishRunningActions();
+      turnAnchorRef.current = null;
+    },
+    [applyTurnEvent, ensureOutcomeActions, finishRunningActions],
+  );
+
+  const resumeImage = useCallback(async () => {
+    if (!accessToken || !sessionId || sending || stopping || !awaitingImageOk) return;
+    setSending(true);
+    setLlmError(null);
+    const abort = new AbortController();
+    sendAbortRef.current = abort;
+    try {
+      const res = await apiResumeSessionImage(accessToken, sessionId, {
+        signal: abort.signal,
+      });
+      applyTurnResponse(res);
+      void refreshHistory();
+    } catch (err) {
+      if (abort.signal.aborted) return;
+      throw err;
+    } finally {
+      if (sendAbortRef.current === abort) sendAbortRef.current = null;
+      setSending(false);
+    }
+  }, [
+    accessToken,
+    sessionId,
+    sending,
+    stopping,
+    awaitingImageOk,
+    applyTurnResponse,
+    refreshHistory,
+  ]);
+
+  const stopTurn = useCallback(async () => {
+    if (!accessToken || !sessionId || stopping) return;
+    if (!sending && !awaitingImageOk) return;
+    setStopping(true);
+    sendAbortRef.current?.abort();
+    try {
+      await apiStopSessionTurn(accessToken, sessionId);
+      // Reload transcript after discard (user message / draft may be gone).
+      const hydrated = await apiGetSessionMessages(accessToken, sessionId);
+      messagesRef.current = hydrated.messages;
+      setMessages(hydrated.messages);
+      setMode(hydrated.session.mode);
+      setSession(hydrated.session);
+      setAwaitingImageOk(false);
+      setInterruptAfterMessageId(null);
+      setBrief(null);
+      setBriefAfterMessageId(null);
+      setStreamingText(null);
+      setAgentProgress(null);
+      setAgentActions(agentActionsFromMessages(hydrated.messages));
+      finishRunningActions();
+      turnAnchorRef.current = null;
+      void refreshHistory();
+    } finally {
+      setStopping(false);
+      setSending(false);
+    }
+  }, [
+    accessToken,
+    sessionId,
+    stopping,
+    sending,
+    awaitingImageOk,
+    finishRunningActions,
+    refreshHistory,
+  ]);
 
   const updateDraft = useCallback(
     async (copy: DraftCopy) => {
@@ -760,6 +902,8 @@ export function useSession(companyId: string | undefined) {
     messages,
     mode,
     sending,
+    stopping,
+    composerLocked: sending || stopping || awaitingImageOk,
     sseConnected,
     streamingText,
     agentProgress,
@@ -777,6 +921,8 @@ export function useSession(companyId: string | undefined) {
     historyLoading,
     restoring,
     sendMessage,
+    resumeImage,
+    stopTurn,
     updateDraft,
     confirmPost,
     openSession,

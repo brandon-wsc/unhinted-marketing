@@ -182,7 +182,7 @@ reviewer:
   │                     (max_review_retries=2; exceed → END + error SSE)
   ├── pass + need_image (first AGENT draft, or revise that changes image)
   │                     → interrupt_before executor_image_plan
-  │                     → (user resume via POST /messages)
+  │                     → (user resume via POST /resume-image; Stop discards)
   │                     → executor_image_plan → executor_image_gen
   │                     → persist_preview (mode=PREVIEW, SSE) → END
   └── pass + copy_only revise
@@ -220,7 +220,7 @@ flowchart TD
 
 - Compile with **`interrupt_before=["executor_image_plan"]`**.
 - First AGENT path: after `reviewer` pass → checkpoint pauses before image plan.
-- Resume: next authenticated `POST /messages` on the same session (`thread_id = session.id`) continues into `executor_image_plan`.
+- Resume: authenticated `POST /sessions/{id}/resume-image` continues into `executor_image_plan` ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)). `POST /messages` while parked returns 409. `POST /stop` discards the turn.
 - Copy-only revise that does not need a new image skips the interrupt and goes to `persist_preview`.
 
 ### State
@@ -404,8 +404,8 @@ All metrics stored in PG with provenance before LLM reads them.
 - [x] Migrations: `sessions`, `session_messages`, `preview_drafts`, `tool_receipts`
 - [x] LangGraph graph: CHAT → AGENT → PREVIEW (revise loop) + PostgreSQL checkpointer (`thread_id = session.id`)
 - [x] Session nodes: `route_intent`, `load_context`, `trend_searcher`, `brainstormer`, `executor_post`, `executor_image_plan`, `executor_image_gen`, `edit_copy`, `grounding_check`, `reviewer`, `chat`, `ack_confirm` (+ `persist_preview` side-effect; not a node)
-- [x] Graph interrupt: `interrupt_before=["executor_image_plan"]`; resume via `POST /messages`
-- [x] FastAPI: `POST /sessions`, `POST /messages`, `GET /events` (SSE)
+- [x] Graph interrupt: `interrupt_before=["executor_image_plan"]`; resume via `POST /resume-image`; Stop discards ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))
+- [x] FastAPI: `POST /sessions`, `POST /messages`, `POST /resume-image`, `POST /stop`, `GET /events` (SSE)
 - [ ] Image generation worker (`executor_image_gen` dispatches; placeholder/local URL in `preview_drafts` for MVP)
 - [x] `POST /sessions/{id}/confirm` — **traditional handler**, stub platform adapter → writes `tool_receipts` row
 - [x] Tool schema validators (Pydantic + JSON Schema) for `query_market_trends` / `publish_social_post` / canonical draft + SSE catalog (`schemas/contracts.py`, `schemas/tools.py`; mirrors in `docs/contracts/`). Node wiring to tool adapters remains a follow-up.

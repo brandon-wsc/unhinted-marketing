@@ -58,6 +58,8 @@
       "placeholder": "Type a message… (Enter to send, Shift+Enter for a new line)"
     },
     "send": "Send",
+    "stop": "Stop",
+    "stopping": "Stopping…",
     "live": "Live",
     "offline": "Offline",
     "agent": {
@@ -90,6 +92,7 @@
     },
     "error": {
       "sendFailed": "Failed to send the message. Please try again.",
+      "stopFailed": "Could not stop the turn. Please try again.",
       "llmFailed": "AI service error",
       "retry": "Retry"
     },

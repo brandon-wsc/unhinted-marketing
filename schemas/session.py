@@ -72,6 +72,21 @@ class PostMessageResponse(BaseModel):
     events: list[dict] = Field(default_factory=list)
 
 
+class StopSessionResponse(BaseModel):
+    status: str  # cancelled | idle
+
+
+class ResumeImageResponse(BaseModel):
+    session: SessionResponse
+    messages: list[MessageResponse]
+    interrupted: bool = False
+    mode: str
+    revision: int | None = None
+    pending_confirm: bool = False
+    approval_token: str | None = None
+    events: list[dict] = Field(default_factory=list)
+
+
 class ConfirmSessionRequest(BaseModel):
     approval_token: str = Field(min_length=8, max_length=128)
     idempotency_key: str = Field(min_length=8, max_length=200)

@@ -32,6 +32,8 @@ export function ChatPanel() {
     messages,
     mode,
     sending,
+    stopping,
+    composerLocked,
     streamingText,
     agentActions,
     brief,
@@ -47,6 +49,8 @@ export function ChatPanel() {
     historyLoading,
     restoring,
     sendMessage,
+    resumeImage,
+    stopTurn,
     updateDraft,
     confirmPost,
     openSession,
@@ -136,8 +140,9 @@ export function ChatPanel() {
 
   async function onSubmit(e?: FormEvent) {
     e?.preventDefault();
+    if (composerLocked) return;
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text) return;
     setInput("");
     try {
       await sendMessage(text);
@@ -148,7 +153,7 @@ export function ChatPanel() {
   }
 
   async function onRetryUserMessage(content: string) {
-    if (!content.trim() || sending) return;
+    if (!content.trim() || composerLocked) return;
     try {
       await sendMessage(content);
     } catch {
@@ -157,7 +162,7 @@ export function ChatPanel() {
   }
 
   async function onPickQuestion(question: RecommendedQuestion) {
-    if (sending) return;
+    if (composerLocked) return;
     try {
       await sendMessage(question.text);
     } catch {
@@ -167,9 +172,17 @@ export function ChatPanel() {
 
   async function onResumeImageGen() {
     try {
-      await sendMessage(t("chat.agent.imageOkMessage"));
+      await resumeImage();
     } catch {
       showError(t("chat.error.sendFailed"));
+    }
+  }
+
+  async function onStopTurn() {
+    try {
+      await stopTurn();
+    } catch {
+      showError(t("chat.error.stopFailed"));
     }
   }
 
@@ -191,13 +204,15 @@ export function ChatPanel() {
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     // isComposing guard: Enter must not send while a CJK IME candidate is open.
+    if (composerLocked) return;
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void onSubmit();
     }
   }
 
-  const showLanding = messages.length === 0 && !sending && streamingText === null;
+  const showLanding =
+    messages.length === 0 && !sending && !stopping && streamingText === null;
   const confirmed = session?.status === "confirmed" || !!confirmReceipt;
 
   const historyProps = {
@@ -256,7 +271,7 @@ export function ChatPanel() {
                 questions={questions}
                 loading={questionsLoading}
                 isStale={isStale}
-                disabled={sending}
+                disabled={composerLocked}
                 onSelect={(q) => void onPickQuestion(q)}
               />
             </div>
@@ -269,7 +284,7 @@ export function ChatPanel() {
                 <ChatMessageItem
                   message={m}
                   retryContent={prevUser}
-                  retryDisabled={sending}
+                  retryDisabled={composerLocked}
                   onRetry={
                     prevUser
                       ? () => void onRetryUserMessage(prevUser)
@@ -279,7 +294,10 @@ export function ChatPanel() {
                 {turnActions.length > 0 && <AgentActionList actions={turnActions} />}
                 {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
                 {awaitingImageOk && interruptAfterMessageId === m.id && (
-                  <InterruptCard sending={sending} onResume={() => void onResumeImageGen()} />
+                  <InterruptCard
+                    sending={sending || stopping}
+                    onResume={() => void onResumeImageGen()}
+                  />
                 )}
               </div>
               );
@@ -301,17 +319,23 @@ export function ChatPanel() {
           {awaitingImageOk &&
             interruptAfterMessageId &&
             !messages.some((m) => m.id === interruptAfterMessageId) && (
-              <InterruptCard sending={sending} onResume={() => void onResumeImageGen()} />
+              <InterruptCard
+                sending={sending || stopping}
+                onResume={() => void onResumeImageGen()}
+              />
             )}
           {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
           {awaitingImageOk && !interruptAfterMessageId && (
-            <InterruptCard sending={sending} onResume={() => void onResumeImageGen()} />
+            <InterruptCard
+              sending={sending || stopping}
+              onResume={() => void onResumeImageGen()}
+            />
           )}
           {/* Inline LLM error when failed before an assistant row was persisted. */}
           {llmError && !messages.some((m) => isLlmErrorContent(m.content)) && (
             <LlmErrorCard
               message={llmError}
-              retryDisabled={sending}
+              retryDisabled={composerLocked}
               onRetry={
                 findLastUserContent(messages)
                   ? () => void onRetryUserMessage(findLastUserContent(messages)!)
@@ -351,11 +375,24 @@ export function ChatPanel() {
             onKeyDown={onKeyDown}
             rows={2}
             placeholder={t("chat.input.placeholder")}
-            className="flex-1 resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-3 text-sm outline-none transition focus:border-[var(--color-ring)] focus:ring-2 focus:ring-[var(--color-ring)]/30"
+            disabled={composerLocked}
+            className="flex-1 resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-3 text-sm outline-none transition focus:border-[var(--color-ring)] focus:ring-2 focus:ring-[var(--color-ring)]/30 disabled:cursor-not-allowed disabled:opacity-60"
           />
-          <Button type="submit" disabled={sending || !input.trim()} className="shrink-0">
-            {t("chat.send")}
-          </Button>
+          {composerLocked ? (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={stopping}
+              onClick={() => void onStopTurn()}
+              className="shrink-0"
+            >
+              {stopping ? t("chat.stopping") : t("chat.stop")}
+            </Button>
+          ) : (
+            <Button type="submit" disabled={!input.trim()} className="shrink-0">
+              {t("chat.send")}
+            </Button>
+          )}
         </form>
       </div>
     </div>
