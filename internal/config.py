@@ -4,6 +4,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # development | production — non-development refuses known-default / short JWT_SECRET
+    app_env: str = "development"
+    allow_insecure_jwt: bool = False
+
     database_url: str = "postgresql+asyncpg://unhinted:unhinted@localhost:5432/unhinted"
     jwt_secret: str = "change-me-to-a-long-random-secret-at-least-32-chars"
     jwt_access_expire_minutes: int = 15
@@ -13,6 +17,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     refresh_cookie_secure: bool = False
     refresh_cookie_samesite: str = "lax"
+
+    # Auth rate limit (in-memory sliding window per client IP; Redis later)
+    auth_rate_limit_enabled: bool = True
+    auth_rate_limit_max: int = 30
+    auth_rate_limit_window_seconds: int = 60
 
     # LLM (BYOK via env; org keys in DB deferred to Phase 4)
     openai_api_key: str | None = None

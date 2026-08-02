@@ -80,6 +80,9 @@ async def session_factory(engine):
 @pytest_asyncio.fixture(autouse=True)
 async def clean_db(engine, migrated_database: str):
     """Truncate app tables before each API test."""
+    from internal.auth.rate_limit import reset_auth_rate_limiter
+
+    reset_auth_rate_limiter()
     async with engine.begin() as conn:
         tables = ", ".join(TRUNCATE_TABLES)
         await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))

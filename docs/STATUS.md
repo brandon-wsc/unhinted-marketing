@@ -1,7 +1,7 @@
 # Unhinted Marketing — Project Status
 
 > **Last updated:** 2026-08-02  
-> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** (chat + agent + landing + Preview/Confirm + history; mobile Record/Chat/Preview; Meta/BYOK/Trace next) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
+> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Security: auth rate limit + confirm user-private idempotency (branch) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
 This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). For architecture and phase plans, see ROADMAP.
@@ -84,7 +84,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | React web app | ✅ | Vite + React 19 + Tailwind v4 |
 | README | ✅ | Project intro; setup in GETTING_STARTED |
 | `docker-compose.yml` | ✅ | Local `db` (pgvector) + `minio` / `minio-init` (S3-compatible media) + adminer |
-| Auth rate limiting | ⬜ | Planned (Redis or in-memory) |
+| Auth rate limiting | ✅ | In-memory sliding window on register/login/refresh (`AUTH_RATE_LIMIT_*`); Redis later |
 | Automated tests | ✅ Backend + FE Tier 1/2 + CI | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && npm test` (Vitest + RTL — lib utils + PasswordBox / UserMenuDropdown). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
 ### Phase 1 — Data & Autopilot Backend · **100%**
@@ -270,7 +270,12 @@ unhinted-marketing/
 |----------|---------|
 | `TEST_DATABASE_URL` | Isolated Postgres for `pytest tests/api` (skipped if unset) |
 | `DATABASE_URL` | Async PG URL → dev DB `192.168.5.20:5434/unhinted` |
-| `JWT_SECRET` | Sign access/refresh tokens — **change in prod** |
+| `APP_ENV` | `development` (default) or `production` — production refuses weak JWT |
+| `ALLOW_INSECURE_JWT` | Escape hatch for local/tests only (`true` skips JWT secret check) |
+| `JWT_SECRET` | Sign access/refresh tokens — **≥32 chars + unique** (prod rejects the published `.env.example` default) |
+| `AUTH_RATE_LIMIT_ENABLED` | Rate-limit `/auth/register|login|refresh` (default true) |
+| `AUTH_RATE_LIMIT_MAX` | Max requests per client IP per window (default 30) |
+| `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Sliding window length (default 60) |
 | `CORS_ORIGINS` | Default `http://localhost:5173` |
 | `OPENAI_API_KEY` | LLM for questions + session nodes |
 | `LLM_API_BASE` | Optional OpenAI-compatible proxy base URL (OpenRouter, DeepSeek, Azure, …). When set, bare model ids are sent as `openai/<id>` so LiteLLM uses the OpenAI-compatible client against that base (avoids native Deepseek routing ignoring `api_base`) |
@@ -288,10 +293,21 @@ See `.env.example`. Local `.env` is gitignored.
 
 ## Known Gaps / Next Steps
 
+### High-priority risks
+
+| ID | Risk | Status |
+|----|------|--------|
+| **H1** | Auth rate limit + known-default / weak `JWT_SECRET` | ✅ **Mitigated on this branch** — in-memory limit on register/login/refresh; `APP_ENV=production` refuses insecure JWT |
+| **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ⬜ Open — product decision + ADR before change |
+| **H3** | `use-session.ts` correctness concentrated & untested | ⬜ Open — extract pure helpers + Tier 6 tests |
+| **I1** | Confirm idempotency key global (cross-user receipt leak) | ✅ **Mitigated** — foreign key → 409; same session/user only replays |
+
+### Other gaps
+
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
 2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + MinIO (`S3_*`) when configured; formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer; FB/Threads preview skins.
-4. **Hardening:** Auth rate limits; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; multi-worker SSE (Redis) if scaling beyond one API process; enable branch protection requiring CI checks; persist node traces / live LLM eval harness later.
+4. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; multi-worker SSE (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks; persist node traces / live LLM eval harness later.
 
 ---
 
