@@ -1,7 +1,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -18,6 +28,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # ADR 0005 numeric privilege ladder (MEMBER=3 default; see internal/auth/roles.py)
+    platform_level: Mapped[int] = mapped_column(Integer, default=3, server_default="3", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -198,3 +210,44 @@ class ToolReceipt(Base):
     request: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     response: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LlmCallRecord(Base):
+    """One provider call (ADR 0005) — the debug unit for prompt/node fine-tuning."""
+
+    __tablename__ = "llm_call_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Correlation: who/where. Nullable + SET NULL so records survive entity deletion.
+    caller: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    node: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="SET NULL"), nullable=True
+    )
+    # Request
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # chat_json | chat_text | image
+    tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Response + metrics
+    response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Diagnosis — the "which step went wrong" fields
+    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # ok | provider_error | cancelled | empty_response | error
+    error: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    parse_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )

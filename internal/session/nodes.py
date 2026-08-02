@@ -12,6 +12,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
+from internal.llm.recorder import mark_last_call
 from internal.llm.router import (
     LlmProviderError,
     ModelTier,
@@ -104,14 +105,19 @@ async def _parse_llm_json(tier: ModelTier, system: str, user: str, model: type[T
         return None
     try:
         raw = await complete_json(tier=tier, system=system, user=user)
-        return model.model_validate_json(raw)
+        parsed = model.model_validate_json(raw)
     except LlmProviderError:
         # Provider/transport/auth/model failures must surface to the UI — do not
-        # silently fall back while credentials are configured.
+        # silently fall back while credentials are configured. The record already
+        # carries status=provider_error; no heuristic takes over, so no fallback mark.
         raise
     except Exception:
+        # ADR 0005: validation failed and heuristics take over — the fine-tuning signal.
+        mark_last_call(parse_ok=False, fallback_used=True)
         logger.exception("LLM JSON node failed (%s)", model.__name__)
         return None
+    mark_last_call(parse_ok=True)
+    return parsed
 
 
 def _llm_failure_reply(exc: LlmProviderError, *, chinese: bool) -> str:

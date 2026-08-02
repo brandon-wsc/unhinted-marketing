@@ -12,6 +12,7 @@ export type User = {
   email: string;
   display_name: string;
   is_active: boolean;
+  platform_level: number;
   created_at: string;
   organizations: Organization[];
 };

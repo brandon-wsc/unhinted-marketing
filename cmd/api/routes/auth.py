@@ -45,6 +45,7 @@ def _user_response(user: User) -> UserResponse:
         email=user.email,
         display_name=user.display_name,
         is_active=user.is_active,
+        platform_level=user.platform_level,
         created_at=user.created_at,
         organizations=orgs,
     )

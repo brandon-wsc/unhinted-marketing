@@ -26,6 +26,7 @@ TRUNCATE_TABLES = (
     "preview_drafts",
     "session_messages",
     "sessions",
+    "llm_call_records",
     "recommended_questions",
     "edges",
     "raw_news_events",

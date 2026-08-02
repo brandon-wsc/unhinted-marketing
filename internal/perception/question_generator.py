@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.config import settings
-from internal.llm.router import ModelTier, complete_json
+from internal.llm.recorder import call_context, mark_last_call
+from internal.llm.router import LlmProviderError, ModelTier, complete_json
 from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.models import Entity
 from internal.memory.repos import (
@@ -112,17 +113,26 @@ async def generate_questions_for_company(
         ]
     )
 
-    try:
-        raw = await complete_json(
-            tier=ModelTier.CHEAP,
-            system=SYSTEM_PROMPT,
-            user=user_prompt,
-        )
-        payload = json.loads(raw)
-        questions = payload.get("questions") or []
-    except Exception:
-        logger.exception("LLM question generation failed; using fallback")
-        questions = _fallback_questions(signals)
+    # ADR 0005: record this worker's LLM call with company correlation + fallback marks.
+    with call_context(caller="worker:question_generator", company_id=str(company.id)):
+        try:
+            raw = await complete_json(
+                tier=ModelTier.CHEAP,
+                system=SYSTEM_PROMPT,
+                user=user_prompt,
+            )
+            payload = json.loads(raw)
+            questions = payload.get("questions") or []
+        except LlmProviderError:
+            mark_last_call(fallback_used=True)
+            logger.exception("LLM question generation failed; using fallback")
+            questions = _fallback_questions(signals)
+        except Exception:
+            mark_last_call(parse_ok=False, fallback_used=True)
+            logger.exception("LLM question generation failed; using fallback")
+            questions = _fallback_questions(signals)
+        else:
+            mark_last_call(parse_ok=True)
 
     valid_signal_ids = {s.signal_id for s in signals}
     normalized: list[dict] = []

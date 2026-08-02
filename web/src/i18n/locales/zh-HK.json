@@ -160,6 +160,59 @@
       "confirmFailed": "確認失敗，請再試一次"
     }
   },
+  "admin": {
+    "menuEntry": "Admin 後台",
+    "llmCalls": "LLM 呼叫紀錄",
+    "loading": "載入紀錄…",
+    "empty": "暫時未有紀錄 — 觸發 LLM call 之後會喺呢度出現",
+    "loadFailed": "載入失敗",
+    "forbidden": {
+      "title": "冇權限",
+      "body": "呢一頁只限 admin 用戶。",
+      "back": "返回主頁"
+    },
+    "filters": {
+      "node": "節點",
+      "nodePlaceholder": "例如 reviewer",
+      "status": "狀態",
+      "statusAll": "全部",
+      "fallbackOnly": "只顯示 fallback",
+      "apply": "篩選",
+      "refresh": "重新整理"
+    },
+    "table": {
+      "time": "時間",
+      "node": "節點",
+      "caller": "來源",
+      "kind": "類型",
+      "model": "模型",
+      "status": "狀態",
+      "tokens": "Tokens",
+      "latency": "耗時",
+      "flags": "標記"
+    },
+    "badges": {
+      "parseFailed": "解析失敗",
+      "fallback": "fallback"
+    },
+    "pagination": {
+      "prev": "上一頁",
+      "next": "下一頁",
+      "showing": "顯示 {{from}}–{{to}}"
+    },
+    "detail": {
+      "title": "呼叫詳情",
+      "close": "關閉",
+      "session": "Session",
+      "user": "User",
+      "temperature": "Temperature",
+      "parseOk": "JSON 解析",
+      "systemPrompt": "System prompt",
+      "userPrompt": "User prompt",
+      "response": "回應",
+      "error": "錯誤"
+    }
+  },
   "theme": {
     "label": "主題",
     "light": "淺色模式",

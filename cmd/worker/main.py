@@ -1,4 +1,4 @@
-"""Worker CLI: hot search ingest, question generation, news promotion."""
+"""Worker CLI: hot search ingest, question generation, news promotion, admin grants."""
 
 import argparse
 import asyncio
@@ -6,7 +6,12 @@ import json
 import logging
 import sys
 
+from sqlalchemy import select
+
+from internal.auth.roles import parse_platform_level
+from internal.llm.recorder import drain as drain_llm_records
 from internal.memory.database import SessionLocal
+from internal.memory.models import User
 from internal.memory.repos import get_company, list_top_signals, reset_market_signals
 from internal.perception.hot_search import ingest_hot_search
 from internal.perception.news_promoter import promote_signals
@@ -89,6 +94,33 @@ async def _cmd_reset_signals(reingest: bool) -> int:
     return rc
 
 
+async def _cmd_set_platform_role(email: str, level: str) -> int:
+    """Grant a platform privilege level (ADR 0005) — the only admin bootstrap path."""
+    try:
+        lvl = parse_platform_level(level)
+    except ValueError as exc:
+        logger.error("%s", exc)
+        return 2
+    async with SessionLocal() as db:
+        user = await db.scalar(select(User).where(User.email == email.strip().lower()))
+        if not user:
+            logger.error("User not found: %s", email)
+            return 1
+        before = user.platform_level
+        user.platform_level = int(lvl)
+        await db.commit()
+    print(
+        json.dumps(
+            {
+                "email": email.strip().lower(),
+                "platform_level": {"from": before, "to": int(lvl), "name": lvl.name},
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Unhinted marketing workers")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -111,6 +143,13 @@ def main() -> None:
         action="store_true",
         help="After reset, run hot-search → promote → questions --force",
     )
+    pr = sub.add_parser("set-platform-role", help="Set a user's platform level (ADR 0005)")
+    pr.add_argument("--email", required=True, help="Account email")
+    pr.add_argument(
+        "--level",
+        required=True,
+        help="Rung name (member / admin / superadmin) or number (3 / 6 / 9)",
+    )
 
     args = parser.parse_args()
     commands = {
@@ -120,8 +159,16 @@ def main() -> None:
         "signals": lambda: _cmd_signals(args.limit),
         "all": lambda: _cmd_all(args.force),
         "reset-signals": lambda: _cmd_reset_signals(getattr(args, "reingest", False)),
+        "set-platform-role": lambda: _cmd_set_platform_role(args.email, args.level),
     }
-    rc = asyncio.run(commands[args.command]())
+
+    async def _run() -> int:
+        rc = await commands[args.command]()
+        # Flush pending LLM call records before the loop closes (ADR 0005).
+        await drain_llm_records()
+        return rc
+
+    rc = asyncio.run(_run())
     sys.exit(rc)
 
 

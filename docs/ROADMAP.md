@@ -430,6 +430,7 @@ All metrics stored in PG with provenance before LLM reads them.
 - [x] Confirm button → dirty auto-flush then `/confirm`; shows stub receipt status
 - [x] `GET /sessions` + `GET /sessions/{id}/messages` — history list + hydrate after refresh
 - [x] `PATCH /sessions/{id}` + `DELETE /sessions/{id}` — rename / pin / delete (desktop sidebar; mobile Record page)
+- [x] LLM call records + platform levels + admin page ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)): every provider call → `llm_call_records`; `GET /admin/llm-calls` gated by `platform_level`; web `/admin` records viewer (filters, detail drawer)
 - [ ] BYOK settings page (masked keys, server-side storage)
 - [ ] Trace viewer: session messages + revision timeline + signal grounding links
 
