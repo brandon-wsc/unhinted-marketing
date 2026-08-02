@@ -1,0 +1,45 @@
+{
+  "description": "Payload for `brief.updated` (matches session BriefOut / FE SessionBrief).",
+  "properties": {
+    "can_do": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Can Do",
+      "type": "array"
+    },
+    "cannot_do": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Cannot Do",
+      "type": "array"
+    },
+    "angles": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Angles",
+      "type": "array"
+    },
+    "persona": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Persona"
+    },
+    "summary": {
+      "default": "",
+      "title": "Summary",
+      "type": "string"
+    }
+  },
+  "title": "SessionBriefData",
+  "type": "object"
+}

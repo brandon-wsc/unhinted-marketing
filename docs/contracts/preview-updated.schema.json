@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "DraftCopy": {
+      "description": "Shared post copy across preview skins (ADR 0001).",
+      "properties": {
+        "caption": {
+          "default": "",
+          "title": "Caption",
+          "type": "string"
+        },
+        "hashtags": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 40,
+          "title": "Hashtags",
+          "type": "array"
+        },
+        "cta": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Cta",
+          "type": "string"
+        }
+      },
+      "title": "DraftCopy",
+      "type": "object"
+    }
+  },
+  "description": "Payload for SSE / turn event `preview.updated`.",
+  "properties": {
+    "revision": {
+      "minimum": 0,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "approval_token": {
+      "minLength": 1,
+      "title": "Approval Token",
+      "type": "string"
+    },
+    "image_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Image Url"
+    },
+    "copy": {
+      "$ref": "#/$defs/DraftCopy"
+    },
+    "platform": {
+      "default": "instagram",
+      "maxLength": 40,
+      "title": "Platform",
+      "type": "string"
+    }
+  },
+  "required": [
+    "revision",
+    "approval_token"
+  ],
+  "title": "PreviewUpdatedData",
+  "type": "object"
+}

@@ -16,9 +16,13 @@ FastAPI · PostgreSQL (pgvector) · React · LangGraph + LiteLLM (Phase 2+)
 
 | Doc | Purpose |
 |-----|---------|
+| [AGENTS.md](AGENTS.md) | Coding-agent entry: SSOT map + hard boundaries |
 | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | Local setup, env, run commands, API overview |
 | [docs/STATUS.md](docs/STATUS.md) | What's implemented today vs the roadmap |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Architecture, phases, and product plan |
+| [docs/adr/](docs/adr/) | Architecture Decision Records |
+| [docs/contracts/](docs/contracts/) | JSON Schema mirrors + SSE event catalog |
+| [docs/openapi.json](docs/openapi.json) | Generated OpenAPI (refresh via `python -m scripts.export_contracts`) |
 | [docs/TESTING.md](docs/TESTING.md) | Test tiers + path coverage gates (utils / API / UI) |
 
 ## Quick start

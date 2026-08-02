@@ -131,6 +131,7 @@ def test_confirm_and_draft_responses() -> None:
         mode="PREVIEW",
     )
     assert draft.image_url is None
+    assert draft.draft_copy.caption == "c"
     req = UpdateDraftRequest(caption="Hello", hashtags=["hk"])
     assert req.cta == ""
 

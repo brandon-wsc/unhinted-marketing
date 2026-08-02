@@ -120,7 +120,7 @@ Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template
 | GET | `/sessions/{id}/events` | SSE stream (snapshot includes `interrupted` for Generate-image CTA) |
 | POST | `/sessions/{id}/confirm` | Confirm stub publish |
 
-Full auth and session specs: [ROADMAP.md](./ROADMAP.md); what’s shipped: [STATUS.md](./STATUS.md).
+Full auth and session specs: [ROADMAP.md](./ROADMAP.md); what’s shipped: [STATUS.md](./STATUS.md). Agent SSOT map: [AGENTS.md](../AGENTS.md). Refresh OpenAPI / JSON Schema mirrors: `python -m scripts.export_contracts`.
 
 ---
 
