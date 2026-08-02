@@ -110,7 +110,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 |------|--------|-------|
 | ROADMAP graph contract | ✅ | 12 nodes + `persist_preview`; edges + interrupt |
 | Migrations | ✅ | Alembic `526ca8643303` sessions tables; `86f20bd3cb7d` session `title` + `pinned` |
-| LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /resume-image` ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)); `POST /stop` discards turn |
+| LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /resume-image` ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)); Stop mid-resume re-parks CTA; Stop while parked discards turn |
 | Postgres checkpointer | ✅ | `AsyncPostgresSaver` + pool (`check` / keepalives / idle recycle); `setup()` on API lifespan; `thread_id = session.id` |
 | Node logic | ✅ | LiteLLM + structured I/O; heuristic fallbacks; PG load/grounding |
 | Session HTTP API | ✅ | `GET/POST /sessions`, `PATCH/DELETE /sessions/{id}`, `/messages`, `/draft`, `/confirm` |
@@ -130,7 +130,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Auth pages + protected shell | ✅ | Login / register; `/` is now the chat workspace |
 | Chat UI shell | ✅ | `web/src/features/session/` — `useSession` + message list / composer; Streamdown + `@streamdown/cjk`; Vite proxy covers `/sessions` `/companies` `/signals` |
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
-| Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer locked while in-flight or parked; Stop → `POST /stop` discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
+| Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer locked while in-flight or parked; Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
 | Landing: recommended questions cards | ✅ | Empty-state cards from `GET /companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
 | Preview Mode (left chat / right preview) | ✅ | Desktop: IG mock + editable fields beside chat. Mobile (`< lg`): Preview is a push page with **上一頁**; open from chat ready banner |
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |

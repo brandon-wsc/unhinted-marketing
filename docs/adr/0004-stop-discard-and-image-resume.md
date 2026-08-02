@@ -11,10 +11,10 @@ While the graph runs, overlapping `POST /messages` and “resume image by typing
 ## Decision
 
 1. **Composer lock (product):** While a turn is in-flight **or** the session is parked awaiting image OK, the chat composer (input + Send) is locked. The primary control becomes **Stop**.
-2. **Stop = discard this turn:** Do not keep partial graph progress. Restore `sessions.state` to the pre-turn snapshot, delete messages created by that turn, and `adelete_thread` on the LangGraph checkpointer. After unlock, the next Send is a **new** message.
+2. **Stop = discard this turn:** Do not keep partial graph progress. Restore `sessions.state` to the pre-turn snapshot, delete messages created by that turn, and `adelete_thread` on the LangGraph checkpointer. After unlock, the next Send is a **new** message. **Exception:** Stop mid `POST /resume-image` cancels the image run and **re-parks** at the image interrupt (`awaiting_image_ok` / Generate-image CTA returns); only Stop while already parked (no in-flight) discards the whole agent turn.
 3. **Backend participates:** Per-session in-memory turn registry holds the running `asyncio.Task`. `POST /sessions/{id}/stop` cancels the task (in-flight) or discards parked state. Concurrent `POST /messages` while busy or parked returns **409**.
 4. **Image resume is explicit:** Only `POST /sessions/{id}/resume-image` may `ainvoke(None)` when parked. Normal `POST /messages` never blind-resumes.
-5. **SSE:** Publish `turn.cancelled` after a successful discard so other tabs can unlock.
+5. **SSE:** Publish `turn.cancelled` after Stop. Payload includes `awaiting_image_ok` so clients know whether to unlock fully or keep the Generate-image CTA.
 6. **LLM cancel path (implementation):** Session chat and JSON completions (`astream_text` / `complete_json`) use LiteLLM **streaming** and always **`aclose`** the upstream stream on exit — including `asyncio.CancelledError` from Stop — so mid-node cancel can abort provider generation best-effort. Image generation remains non-stream; rely on parked CTA to avoid kickoff.
 
 ## Consequences

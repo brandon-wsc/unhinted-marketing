@@ -22,6 +22,7 @@ from internal.session.service import (
     stop_session_turn,
     update_session_draft,
 )
+from schemas.contracts import SessionBriefData
 from schemas.session import (
     ConfirmSessionRequest,
     ConfirmSessionResponse,
@@ -66,6 +67,19 @@ def _message_response(msg) -> MessageResponse:
         created_at=msg.created_at,
         metadata=dict(msg.metadata_ or {}),
     )
+
+
+def _brief_from_state(state: dict | None) -> SessionBriefData | None:
+    raw = (state or {}).get("brief")
+    if not isinstance(raw, dict) or not raw:
+        return None
+    try:
+        brief = SessionBriefData.model_validate(raw)
+    except Exception:
+        return None
+    if not (brief.summary or brief.can_do or brief.cannot_do or brief.angles):
+        return None
+    return brief
 
 
 async def _require_owned_session(
@@ -274,7 +288,11 @@ async def stop_session(
     session = await _require_owned_session(db, session_id, user)
     result = await stop_session_turn(db, session)
     await db.commit()
-    return StopSessionResponse(status=result["status"])
+    return StopSessionResponse(
+        status=result["status"],
+        interrupted=bool(result.get("interrupted")),
+        awaiting_image_ok=bool(result.get("awaiting_image_ok")),
+    )
 
 
 @router.get("/{session_id}/messages", response_model=SessionMessagesResponse)
@@ -286,9 +304,12 @@ async def get_session_messages(
     """Hydrate chat transcript for an owned session."""
     session = await _require_owned_session(db, session_id, user)
     msgs = await repos.list_session_messages(db, session.id)
+    state = session.state or {}
     return SessionMessagesResponse(
         session=_session_response(session),
         messages=[_message_response(m) for m in msgs],
+        brief=_brief_from_state(state),
+        awaiting_image_ok=bool(state.get("awaiting_image_ok")),
     )
 
 

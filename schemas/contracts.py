@@ -84,9 +84,11 @@ class ReviewFailedData(BaseModel):
 
 
 class TurnCancelledData(BaseModel):
-    """Payload for `turn.cancelled` (ADR 0004 Stop discard)."""
+    """Payload for `turn.cancelled` (ADR 0004 Stop)."""
 
     reason: str = "stop"
+    # True when Stop cancelled in-flight resume-image and re-parked at image interrupt.
+    awaiting_image_ok: bool = False
 
 
 class ConfirmCompletedData(BaseModel):

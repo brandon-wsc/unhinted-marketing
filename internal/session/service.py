@@ -146,6 +146,33 @@ async def _adelete_graph_thread(session_id: uuid.UUID) -> None:
         )
 
 
+async def _repark_graph_at_image_interrupt(
+    db: AsyncSession,
+    session: Session,
+) -> None:
+    """After cancelling resume-image, wipe mid-run checkpoint and re-seat interrupt.
+
+    ``aupdate_state(..., as_node="reviewer")`` with ``need_image=True`` schedules
+    ``executor_image_plan``, which pauses again via ``interrupt_before``.
+    """
+    await _adelete_graph_thread(session.id)
+    msgs = await repos.list_session_messages(db, session.id)
+    message_dicts = [{"role": m.role, "content": m.content} for m in msgs]
+    values = _graph_values(session, message_dicts)
+    values["need_image"] = True
+    values["reviewer_passed"] = True
+    graph = get_session_graph()
+    config = _session_config(session.id)
+    try:
+        await graph.aupdate_state(config, values, as_node="reviewer")
+    except Exception:
+        logger.warning(
+            "Failed to re-park graph at image interrupt (session=%s)",
+            session.id,
+            exc_info=True,
+        )
+
+
 async def _discard_turn_state(
     db: AsyncSession,
     session: Session,
@@ -164,7 +191,29 @@ async def _discard_turn_state(
     await db.flush()
     await session_event_bus.publish_many(
         session.id,
-        [{"type": "turn.cancelled", "data": {"reason": "stop"}}],
+        [{"type": "turn.cancelled", "data": {"reason": "stop", "awaiting_image_ok": False}}],
+    )
+
+
+async def _restore_parked_after_resume_cancel(
+    db: AsyncSession,
+    session: Session,
+    *,
+    parked_state: dict[str, Any],
+    message_ids: list[uuid.UUID],
+) -> None:
+    """Cancel in-flight resume-image: keep draft/brief and re-show Generate-image CTA."""
+    session_event_bus.end_turn_progress(session.id)
+    restored = copy.deepcopy(parked_state)
+    restored["awaiting_image_ok"] = True
+    session.state = restored
+    if message_ids:
+        await repos.delete_session_messages_by_ids(db, session.id, message_ids)
+    await _repark_graph_at_image_interrupt(db, session)
+    await db.flush()
+    await session_event_bus.publish_many(
+        session.id,
+        [{"type": "turn.cancelled", "data": {"reason": "stop", "awaiting_image_ok": True}}],
     )
 
 
@@ -483,11 +532,9 @@ async def resume_image_turn(
     if not await session_is_parked(session):
         raise SessionTurnConflict("not_parked", "Session is not awaiting image confirmation")
 
-    pre_state = _strip_discard_meta(session.state)
-    # Prefer discard anchor from the turn that parked, if present.
-    anchor = (session.state or {}).get("turn_discard") or {}
-    if isinstance(anchor.get("pre_state"), dict):
-        pre_state = _strip_discard_meta(anchor["pre_state"])
+    # Snapshot full parked UI state so Stop mid-image can restore the CTA.
+    parked_restore = copy.deepcopy(dict(session.state or {}))
+    parked_restore["awaiting_image_ok"] = True
 
     existing = await repos.list_session_messages(db, session.id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
@@ -500,9 +547,11 @@ async def resume_image_turn(
     entry = await session_turn_registry.begin(
         session.id,
         task=task,
-        pre_state=pre_state,
+        pre_state=_strip_discard_meta(parked_restore),
         user_message_id=resume_msg_id,
     )
+    entry.kind = "resume_image"
+    entry.parked_restore = parked_restore
     # Resume must not delete prior user messages on stop — only assistants added now.
     entry.message_ids = []
 
@@ -514,7 +563,6 @@ async def resume_image_turn(
             user_content="",
             message_dicts=message_dicts,
         )
-        # On successful resume, clear parked discard anchor via persist.
         result = await _persist_after_invoke(
             db,
             session,
@@ -525,17 +573,15 @@ async def resume_image_turn(
             progress_events=progress_events,
             provider_error=provider_error,
             user_content="",
-            pre_state=pre_state,
+            pre_state=_strip_discard_meta(parked_restore),
             entry=entry,
         )
         return result
     except asyncio.CancelledError:
-        # Discard resume attempt: restore pre-agent state; keep prior user messages
-        # (entry.message_ids only tracks assistants added during this resume).
-        await _discard_turn_state(
+        await _restore_parked_after_resume_cancel(
             db,
             session,
-            pre_state=entry.pre_state,
+            parked_state=entry.parked_restore or parked_restore,
             message_ids=list(entry.message_ids),
         )
         await db.commit()
@@ -549,34 +595,55 @@ async def resume_image_turn(
 async def stop_session_turn(
     db: AsyncSession,
     session: Session,
-) -> dict[str, str]:
-    """Cancel in-flight turn or discard parked interrupt (ADR 0004)."""
+) -> dict[str, Any]:
+    """Cancel in-flight turn or discard parked interrupt (ADR 0004).
+
+    Stopping mid ``resume-image`` re-parks at the image interrupt (CTA returns).
+    Stopping a normal message turn or an idle parked session discards the turn.
+    """
     entry = session_turn_registry.get(session.id)
     if entry is not None and not entry.task.done():
         if entry.cancelling:
             await entry.discarded.wait()
             await db.refresh(session)
-            return {"status": "cancelled"}
+            awaiting = bool((session.state or {}).get("awaiting_image_ok"))
+            return {
+                "status": "cancelled",
+                "interrupted": awaiting,
+                "awaiting_image_ok": awaiting,
+            }
         entry.cancelling = True
         entry.task.cancel()
         try:
             await asyncio.wait_for(entry.discarded.wait(), timeout=60.0)
         except TimeoutError:
             logger.error("Timed out waiting for turn discard (session=%s)", session.id)
-            # Best-effort local discard if the other task never finished cleanup.
             if not entry.discarded.is_set():
-                await _discard_turn_state(
-                    db,
-                    session,
-                    pre_state=entry.pre_state,
-                    message_ids=list(entry.message_ids),
-                )
+                if entry.kind == "resume_image" and entry.parked_restore is not None:
+                    await _restore_parked_after_resume_cancel(
+                        db,
+                        session,
+                        parked_state=entry.parked_restore,
+                        message_ids=list(entry.message_ids),
+                    )
+                else:
+                    await _discard_turn_state(
+                        db,
+                        session,
+                        pre_state=entry.pre_state,
+                        message_ids=list(entry.message_ids),
+                    )
                 entry.discarded.set()
         await session_turn_registry.clear(session.id, entry=entry)
         await db.refresh(session)
-        return {"status": "cancelled"}
+        awaiting = bool((session.state or {}).get("awaiting_image_ok"))
+        return {
+            "status": "cancelled",
+            "interrupted": awaiting,
+            "awaiting_image_ok": awaiting,
+        }
 
-    # Parked discard (no in-flight task).
+    # Parked discard (no in-flight task) — drop the agent turn that created the draft.
     if await session_is_parked(session):
         state = dict(session.state or {})
         anchor = state.get("turn_discard") if isinstance(state.get("turn_discard"), dict) else {}
@@ -599,9 +666,13 @@ async def stop_session_turn(
             pre_state=pre_state,
             message_ids=message_ids,
         )
-        return {"status": "cancelled"}
+        return {
+            "status": "cancelled",
+            "interrupted": False,
+            "awaiting_image_ok": False,
+        }
 
-    return {"status": "idle"}
+    return {"status": "idle", "interrupted": False, "awaiting_image_ok": False}
 
 
 async def update_session_draft(

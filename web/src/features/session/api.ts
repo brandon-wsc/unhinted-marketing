@@ -100,7 +100,11 @@ export async function apiResumeSessionImage(
 export async function apiStopSessionTurn(
   accessToken: string | null,
   sessionId: string,
-): Promise<{ status: string }> {
+): Promise<{
+  status: string;
+  interrupted?: boolean;
+  awaiting_image_ok?: boolean;
+}> {
   const res = await fetchWithAuth(accessToken, `/sessions/${sessionId}/stop`, {
     method: "POST",
   });
