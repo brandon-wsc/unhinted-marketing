@@ -6,8 +6,9 @@ import json
 import logging
 import secrets
 import uuid
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 

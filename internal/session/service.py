@@ -10,13 +10,13 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from internal.session.graph import get_session_graph
-from internal.session.state import MODE_CHAT, MODE_PREVIEW
 from internal.llm.router import LlmProviderError
 from internal.memory import repos
 from internal.memory.models import Session
 from internal.session.context import session_db
 from internal.session.events import session_event_bus
+from internal.session.graph import get_session_graph
+from internal.session.state import MODE_CHAT, MODE_PREVIEW
 
 logger = logging.getLogger(__name__)
 

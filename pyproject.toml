@@ -28,6 +28,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "httpx>=0.28.0",
     "ruff>=0.8.0",
+    "greenlet>=3.0.0",
 ]
 
 [build-system]
@@ -40,6 +41,36 @@ packages = ["internal", "schemas", "cmd"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "SIM",   # flake8-simplify
+    "BLE",   # blind-except
+    "RUF",   # ruff-specific
+    "S110",  # try-except-pass
+]
+ignore = [
+    "E501",   # line length — discretionary
+    "RUF001", # intentional CJK / fullwidth punctuation in HK copy
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"migrations/**" = ["UP035", "UP007", "I001"]
+"tests/**" = ["S101", "BLE001"]
+# LLM / graph glue: broad catch is intentional around optional checkpoint sync
+"internal/llm/**" = ["UP042"]
+"internal/perception/**" = ["BLE001"]
+"internal/session/service.py" = ["BLE001", "RUF005"]
+"cmd/api/routes/sessions.py" = ["BLE001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cmd", "internal", "schemas"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -54,6 +85,10 @@ addopts = "-p no:debugging"
 # CI should run separate reports (utils ≥85%, api routes ≥70%).
 [tool.coverage.run]
 branch = true
+# FastAPI (threads) + async SQLAlchemy (greenlets): without this, Linux CI under-reports
+# route lines after await db calls while tests still pass.
+concurrency = ["thread", "greenlet"]
+relative_files = true
 source = ["internal", "schemas", "cmd"]
 omit = [
     "**/__init__.py",
