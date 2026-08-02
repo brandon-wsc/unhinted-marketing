@@ -20,6 +20,9 @@ class TurnEntry:
     message_ids: list[uuid.UUID] = field(default_factory=list)
     cancelling: bool = False
     discarded: asyncio.Event = field(default_factory=asyncio.Event)
+    # "message" | "resume_image" — resume cancel restores parked interrupt UI
+    kind: str = "message"
+    parked_restore: dict[str, Any] | None = None
 
 
 class SessionTurnRegistry:

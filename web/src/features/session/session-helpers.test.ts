@@ -8,9 +8,10 @@ import {
   parseAgentProgress,
   parseBrief,
   parseDraftCopy,
+  previewAnchorFromActions,
   waitForSseReady,
 } from "@/features/session/session-helpers";
-import type { ChatMessage, PreviewDraft } from "@/features/session/types";
+import type { AgentActionRecord, ChatMessage, PreviewDraft } from "@/features/session/types";
 
 describe("asStringList", () => {
   it("keeps only string entries", () => {
@@ -163,6 +164,71 @@ describe("agentActionsFromMessages", () => {
         },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("previewAnchorFromActions", () => {
+  it("prefers the last executor_image_gen action's afterMessageId", () => {
+    const actions: AgentActionRecord[] = [
+      {
+        id: "1",
+        node: "brainstormer",
+        model_tier: null,
+        model: null,
+        status: "done",
+        afterMessageId: "u1",
+      },
+      {
+        id: "2",
+        node: "executor_image_gen",
+        model_tier: null,
+        model: null,
+        status: "done",
+        afterMessageId: "u1",
+      },
+      {
+        id: "3",
+        node: "brainstormer",
+        model_tier: null,
+        model: null,
+        status: "running",
+        afterMessageId: "u2",
+      },
+    ];
+    const messages: ChatMessage[] = [
+      {
+        id: "u1",
+        session_id: "s1",
+        role: "user",
+        content: "first",
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "u2",
+        session_id: "s1",
+        role: "user",
+        content: "later",
+        created_at: "2026-01-01T00:00:02Z",
+      },
+    ];
+    expect(previewAnchorFromActions(actions, messages)).toBe("u1");
+  });
+
+  it("falls back to last user message when no image-gen action", () => {
+    expect(
+      previewAnchorFromActions(
+        [],
+        [
+          {
+            id: "u9",
+            session_id: "s1",
+            role: "user",
+            content: "x",
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+      ),
+    ).toBe("u9");
   });
 });
 

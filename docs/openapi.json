@@ -1317,6 +1317,50 @@
         ],
         "title": "ResumeImageResponse"
       },
+      "SessionBriefData": {
+        "properties": {
+          "can_do": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Can Do"
+          },
+          "cannot_do": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cannot Do"
+          },
+          "angles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Angles"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "SessionBriefData",
+        "description": "Payload for `brief.updated` (matches session BriefOut / FE SessionBrief)."
+      },
       "SessionListItem": {
         "properties": {
           "id": {
@@ -1408,6 +1452,21 @@
             },
             "type": "array",
             "title": "Messages"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionBriefData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "awaiting_image_ok": {
+            "type": "boolean",
+            "title": "Awaiting Image Ok",
+            "default": false
           }
         },
         "type": "object",
@@ -1531,6 +1590,16 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "interrupted": {
+            "type": "boolean",
+            "title": "Interrupted",
+            "default": false
+          },
+          "awaiting_image_ok": {
+            "type": "boolean",
+            "title": "Awaiting Image Ok",
+            "default": false
           }
         },
         "type": "object",

@@ -90,6 +90,9 @@ export type SessionListItem = Session & {
 export type SessionMessagesResponse = {
   session: Session;
   messages: ChatMessage[];
+  /** From sessions.state — restores BriefCard after Stop / reopen. */
+  brief?: SessionBrief | null;
+  awaiting_image_ok?: boolean;
 };
 
 export type PostMessageResponse = {

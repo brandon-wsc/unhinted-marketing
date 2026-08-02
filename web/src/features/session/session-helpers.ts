@@ -85,6 +85,23 @@ export function agentActionsFromMessages(messages: ChatMessage[]): AgentActionRe
   return out;
 }
 
+/** User message id that owns the preview turn (`executor_image_gen`), else last user. */
+export function previewAnchorFromActions(
+  actions: AgentActionRecord[],
+  messages: ChatMessage[],
+): string | null {
+  for (let i = actions.length - 1; i >= 0; i -= 1) {
+    const a = actions[i];
+    if (a?.node === "executor_image_gen" && a.afterMessageId) {
+      return a.afterMessageId;
+    }
+  }
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === "user") return messages[i]!.id;
+  }
+  return null;
+}
+
 export function mergePreviewDraft(
   prev: PreviewDraft | null,
   patch: {

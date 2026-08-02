@@ -136,22 +136,33 @@ describe("useSession", () => {
         afterMessageId: "u1",
       }),
     ]);
-    expect(result.current.briefAfterMessageId).toBe("u1");
+    // No sessions.state.brief on hydrate → no BriefCard anchor.
+    expect(result.current.brief).toBeNull();
+    expect(result.current.briefAfterMessageId).toBeNull();
     expect(setRememberedSessionId).toHaveBeenCalledWith("co-1", "sess-1");
   });
 
   it("clears remembered id and starts fresh when restore fails", async () => {
     getRememberedSessionId.mockReturnValue("sess-gone");
     apiGetSessionMessages.mockRejectedValue(new Error("not found"));
+    const fresh = {
+      ...sessionFixture,
+      id: "sess-fresh",
+      created_at: "2026-01-02T00:00:00Z",
+      updated_at: "2026-01-02T00:00:00Z",
+    };
+    apiCreateSession.mockResolvedValue(fresh);
 
     const { result } = renderHook(() => useSession("co-1"));
 
     await waitFor(() => expect(result.current.restoring).toBe(false));
-    expect(result.current.session).toBeNull();
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-fresh"));
     expect(setRememberedSessionId).toHaveBeenCalledWith("co-1", null);
+    expect(apiCreateSession).toHaveBeenCalledWith("tok", "co-1");
+    expect(setRememberedSessionId).toHaveBeenCalledWith("co-1", "sess-fresh");
   });
 
-  it("startNewChat clears session state and remembered id", async () => {
+  it("startNewChat creates a backend session immediately", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({
       session: sessionFixture,
@@ -165,17 +176,54 @@ describe("useSession", () => {
         },
       ],
     });
+    const fresh = {
+      ...sessionFixture,
+      id: "sess-new",
+      created_at: "2026-01-02T00:00:00Z",
+      updated_at: "2026-01-02T00:00:00Z",
+    };
+    apiCreateSession.mockResolvedValue(fresh);
+    apiListSessions.mockResolvedValue([
+      {
+        ...historyItem,
+        id: "sess-new",
+        title: null,
+        created_at: fresh.created_at,
+        updated_at: fresh.updated_at,
+      },
+      historyItem,
+    ]);
 
     const { result } = renderHook(() => useSession("co-1"));
     await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
 
-    act(() => {
-      result.current.startNewChat();
+    await act(async () => {
+      await result.current.startNewChat();
     });
 
-    expect(result.current.session).toBeNull();
+    expect(apiCreateSession).toHaveBeenCalledWith("tok", "co-1");
+    expect(result.current.session?.id).toBe("sess-new");
     expect(result.current.messages).toEqual([]);
-    expect(setRememberedSessionId).toHaveBeenCalledWith("co-1", null);
+    expect(setRememberedSessionId).toHaveBeenCalledWith("co-1", "sess-new");
+    expect(result.current.history.some((s) => s.id === "sess-new")).toBe(true);
+  });
+
+  it("startNewChat on empty session does not create another row", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [],
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    await act(async () => {
+      await result.current.startNewChat();
+    });
+
+    expect(apiCreateSession).not.toHaveBeenCalled();
+    expect(result.current.session?.id).toBe("sess-1");
   });
 
   it("sendMessage creates a session, posts, and applies brief events", async () => {
@@ -480,6 +528,108 @@ describe("useSession", () => {
     );
     expect(result.current.awaitingImageOk).toBe(false);
     expect(result.current.mode).toBe("PREVIEW");
+    expect(result.current.previewAfterMessageId).toBe("u1");
+  });
+
+  it("keeps previewAfterMessageId on the preview turn after a later send", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [
+        {
+          id: "u1",
+          session_id: "sess-1",
+          role: "user",
+          content: "make a post",
+          created_at: "2026-01-01T00:00:01Z",
+          metadata: {
+            agent_actions: [{ node: "executor_image_gen", model: "img" }],
+          },
+        },
+      ],
+    });
+    apiPostSessionMessage
+      .mockResolvedValueOnce({
+        session: { ...sessionFixture, mode: "PREVIEW" },
+        messages: [
+          {
+            id: "u1",
+            session_id: "sess-1",
+            role: "user",
+            content: "make a post",
+            created_at: "2026-01-01T00:00:01Z",
+            metadata: {
+              agent_actions: [{ node: "executor_image_gen", model: "img" }],
+            },
+          },
+        ],
+        interrupted: false,
+        mode: "PREVIEW",
+        revision: 1,
+        pending_confirm: false,
+        approval_token: "tok-1",
+        events: [
+          {
+            type: "preview.updated",
+            data: {
+              revision: 1,
+              approval_token: "tok-1",
+              copy: { caption: "hi", hashtags: [], cta: "" },
+              image_url: "https://example.com/x.png",
+              platform: "instagram",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        session: { ...sessionFixture, mode: "PREVIEW" },
+        messages: [
+          {
+            id: "u1",
+            session_id: "sess-1",
+            role: "user",
+            content: "make a post",
+            created_at: "2026-01-01T00:00:01Z",
+            metadata: {
+              agent_actions: [{ node: "executor_image_gen", model: "img" }],
+            },
+          },
+          {
+            id: "u2",
+            session_id: "sess-1",
+            role: "user",
+            content: "tweak caption",
+            created_at: "2026-01-01T00:00:02Z",
+          },
+        ],
+        interrupted: false,
+        mode: "PREVIEW",
+        revision: 1,
+        pending_confirm: false,
+        approval_token: "tok-1",
+        events: [
+          {
+            type: "agent.progress",
+            data: { node: "brainstormer", model_tier: "cheap", model: "m" },
+          },
+        ],
+      });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+    // openSession with PREVIEW + executor_image_gen metadata
+    expect(result.current.previewAfterMessageId).toBe("u1");
+
+    await act(async () => {
+      await result.current.sendMessage("seed preview");
+    });
+    expect(result.current.previewAfterMessageId).toBe("u1");
+
+    await act(async () => {
+      await result.current.sendMessage("tweak caption");
+    });
+    expect(result.current.previewAfterMessageId).toBe("u1");
+    expect(result.current.messages.some((m) => m.id === "u2")).toBe(true);
   });
 
   it("stopTurn discards parked turn and reloads messages", async () => {
@@ -519,7 +669,11 @@ describe("useSession", () => {
       approval_token: null,
       events: [{ type: "draft.awaiting_image_ok", data: { awaiting: true } }],
     });
-    apiStopSessionTurn.mockResolvedValue({ status: "cancelled" });
+    apiStopSessionTurn.mockResolvedValue({
+      status: "cancelled",
+      interrupted: false,
+      awaiting_image_ok: false,
+    });
 
     const { result } = renderHook(() => useSession("co-1"));
     await waitFor(() => expect(result.current.restoring).toBe(false));
@@ -536,6 +690,254 @@ describe("useSession", () => {
     expect(apiStopSessionTurn).toHaveBeenCalledWith("tok", "sess-1");
     expect(result.current.awaitingImageOk).toBe(false);
     expect(result.current.messages).toEqual([]);
+    expect(result.current.composerLocked).toBe(false);
+  });
+
+  it("stopTurn restores BriefCard from hydrated session brief", async () => {
+    const brief = {
+      summary: "Keep this brief",
+      can_do: ["a"],
+      cannot_do: [],
+      angles: [],
+      persona: null,
+    };
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u1",
+            session_id: "sess-1",
+            role: "user",
+            content: "make a post",
+            created_at: "2026-01-01T00:00:01Z",
+          },
+        ],
+        brief,
+        awaiting_image_ok: true,
+      })
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u1",
+            session_id: "sess-1",
+            role: "user",
+            content: "make a post",
+            created_at: "2026-01-01T00:00:01Z",
+          },
+        ],
+        brief,
+        awaiting_image_ok: true,
+      });
+    apiResumeSessionImage.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* hang until stop */
+        }),
+    );
+    apiStopSessionTurn.mockResolvedValue({
+      status: "cancelled",
+      interrupted: true,
+      awaiting_image_ok: true,
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+    expect(result.current.brief?.summary).toBe("Keep this brief");
+    expect(result.current.awaitingImageOk).toBe(true);
+
+    await act(async () => {
+      void result.current.resumeImage();
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      await result.current.stopTurn();
+    });
+
+    expect(result.current.awaitingImageOk).toBe(true);
+    expect(result.current.brief?.summary).toBe("Keep this brief");
+    expect(result.current.briefAfterMessageId).toBe("u1");
+    expect(result.current.sending).toBe(false);
+  });
+
+  it("stopTurn mid resume-image keeps Generate-image CTA", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [
+        {
+          id: "u1",
+          session_id: "sess-1",
+          role: "user",
+          content: "make a post",
+          created_at: "2026-01-01T00:00:01Z",
+        },
+      ],
+    });
+    apiPostSessionMessage.mockResolvedValue({
+      session: sessionFixture,
+      messages: [
+        {
+          id: "u1",
+          session_id: "sess-1",
+          role: "user",
+          content: "make a post",
+          created_at: "2026-01-01T00:00:01Z",
+        },
+      ],
+      interrupted: true,
+      mode: "AGENT",
+      revision: null,
+      pending_confirm: false,
+      approval_token: null,
+      events: [{ type: "draft.awaiting_image_ok", data: { awaiting: true } }],
+    });
+
+    let resolveResume: (value: unknown) => void = () => {};
+    apiResumeSessionImage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveResume = resolve;
+        }),
+    );
+    apiStopSessionTurn.mockResolvedValue({
+      status: "cancelled",
+      interrupted: true,
+      awaiting_image_ok: true,
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    await act(async () => {
+      await result.current.sendMessage("park me");
+    });
+    expect(result.current.awaitingImageOk).toBe(true);
+
+    let resumePromise: Promise<void>;
+    await act(async () => {
+      resumePromise = result.current.resumeImage();
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      await result.current.stopTurn();
+    });
+
+    // Unblock stalled resume (aborted / discarded).
+    await act(async () => {
+      resolveResume({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u1",
+            session_id: "sess-1",
+            role: "user",
+            content: "make a post",
+            created_at: "2026-01-01T00:00:01Z",
+          },
+        ],
+        interrupted: true,
+        mode: "AGENT",
+        revision: null,
+        pending_confirm: false,
+        approval_token: null,
+        events: [],
+      });
+      await resumePromise!;
+    });
+
+    expect(result.current.awaitingImageOk).toBe(true);
+    expect(result.current.composerLocked).toBe(true);
+    expect(result.current.sending).toBe(false);
+  });
+
+  it("ignores late sendMessage response after stop", async () => {
+    const priorAssistant = {
+      id: "a1",
+      session_id: "sess-1",
+      role: "assistant",
+      content: "prior reply",
+      created_at: "2026-01-01T00:00:00Z",
+    };
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [priorAssistant],
+      })
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [priorAssistant],
+      });
+
+    let resolveSend: (value: unknown) => void = () => {};
+    apiPostSessionMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    apiStopSessionTurn.mockResolvedValue({
+      status: "cancelled",
+      interrupted: false,
+      awaiting_image_ok: false,
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+    expect(result.current.messages).toEqual([priorAssistant]);
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage("OK，幫我生成圖片。");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      await result.current.stopTurn();
+    });
+    expect(result.current.messages).toEqual([priorAssistant]);
+    expect(result.current.sending).toBe(false);
+
+    // Late POST /messages resolve must not resurrect the discarded turn.
+    await act(async () => {
+      resolveSend({
+        session: sessionFixture,
+        messages: [
+          priorAssistant,
+          {
+            id: "u-discarded",
+            session_id: "sess-1",
+            role: "user",
+            content: "OK，幫我生成圖片。",
+            created_at: "2026-01-01T00:00:02Z",
+          },
+        ],
+        interrupted: false,
+        mode: "AGENT",
+        revision: null,
+        pending_confirm: false,
+        approval_token: null,
+        events: [
+          {
+            type: "agent.progress",
+            data: {
+              node: "executor_image_gen",
+              model_tier: null,
+              model: "x",
+            },
+          },
+        ],
+      });
+      await sendPromise!;
+    });
+
+    expect(result.current.messages).toEqual([priorAssistant]);
+    expect(result.current.agentActions).toEqual([]);
     expect(result.current.composerLocked).toBe(false);
   });
 });

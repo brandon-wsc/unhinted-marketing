@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from schemas.contracts import DraftCopy
+from schemas.contracts import DraftCopy, SessionBriefData
 
 
 class CreateSessionRequest(BaseModel):
@@ -59,6 +59,9 @@ class MessageResponse(BaseModel):
 class SessionMessagesResponse(BaseModel):
     session: SessionResponse
     messages: list[MessageResponse]
+    # From sessions.state — so Stop/openSession can restore BriefCard without SSE.
+    brief: SessionBriefData | None = None
+    awaiting_image_ok: bool = False
 
 
 class PostMessageResponse(BaseModel):
@@ -74,6 +77,8 @@ class PostMessageResponse(BaseModel):
 
 class StopSessionResponse(BaseModel):
     status: str  # cancelled | idle
+    interrupted: bool = False
+    awaiting_image_ok: bool = False
 
 
 class ResumeImageResponse(BaseModel):
