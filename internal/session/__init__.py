@@ -9,6 +9,6 @@ __all__ = [
     "SessionState",
     "build_session_graph",
     "get_session_graph",
-    "set_session_graph",
     "open_postgres_checkpointer",
+    "set_session_graph",
 ]

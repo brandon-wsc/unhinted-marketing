@@ -7,13 +7,13 @@ import logging
 import sys
 
 from internal.memory.database import SessionLocal
+from internal.memory.repos import get_company, list_top_signals, reset_market_signals
 from internal.perception.hot_search import ingest_hot_search
 from internal.perception.news_promoter import promote_signals
 from internal.perception.question_generator import (
     generate_questions_all_companies,
     generate_questions_for_company,
 )
-from internal.memory.repos import get_company, list_top_signals, reset_market_signals
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)

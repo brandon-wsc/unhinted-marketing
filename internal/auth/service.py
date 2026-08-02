@@ -73,7 +73,7 @@ async def register_user(
     db.add(membership)
 
     access_token, _ = create_access_token(user.id)
-    refresh_token, family_id = await _issue_refresh_token(db, user.id)
+    refresh_token, _family_id = await _issue_refresh_token(db, user.id)
     await db.commit()
     await db.refresh(user)
     return user, access_token, refresh_token

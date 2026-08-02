@@ -1,5 +1,7 @@
+import logging
 import uuid
-from typing import Annotated, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -31,6 +33,8 @@ from schemas.session import (
     UpdateDraftResponse,
     UpdateSessionRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -77,9 +81,8 @@ async def list_sessions(
     limit: Annotated[int, Query(ge=1, le=100)] = 40,
 ) -> SessionListResponse:
     """List the current user's sessions (newest first), optionally by company."""
-    if company_id is not None:
-        if not await repos.user_has_org_access(db, user.id, company_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    if company_id is not None and not await repos.user_has_org_access(db, user.id, company_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     rows = await repos.list_user_sessions(
         db, user_id=user.id, company_id=company_id, limit=limit
     )
@@ -241,8 +244,9 @@ async def session_events(
         graph = get_session_graph()
         snap = await graph.aget_state({"configurable": {"thread_id": str(session.id)}})
         interrupted = bool(snap.next)
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001 — graph/checkpointer may be unavailable in tests
+        # Graph may be unset in tests / early boot; keep snapshot usable.
+        logger.debug("session events: could not read graph interrupt state", exc_info=True)
 
     snapshot_data = {
         "session_id": str(session.id),

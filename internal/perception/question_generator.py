@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.config import settings
 from internal.llm.router import ModelTier, complete_json
-from internal.memory.models import Entity
 from internal.memory.knowledge_seed import ensure_default_personas
+from internal.memory.models import Entity
 from internal.memory.repos import (
     get_latest_questions,
     list_personas,
