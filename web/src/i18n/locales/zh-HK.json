@@ -163,7 +163,6 @@
   "admin": {
     "menuEntry": "Admin 後台",
     "llmCalls": "LLM 呼叫紀錄",
-    "loading": "載入紀錄…",
     "empty": "暫時未有紀錄 — 觸發 LLM call 之後會喺呢度出現",
     "loadFailed": "載入失敗",
     "forbidden": {
@@ -177,7 +176,6 @@
       "status": "狀態",
       "statusAll": "全部",
       "fallbackOnly": "只顯示 fallback",
-      "apply": "篩選",
       "refresh": "重新整理"
     },
     "table": {
@@ -207,6 +205,9 @@
       "user": "User",
       "temperature": "Temperature",
       "parseOk": "JSON 解析",
+      "tokensPrompt": "輸入",
+      "tokensCompletion": "輸出",
+      "tokensTotal": "合計",
       "systemPrompt": "System prompt",
       "userPrompt": "User prompt",
       "response": "回應",
