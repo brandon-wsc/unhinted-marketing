@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import logging
 import secrets
@@ -590,10 +591,8 @@ async def stop_session_turn(
                 except ValueError:
                     continue
         if not message_ids and anchor.get("user_message_id"):
-            try:
+            with contextlib.suppress(ValueError):
                 message_ids.append(uuid.UUID(str(anchor["user_message_id"])))
-            except ValueError:
-                pass
         await _discard_turn_state(
             db,
             session,

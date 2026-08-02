@@ -81,9 +81,11 @@ async def test_run_session_turn_rejects_when_busy() -> None:
 async def test_resume_image_rejects_when_not_parked() -> None:
     session = _session(awaiting=False)
     db = AsyncMock()
-    with patch("internal.session.service.graph_is_parked", AsyncMock(return_value=False)):
-        with pytest.raises(SessionTurnConflict) as exc:
-            await resume_image_turn(db, session)
+    with (
+        patch("internal.session.service.graph_is_parked", AsyncMock(return_value=False)),
+        pytest.raises(SessionTurnConflict) as exc,
+    ):
+        await resume_image_turn(db, session)
     assert exc.value.reason == "not_parked"
 
 
