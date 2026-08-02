@@ -85,7 +85,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | README | ✅ | Project intro; setup in GETTING_STARTED |
 | `docker-compose.yml` | ✅ | Local `db` (pgvector) + `minio` / `minio-init` (S3-compatible media) + adminer |
 | Auth rate limiting | ✅ | In-memory sliding window on register/login/refresh (`AUTH_RATE_LIMIT_*`); Redis later |
-| Automated tests | ✅ Backend + FE Tier 1/2 + CI | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && npm test` (Vitest + RTL — lib utils + PasswordBox / UserMenuDropdown). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
+| Automated tests | ✅ Backend + FE Tier 1/2 + CI | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && npm test` (Vitest + RTL — lib utils + `session-helpers` / `useSession` + PasswordBox / UserMenuDropdown). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
 ### Phase 1 — Data & Autopilot Backend · **100%**
 
@@ -216,7 +216,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 - **Form memory:** Last user email / display name / org name from `localStorage` (not fake placeholders)
 - **Auth:** Access token in memory; refresh via cookie; auto-refresh on app load
 - **Phase 3 (shipped):** Chat workspace at `/` — `useSession` REST-first + SSE; Streamdown + `@streamdown/cjk`; live `message.delta`; Agent Mode UI (`agent.progress` trail persisted on user-message `metadata.agent_actions`; brief / `draft.awaiting_image_ok` interrupt; snapshot `interrupted` rehydrates Generate-image CTA); landing recommended-question cards; IG Preview + Confirm; Gemini-style history (desktop sidebar; mobile Record push page); mobile Chat primary with history icon + Preview via ready banner / **上一頁**; `llm.failed` inline error + Retry; shell fits `h-dvh` with per-pane scroll; no `useChat`
-- **Session client:** `web/src/features/session/` — `api.ts` (REST), `sse.ts` (`@microsoft/fetch-event-source` with Bearer), `use-session.ts`, `session-storage.ts` (per-company last session id), `use-recommended-questions.ts`, `components/chat-panel.tsx` + `session-history.tsx` + `preview-panel.tsx` + `ig-preview-mock.tsx` + `recommended-questions.tsx`
+- **Session client:** `web/src/features/session/` — `api.ts` (REST), `sse.ts` (`@microsoft/fetch-event-source` with Bearer), `use-session.ts` + `session-helpers.ts`, `session-storage.ts` (per-company last session id), `use-recommended-questions.ts`, `components/chat-panel.tsx` + `session-history.tsx` + `preview-panel.tsx` + `ig-preview-mock.tsx` + `recommended-questions.tsx`
 - **Chat persistence:** Backend writes `session_messages` (user always; assistant for `chat` / `ack_confirm` / LLM failure / review exhausted). Agent turns often **do not** append assistant chat rows — brief/draft live in `sessions.state` + `preview_drafts`. **Agent action trail:** after each turn, `agent.progress` payloads are stored on that turn’s **user** message as `metadata.agent_actions` (`[{node, model_tier, model}, …]`); `GET …/messages` returns `metadata` so refresh rebuilds the trail. **Interrupt hydrate:** `sessions.state.awaiting_image_ok` + SSE `session.snapshot.interrupted` (graph `next`) restore the Generate-image card after reopen / API drop. **Hydrate:** `GET /sessions/{id}/messages` + remembered session id in `localStorage`. **History:** desktop left sidebar lists `GET /sessions?company_id=` (pinned group + date groups + search); mobile opens the same list as a full-page Record view; `PATCH` rename/pin, `DELETE` removes session (+ cascades).
 
 **Run:**
@@ -299,7 +299,7 @@ See `.env.example`. Local `.env` is gitignored.
 |----|------|--------|
 | **H1** | Auth rate limit + known-default / weak `JWT_SECRET` | ✅ **Mitigated on this branch** — in-memory limit on register/login/refresh; `APP_ENV=production` refuses insecure JWT |
 | **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ⬜ Open — product decision + ADR before change |
-| **H3** | `use-session.ts` correctness concentrated & untested | ⬜ Open — extract pure helpers + Tier 6 tests |
+| **H3** | `use-session.ts` correctness concentrated & untested | ✅ **Mitigated** — pure helpers in `session-helpers.ts` (+ Tier 1 cov gate); `use-session.test.ts` covers restore / send / confirm / SSE merge |
 | **I1** | Confirm idempotency key global (cross-user receipt leak) | ✅ **Mitigated** — foreign key → 409; same session/user only replays |
 
 ### Other gaps

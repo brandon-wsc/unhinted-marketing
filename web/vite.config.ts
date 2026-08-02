@@ -27,6 +27,7 @@ export default defineConfig({
       include: [
         "src/lib/**",
         "src/features/session/session-storage.ts",
+        "src/features/session/session-helpers.ts",
         "src/components/password-box.tsx",
         "src/components/user-menu-dropdown.tsx",
       ],
@@ -40,6 +41,7 @@ export default defineConfig({
       thresholds: {
         "src/lib/**": { lines: 85 },
         "src/features/session/session-storage.ts": { lines: 85 },
+        "src/features/session/session-helpers.ts": { lines: 85 },
         "src/components/password-box.tsx": { lines: 50 },
         "src/components/user-menu-dropdown.tsx": { lines: 50 },
       },
