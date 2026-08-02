@@ -1,0 +1,35 @@
+# Local dev Postgres (pgvector). Dev DB: unhinted · Test DB: unhinted_test (see docker/postgres/init).
+# Usage: docker compose up -d db
+#        cp .env.example .env   # DATABASE_URL + TEST_DATABASE_URL → localhost:5432
+
+services:
+  db:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    shm_size: 128mb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: unhinted
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata18:/var/lib/postgresql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d unhinted"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata18:
