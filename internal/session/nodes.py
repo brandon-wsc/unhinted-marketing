@@ -18,9 +18,12 @@ from internal.llm.router import (
     astream_text,
     complete_json,
     complete_text,
+    generate_image,
     has_llm_credentials,
+    resolve_image_model,
     resolve_model,
 )
+from internal.media.storage import media_object_key, persist_generated_image
 from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.repos import get_company, get_signals_by_ids, list_personas, list_top_signals
 from internal.session import prompts
@@ -137,6 +140,12 @@ def _thread_uuid(state: SessionState) -> uuid.UUID | None:
 
 def _agent_progress_payload(node: str) -> dict[str, Any]:
     tier = NODE_MODEL_TIERS.get(node)
+    if node == "executor_image_gen":
+        return {
+            "node": node,
+            "model_tier": None,
+            "model": resolve_image_model(),
+        }
     return {
         "node": node,
         "model_tier": tier.value if tier else None,
@@ -570,10 +579,41 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
 
 @agent_progress("executor_image_gen")
 async def executor_image_gen(state: SessionState) -> dict[str, Any]:
-    """Phase 2: placeholder URL only (real render / S3 in later phases)."""
+    """Render via LLM_IMAGE_MODEL (LiteLLM). Wrong/chat-only models must error.
+
+    - No credentials (CI / offline): placeholder URL for UI mock.
+    - ``LLM_IMAGE_MODEL=placeholder``: explicit mock even with credentials.
+    - Credentials + unset image model: ``LlmProviderError`` (do not silently succeed).
+    - Credentials + real model: ``aimage_generation``; provider failures surface as
+      ``LlmProviderError`` → ``llm.failed`` in the session turn.
+    """
     revision = int(state.get("revision") or 0) + 1
     thread = state.get("thread_id") or "session"
-    return {"image_url": f"placeholder://local/{thread}/r{revision}.png"}
+    placeholder = f"placeholder://local/{thread}/r{revision}.png"
+
+    image_model = resolve_image_model()
+    if not has_llm_credentials():
+        return {"image_url": placeholder}
+    if image_model and image_model.lower() == "placeholder":
+        return {"image_url": placeholder}
+    if not image_model:
+        raise LlmProviderError(
+            "No image model configured (set LLM_IMAGE_MODEL, e.g. dall-e-3). "
+            "Chat-only models (DeepSeek, gpt-4o-mini, …) cannot generate images.",
+            kind="unsupported",
+        )
+
+    plan = state.get("image_plan") or {}
+    prompt = str(plan.get("prompt") or "").strip()
+    if not prompt:
+        company = (state.get("company_context") or {}).get("name") or "brand"
+        prompt = f"Clean modern social media image for {company}, Hong Kong urban mood"
+
+    # Size is provider-specific; LiteLLM drop_params handles unsupported keys.
+    raw_ref = await generate_image(prompt=prompt)
+    key = media_object_key(session_id=str(thread), revision=revision)
+    url = await persist_generated_image(raw_ref, key=key)
+    return {"image_url": url}
 
 
 async def ack_confirm(state: SessionState) -> dict[str, Any]:

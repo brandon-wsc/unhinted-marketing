@@ -130,7 +130,7 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
 3. ~~**Frontend Vitest**~~ — Tier 1 `web/src/lib/**` + Tier 2 PasswordBox / UserMenuDropdown
 4. ~~**CI/CD**~~ — `.github/workflows/ci.yml` (ruff + pytest unit/API + Vitest + build)
-5. Hold: SSE E2E, Playwright chat→preview→confirm; branch protection requiring CI; live LLM eval = manual/nightly only (`@pytest.mark.live_llm` — not yet wired)
+5. Hold: SSE E2E, Playwright chat→preview→confirm; live LLM eval = manual/nightly only (`@pytest.mark.live_llm` — not yet wired). **Branch rules:** configured on GitHub but **Not enforced** (account-plan limit) — CI still runs on PRs; merge is not blocked by required checks until enforcement is available.
 6. ~~**Contracts SSOT**~~ — `AGENTS.md`, ADRs, `schemas/contracts.py` / `tools.py`, `docs/contracts/` + OpenAPI export
 7. ~~**Graph mock-LLM node tests + CI**~~ — `tests/unit/test_session_nodes.py` + routing; opt-in `node_trace_recording()`; CI Tier 1b ≥70%
 

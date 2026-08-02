@@ -10,7 +10,13 @@ type Props = {
 
 function isRenderableImageUrl(url: string | null): url is string {
   if (!url) return false;
-  return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/");
+  // OpenRouter / LiteLLM often return data: URLs (b64) instead of https.
+  return (
+    url.startsWith("http://") ||
+    url.startsWith("https://") ||
+    url.startsWith("data:image/") ||
+    url.startsWith("/")
+  );
 }
 
 export function IgPreviewMock({ copy, imageUrl, accountName = "unhinted" }: Props) {

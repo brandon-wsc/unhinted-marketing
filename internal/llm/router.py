@@ -11,8 +11,11 @@ from litellm.exceptions import (
     APIConnectionError,
     AuthenticationError,
     BadRequestError,
+    InvalidRequestError,
+    NotFoundError,
     RateLimitError,
     Timeout,
+    UnsupportedParamsError,
 )
 
 from internal.config import settings
@@ -61,6 +64,12 @@ def resolve_model(tier: ModelTier) -> str:
     return mapping[tier]
 
 
+def resolve_image_model() -> str | None:
+    """Configured image-gen model, or None when unset / blank."""
+    raw = (settings.llm_image_model or "").strip()
+    return raw or None
+
+
 def _litellm_model(model: str) -> str:
     """When LLM_API_BASE is set, force the OpenAI-compatible provider.
 
@@ -91,6 +100,31 @@ def _base_kwargs(tier: ModelTier, temperature: float) -> dict:
     return kwargs
 
 
+def _looks_like_unsupported_image(text: str) -> bool:
+    lower = text.lower()
+    return any(
+        tip in lower
+        for tip in (
+            "does not support",
+            "doesn't support",
+            "not support",
+            "unsupported",
+            "not supported",
+            "image_generation not",
+            "no endpoint",
+            "unknown model for image",
+            "not a valid model",
+            "is not a valid model",
+            "model_not_found",
+            "does not exist",
+            "invalid model",
+            "not available for image",
+            "images generations",
+            "/images/generations",
+        )
+    )
+
+
 def _wrap_provider_error(exc: BaseException, *, model: str) -> LlmProviderError:
     if isinstance(exc, Timeout):
         return LlmProviderError(
@@ -116,14 +150,30 @@ def _wrap_provider_error(exc: BaseException, *, model: str) -> LlmProviderError:
             model=model,
             kind="rate_limit",
         )
-    if isinstance(exc, BadRequestError):
+    text = str(exc)
+    if isinstance(exc, (NotFoundError, UnsupportedParamsError)) or _looks_like_unsupported_image(
+        text
+    ):
+        return LlmProviderError(
+            f"Model {model} cannot generate images (wrong or chat-only model). "
+            "Set LLM_IMAGE_MODEL to an image-capable id (e.g. dall-e-3).",
+            model=model,
+            kind="unsupported",
+        )
+    if isinstance(exc, (BadRequestError, InvalidRequestError)):
+        if _looks_like_unsupported_image(text):
+            return LlmProviderError(
+                f"Model {model} cannot generate images (wrong or chat-only model). "
+                "Set LLM_IMAGE_MODEL to an image-capable id (e.g. dall-e-3).",
+                model=model,
+                kind="unsupported",
+            )
         return LlmProviderError(
             f"LLM rejected the request for {model} (bad model id or unsupported params). Check LLM_*_MODEL.",
             model=model,
             kind="bad_request",
         )
     # LiteLLM sometimes nests provider names in a generic Exception message.
-    text = str(exc)
     lower = text.lower()
     if "timeout" in lower:
         return LlmProviderError(
@@ -147,7 +197,16 @@ def _wrap_provider_error(exc: BaseException, *, model: str) -> LlmProviderError:
 def _is_provider_failure(exc: BaseException) -> bool:
     if isinstance(
         exc,
-        (Timeout, APIConnectionError, AuthenticationError, RateLimitError, BadRequestError),
+        (
+            Timeout,
+            APIConnectionError,
+            AuthenticationError,
+            RateLimitError,
+            BadRequestError,
+            InvalidRequestError,
+            NotFoundError,
+            UnsupportedParamsError,
+        ),
     ):
         return True
     text = str(exc).lower()
@@ -163,6 +222,11 @@ def _is_provider_failure(exc: BaseException) -> bool:
             "model_not_found",
             "does not exist",
             "invalid model",
+            "does not support",
+            "doesn't support",
+            "not support",
+            "unsupported",
+            "not supported",
         )
     )
 
@@ -246,3 +310,72 @@ async def astream_text(
         if _is_provider_failure(exc):
             raise _wrap_provider_error(exc, model=model) from exc
         raise
+
+
+async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
+    """Call the configured image model; return a hostable URL.
+
+    Raises ``LlmProviderError`` when the model is missing, chat-only, or the
+    provider rejects the request — callers must surface this to the UI.
+    """
+    raw = resolve_image_model()
+    if not raw:
+        raise LlmProviderError(
+            "No image model configured (set LLM_IMAGE_MODEL, e.g. dall-e-3). "
+            "Chat-only models cannot generate images.",
+            kind="unsupported",
+        )
+    if raw.lower() == "placeholder":
+        raise LlmProviderError(
+            "LLM_IMAGE_MODEL=placeholder — mock mode is handled by the session node.",
+            model=raw,
+            kind="unsupported",
+        )
+
+    configure_litellm()
+    model = _litellm_model(raw)
+    kwargs: dict = {
+        "model": model,
+        "prompt": prompt,
+        "size": size,
+        "timeout": settings.llm_timeout_seconds,
+    }
+    if settings.llm_api_base:
+        kwargs["api_base"] = settings.llm_api_base
+        if settings.openai_api_key:
+            kwargs["api_key"] = settings.openai_api_key
+
+    try:
+        response = await litellm.aimage_generation(**kwargs)
+    except Exception as exc:
+        if _is_provider_failure(exc):
+            raise _wrap_provider_error(exc, model=model) from exc
+        raise
+
+    data = getattr(response, "data", None) or []
+    if not data:
+        raise LlmProviderError(
+            f"Image model {model} returned no image data.",
+            model=model,
+            kind="provider",
+        )
+    first = data[0]
+    url = getattr(first, "url", None)
+    if not url and isinstance(first, dict):
+        url = first.get("url")
+    # Some providers return b64_json instead of a URL.
+    b64 = getattr(first, "b64_json", None)
+    if not b64 and isinstance(first, dict):
+        b64 = first.get("b64_json")
+    if url:
+        return str(url)
+    if b64:
+        # Providers often return JPEG bytes even when labelled loosely; sniff magic.
+        raw = str(b64)
+        mime = "image/jpeg" if raw.startswith("/9j/") else "image/png"
+        return f"data:{mime};base64,{raw}"
+    raise LlmProviderError(
+        f"Image model {model} response had neither url nor b64_json.",
+        model=model,
+        kind="provider",
+    )
