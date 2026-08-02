@@ -20,6 +20,7 @@ import {
   parseAgentProgress,
   parseBrief,
   parseDraftCopy,
+  previewAnchorFromActions,
   waitForSseReady,
 } from "./session-helpers";
 import { getRememberedSessionId, setRememberedSessionId } from "./session-storage";
@@ -63,6 +64,8 @@ export function useSession(companyId: string | undefined) {
   const [interruptAfterMessageId, setInterruptAfterMessageId] = useState<string | null>(
     null,
   );
+  // Mobile preview-ready banner — anchor to the turn that produced preview.updated.
+  const [previewAfterMessageId, setPreviewAfterMessageId] = useState<string | null>(null);
   // True while the graph sits at interrupt_before executor_image_plan.
   const [awaitingImageOk, setAwaitingImageOk] = useState(false);
   const [draft, setDraft] = useState<PreviewDraft | null>(null);
@@ -85,6 +88,10 @@ export function useSession(companyId: string | undefined) {
   const turnAnchorRef = useRef<string | null>(null);
   const restoreAttemptedRef = useRef<string | null>(null);
   const sendAbortRef = useRef<AbortController | null>(null);
+  // Bumped on Stop / turn.cancelled so late POST responses cannot re-apply a
+  // discarded turn. suppressLiveTurnEventsRef drops late SSE until the next send.
+  const turnEpochRef = useRef(0);
+  const suppressLiveTurnEventsRef = useRef(false);
 
   const resetTransientUi = useCallback(() => {
     setStreamingText(null);
@@ -93,6 +100,7 @@ export function useSession(companyId: string | undefined) {
     setBrief(null);
     setBriefAfterMessageId(null);
     setInterruptAfterMessageId(null);
+    setPreviewAfterMessageId(null);
     setAwaitingImageOk(false);
     setDraft(null);
     setConfirmReceipt(null);
@@ -238,6 +246,57 @@ export function useSession(companyId: string | undefined) {
   // POST /messages response repeats them at the end for the no-SSE path.
   const applyTurnEvent = useCallback(
     (type: string, data: Record<string, unknown>) => {
+      if (type === "turn.cancelled") {
+        // Invalidate any in-flight send/resume apply + late SSE progress.
+        turnEpochRef.current += 1;
+        suppressLiveTurnEventsRef.current = true;
+        const discardedAnchor = turnAnchorRef.current;
+        turnAnchorRef.current = null;
+
+        // Mid resume-image Stop re-parks; keep Generate-image CTA.
+        const stillParked = data.awaiting_image_ok === true;
+        setAwaitingImageOk(stillParked);
+        if (stillParked) {
+          setInterruptAfterMessageId(lastUserMessageId());
+          setStreamingText(null);
+          setAgentProgress(null);
+          finishRunningActions();
+        } else {
+          setInterruptAfterMessageId(null);
+          // Keep brief until stopTurn hydrates from sessions.state (may still exist).
+          setStreamingText(null);
+          setAgentProgress(null);
+          // Optimistic prune — stopTurn hydrate is source of truth right after.
+          if (discardedAnchor) {
+            const drop = (id: string) =>
+              id === discardedAnchor || id.startsWith("local-");
+            messagesRef.current = messagesRef.current.filter((m) => !drop(m.id));
+            setMessages(messagesRef.current);
+            setAgentActions((prev) =>
+              prev.filter((a) => !a.afterMessageId || !drop(a.afterMessageId)),
+            );
+          } else {
+            finishRunningActions();
+          }
+        }
+        setSending(false);
+        setStopping(false);
+        return;
+      }
+      // After Stop, ignore late live events from the discarded turn.
+      if (suppressLiveTurnEventsRef.current) {
+        if (
+          type === "agent.progress" ||
+          type === "brief.updated" ||
+          type === "draft.awaiting_image_ok" ||
+          type === "message.delta" ||
+          type === "draft.copy_updated" ||
+          type === "draft.updated" ||
+          type === "preview.updated"
+        ) {
+          return;
+        }
+      }
       if (type === "agent.progress") {
         const progress = parseAgentProgress(data);
         if (progress) appendAgentAction(progress, lastUserMessageId());
@@ -254,18 +313,6 @@ export function useSession(companyId: string | undefined) {
       if (type === "draft.awaiting_image_ok") {
         setAwaitingImageOk(true);
         setInterruptAfterMessageId(lastUserMessageId());
-        return;
-      }
-      if (type === "turn.cancelled") {
-        setAwaitingImageOk(false);
-        setInterruptAfterMessageId(null);
-        setBrief(null);
-        setBriefAfterMessageId(null);
-        setStreamingText(null);
-        setAgentProgress(null);
-        finishRunningActions();
-        setSending(false);
-        setStopping(false);
         return;
       }
       if (type === "draft.copy_updated") {
@@ -287,6 +334,7 @@ export function useSession(companyId: string | undefined) {
       if (type === "preview.updated") {
         setAwaitingImageOk(false);
         setInterruptAfterMessageId(null);
+        setPreviewAfterMessageId(lastUserMessageId());
         const copy = parseDraftCopy(data.copy);
         setDraft((prev) =>
           mergePreviewDraft(prev, {
@@ -386,6 +434,19 @@ export function useSession(companyId: string | undefined) {
                 typeof data.platform === "string" ? data.platform : null,
             }),
           );
+          if (typeof data.mode === "string" && data.mode === "PREVIEW") {
+            setPreviewAfterMessageId((prev) => {
+              if (prev && messagesRef.current.some((m) => m.id === prev)) {
+                return prev;
+              }
+              return previewAnchorFromActions(
+                // Prefer live actions; fall back to rebuild from messages.
+                // agentActions state may be stale in this closure — rebuild.
+                agentActionsFromMessages(messagesRef.current),
+                messagesRef.current,
+              );
+            });
+          }
           const interrupted =
             data.interrupted === true || state?.awaiting_image_ok === true;
           if (interrupted) {
@@ -399,12 +460,14 @@ export function useSession(companyId: string | undefined) {
           return;
         }
         if (type === "message.delta") {
+          if (suppressLiveTurnEventsRef.current) return;
           if (typeof data.content === "string" && data.content) {
             setStreamingText((prev) => (prev ?? "") + data.content);
           }
           return;
         }
         if (type === "message.assistant") {
+          if (suppressLiveTurnEventsRef.current) return;
           const id = typeof data.id === "string" ? data.id : null;
           const content = typeof data.content === "string" ? data.content : null;
           if (!id || !content) return;
@@ -468,20 +531,45 @@ export function useSession(companyId: string | undefined) {
       setAgentActions(agentActionsFromMessages(res.messages));
       setRememberedSessionId(companyId, res.session.id);
       const lastUser = [...res.messages].reverse().find((m) => m.role === "user");
-      if (lastUser) setBriefAfterMessageId(lastUser.id);
+      const parsedBrief = parseBrief(res.brief);
+      setBrief(parsedBrief);
+      setBriefAfterMessageId(parsedBrief && lastUser ? lastUser.id : null);
+      const parked = res.awaiting_image_ok === true;
+      setAwaitingImageOk(parked);
+      setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
+      if (res.session.mode === "PREVIEW") {
+        setPreviewAfterMessageId(
+          previewAnchorFromActions(
+            agentActionsFromMessages(res.messages),
+            res.messages,
+          ),
+        );
+      } else {
+        setPreviewAfterMessageId(null);
+      }
       void refreshHistory();
     },
     [accessToken, companyId, resetTransientUi, refreshHistory],
   );
 
-  const startNewChat = useCallback(() => {
+  const startNewChat = useCallback(async () => {
+    if (!accessToken || !companyId) return;
+    // Already on an empty draft session — just clear chrome, don't spawn another row.
+    if (session && messagesRef.current.length === 0) {
+      resetTransientUi();
+      setMode("CHAT");
+      return;
+    }
     resetTransientUi();
-    setSession(null);
     setMessages([]);
     messagesRef.current = [];
     setMode("CHAT");
-    setRememberedSessionId(companyId, null);
-  }, [companyId, resetTransientUi]);
+    const active = await apiCreateSession(accessToken, companyId);
+    setSession(active);
+    setRememberedSessionId(companyId, active.id);
+    await waitForSseReady(sseReadyRef);
+    void refreshHistory();
+  }, [accessToken, companyId, session, resetTransientUi, refreshHistory]);
 
   const renameSession = useCallback(
     async (targetSessionId: string, title: string) => {
@@ -528,7 +616,7 @@ export function useSession(companyId: string | undefined) {
       await apiDeleteSession(accessToken, targetSessionId);
       setHistory((prev) => prev.filter((s) => s.id !== targetSessionId));
       if (session?.id === targetSessionId) {
-        startNewChat();
+        void startNewChat();
       } else if (getRememberedSessionId(companyId) === targetSessionId) {
         setRememberedSessionId(companyId, null);
       }
@@ -553,7 +641,7 @@ export function useSession(companyId: string | undefined) {
     void openSession(remembered)
       .catch(() => {
         setRememberedSessionId(companyId, null);
-        startNewChat();
+        void startNewChat();
       })
       .finally(() => {
         setRestoring(false);
@@ -572,6 +660,8 @@ export function useSession(companyId: string | undefined) {
       setAgentProgress(null);
       setLlmError(null);
 
+      const epoch = ++turnEpochRef.current;
+      suppressLiveTurnEventsRef.current = false;
       const abort = new AbortController();
       sendAbortRef.current = abort;
 
@@ -601,6 +691,10 @@ export function useSession(companyId: string | undefined) {
         const res = await apiPostSessionMessage(accessToken, active.id, text, {
           signal: abort.signal,
         });
+        // Stop (or a newer turn) won the race — do not re-apply discarded payload.
+        if (abort.signal.aborted || epoch !== turnEpochRef.current) {
+          return;
+        }
         messagesRef.current = res.messages;
         setMessages(res.messages);
         setMode(res.mode);
@@ -634,10 +728,15 @@ export function useSession(companyId: string | undefined) {
           if (res.interrupted || hasInterruptEvent) {
             setInterruptAfterMessageId(serverLastUser.id);
           }
+          const hasPreviewEvent = res.events?.some((ev) => ev.type === "preview.updated");
+          if (hasPreviewEvent) setPreviewAfterMessageId(serverLastUser.id);
           setBriefAfterMessageId((prev) =>
             prev?.startsWith("local-") ? serverLastUser.id : prev,
           );
           setInterruptAfterMessageId((prev) =>
+            prev?.startsWith("local-") ? serverLastUser.id : prev,
+          );
+          setPreviewAfterMessageId((prev) =>
             prev?.startsWith("local-") ? serverLastUser.id : prev,
           );
           ensureOutcomeActions(res.events ?? [], serverLastUser.id);
@@ -669,7 +768,7 @@ export function useSession(companyId: string | undefined) {
         turnAnchorRef.current = null;
         void refreshHistory();
       } catch (err) {
-        if (abort.signal.aborted) {
+        if (abort.signal.aborted || epoch !== turnEpochRef.current) {
           // Stop path owns UI reset via turn.cancelled / stopTurn refresh.
           return;
         }
@@ -762,16 +861,21 @@ export function useSession(companyId: string | undefined) {
     if (!accessToken || !sessionId || sending || stopping || !awaitingImageOk) return;
     setSending(true);
     setLlmError(null);
+    const epoch = ++turnEpochRef.current;
+    suppressLiveTurnEventsRef.current = false;
     const abort = new AbortController();
     sendAbortRef.current = abort;
     try {
       const res = await apiResumeSessionImage(accessToken, sessionId, {
         signal: abort.signal,
       });
+      if (abort.signal.aborted || epoch !== turnEpochRef.current) {
+        return;
+      }
       applyTurnResponse(res);
       void refreshHistory();
     } catch (err) {
-      if (abort.signal.aborted) return;
+      if (abort.signal.aborted || epoch !== turnEpochRef.current) return;
       throw err;
     } finally {
       if (sendAbortRef.current === abort) sendAbortRef.current = null;
@@ -791,24 +895,45 @@ export function useSession(companyId: string | undefined) {
     if (!accessToken || !sessionId || stopping) return;
     if (!sending && !awaitingImageOk) return;
     setStopping(true);
+    // Invalidate in-flight send/resume before abort so late resolves are dropped.
+    turnEpochRef.current += 1;
+    suppressLiveTurnEventsRef.current = true;
     sendAbortRef.current?.abort();
     try {
-      await apiStopSessionTurn(accessToken, sessionId);
+      const stopped = await apiStopSessionTurn(accessToken, sessionId);
+      const stillParked = stopped.awaiting_image_ok === true;
       // Reload transcript after discard (user message / draft may be gone).
       const hydrated = await apiGetSessionMessages(accessToken, sessionId);
       messagesRef.current = hydrated.messages;
       setMessages(hydrated.messages);
       setMode(hydrated.session.mode);
       setSession(hydrated.session);
-      setAwaitingImageOk(false);
-      setInterruptAfterMessageId(null);
-      setBrief(null);
-      setBriefAfterMessageId(null);
+      const lastUser = [...hydrated.messages]
+        .reverse()
+        .find((m) => m.role === "user");
+      const parked =
+        stillParked || hydrated.awaiting_image_ok === true;
+      setAwaitingImageOk(parked);
+      setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
+      // Restore BriefCard from sessions.state (Stop must not wipe a surviving brief).
+      const parsedBrief = parseBrief(hydrated.brief);
+      setBrief(parsedBrief);
+      setBriefAfterMessageId(parsedBrief && lastUser ? lastUser.id : null);
+      if (!parked) {
+        turnAnchorRef.current = null;
+      }
       setStreamingText(null);
       setAgentProgress(null);
-      setAgentActions(agentActionsFromMessages(hydrated.messages));
+      const actions = agentActionsFromMessages(hydrated.messages);
+      setAgentActions(actions);
+      if (hydrated.session.mode === "PREVIEW") {
+        setPreviewAfterMessageId(
+          previewAnchorFromActions(actions, hydrated.messages),
+        );
+      } else {
+        setPreviewAfterMessageId(null);
+      }
       finishRunningActions();
-      turnAnchorRef.current = null;
       void refreshHistory();
     } finally {
       setStopping(false);
@@ -911,6 +1036,7 @@ export function useSession(companyId: string | undefined) {
     brief,
     briefAfterMessageId,
     interruptAfterMessageId,
+    previewAfterMessageId,
     awaitingImageOk,
     draft,
     confirmReceipt,

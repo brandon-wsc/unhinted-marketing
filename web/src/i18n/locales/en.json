@@ -110,6 +110,7 @@
       "untitled": "Untitled chat",
       "restoring": "Restoring chat…",
       "openFailed": "Could not open that chat",
+      "createFailed": "Could not start a new chat",
       "more": "More options",
       "pin": "Pin",
       "unpin": "Unpin",
