@@ -11,6 +11,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
+coverage.xml
+lcov.info
 htmlcov/
 dist/
 build/
@@ -20,6 +23,8 @@ node_modules/
 web/dist/
 web/.vite/
 web/coverage/
+web/coverage-*/
+*.tsbuildinfo
 *.local
 
 # IDE

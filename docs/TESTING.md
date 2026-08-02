@@ -47,12 +47,12 @@ Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 
 | Tier | Paths | Target | Gate |
 |------|-------|--------|------|
-| **1 — Utils** | `web/src/lib/**` (except deferred `api.ts` fetch wrappers) · `features/session/session-storage.ts` | **85–95%** | **Fail** |
+| **1 — Utils** | `web/src/lib/**` (except deferred `api.ts` fetch wrappers) · `features/session/session-storage.ts` · `features/session/session-helpers.ts` | **85–95%** | **Fail** |
 | **2 — Shared (behavioral)** | `components/password-box.tsx` · `components/user-menu-dropdown.tsx` | **50–70%** behavior | Soft floor (50%) in Vitest thresholds |
 | **3 — Shared (presentational)** | `app-header.tsx` · `app-logo.tsx` · mostly-layout `auth-layout.tsx` | **Omit** or snapshot optional | No gate |
 | **4 — Pages** | `web/src/pages/**` | **20–40%** or smoke only | No hard gate — logic lives in lib/context |
 | **5 — Feature UI** | `features/session/components/**` (`chat-panel`, `session-history`, …) | **15–30%** later | No gate in v1 CI |
-| **6 — Hooks** | `use-session.ts` (large) · related hooks | **25–40%** progressive | Prefer extract-pure + unit; full hook suite later |
+| **6 — Hooks** | `use-session.ts` (large) · related hooks | **25–40%** progressive | Pure helpers extracted (`session-helpers.ts`); hook suite via mocked RTL `renderHook` — still omitted from hard cov gate |
 | **Static** | `npm run build` (`tsc -b && vite build`) | Must pass | **Fail** |
 
 ---
@@ -85,7 +85,7 @@ pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
 Frontend Vitest instrumentation (see `web/vite.config.ts`):
 
 ```text
-include: src/lib/** , session-storage.ts , password-box.tsx , user-menu-dropdown.tsx
+include: src/lib/** , session-storage.ts , session-helpers.ts , password-box.tsx , user-menu-dropdown.tsx
 omit:   src/pages/** , src/features/session/components/** , src/main.tsx ,
         use-session.ts , src/lib/api.ts (fetch wrappers deferred)
 ```
