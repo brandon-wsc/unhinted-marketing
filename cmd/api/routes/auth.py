@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
+from internal.auth.rate_limit import enforce_auth_rate_limit
 from internal.auth.service import (
     AuthError,
     get_user_with_memberships,
@@ -79,9 +80,11 @@ def _token_response(
 @router.post("/register", response_model=TokenResponse, status_code=201)
 async def register(
     body: RegisterRequest,
+    request: Request,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
+    enforce_auth_rate_limit(request, bucket="register")
     try:
         user, access, refresh = await register_user(
             db,
@@ -100,9 +103,11 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,
+    request: Request,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
+    enforce_auth_rate_limit(request, bucket="login")
     try:
         user, access, refresh = await login_user(db, email=body.email, password=body.password)
     except AuthError as exc:
@@ -118,6 +123,7 @@ async def refresh(
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
+    enforce_auth_rate_limit(request, bucket="refresh")
     raw = request.cookies.get(REFRESH_COOKIE)
     if not raw:
         raise HTTPException(status_code=401, detail="Refresh token missing")

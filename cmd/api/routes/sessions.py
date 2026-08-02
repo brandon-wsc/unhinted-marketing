@@ -322,6 +322,12 @@ async def confirm_session(
 
     existing = await repos.get_tool_receipt_by_idempotency(db, body.idempotency_key)
     if existing:
+        # User-private: never return another session/user's receipt (IDOR).
+        if existing.session_id != session.id or existing.user_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Idempotency key already used",
+            )
         return ConfirmSessionResponse(
             receipt_id=existing.id,
             status=existing.status,

@@ -89,3 +89,57 @@ async def test_confirm_idempotency(client, db_session) -> None:
     assert second.status_code == 200
     assert second.json()["receipt_id"] == receipt_id
     assert second.json()["idempotency_key"] == idem
+
+
+@pytest.mark.asyncio
+async def test_confirm_idempotency_key_not_shared_across_users(client, db_session) -> None:
+    """User-private: replaying another user's idempotency_key must not leak their receipt."""
+    owner = await register_user(client, email=f"own-idem-{uuid.uuid4().hex[:8]}@example.com")
+    other = await register_user(
+        client,
+        email=f"oth-idem-{uuid.uuid4().hex[:8]}@example.com",
+        organization_name="Other Idem Co",
+    )
+    owner_uid = uuid.UUID(owner["user"]["id"])
+    owner_cid = uuid.UUID(owner["user"]["organizations"][0]["id"])
+    other_uid = uuid.UUID(other["user"]["id"])
+    other_cid = uuid.UUID(other["user"]["organizations"][0]["id"])
+
+    owner_token = "owner-confirm-token-dddd"
+    other_token = "other-confirm-token-eeee"
+    owner_sid = await seed_preview_session(
+        db_session,
+        user_id=owner_uid,
+        company_id=owner_cid,
+        approval_token=owner_token,
+    )
+    other_sid = await seed_preview_session(
+        db_session,
+        user_id=other_uid,
+        company_id=other_cid,
+        approval_token=other_token,
+    )
+
+    shared_idem = f"shared-idem-{uuid.uuid4().hex}"
+    first = await client.post(
+        f"/sessions/{owner_sid}/confirm",
+        headers=auth_header(owner["access_token"]),
+        json={
+            "approval_token": owner_token,
+            "idempotency_key": shared_idem,
+            "platform": "stub",
+        },
+    )
+    assert first.status_code == 200, first.text
+
+    conflict = await client.post(
+        f"/sessions/{other_sid}/confirm",
+        headers=auth_header(other["access_token"]),
+        json={
+            "approval_token": other_token,
+            "idempotency_key": shared_idem,
+            "platform": "stub",
+        },
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"] == "Idempotency key already used"
