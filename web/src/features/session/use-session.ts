@@ -554,10 +554,30 @@ export function useSession(companyId: string | undefined) {
 
   const startNewChat = useCallback(async () => {
     if (!accessToken || !companyId) return;
+
+    const upsertHistoryRow = (row: Session) => {
+      setHistory((prev) => {
+        if (prev.some((s) => s.id === row.id)) return prev;
+        const item: SessionListItem = {
+          id: row.id,
+          company_id: row.company_id,
+          user_id: row.user_id,
+          mode: row.mode,
+          status: row.status,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          title: null,
+          pinned: false,
+        };
+        return [item, ...prev];
+      });
+    };
+
     // Already on an empty draft session — just clear chrome, don't spawn another row.
     if (session && messagesRef.current.length === 0) {
       resetTransientUi();
       setMode("CHAT");
+      upsertHistoryRow(session);
       return;
     }
     resetTransientUi();
@@ -567,8 +587,10 @@ export function useSession(companyId: string | undefined) {
     const active = await apiCreateSession(accessToken, companyId);
     setSession(active);
     setRememberedSessionId(companyId, active.id);
-    await waitForSseReady(sseReadyRef);
+    // Optimistic sidebar row — don't wait on SSE before the list updates.
+    upsertHistoryRow(active);
     void refreshHistory();
+    void waitForSseReady(sseReadyRef);
   }, [accessToken, companyId, session, resetTransientUi, refreshHistory]);
 
   const renameSession = useCallback(

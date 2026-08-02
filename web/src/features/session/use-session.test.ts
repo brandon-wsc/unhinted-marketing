@@ -183,6 +183,16 @@ describe("useSession", () => {
       updated_at: "2026-01-02T00:00:00Z",
     };
     apiCreateSession.mockResolvedValue(fresh);
+    apiListSessions.mockResolvedValue([
+      {
+        ...historyItem,
+        id: "sess-new",
+        title: null,
+        created_at: fresh.created_at,
+        updated_at: fresh.updated_at,
+      },
+      historyItem,
+    ]);
 
     const { result } = renderHook(() => useSession("co-1"));
     await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
@@ -195,6 +205,7 @@ describe("useSession", () => {
     expect(result.current.session?.id).toBe("sess-new");
     expect(result.current.messages).toEqual([]);
     expect(setRememberedSessionId).toHaveBeenCalledWith("co-1", "sess-new");
+    expect(result.current.history.some((s) => s.id === "sess-new")).toBe(true);
   });
 
   it("startNewChat on empty session does not create another row", async () => {
