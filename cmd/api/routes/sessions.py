@@ -244,8 +244,8 @@ async def session_events(
         graph = get_session_graph()
         snap = await graph.aget_state({"configurable": {"thread_id": str(session.id)}})
         interrupted = bool(snap.next)
-    except Exception:  # noqa: BLE001 — graph/checkpointer may be unavailable in tests
-        # Graph may be unset in tests / early boot; keep snapshot usable.
+    except Exception:
+        # Graph/checkpointer may be unavailable in tests / early boot.
         logger.debug("session events: could not read graph interrupt state", exc_info=True)
 
     snapshot_data = {

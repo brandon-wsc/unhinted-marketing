@@ -28,6 +28,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "httpx>=0.28.0",
     "ruff>=0.8.0",
+    "greenlet>=3.0.0",
 ]
 
 [build-system]
@@ -66,6 +67,7 @@ ignore = [
 "internal/llm/**" = ["UP042"]
 "internal/perception/**" = ["BLE001"]
 "internal/session/service.py" = ["BLE001", "RUF005"]
+"cmd/api/routes/sessions.py" = ["BLE001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["cmd", "internal", "schemas"]
@@ -83,6 +85,10 @@ addopts = "-p no:debugging"
 # CI should run separate reports (utils ≥85%, api routes ≥70%).
 [tool.coverage.run]
 branch = true
+# FastAPI (threads) + async SQLAlchemy (greenlets): without this, Linux CI under-reports
+# route lines after await db calls while tests still pass.
+concurrency = ["thread", "greenlet"]
+relative_files = true
 source = ["internal", "schemas", "cmd"]
 omit = [
     "**/__init__.py",
