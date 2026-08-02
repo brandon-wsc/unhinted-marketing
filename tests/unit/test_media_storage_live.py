@@ -55,6 +55,6 @@ async def test_live_put_and_fetch_roundtrip() -> None:
 
     import urllib.request
 
-    with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310 — local MinIO
+    with urllib.request.urlopen(url, timeout=5) as resp:
         body = resp.read()
     assert body == TINY_PNG
