@@ -75,6 +75,8 @@ class DraftAwaitingImageOkData(BaseModel):
 class LlmFailedData(BaseModel):
     error: str = "AI service unavailable"
     code: str | None = None
+    kind: str | None = None
+    model: str | None = None
 
 
 class ReviewFailedData(BaseModel):

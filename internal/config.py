@@ -21,7 +21,19 @@ class Settings(BaseSettings):
     llm_cheap_model: str = "gpt-4o-mini"
     llm_medium_model: str = "gpt-4o-mini"
     llm_strong_model: str = "gpt-4o"
+    # Dedicated image model (e.g. dall-e-3). Chat-only ids will fail at runtime.
+    # Empty = image gen disabled (error when credentials exist). "placeholder" = mock URL.
+    llm_image_model: str | None = None
     llm_timeout_seconds: float = 45.0
+
+    # S3-compatible media (MinIO locally — see docker-compose `minio` service)
+    s3_endpoint_url: str | None = None
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
+    s3_bucket: str = "unhinted-media"
+    s3_region: str = "us-east-1"
+    # Browser-facing base (path-style). Default derived as {endpoint}/{bucket}.
+    s3_public_base_url: str | None = None
 
     # Perception / workers
     question_cache_ttl_hours: int = 12

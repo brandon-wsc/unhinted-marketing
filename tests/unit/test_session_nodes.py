@@ -299,12 +299,84 @@ async def test_executor_image_plan_fallback(no_llm: None) -> None:
 
 
 @pytest.mark.asyncio
-async def test_executor_image_gen_placeholder() -> None:
+async def test_executor_image_gen_placeholder_without_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: False)
     out = await N.executor_image_gen(
         _base_state(thread_id="22222222-2222-2222-2222-222222222222", revision=2)
     )
     assert out["image_url"].startswith("placeholder://")
     assert "r3.png" in out["image_url"]
+
+
+@pytest.mark.asyncio
+async def test_executor_image_gen_errors_when_image_model_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from internal.llm.router import LlmProviderError
+
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    monkeypatch.setattr(N, "resolve_image_model", lambda: None)
+    with pytest.raises(LlmProviderError) as ei:
+        await N.executor_image_gen(_base_state(revision=0, image_plan={"prompt": "x"}))
+    assert ei.value.kind == "unsupported"
+    assert "LLM_IMAGE_MODEL" in ei.value.message
+
+
+@pytest.mark.asyncio
+async def test_executor_image_gen_explicit_placeholder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    monkeypatch.setattr(N, "resolve_image_model", lambda: "placeholder")
+    out = await N.executor_image_gen(
+        _base_state(thread_id="22222222-2222-2222-2222-222222222222", revision=0)
+    )
+    assert out["image_url"].startswith("placeholder://")
+
+
+@pytest.mark.asyncio
+async def test_executor_image_gen_surfaces_unsupported_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from internal.llm.router import LlmProviderError
+
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    monkeypatch.setattr(N, "resolve_image_model", lambda: "deepseek-v4-flash")
+
+    async def boom(*, prompt: str, size: str = "1024x1024") -> str:
+        raise LlmProviderError(
+            "Model deepseek-v4-flash cannot generate images (wrong or chat-only model). "
+            "Set LLM_IMAGE_MODEL to an image-capable id (e.g. dall-e-3).",
+            model="deepseek-v4-flash",
+            kind="unsupported",
+        )
+
+    monkeypatch.setattr(N, "generate_image", boom)
+    with pytest.raises(LlmProviderError) as ei:
+        await N.executor_image_gen(
+            _base_state(image_plan={"prompt": "HK skyline editorial"})
+        )
+    assert ei.value.kind == "unsupported"
+    assert "deepseek" in ei.value.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_executor_image_gen_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    monkeypatch.setattr(N, "resolve_image_model", lambda: "dall-e-3")
+    monkeypatch.setattr(
+        N,
+        "generate_image",
+        AsyncMock(return_value="https://cdn.example/img.png"),
+    )
+    out = await N.executor_image_gen(
+        _base_state(image_plan={"prompt": "bright HK cafe"})
+    )
+    assert out["image_url"] == "https://cdn.example/img.png"
 
 
 @pytest.mark.asyncio

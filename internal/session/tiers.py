@@ -14,6 +14,6 @@ NODE_MODEL_TIERS: dict[str, ModelTier | None] = {
     "reviewer": ModelTier.STRONG,
     "load_context": None,
     "grounding_check": None,
-    "executor_image_gen": None,  # worker dispatch; no LLM
+    "executor_image_gen": None,  # LLM_IMAGE_MODEL via generate_image (not chat tiers)
     "persist_preview": None,
 }

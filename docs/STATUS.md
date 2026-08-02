@@ -83,7 +83,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | Alembic `8791b607d5bc` (auth) | ✅ | `users`, `entities`, `organization_members`, `refresh_tokens` |
 | React web app | ✅ | Vite + React 19 + Tailwind v4 |
 | README | ✅ | Project intro; setup in GETTING_STARTED |
-| `docker-compose.yml` | ➖ | Removed — dev DB is external |
+| `docker-compose.yml` | ✅ | Local `db` (pgvector) + `minio` / `minio-init` (S3-compatible media) + adminer |
 | Auth rate limiting | ⬜ | Planned (Redis or in-memory) |
 | Automated tests | ✅ Backend + FE Tier 1/2 + CI | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && npm test` (Vitest + RTL — lib utils + PasswordBox / UserMenuDropdown). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
@@ -110,12 +110,12 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 |------|--------|-------|
 | ROADMAP graph contract | ✅ | 12 nodes + `persist_preview`; edges + interrupt |
 | Migrations | ✅ | Alembic `526ca8643303` sessions tables; `86f20bd3cb7d` session `title` + `pinned` |
-| LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /messages` |
+| LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /messages` (blind resume while parked is a known follow-up) |
 | Postgres checkpointer | ✅ | `AsyncPostgresSaver` + pool (`check` / keepalives / idle recycle); `setup()` on API lifespan; `thread_id = session.id` |
 | Node logic | ✅ | LiteLLM + structured I/O; heuristic fallbacks; PG load/grounding |
 | Session HTTP API | ✅ | `GET/POST /sessions`, `PATCH/DELETE /sessions/{id}`, `/messages`, `/draft`, `/confirm` |
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform`; snapshot `interrupted` from graph checkpoint (+ `sessions.state.awaiting_image_ok`) |
-| Image generation worker | ⏸ **Held** | Still `placeholder://` URL — fine for UI mock preview |
+| Image generation worker | 🟡 Soft | LiteLLM ``aimage_generation`` via ``LLM_IMAGE_MODEL``; chat-only / unset → ``llm.failed``. ``data:`` results upload to S3-compatible store (MinIO) when ``S3_*`` configured; else remain data URLs. ``placeholder`` / no credentials → mock URL |
 | `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
 | Curl exit-criteria script | ⏸ **Held** | Manual/API path works; formal curl checklist later |
 
@@ -276,6 +276,9 @@ unhinted-marketing/
 | `LLM_API_BASE` | Optional OpenAI-compatible proxy base URL (OpenRouter, DeepSeek, Azure, …). When set, bare model ids are sent as `openai/<id>` so LiteLLM uses the OpenAI-compatible client against that base (avoids native Deepseek routing ignoring `api_base`) |
 | `ANTHROPIC_API_KEY` | Optional alternate provider |
 | `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `gpt-4o-mini`, `deepseek-chat`) |
+| `LLM_IMAGE_MODEL` | Image-capable id (e.g. `dall-e-3` / OpenRouter image model). Unset with credentials → error on gen; `placeholder` = mock URL |
+| `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |
+| `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`) |
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |
 | `QUESTION_CACHE_TTL_HOURS` | Recommended questions cache (default 12) |
 
@@ -286,7 +289,7 @@ See `.env.example`. Local `.env` is gitignored.
 ## Known Gaps / Next Steps
 
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
-2. **Phase 2 held:** Image worker (replace `placeholder://`), formal curl exit-criteria script; `query_market_trends` **schema** landed (`schemas/tools.py`) — adapter wiring still held.
+2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + MinIO (`S3_*`) when configured; formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer; FB/Threads preview skins.
 4. **Hardening:** Auth rate limits; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; multi-worker SSE (Redis) if scaling beyond one API process; enable branch protection requiring CI checks; persist node traces / live LLM eval harness later.
 

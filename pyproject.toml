@@ -19,6 +19,7 @@ dependencies = [
     "litellm>=1.55.0",
     "langgraph>=0.2.0",
     "langgraph-checkpoint-postgres>=2.0.0",
+    "boto3>=1.35.0",
 ]
 
 [project.optional-dependencies]
@@ -79,6 +80,10 @@ testpaths = ["tests"]
 # Project top-level package `cmd` shadows stdlib `cmd`; pytest's debugging plugin
 # imports pdb → stdlib cmd.Cmd and crashes. Disable that plugin for local/CI runs.
 addopts = "-p no:debugging"
+markers = [
+    "minio: needs local MinIO (docker compose up -d minio minio-init)",
+    "live_llm: optional live provider calls (never required in CI)",
+]
 
 # Path-tiered coverage policy: docs/TESTING.md
 # Do NOT set a single global --cov-fail-under for the whole tree.
