@@ -39,6 +39,7 @@ export function ChatPanel() {
     brief,
     briefAfterMessageId,
     interruptAfterMessageId,
+    previewAfterMessageId,
     awaitingImageOk,
     draft,
     confirmReceipt,
@@ -105,8 +106,9 @@ export function ChatPanel() {
   }
 
   function handleNewChat() {
-    startNewChat();
-    goToChat();
+    void startNewChat()
+      .then(() => goToChat())
+      .catch(() => showError(t("chat.history.createFailed")));
   }
 
   async function handleRenameSession(id: string, title: string) {
@@ -299,6 +301,9 @@ export function ChatPanel() {
                     onResume={() => void onResumeImageGen()}
                   />
                 )}
+                {previewMode && previewAfterMessageId === m.id && (
+                  <PreviewReadyBanner onOpen={() => setMobileTab("preview")} />
+                )}
               </div>
               );
             })
@@ -324,12 +329,20 @@ export function ChatPanel() {
                 onResume={() => void onResumeImageGen()}
               />
             )}
+          {previewMode &&
+            previewAfterMessageId &&
+            !messages.some((m) => m.id === previewAfterMessageId) && (
+              <PreviewReadyBanner onOpen={() => setMobileTab("preview")} />
+            )}
           {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
           {awaitingImageOk && !interruptAfterMessageId && (
             <InterruptCard
               sending={sending || stopping}
               onResume={() => void onResumeImageGen()}
             />
+          )}
+          {previewMode && !previewAfterMessageId && (
+            <PreviewReadyBanner onOpen={() => setMobileTab("preview")} />
           )}
           {/* Inline LLM error when failed before an assistant row was persisted. */}
           {llmError && !messages.some((m) => isLlmErrorContent(m.content)) && (
@@ -342,15 +355,6 @@ export function ChatPanel() {
                   : undefined
               }
             />
-          )}
-          {previewMode && (
-            <button
-              type="button"
-              onClick={() => setMobileTab("preview")}
-              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-left text-xs text-[var(--color-muted)] transition hover:border-[var(--color-ring)] hover:text-[var(--color-foreground)] lg:hidden"
-            >
-              {t("preview.readyBanner")}
-            </button>
           )}
           {streamingText !== null && (
             <div className="text-sm leading-relaxed">
@@ -452,6 +456,19 @@ export function ChatPanel() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function PreviewReadyBanner({ onOpen }: { onOpen: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-left text-xs text-[var(--color-muted)] transition hover:border-[var(--color-ring)] hover:text-[var(--color-foreground)] lg:hidden"
+    >
+      {t("preview.readyBanner")}
+    </button>
   );
 }
 
