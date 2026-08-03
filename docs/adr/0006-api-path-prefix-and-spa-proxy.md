@@ -1,6 +1,6 @@
 # ADR 0006 — API path prefix vs SPA same-origin proxy
 
-- **Status:** Accepted (direction); migration not yet executed
+- **Status:** Accepted; **migration executed 2026-08-04**
 - **Date:** 2026-08-03
 - **Supersedes:** —
 - **Related:** [ADR 0005](./0005-platform-levels-and-llm-records.md) (admin API + web admin page)
@@ -33,14 +33,14 @@ This is not a React Router bug and not a FastAPI bug. It is a **namespace collis
 
 All public JSON/SSE routes move under `/api/…`, e.g.:
 
-| Today | Target |
-|-------|--------|
+| Before | After |
+|--------|-------|
 | `/auth/*` | `/api/auth/*` |
 | `/sessions/*` | `/api/sessions/*` |
 | `/companies/*` | `/api/companies/*` |
 | `/signals/*` | `/api/signals/*` |
 | `/admin/*` | `/api/admin/*` |
-| `/health` | `/api/health` (or keep bare `/health` for probes only — either is fine if documented) |
+| `/health` | `/api/health` |
 
 Vite (and production ingress) then needs **one** proxy rule:
 
@@ -69,7 +69,7 @@ Moving to `/api` touches FastAPI routers, OpenAPI export, web `fetch` paths, vit
 - **Better:** One proxy rule; SPA free to use any path; prod nginx/Caddy config matches mental model; eliminates the “refresh → Not Found JSON” class of bugs.
 - **Cost:** Mechanical path rewrite across backend + `web/` + docs/contracts; brief churn for anyone with hardcoded URLs.
 - **OpenAPI / contracts:** Paths in `docs/openapi.json` become `/api/…`; regenerate via `python -m scripts.export_contracts`.
-- **SSE:** Event URLs (`/sessions/{id}/events`) move with the rest; clients already go through the same origin proxy — update fetch paths only.
+- **SSE:** Event URLs (`/api/sessions/{id}/events`) move with the rest; clients already go through the same origin proxy — update fetch paths only.
 - **Status until done:** Current multi-key vite proxy + careful SPA naming remains the interim rule; document any new SPA route against the proxy prefix list before merge.
 
 ## Rejected alternatives (as the durable fix)
@@ -77,3 +77,12 @@ Moving to `/api` touches FastAPI routers, OpenAPI export, web `fetch` paths, vit
 - **Keep growing the vite proxy key list + bypass heuristics** — works in demos, fails the next colliding name, diverges from prod.
 - **HashRouter** — avoids server path issues but worsens URLs/bookmarks; does not teach the API/SPA split for production.
 - **Separate API origin in dev** (`localhost:8000` from the browser) — CORS + cookie/`SameSite` complexity; production will often same-origin again anyway.
+
+## Update (2026-08-04) — migration executed
+
+Hard cut (no dual-mount):
+
+- FastAPI: all routers + `/api/health` mounted under `/api` (`cmd/api/main.py`); refresh cookie `Path=/api/auth`
+- Web: `API_BASE = "/api"`; vite proxy is a single `"/api"` → `:8000` rule
+- SPA document route `/admin` kept; refresh now serves the React app (API is `/api/admin/*`)
+- Contracts re-exported; API tests updated

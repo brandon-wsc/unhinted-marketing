@@ -17,11 +17,11 @@ async def test_get_session_messages(client) -> None:
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(token)
 
-    created = await client.post("/sessions", headers=headers, json={"company_id": company_id})
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
     assert created.status_code == 201
     session_id = created.json()["id"]
 
-    res = await client.get(f"/sessions/{session_id}/messages", headers=headers)
+    res = await client.get(f"/api/sessions/{session_id}/messages", headers=headers)
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["session"]["id"] == session_id
@@ -33,7 +33,7 @@ async def test_session_not_found(client) -> None:
     data = await register_user(client)
     missing = uuid.uuid4()
     res = await client.get(
-        f"/sessions/{missing}/messages",
+        f"/api/sessions/{missing}/messages",
         headers=auth_header(data["access_token"]),
     )
     assert res.status_code == 404
@@ -44,7 +44,7 @@ async def test_session_not_found(client) -> None:
 async def test_create_session_company_not_found(client) -> None:
     data = await register_user(client)
     res = await client.post(
-        "/sessions",
+        "/api/sessions",
         headers=auth_header(data["access_token"]),
         json={"company_id": str(uuid.uuid4())},
     )
@@ -62,7 +62,7 @@ async def test_create_session_access_denied(client) -> None:
         organization_name="Other Co",
     )
     res = await client.post(
-        "/sessions",
+        "/api/sessions",
         headers=auth_header(other["access_token"]),
         json={"company_id": company_id},
     )
@@ -80,7 +80,7 @@ async def test_list_sessions_by_company_forbidden(client) -> None:
         organization_name="Other Co 2",
     )
     res = await client.get(
-        "/sessions",
+        "/api/sessions",
         headers=auth_header(other["access_token"]),
         params={"company_id": company_id},
     )
@@ -94,7 +94,7 @@ async def test_list_sessions_by_company_ok(client, db_session) -> None:
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(token)
 
-    created = await client.post("/sessions", headers=headers, json={"company_id": company_id})
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
     session_id = created.json()["id"]
     # Seed a user message so list title falls back to preview text
     db_session.add(
@@ -107,7 +107,7 @@ async def test_list_sessions_by_company_ok(client, db_session) -> None:
     )
     await db_session.commit()
 
-    res = await client.get("/sessions", headers=headers, params={"company_id": company_id})
+    res = await client.get("/api/sessions", headers=headers, params={"company_id": company_id})
     assert res.status_code == 200
     sessions = res.json()["sessions"]
     assert any(s["id"] == session_id for s in sessions)
@@ -120,10 +120,10 @@ async def test_update_session_requires_fields(client) -> None:
     data = await register_user(client)
     headers = auth_header(data["access_token"])
     company_id = data["user"]["organizations"][0]["id"]
-    created = await client.post("/sessions", headers=headers, json={"company_id": company_id})
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
     session_id = created.json()["id"]
 
-    res = await client.patch(f"/sessions/{session_id}", headers=headers, json={})
+    res = await client.patch(f"/api/sessions/{session_id}", headers=headers, json={})
     assert res.status_code == 400
     assert "Provide title" in res.json()["detail"]
 
@@ -133,11 +133,11 @@ async def test_update_draft_rejects_chat_mode(client) -> None:
     data = await register_user(client)
     headers = auth_header(data["access_token"])
     company_id = data["user"]["organizations"][0]["id"]
-    created = await client.post("/sessions", headers=headers, json={"company_id": company_id})
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
     session_id = created.json()["id"]
 
     res = await client.post(
-        f"/sessions/{session_id}/draft",
+        f"/api/sessions/{session_id}/draft",
         headers=headers,
         json={"caption": "nope", "hashtags": [], "cta": ""},
     )
@@ -162,10 +162,10 @@ async def test_session_events_snapshot(client, monkeypatch) -> None:
     data = await register_user(client)
     headers = auth_header(data["access_token"])
     company_id = data["user"]["organizations"][0]["id"]
-    created = await client.post("/sessions", headers=headers, json={"company_id": company_id})
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
     session_id = created.json()["id"]
 
-    res = await client.get(f"/sessions/{session_id}/events", headers=headers)
+    res = await client.get(f"/api/sessions/{session_id}/events", headers=headers)
     assert res.status_code == 200
     assert "session.snapshot" in res.text
     assert session_id in res.text
@@ -182,7 +182,7 @@ async def test_clear_session_title(client, db_session) -> None:
     )
 
     named = await client.patch(
-        f"/sessions/{session_id}",
+        f"/api/sessions/{session_id}",
         headers=headers,
         json={"title": "Temp"},
     )
@@ -190,7 +190,7 @@ async def test_clear_session_title(client, db_session) -> None:
     assert named.json()["title"] == "Temp"
 
     cleared = await client.patch(
-        f"/sessions/{session_id}",
+        f"/api/sessions/{session_id}",
         headers=headers,
         json={"clear_title": True},
     )

@@ -28,6 +28,8 @@ from schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 REFRESH_COOKIE = "refresh_token"
+# Cookie Path must match the mounted auth routes (ADR 0006).
+REFRESH_COOKIE_PATH = "/api/auth"
 
 
 def _user_response(user: User) -> UserResponse:
@@ -59,12 +61,12 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         secure=settings.refresh_cookie_secure,
         samesite=settings.refresh_cookie_samesite,
         max_age=settings.jwt_refresh_expire_days * 86400,
-        path="/auth",
+        path=REFRESH_COOKIE_PATH,
     )
 
 
 def _clear_refresh_cookie(response: Response) -> None:
-    response.delete_cookie(key=REFRESH_COOKIE, path="/auth")
+    response.delete_cookie(key=REFRESH_COOKIE, path=REFRESH_COOKIE_PATH)
 
 
 def _token_response(

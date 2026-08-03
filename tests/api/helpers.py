@@ -31,7 +31,7 @@ async def register_user(
         "display_name": display_name,
         "organization_name": organization_name,
     }
-    res = await client.post("/auth/register", json=payload)
+    res = await client.post("/api/auth/register", json=payload)
     assert res.status_code == 201, res.text
     return res.json()
 

@@ -1,3 +1,4 @@
+import { API_BASE } from "@/lib/api-base";
 import { parseApiErrorResponse } from "@/lib/parse-api-error";
 
 export type Organization = {
@@ -30,7 +31,7 @@ export async function apiRegister(input: {
   display_name: string;
   organization_name?: string;
 }): Promise<TokenResponse> {
-  const res = await fetch("/auth/register", {
+  const res = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -44,7 +45,7 @@ export async function apiLogin(input: {
   email: string;
   password: string;
 }): Promise<TokenResponse> {
-  const res = await fetch("/auth/login", {
+  const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -55,7 +56,7 @@ export async function apiLogin(input: {
 }
 
 export async function apiRefresh(): Promise<TokenResponse> {
-  const res = await fetch("/auth/refresh", {
+  const res = await fetch(`${API_BASE}/auth/refresh`, {
     method: "POST",
     credentials: "include",
   });
@@ -64,11 +65,11 @@ export async function apiRefresh(): Promise<TokenResponse> {
 }
 
 export async function apiLogout(): Promise<void> {
-  await fetch("/auth/logout", { method: "POST", credentials: "include" });
+  await fetch(`${API_BASE}/auth/logout`, { method: "POST", credentials: "include" });
 }
 
 export async function apiMe(accessToken: string): Promise<User> {
-  const res = await fetch("/auth/me", {
+  const res = await fetch(`${API_BASE}/auth/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     credentials: "include",
   });

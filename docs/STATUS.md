@@ -69,12 +69,12 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Platform privilege** — numeric `users.platform_level` ladder 0–10 with named rungs + gaps (`MEMBER`=3 default, `ADMIN`=6 read-only records, `SUPERADMIN`=9 full); threshold checks via `require_platform_level`; tenant `organization_members.role` stays separate
 - **Bootstrap** — CLI only: `python -m cmd.worker set-platform-role --email … --level superadmin`
 - **LLM call records** — every provider call (10 session LLM nodes + `question_generator` worker) persisted to `llm_call_records` with prompts, response, tokens, latency, status, `parse_ok` / `fallback_used`; instrumented at the `internal/llm/router.py` choke point; correlation via contextvars; toggle `LLM_RECORD_ENABLED` (default on)
-- **Admin surface** — `GET /admin/llm-calls` (+ `/{id}`), `GET /admin/node-steps` (+ `/{id}`), `GET /admin/sessions/{id}/trace` gated by `require_platform_level(ADMIN)`; web `/admin` (UserMenu, level ≥ 6) with tabs: LLM calls | Node steps | Session Trace ([ADR 0007](./adr/0007-admin-trace-viewer.md)). Same-origin vite refresh collision known — [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)
+- **Admin surface** — `GET /api/admin/llm-calls` (+ `/{id}`), `GET /api/admin/node-steps` (+ `/{id}`), `GET /api/admin/sessions/{id}/trace` gated by `require_platform_level(ADMIN)`; web `/admin` (UserMenu, level ≥ 6) with tabs: LLM calls | Node steps | Session Trace ([ADR 0007](./adr/0007-admin-trace-viewer.md))
 
 **Decision (2026-08-03) — API `/api` prefix vs SPA proxy collision:** → [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)
 
-- Same-origin vite proxy + top-level API paths (`/admin`, `/sessions`, …) is a **latent namespace footgun** from day one; became user-visible when SPA `/admin` shared a prefix with the API (refresh → FastAPI `{"detail":"Not Found"}`)
-- **Direction:** migrate all HTTP routes under `/api/…` (one proxy rule). SPA stays at `/admin` for now; vite refresh collision deferred to that migration
+- Same-origin vite proxy + top-level API paths (`/admin`, `/sessions`, …) was a **latent namespace footgun**; became user-visible when SPA `/admin` shared a prefix with the API (refresh → FastAPI `{"detail":"Not Found"}`)
+- **Executed 2026-08-04:** all public HTTP routes under `/api/…`; vite single proxy `/api` → API; SPA `/admin` refresh serves the React app (API is `/api/admin/*`)
 
 **Decision (2026-08-03) — Admin Trace viewer:** → [ADR 0007](./adr/0007-admin-trace-viewer.md)
 
@@ -95,7 +95,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | `docs/STATUS.md` | ✅ | This file |
 | `.env.example` | ✅ | Includes LLM keys / `LLM_API_BASE` |
 | `pyproject.toml` + Python skeleton | ✅ | FastAPI, SQLAlchemy, Alembic, JWT, LangGraph |
-| Auth API | ✅ | `/auth/register`, `/login`, `/refresh`, `/logout`, `/me` |
+| Auth API | ✅ | `/api/auth/register`, `/login`, `/refresh`, `/logout`, `/me` |
 | Alembic `8791b607d5bc` (auth) | ✅ | `users`, `entities`, `organization_members`, `refresh_tokens` |
 | React web app | ✅ | Vite + React 19 + Tailwind v4 |
 | README | ✅ | Project intro; setup in GETTING_STARTED |
@@ -113,8 +113,8 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | News promoter | ✅ | Top trends → topic `entities` + `edges` in PG |
 | LiteLLM BYOK loader | ✅ | Env-based (`OPENAI_API_KEY`, model tiers); `LLM_API_BASE` → `openai/<model>` prefix |
 | Default personas | ✅ | Seeded in `entities` (type=persona) on first question run |
-| Signals API | ✅ | `GET /signals/top` |
-| Questions API | ✅ | `GET /companies/{id}/recommended-questions` |
+| Signals API | ✅ | `GET /api/signals/top` |
+| Questions API | ✅ | `GET /api/companies/{id}/recommended-questions` |
 | Scheduler | ✅ | `python -m cmd.scheduler` |
 | CLI signals | ✅ | `python -m cmd.worker signals` |
 
@@ -129,7 +129,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /resume-image` ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)); Stop mid-resume re-parks CTA; Stop while parked discards turn |
 | Postgres checkpointer | ✅ | `AsyncPostgresSaver` + pool (`check` / keepalives / idle recycle); `setup()` on API lifespan; `thread_id = session.id` |
 | Node logic | ✅ | LiteLLM + structured I/O; heuristic fallbacks; PG load/grounding |
-| Session HTTP API | ✅ | `GET/POST /sessions`, `PATCH/DELETE /sessions/{id}`, `/messages`, `/draft`, `/confirm` |
+| Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}`, `/messages`, `/draft`, `/confirm` |
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform`; snapshot `interrupted` from graph checkpoint (+ `sessions.state.awaiting_image_ok`) |
 | Image generation worker | 🟡 Soft | LiteLLM ``aimage_generation`` via ``LLM_IMAGE_MODEL``; chat-only / unset → ``llm.failed``. ``data:`` results upload to S3-compatible store (MinIO) when ``S3_*`` configured; else remain data URLs. ``placeholder`` / no credentials → mock URL |
 | `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
@@ -144,15 +144,16 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Item | Status | Notes |
 |------|--------|-------|
 | Auth pages + protected shell | ✅ | Login / register; `/` is now the chat workspace |
-| Chat UI shell | ✅ | `web/src/features/session/` — `useSession` + message list / composer; Streamdown + `@streamdown/cjk`; Vite proxy covers `/sessions` `/companies` `/signals` |
+| Chat UI shell | ✅ | `web/src/features/session/` — `useSession` + message list / composer; Streamdown + `@streamdown/cjk`; Vite proxies `/api` → API |
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
 | Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer locked while in-flight or parked; Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
-| Landing: recommended questions cards | ✅ | Empty-state cards from `GET /companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
+| Landing: recommended questions cards | ✅ | Empty-state cards from `GET /api/companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
 | Preview Mode (left chat / right preview) | ✅ | Desktop: IG mock + editable fields beside chat. Mobile (`< lg`): Preview is a push page with **上一頁**; open from chat ready banner |
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |
 | Manual draft API `POST …/draft` | ✅ | No LLM; bump revision + `approval_token`; sync graph checkpoint |
-| Chat history hydrate + list | ✅ | `GET /sessions`, `GET …/messages`, `PATCH/DELETE …/{id}` (`title`/`pinned`); localStorage last session; desktop Gemini-style sidebar; mobile Record page (history icon → full list; **上一頁** back to Chat) |
-| LLM call records + admin page | ✅ | [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — `llm_call_records` + platform levels + recorder; `/admin/llm-calls` API + web `/admin` |
+| Chat history hydrate + list | ✅ | `GET /api/sessions`, `GET …/messages`, `PATCH/DELETE …/{id}` (`title`/`pinned`); localStorage last session; desktop Gemini-style sidebar; mobile Record page (history icon → full list; **上一頁** back to Chat) |
+| LLM call records + admin page | ✅ | [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — `llm_call_records` + platform levels + recorder; `/api/admin/llm-calls` API + web `/admin` |
+| API `/api` path prefix | ✅ | [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md) — hard cut; SPA `/admin` refresh no longer collides |
 | Admin Trace viewer (node-steps + session) | ✅ | [ADR 0007](./adr/0007-admin-trace-viewer.md) — `session_node_steps` + `turn_id`; admin tabs Node steps / Session Trace |
 | Meta Graph API hot search | ⏸ | Next after core UI |
 | BYOK settings page | ⏸ | After core UI |
@@ -164,15 +165,15 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 
 ### Backend (`cmd/api`)
 
-- **Health:** `GET /health` → `{"status":"ok"}`
-- **Auth:** Full email/password flow with JWT access token (15 min) + refresh token (7 days, httpOnly cookie on `/auth`)
-- **Signals:** `GET /signals/top` — latest HK market signals from PostgreSQL
-- **Questions:** `GET /companies/{id}/recommended-questions` — cached 12h question batch
-- **Sessions:** `GET /sessions`, `POST /sessions`, `PATCH /sessions/{id}` (title / pinned), `DELETE /sessions/{id}`, `POST /sessions/{id}/messages`, `GET /sessions/{id}/messages`, `POST /sessions/{id}/resume-image`, `POST /sessions/{id}/stop`, `POST /sessions/{id}/draft`, `GET /sessions/{id}/events` (SSE), `POST /sessions/{id}/confirm`
+- **Health:** `GET /api/health` → `{"status":"ok"}`
+- **Auth:** Full email/password flow with JWT access token (15 min) + refresh token (7 days, httpOnly cookie on `/api/auth`)
+- **Signals:** `GET /api/signals/top` — latest HK market signals from PostgreSQL
+- **Questions:** `GET /api/companies/{id}/recommended-questions` — cached 12h question batch
+- **Sessions:** `GET /api/sessions`, `POST /api/sessions`, `PATCH /api/sessions/{id}` (title / pinned), `DELETE /api/sessions/{id}`, `POST /api/sessions/{id}/messages`, `GET /api/sessions/{id}/messages`, `POST /api/sessions/{id}/resume-image`, `POST /api/sessions/{id}/stop`, `POST /api/sessions/{id}/draft`, `GET /api/sessions/{id}/events` (SSE), `POST /api/sessions/{id}/confirm`
 - **LangGraph:** Session nodes + Postgres checkpointer; image URL still placeholder
 - **Security:** Argon2 password hashing, refresh token rotation + revoke on logout
 - **Multi-tenant bootstrap:** Register auto-creates `entities` (type `company`) + `organization_members` (role `owner`)
-- **Platform levels:** `users.platform_level` ladder ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)); grant via worker CLI `set-platform-role`; `require_platform_level(ADMIN)` gates `/admin/*`
+- **Platform levels:** `users.platform_level` ladder ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)); grant via worker CLI `set-platform-role`; `require_platform_level(ADMIN)` gates `/api/admin/*`
 - **LLM call records:** Every provider call (session nodes + question worker) → `llm_call_records` (prompts, response, tokens, latency, status, `parse_ok`/`fallback_used`); `LLM_RECORD_ENABLED=false` disables
 
 **Run:**
@@ -247,7 +248,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 cd web && npm install && npm run dev
 ```
 
-App: http://localhost:5173/login (Vite proxies `/auth`, `/sessions`, `/signals`, `/companies`, `/health` → `:8000`)
+App: http://localhost:5173/login (Vite proxies `/api` → `:8000`; SPA owns `/`, `/login`, `/admin`, …)
 
 ---
 
@@ -256,7 +257,7 @@ App: http://localhost:5173/login (Vite proxies `/auth`, `/sessions`, `/signals`,
 ```
 unhinted-marketing/
 ├── cmd/
-│   ├── api/              # FastAPI app + /auth, /signals, /questions, /sessions routes
+│   ├── api/              # FastAPI app; public routes under /api (auth, signals, sessions, admin)
 │   ├── worker/           # hot-search, questions, promote, signals CLI
 │   └── scheduler/        # Periodic ingest + question generation
 ├── internal/
@@ -295,7 +296,7 @@ unhinted-marketing/
 | `APP_ENV` | `development` (default) or `production` — production refuses weak JWT |
 | `ALLOW_INSECURE_JWT` | Escape hatch for local/tests only (`true` skips JWT secret check) |
 | `JWT_SECRET` | Sign access/refresh tokens — **≥32 chars + unique** (prod rejects the published `.env.example` default) |
-| `AUTH_RATE_LIMIT_ENABLED` | Rate-limit `/auth/register|login|refresh` (default true) |
+| `AUTH_RATE_LIMIT_ENABLED` | Rate-limit `/api/auth/register|login|refresh` (default true) |
 | `AUTH_RATE_LIMIT_MAX` | Max requests per client IP per window (default 30) |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Sliding window length (default 60) |
 | `CORS_ORIGINS` | Default `http://localhost:5173` |
@@ -329,8 +330,8 @@ See `.env.example`. Local `.env` is gitignored.
 
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
 2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + MinIO (`S3_*`) when configured; formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
-3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer UI; FB/Threads preview skins. LLM call **records** + admin Trace viewer landed ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md), [ADR 0007](./adr/0007-admin-trace-viewer.md)) — ops guide: [PROMPT_TUNING.md](./PROMPT_TUNING.md). Next: retention/purge policy; `/api` prefix ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)).
-4. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; ~~persist LLM call records ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md))~~; **`/api` path prefix migration ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md))** — pending; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks; persist non-LLM node-step traces / live LLM eval harness later.
+3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page; FB/Threads preview skins. LLM call **records** + admin Trace viewer landed ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md), [ADR 0007](./adr/0007-admin-trace-viewer.md)) — ops guide: [PROMPT_TUNING.md](./PROMPT_TUNING.md). Next: retention/purge policy. `/api` prefix shipped ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)).
+4. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; ~~persist LLM call records ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md))~~; ~~`/api` path prefix ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md))~~; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks; live LLM eval harness later.
 
 ---
 

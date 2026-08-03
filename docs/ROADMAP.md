@@ -45,15 +45,15 @@ users ──< organization_members >── entities (type=company)
 
 **MVP scope:** email/password login; one default company per new user (auto-created `entities` row + `organization_members` as `owner`). OAuth (Google / Meta) deferred to Phase 4.
 
-### API (`/auth/*`)
+### API (`/api/auth/*`)
 
 | Method | Path | Notes |
 |--------|------|-------|
-| POST | `/auth/register` | Create user + default org; returns tokens |
-| POST | `/auth/login` | Email/password → access + refresh JWT |
-| POST | `/auth/refresh` | Rotate refresh token; new access token |
-| POST | `/auth/logout` | Revoke refresh token family |
-| GET | `/auth/me` | Current user + org memberships |
+| POST | `/api/auth/register` | Create user + default org; returns tokens |
+| POST | `/api/auth/login` | Email/password → access + refresh JWT |
+| POST | `/api/auth/refresh` | Rotate refresh token; new access token |
+| POST | `/api/auth/logout` | Revoke refresh token family |
+| GET | `/api/auth/me` | Current user + org memberships |
 
 Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly cookie in browser; body for CLI).
 
@@ -284,7 +284,7 @@ awaiting_image_ok     # bool — mirrored into sessions.state when graph is park
 ```
 unhinted-marketing/
 ├── cmd/
-│   ├── api/                 # FastAPI entrypoint (+ /auth routes)
+│   ├── api/                 # FastAPI entrypoint (public routes under /api)
 │   ├── worker/              # ARQ / async job consumer
 │   └── scheduler/           # Cron: hot_search, question_gen
 ├── internal/
@@ -430,9 +430,9 @@ All metrics stored in PG with provenance before LLM reads them.
 - [x] Confirm button → dirty auto-flush then `/confirm`; shows stub receipt status
 - [x] `GET /sessions` + `GET /sessions/{id}/messages` — history list + hydrate after refresh
 - [x] `PATCH /sessions/{id}` + `DELETE /sessions/{id}` — rename / pin / delete (desktop sidebar; mobile Record page)
-- [x] LLM call records + platform levels + admin page ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)): every provider call → `llm_call_records`; `GET /admin/llm-calls` gated by `platform_level`; web `/admin` records viewer (filters, detail drawer)
+- [x] LLM call records + platform levels + admin page ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)): every provider call → `llm_call_records`; `GET /api/admin/llm-calls` gated by `platform_level`; web `/admin` records viewer (filters, detail drawer)
 - [x] Admin Trace viewer ([ADR 0007](./adr/0007-admin-trace-viewer.md)): `session_node_steps` + turn correlation; admin tabs Node steps + Session Trace (messages, revisions, signal grounding)
-- [ ] Mount HTTP API under `/api/…` ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)) — fix same-origin SPA/proxy namespace collision class
+- [x] Mount HTTP API under `/api/…` ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)) — SPA `/admin` refresh no longer collides with API
 - [ ] BYOK settings page (masked keys, server-side storage)
 
 **Exit criteria:** End-to-end demo in browser for one platform (TBD: IG / FB / Threads).

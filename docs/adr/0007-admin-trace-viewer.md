@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-03
 - **Supersedes:** Deferred “persist full node-step I/O” / Trace viewer UI notes in [ADR 0005](./0005-platform-levels-and-llm-records.md); closes ROADMAP “Trace viewer: session messages + revision timeline + signal grounding links” as an **admin** tool
-- **Related:** [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (SPA `/admin` shares vite proxy prefix with API — refresh collision deferred to `/api` migration)
+- **Related:** [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (API under `/api`; SPA `/admin` no longer shares a vite proxy prefix)
 
 ## Context
 

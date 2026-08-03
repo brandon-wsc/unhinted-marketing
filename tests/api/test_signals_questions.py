@@ -14,7 +14,7 @@ from tests.api.helpers import auth_header, register_user
 @pytest.mark.asyncio
 async def test_signals_top_empty(client) -> None:
     data = await register_user(client)
-    res = await client.get("/signals/top", headers=auth_header(data["access_token"]))
+    res = await client.get("/api/signals/top", headers=auth_header(data["access_token"]))
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["region"] == "HK"
@@ -37,7 +37,7 @@ async def test_signals_top_with_rows(client, db_session) -> None:
     )
     await db_session.commit()
 
-    res = await client.get("/signals/top", headers=auth_header(data["access_token"]))
+    res = await client.get("/api/signals/top", headers=auth_header(data["access_token"]))
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["count"] >= 1
@@ -49,7 +49,7 @@ async def test_recommended_questions_not_ready(client) -> None:
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
     res = await client.get(
-        f"/companies/{company_id}/recommended-questions",
+        f"/api/companies/{company_id}/recommended-questions",
         headers=auth_header(data["access_token"]),
     )
     assert res.status_code == 404
@@ -78,7 +78,7 @@ async def test_recommended_questions_happy_path(client, db_session) -> None:
     await db_session.commit()
 
     res = await client.get(
-        f"/companies/{company_id}/recommended-questions",
+        f"/api/companies/{company_id}/recommended-questions",
         headers=auth_header(data["access_token"]),
     )
     assert res.status_code == 200, res.text
@@ -104,7 +104,7 @@ async def test_recommended_questions_stale(client, db_session) -> None:
     await db_session.commit()
 
     res = await client.get(
-        f"/companies/{company_id}/recommended-questions",
+        f"/api/companies/{company_id}/recommended-questions",
         headers=auth_header(data["access_token"]),
     )
     assert res.status_code == 200

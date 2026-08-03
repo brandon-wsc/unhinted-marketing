@@ -51,13 +51,15 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
         allow_headers=["*"],
     )
 
-    application.include_router(auth_router)
-    application.include_router(signals_router)
-    application.include_router(questions_router)
-    application.include_router(sessions_router)
-    application.include_router(admin_router)
+    # All public JSON/SSE routes live under /api (ADR 0006) so the SPA
+    # owns every other same-origin path (e.g. document /admin).
+    application.include_router(auth_router, prefix="/api")
+    application.include_router(signals_router, prefix="/api")
+    application.include_router(questions_router, prefix="/api")
+    application.include_router(sessions_router, prefix="/api")
+    application.include_router(admin_router, prefix="/api")
 
-    @application.get("/health")
+    @application.get("/api/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 

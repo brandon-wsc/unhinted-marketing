@@ -11,12 +11,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/admin": { target: "http://localhost:8000", changeOrigin: true },
-      "/auth": { target: "http://localhost:8000", changeOrigin: true },
-      "/health": { target: "http://localhost:8000", changeOrigin: true },
-      "/sessions": { target: "http://localhost:8000", changeOrigin: true },
-      "/companies": { target: "http://localhost:8000", changeOrigin: true },
-      "/signals": { target: "http://localhost:8000", changeOrigin: true },
+      // Single reserved API prefix (ADR 0006) — SPA owns all other paths.
+      "/api": { target: "http://localhost:8000", changeOrigin: true },
     },
   },
   test: {
