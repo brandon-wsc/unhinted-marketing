@@ -66,3 +66,62 @@ async def test_submit_steps_disabled_is_noop(monkeypatch: pytest.MonkeyPatch) ->
             steps=[trace.NodeStepRecord(node="chat")],
         )
         persist.assert_not_called()
+
+
+def test_clear_and_get_node_trace() -> None:
+    with trace.node_trace_recording():
+        trace.record_node_step("chat", {"mode": "CHAT"}, {"mode": "CHAT"})
+        assert len(trace.get_node_trace()) == 1
+        trace.clear_node_trace()
+        assert trace.get_node_trace() == []
+
+
+def test_as_uuid_and_cap_output_branches() -> None:
+    assert trace._as_uuid(None) is None
+    assert trace._as_uuid("not-a-uuid") is None
+    uid = uuid.uuid4()
+    assert trace._as_uuid(uid) == uid
+    assert trace._cap_output(None) is None
+    assert trace._cap_output(3.5) == 3.5
+    assert trace._cap_output(object())  # falls back to str
+    nested = {"a": {"b": {"c": {"d": {"e": {"f": {"g": 1}}}}}}}
+    assert "max_depth" in str(trace._cap_output(nested))
+    long_list = list(range(120))
+    capped = trace._cap_output(long_list)
+    assert isinstance(capped, list) and len(capped) == 101
+
+
+@pytest.mark.asyncio
+async def test_submit_steps_schedules_persist(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(trace.settings, "node_trace_enabled", True)
+    persist = AsyncMock()
+    monkeypatch.setattr(trace, "_persist_steps_safely", persist)
+    turn_id = uuid.uuid4()
+    trace.submit_steps(
+        turn_id=turn_id,
+        session_id=uuid.uuid4(),
+        user_id=None,
+        company_id=None,
+        steps=[trace.NodeStepRecord(node="chat")],
+    )
+    await trace.drain(timeout=2.0)
+    persist.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_persist_steps_safely_swallows_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Boom:
+        async def __aenter__(self):
+            raise RuntimeError("db down")
+
+        async def __aexit__(self, *args):
+            return False
+
+    monkeypatch.setattr(trace, "SessionLocal", lambda: Boom())
+    await trace._persist_steps_safely(
+        turn_id=uuid.uuid4(),
+        session_id=None,
+        user_id=None,
+        company_id=None,
+        steps=[trace.NodeStepRecord(node="chat", output={"x": 1})],
+    )

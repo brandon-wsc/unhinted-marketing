@@ -50,7 +50,8 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 pip install -e ".[dev]"
 pytest tests/unit
 pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
-  --cov=internal.session.nodes --cov=internal.session.trace --cov-fail-under=70
+ tests/unit/test_session_trace.py \
+ --cov=internal.session.nodes --cov=internal.session.trace --cov-fail-under=70
 python -m scripts.export_contracts   # OpenAPI + JSON Schema under docs/
 cd web && npm test && npm run build
 ```
