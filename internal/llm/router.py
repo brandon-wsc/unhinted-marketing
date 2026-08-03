@@ -24,6 +24,7 @@ from litellm.exceptions import (
 )
 
 from internal.config import settings
+from internal.llm.recorder import track
 
 logger = logging.getLogger(__name__)
 
@@ -270,12 +271,17 @@ async def _astream_completion(
     *,
     model: str,
     kwargs: dict[str, Any],
+    usage_sink: Any = None,
 ) -> AsyncIterator[str]:
     """Stream chat completion deltas; always aclose on exit (including CancelledError)."""
     response: Any = None
     try:
         response = await litellm.acompletion(**kwargs)
         async for chunk in response:
+            if usage_sink is not None:
+                usage = getattr(chunk, "usage", None)
+                if usage is not None:
+                    usage_sink(usage)
             piece = _delta_text(chunk)
             if piece:
                 yield piece
@@ -305,13 +311,21 @@ async def complete_json(
     ]
     kwargs["response_format"] = {"type": "json_object"}
     kwargs["stream"] = True
-    parts: list[str] = []
-    async for piece in _astream_completion(model=model, kwargs=kwargs):
-        parts.append(piece)
-    content = "".join(parts)
-    if not content:
-        raise RuntimeError("LLM returned empty content")
-    return content
+    # Ask for a final usage chunk (dropped for providers that don't support it).
+    kwargs["stream_options"] = {"include_usage": True}
+    with track(
+        kind="chat_json", tier=tier, model=model, temperature=temperature,
+        system=system, user=user,
+    ) as rec:
+        parts: list[str] = []
+        async for piece in _astream_completion(model=model, kwargs=kwargs, usage_sink=rec.set_usage):
+            parts.append(piece)
+        content = "".join(parts)
+        if not content:
+            rec.fail("empty_response", {"kind": "empty_response", "message": "LLM returned empty content"})
+            raise RuntimeError("LLM returned empty content")
+        rec.response_text = content
+        return content
 
 
 async def complete_text(
@@ -327,16 +341,23 @@ async def complete_text(
         {"role": "system", "content": system},
         {"role": "user", "content": user},
     ]
-    try:
-        response = await litellm.acompletion(**kwargs)
-    except Exception as exc:
-        if _is_provider_failure(exc):
-            raise _wrap_provider_error(exc, model=model) from exc
-        raise
-    content = response.choices[0].message.content
-    if not content:
-        raise RuntimeError("LLM returned empty content")
-    return content.strip()
+    with track(
+        kind="chat_text", tier=tier, model=model, temperature=temperature,
+        system=system, user=user,
+    ) as rec:
+        try:
+            response = await litellm.acompletion(**kwargs)
+        except Exception as exc:
+            if _is_provider_failure(exc):
+                raise _wrap_provider_error(exc, model=model) from exc
+            raise
+        content = response.choices[0].message.content
+        if not content:
+            rec.fail("empty_response", {"kind": "empty_response", "message": "LLM returned empty content"})
+            raise RuntimeError("LLM returned empty content")
+        rec.set_usage(getattr(response, "usage", None))
+        rec.response_text = content.strip()
+        return rec.response_text
 
 
 async def astream_text(
@@ -354,8 +375,16 @@ async def astream_text(
         {"role": "user", "content": user},
     ]
     kwargs["stream"] = True
-    async for piece in _astream_completion(model=model, kwargs=kwargs):
-        yield piece
+    kwargs["stream_options"] = {"include_usage": True}
+    with track(
+        kind="chat_text", tier=tier, model=model, temperature=temperature,
+        system=system, user=user,
+    ) as rec:
+        parts: list[str] = []
+        async for piece in _astream_completion(model=model, kwargs=kwargs, usage_sink=rec.set_usage):
+            parts.append(piece)
+            yield piece
+        rec.response_text = "".join(parts)
 
 
 async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
@@ -391,37 +420,41 @@ async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
         if settings.openai_api_key:
             kwargs["api_key"] = settings.openai_api_key
 
-    try:
-        response = await litellm.aimage_generation(**kwargs)
-    except Exception as exc:
-        if _is_provider_failure(exc):
-            raise _wrap_provider_error(exc, model=model) from exc
-        raise
+    with track(kind="image", tier=None, model=model, temperature=None, system=None, user=prompt) as rec:
+        try:
+            response = await litellm.aimage_generation(**kwargs)
+        except Exception as exc:
+            if _is_provider_failure(exc):
+                raise _wrap_provider_error(exc, model=model) from exc
+            raise
 
-    data = getattr(response, "data", None) or []
-    if not data:
+        data = getattr(response, "data", None) or []
+        if not data:
+            raise LlmProviderError(
+                f"Image model {model} returned no image data.",
+                model=model,
+                kind="provider",
+            )
+        first = data[0]
+        url = getattr(first, "url", None)
+        if not url and isinstance(first, dict):
+            url = first.get("url")
+        # Some providers return b64_json instead of a URL.
+        b64 = getattr(first, "b64_json", None)
+        if not b64 and isinstance(first, dict):
+            b64 = first.get("b64_json")
+        if url:
+            rec.response_text = str(url)
+            return rec.response_text
+        if b64:
+            # Providers often return JPEG bytes even when labelled loosely; sniff magic.
+            raw = str(b64)
+            mime = "image/jpeg" if raw.startswith("/9j/") else "image/png"
+            # The recorder stores a size marker for data URIs, not megabytes of base64.
+            rec.response_text = f"data:{mime};base64,{raw}"
+            return rec.response_text
         raise LlmProviderError(
-            f"Image model {model} returned no image data.",
+            f"Image model {model} response had neither url nor b64_json.",
             model=model,
             kind="provider",
         )
-    first = data[0]
-    url = getattr(first, "url", None)
-    if not url and isinstance(first, dict):
-        url = first.get("url")
-    # Some providers return b64_json instead of a URL.
-    b64 = getattr(first, "b64_json", None)
-    if not b64 and isinstance(first, dict):
-        b64 = first.get("b64_json")
-    if url:
-        return str(url)
-    if b64:
-        # Providers often return JPEG bytes even when labelled loosely; sniff magic.
-        raw = str(b64)
-        mime = "image/jpeg" if raw.startswith("/9j/") else "image/png"
-        return f"data:{mime};base64,{raw}"
-    raise LlmProviderError(
-        f"Image model {model} response had neither url nor b64_json.",
-        model=model,
-        kind="provider",
-    )

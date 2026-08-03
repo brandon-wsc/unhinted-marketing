@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import {
@@ -8,6 +9,7 @@ import {
 } from "@/i18n/locales";
 import { useAuth } from "@/context/auth-context";
 import { useTheme, type ThemeMode } from "@/context/theme-context";
+import { isAdmin } from "@/lib/platform-level";
 
 const THEME_MODES: ThemeMode[] = ["light", "dark", "system"];
 
@@ -64,6 +66,7 @@ export function UserMenuDropdown() {
   const { t, i18n: i18nInstance } = useTranslation();
   const { user, logout } = useAuth();
   const { mode, setMode } = useTheme();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -89,6 +92,11 @@ export function UserMenuDropdown() {
   async function onLogout() {
     setOpen(false);
     await logout();
+  }
+
+  function onOpenAdmin() {
+    setOpen(false);
+    navigate("/admin");
   }
 
   function onLocaleChange(locale: SupportedLocale) {
@@ -145,6 +153,22 @@ export function UserMenuDropdown() {
               </MenuItem>
             ))}
           </MenuSection>
+
+          {user && isAdmin(user.platform_level) && (
+            <>
+              <div className="my-1 border-t border-[var(--color-border)]" />
+              <div className="px-1 py-1">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={onOpenAdmin}
+                  className="flex w-full items-center rounded-md px-3 py-2 text-sm text-[var(--color-foreground)] transition hover:bg-[var(--color-hover)]"
+                >
+                  {t("admin.menuEntry")}
+                </button>
+              </div>
+            </>
+          )}
 
           {user && (
             <>

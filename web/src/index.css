@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -24,6 +25,15 @@
   --color-border: #e4e4e7;
   --color-card: #ffffff;
   --color-hover: rgb(0 0 0 / 0.05);
+
+  /* shadcn/ui tokens (light); dark overrides below. */
+  --color-accent: rgb(0 0 0 / 0.05);
+  --color-accent-foreground: #18181b;
+  --color-secondary: rgb(0 0 0 / 0.05);
+  --color-secondary-foreground: #18181b;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #18181b;
+  --color-input: #e4e4e7;
 }
 
 :root,
@@ -45,6 +55,14 @@
   --color-destructive-soft: rgb(239 68 68 / 0.1);
   --color-destructive-text: #fca5a5;
   --shadow-color: rgb(0 0 0 / 0.35);
+
+  --color-accent: rgb(255 255 255 / 0.05);
+  --color-accent-foreground: #fafafa;
+  --color-secondary: rgb(255 255 255 / 0.05);
+  --color-secondary-foreground: #fafafa;
+  --color-popover: #18181b;
+  --color-popover-foreground: #fafafa;
+  --color-input: #27272a;
 }
 
 html,

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+from functools import wraps
 from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from internal.llm import recorder
 from internal.session import nodes as N
 from internal.session.state import SessionState
 
@@ -17,6 +19,23 @@ logger = logging.getLogger(__name__)
 INTERRUPT_BEFORE = ["executor_image_plan"]
 
 _compiled_graph: Any | None = None
+
+
+def _with_llm_record_context(name: str, fn: Any) -> Any:
+    """ADR 0005: correlate every LLM call in this node with session/user/company."""
+
+    @wraps(fn)
+    async def wrapped(state: SessionState) -> dict[str, Any]:
+        with recorder.call_context(
+            caller=f"node:{name}",
+            node=name,
+            session_id=state.get("thread_id"),
+            user_id=state.get("user_id"),
+            company_id=state.get("company_id"),
+        ):
+            return await fn(state)
+
+    return wrapped
 
 
 async def _wrap_reviewer_fail(state: SessionState) -> dict[str, Any]:
@@ -34,19 +53,26 @@ def build_session_graph(*, checkpointer: Any | None = None):
     """
     g: StateGraph = StateGraph(SessionState)
 
-    g.add_node("route_intent", N.route_intent)
+    # LLM nodes get an ADR 0005 record context; non-LLM nodes stay plain.
+    g.add_node("route_intent", _with_llm_record_context("route_intent", N.route_intent))
     g.add_node("load_context", N.load_context)
-    g.add_node("trend_searcher", N.trend_searcher)
-    g.add_node("brainstormer", N.brainstormer)
-    g.add_node("executor_post", N.executor_post)
+    g.add_node("trend_searcher", _with_llm_record_context("trend_searcher", N.trend_searcher))
+    g.add_node("brainstormer", _with_llm_record_context("brainstormer", N.brainstormer))
+    g.add_node("executor_post", _with_llm_record_context("executor_post", N.executor_post))
     g.add_node("grounding_check", N.grounding_check)
-    g.add_node("reviewer", N.reviewer)
-    g.add_node("edit_copy", N.edit_copy)
-    g.add_node("executor_image_plan", N.executor_image_plan)
-    g.add_node("executor_image_gen", N.executor_image_gen)
+    g.add_node("reviewer", _with_llm_record_context("reviewer", N.reviewer))
+    g.add_node("edit_copy", _with_llm_record_context("edit_copy", N.edit_copy))
+    g.add_node(
+        "executor_image_plan",
+        _with_llm_record_context("executor_image_plan", N.executor_image_plan),
+    )
+    g.add_node(
+        "executor_image_gen",
+        _with_llm_record_context("executor_image_gen", N.executor_image_gen),
+    )
     g.add_node("persist_preview", N.persist_preview)
-    g.add_node("chat", N.chat)
-    g.add_node("ack_confirm", N.ack_confirm)
+    g.add_node("chat", _with_llm_record_context("chat", N.chat))
+    g.add_node("ack_confirm", _with_llm_record_context("ack_confirm", N.ack_confirm))
     g.add_node("review_exhausted", N.review_exhausted)
     g.add_node("_reviewer_fail_bump", _wrap_reviewer_fail)
 

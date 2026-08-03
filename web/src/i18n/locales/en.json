@@ -160,6 +160,99 @@
       "confirmFailed": "Failed to confirm. Please try again."
     }
   },
+  "admin": {
+    "menuEntry": "Admin",
+    "title": "Admin",
+    "llmCalls": "LLM call records",
+    "empty": "No records yet — they appear after an LLM call runs",
+    "nodeStepsEmpty": "No node steps yet — they appear after a session turn runs",
+    "loadFailed": "Failed to load",
+    "openNodeSteps": "View steps for this turn",
+    "openSessionTrace": "View session trace",
+    "tabs": {
+      "llm": "LLM calls",
+      "steps": "Node steps",
+      "trace": "Session Trace"
+    },
+    "forbidden": {
+      "title": "No access",
+      "body": "This page is for admin users only.",
+      "back": "Back to home"
+    },
+    "filters": {
+      "node": "Node",
+      "nodePlaceholder": "e.g. reviewer",
+      "status": "Status",
+      "statusAll": "All",
+      "fallbackOnly": "Fallback only",
+      "refresh": "Refresh",
+      "sessionId": "Session ID",
+      "turnId": "Turn ID"
+    },
+    "table": {
+      "time": "Time",
+      "node": "Node",
+      "caller": "Caller",
+      "kind": "Kind",
+      "model": "Model",
+      "status": "Status",
+      "tokens": "Tokens",
+      "latency": "Latency",
+      "flags": "Flags",
+      "seq": "Seq",
+      "mode": "Mode",
+      "intent": "Intent",
+      "turnId": "Turn",
+      "outputKeys": "Output keys"
+    },
+    "badges": {
+      "parseFailed": "Parse failed",
+      "fallback": "fallback"
+    },
+    "pagination": {
+      "prev": "Previous",
+      "next": "Next",
+      "showing": "Showing {{from}}–{{to}}"
+    },
+    "detail": {
+      "title": "Call detail",
+      "close": "Close",
+      "session": "Session",
+      "user": "User",
+      "temperature": "Temperature",
+      "parseOk": "JSON parse",
+      "tokensPrompt": "Input",
+      "tokensCompletion": "Output",
+      "tokensTotal": "Total",
+      "systemPrompt": "System prompt",
+      "userPrompt": "User prompt",
+      "response": "Response",
+      "error": "Error"
+    },
+    "nodeStepDetail": {
+      "title": "Node step detail",
+      "output": "Output",
+      "llmCalls": "LLM calls for this turn / node"
+    },
+    "sessionTrace": {
+      "placeholder": "Paste session UUID…",
+      "load": "Load",
+      "empty": "Enter a session ID to view the trace",
+      "summary": "Session",
+      "title": "Title",
+      "messages": "Messages",
+      "noMessages": "No messages",
+      "revisions": "Draft revisions",
+      "noRevisions": "No draft revisions",
+      "revision": "Revision {{n}}",
+      "grounding": "Signal grounding",
+      "pickRevision": "Select a revision to see grounding",
+      "noSignals": "No source signals on this revision / no matching signal rows",
+      "turns": "Graph turns",
+      "noTurns": "No node-step / LLM turn records",
+      "llmCount": "{{n}} LLM calls"
+    }
+  },
   "theme": {
     "label": "Theme",
     "light": "Light mode",

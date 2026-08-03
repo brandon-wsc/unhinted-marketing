@@ -4,14 +4,17 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from cmd.api.routes.admin import router as admin_router
 from cmd.api.routes.auth import router as auth_router
 from cmd.api.routes.questions import router as questions_router
 from cmd.api.routes.sessions import router as sessions_router
 from cmd.api.routes.signals import router as signals_router
 from internal.auth.rate_limit import assert_jwt_secret_safe
 from internal.config import settings
+from internal.llm.recorder import drain as drain_llm_records
 from internal.session.checkpointer import close_postgres_checkpointer, open_postgres_checkpointer
 from internal.session.graph import build_session_graph, set_session_graph
+from internal.session.trace import drain as drain_node_steps
 
 
 @asynccontextmanager
@@ -26,6 +29,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         set_session_graph(None)
+        await drain_llm_records()
+        await drain_node_steps()
         await close_postgres_checkpointer(pool)
 
 
@@ -50,6 +55,7 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(signals_router)
     application.include_router(questions_router)
     application.include_router(sessions_router)
+    application.include_router(admin_router)
 
     @application.get("/health")
     async def health() -> dict[str, str]:

@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     display_name: str
     is_active: bool
+    platform_level: int  # ADR 0005 ladder: member=3, admin=6, superadmin=9
     created_at: datetime
     organizations: list[OrganizationSummary]
 

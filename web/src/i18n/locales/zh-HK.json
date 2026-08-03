@@ -160,6 +160,99 @@
       "confirmFailed": "確認失敗，請再試一次"
     }
   },
+  "admin": {
+    "menuEntry": "Admin 後台",
+    "title": "Admin 後台",
+    "llmCalls": "LLM 呼叫紀錄",
+    "empty": "暫時未有紀錄 — 觸發 LLM call 之後會喺呢度出現",
+    "nodeStepsEmpty": "暫時未有 node steps — 跑完一個 session turn 之後會喺呢度出現",
+    "loadFailed": "載入失敗",
+    "openNodeSteps": "睇呢個 turn 嘅 steps",
+    "openSessionTrace": "睇 Session Trace",
+    "tabs": {
+      "llm": "LLM 呼叫",
+      "steps": "Node steps",
+      "trace": "Session Trace"
+    },
+    "forbidden": {
+      "title": "冇權限",
+      "body": "呢一頁只限 admin 用戶。",
+      "back": "返回主頁"
+    },
+    "filters": {
+      "node": "節點",
+      "nodePlaceholder": "例如 reviewer",
+      "status": "狀態",
+      "statusAll": "全部",
+      "fallbackOnly": "只顯示 fallback",
+      "refresh": "重新整理",
+      "sessionId": "Session ID",
+      "turnId": "Turn ID"
+    },
+    "table": {
+      "time": "時間",
+      "node": "節點",
+      "caller": "來源",
+      "kind": "類型",
+      "model": "模型",
+      "status": "狀態",
+      "tokens": "Tokens",
+      "latency": "耗時",
+      "flags": "標記",
+      "seq": "序",
+      "mode": "Mode",
+      "intent": "Intent",
+      "turnId": "Turn",
+      "outputKeys": "Output keys"
+    },
+    "badges": {
+      "parseFailed": "解析失敗",
+      "fallback": "fallback"
+    },
+    "pagination": {
+      "prev": "上一頁",
+      "next": "下一頁",
+      "showing": "顯示 {{from}}–{{to}}"
+    },
+    "detail": {
+      "title": "呼叫詳情",
+      "close": "關閉",
+      "session": "Session",
+      "user": "User",
+      "temperature": "Temperature",
+      "parseOk": "JSON 解析",
+      "tokensPrompt": "輸入",
+      "tokensCompletion": "輸出",
+      "tokensTotal": "合計",
+      "systemPrompt": "System prompt",
+      "userPrompt": "User prompt",
+      "response": "回應",
+      "error": "錯誤"
+    },
+    "nodeStepDetail": {
+      "title": "Node step 詳情",
+      "output": "Output",
+      "llmCalls": "同 turn / node 嘅 LLM calls"
+    },
+    "sessionTrace": {
+      "placeholder": "貼上 session UUID…",
+      "load": "載入",
+      "empty": "輸入 session ID 開始睇 Trace",
+      "summary": "Session",
+      "title": "標題",
+      "messages": "訊息",
+      "noMessages": "未有訊息",
+      "revisions": "Draft 修訂",
+      "noRevisions": "未有 draft 修訂",
+      "revision": "修訂 {{n}}",
+      "grounding": "Signal grounding",
+      "pickRevision": "揀一個修訂睇 grounding",
+      "noSignals": "呢個修訂冇 source signals / 搵唔到 signal 列",
+      "turns": "Graph turns",
+      "noTurns": "未有 node-step / LLM turn 紀錄",
+      "llmCount": "{{n}} 個 LLM calls"
+    }
+  },
   "theme": {
     "label": "主題",
     "light": "淺色模式",

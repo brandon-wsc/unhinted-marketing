@@ -1,7 +1,7 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-02  
-> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Security: auth rate limit + confirm user-private idempotency (branch) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
+> **Last updated:** 2026-08-03  
+> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Security: auth rate limit + confirm user-private idempotency (branch) · Observability: LLM call records + platform levels (backend, [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
 This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). For architecture and phase plans, see ROADMAP.
@@ -63,6 +63,22 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 **Decision (2026-08-02) — Contracts SSOT entry:** `AGENTS.md` + [ADRs](./adr/) + `schemas/contracts.py` / `schemas/tools.py` + generated `docs/contracts/` + `docs/openapi.json`. REST > SSE locked in [ADR 0002](./adr/0002-rest-source-of-truth-sse-enhancement.md); Confirm without LLM in [ADR 0003](./adr/0003-confirm-without-llm.md).
 
 **Decision (2026-08-02) — Graph mock-LLM CI:** Session node unit tests monkeypatch LLM/repos (no API key on GitHub). Opt-in `node_trace_recording()` for step I/O. CI Tier 1b ≥70% on `nodes` + `trace`. Live LLM eval stays manual/nightly.
+
+**Decision (2026-08-03) — Platform levels + LLM call records:** → [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)
+
+- **Platform privilege** — numeric `users.platform_level` ladder 0–10 with named rungs + gaps (`MEMBER`=3 default, `ADMIN`=6 read-only records, `SUPERADMIN`=9 full); threshold checks via `require_platform_level`; tenant `organization_members.role` stays separate
+- **Bootstrap** — CLI only: `python -m cmd.worker set-platform-role --email … --level superadmin`
+- **LLM call records** — every provider call (10 session LLM nodes + `question_generator` worker) persisted to `llm_call_records` with prompts, response, tokens, latency, status, `parse_ok` / `fallback_used`; instrumented at the `internal/llm/router.py` choke point; correlation via contextvars; toggle `LLM_RECORD_ENABLED` (default on)
+- **Admin surface** — `GET /admin/llm-calls` (+ `/{id}`), `GET /admin/node-steps` (+ `/{id}`), `GET /admin/sessions/{id}/trace` gated by `require_platform_level(ADMIN)`; web `/admin` (UserMenu, level ≥ 6) with tabs: LLM calls | Node steps | Session Trace ([ADR 0007](./adr/0007-admin-trace-viewer.md)). Same-origin vite refresh collision known — [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)
+
+**Decision (2026-08-03) — API `/api` prefix vs SPA proxy collision:** → [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)
+
+- Same-origin vite proxy + top-level API paths (`/admin`, `/sessions`, …) is a **latent namespace footgun** from day one; became user-visible when SPA `/admin` shared a prefix with the API (refresh → FastAPI `{"detail":"Not Found"}`)
+- **Direction:** migrate all HTTP routes under `/api/…` (one proxy rule). SPA stays at `/admin` for now; vite refresh collision deferred to that migration
+
+**Decision (2026-08-03) — Admin Trace viewer:** → [ADR 0007](./adr/0007-admin-trace-viewer.md)
+
+- Production `session_node_steps` + `turn_id` correlation with `llm_call_records`; admin tabs Node steps / Session Trace
 
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
@@ -136,9 +152,11 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |
 | Manual draft API `POST …/draft` | ✅ | No LLM; bump revision + `approval_token`; sync graph checkpoint |
 | Chat history hydrate + list | ✅ | `GET /sessions`, `GET …/messages`, `PATCH/DELETE …/{id}` (`title`/`pinned`); localStorage last session; desktop Gemini-style sidebar; mobile Record page (history icon → full list; **上一頁** back to Chat) |
+| LLM call records + admin page | ✅ | [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — `llm_call_records` + platform levels + recorder; `/admin/llm-calls` API + web `/admin` |
+| Admin Trace viewer (node-steps + session) | ✅ | [ADR 0007](./adr/0007-admin-trace-viewer.md) — `session_node_steps` + `turn_id`; admin tabs Node steps / Session Trace |
 | Meta Graph API hot search | ⏸ | Next after core UI |
 | BYOK settings page | ⏸ | After core UI |
-| Trace viewer | ⏸ | After core UI |
+| Trace viewer | ✅ | Admin Session Trace tab ([ADR 0007](./adr/0007-admin-trace-viewer.md)) — not end-user UI |
 
 ---
 
@@ -154,6 +172,8 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 - **LangGraph:** Session nodes + Postgres checkpointer; image URL still placeholder
 - **Security:** Argon2 password hashing, refresh token rotation + revoke on logout
 - **Multi-tenant bootstrap:** Register auto-creates `entities` (type `company`) + `organization_members` (role `owner`)
+- **Platform levels:** `users.platform_level` ladder ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)); grant via worker CLI `set-platform-role`; `require_platform_level(ADMIN)` gates `/admin/*`
+- **LLM call records:** Every provider call (session nodes + question worker) → `llm_call_records` (prompts, response, tokens, latency, status, `parse_ok`/`fallback_used`); `LLM_RECORD_ENABLED=false` disables
 
 **Run:**
 
@@ -176,6 +196,7 @@ python -m cmd.worker promote       # Promote signals → topic entities in PG
 python -m cmd.worker all           # Full pipeline
 python -m cmd.worker reset-signals              # Wipe signal data (destructive)
 python -m cmd.worker reset-signals --reingest   # Wipe + hot-search → promote → questions
+python -m cmd.worker set-platform-role --email you@x.com --level superadmin   # Grant platform level (ADR 0005)
 python -m cmd.scheduler --once     # One scheduler cycle
 ```
 
@@ -196,6 +217,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `session_messages` | Chat log (user always; assistant for chat / ack / LLM errors — not every Agent node) |
 | `preview_drafts` | Revision chain + approval_token |
 | `tool_receipts` | Idempotent Confirm / tool receipts |
+| `llm_call_records` | Per-call LLM record: correlation, prompts, response, tokens, latency, status, `parse_ok`/`fallback_used` ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | LangGraph checkpoint tables | Owned by `AsyncPostgresSaver.setup()` (not Alembic) |
 
 **pgvector:** Dev DB on Synology NAS runs **`pgvector/pgvector:pg18`** (PostgreSQL **18.4**). PG 18+ Docker images mount data at **`/var/lib/postgresql`** (not `/var/lib/postgresql/data`). After restore/migrate, run `CREATE EXTENSION vector;` on `unhinted`.
@@ -285,6 +307,7 @@ unhinted-marketing/
 | `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |
 | `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`) |
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |
+| `LLM_RECORD_ENABLED` | Persist every LLM call to `llm_call_records` (default true; [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | `QUESTION_CACHE_TTL_HOURS` | Recommended questions cache (default 12) |
 
 See `.env.example`. Local `.env` is gitignored.
@@ -306,8 +329,8 @@ See `.env.example`. Local `.env` is gitignored.
 
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
 2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + MinIO (`S3_*`) when configured; formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
-3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer; FB/Threads preview skins.
-4. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks; persist node traces / live LLM eval harness later.
+3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page, trace viewer UI; FB/Threads preview skins. LLM call **records** + admin Trace viewer landed ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md), [ADR 0007](./adr/0007-admin-trace-viewer.md)) — ops guide: [PROMPT_TUNING.md](./PROMPT_TUNING.md). Next: retention/purge policy; `/api` prefix ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)).
+4. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; ~~persist LLM call records ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md))~~; **`/api` path prefix migration ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md))** — pending; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks; persist non-LLM node-step traces / live LLM eval harness later.
 
 ---
 

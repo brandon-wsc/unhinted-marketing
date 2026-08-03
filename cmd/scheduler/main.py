@@ -6,6 +6,7 @@ import logging
 import signal
 
 from internal.config import settings
+from internal.llm.recorder import drain as drain_llm_records
 from internal.memory.database import SessionLocal
 from internal.perception.hot_search import ingest_hot_search
 from internal.perception.news_promoter import promote_signals
@@ -34,6 +35,8 @@ async def _run_questions_cycle(force: bool = False) -> None:
     async with SessionLocal() as db:
         results = await generate_questions_all_companies(db, force=force)
         logger.info("questions generated for %d companies", len(results))
+    # Flush pending LLM call records before the next sleep (ADR 0005).
+    await drain_llm_records()
 
 
 async def run_scheduler(*, once: bool = False) -> None:
