@@ -18,11 +18,11 @@ async def test_stop_idle(client) -> None:
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(token)
 
-    created = await client.post("/sessions", headers=headers, json={"company_id": company_id})
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
     assert created.status_code == 201
     session_id = created.json()["id"]
 
-    res = await client.post(f"/sessions/{session_id}/stop", headers=headers)
+    res = await client.post(f"/api/sessions/{session_id}/stop", headers=headers)
     assert res.status_code == 200, res.text
     assert res.json()["status"] == "idle"
 
@@ -34,7 +34,7 @@ async def test_messages_conflict_when_parked(client) -> None:
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(token)
 
-    created = await client.post("/sessions", headers=headers, json={"company_id": company_id})
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
     session_id = created.json()["id"]
 
     with patch(
@@ -47,7 +47,7 @@ async def test_messages_conflict_when_parked(client) -> None:
         ),
     ):
         res = await client.post(
-            f"/sessions/{session_id}/messages",
+            f"/api/sessions/{session_id}/messages",
             headers=headers,
             json={"content": "ignore me"},
         )
@@ -63,14 +63,14 @@ async def test_resume_image_not_parked(client) -> None:
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(token)
 
-    created = await client.post("/sessions", headers=headers, json={"company_id": company_id})
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
     session_id = created.json()["id"]
 
     with patch(
         "cmd.api.routes.sessions.resume_image_turn",
         AsyncMock(side_effect=SessionTurnConflict("not_parked", "not parked")),
     ):
-        res = await client.post(f"/sessions/{session_id}/resume-image", headers=headers)
+        res = await client.post(f"/api/sessions/{session_id}/resume-image", headers=headers)
     assert res.status_code == 409
     assert res.json()["detail"]["reason"] == "not_parked"
 
@@ -82,7 +82,7 @@ async def test_resume_image_happy_path(client) -> None:
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(token)
 
-    created = await client.post("/sessions", headers=headers, json={"company_id": company_id})
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
     session_id = created.json()["id"]
     sid = uuid.UUID(session_id)
 
@@ -95,7 +95,7 @@ async def test_resume_image_happy_path(client) -> None:
         "cmd.api.routes.sessions.resume_image_turn",
         AsyncMock(return_value=fake_result),
     ):
-        res = await client.post(f"/sessions/{session_id}/resume-image", headers=headers)
+        res = await client.post(f"/api/sessions/{session_id}/resume-image", headers=headers)
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["session"]["id"] == str(sid)

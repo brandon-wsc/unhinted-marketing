@@ -2,7 +2,7 @@
 
 How to use the admin LLM records, node steps, and Session Trace to fine-tune graph prompts. Product contracts stay in [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) / [ADR 0007](./adr/0007-admin-trace-viewer.md); this doc is the **operator workflow**.
 
-**Entry:** sign in as `platform_level ≥ 6` → UserMenu → **Admin** → `/admin`  
+**Entry:** sign in as `platform_level ≥ 6` → UserMenu → **Admin** → SPA `/admin` (API is `/api/admin/*`)  
 **Tabs:** LLM calls · Node steps · Session Trace
 
 ---

@@ -50,14 +50,14 @@ async def test_register_defaults_to_member_level(client) -> None:
 
 @pytest.mark.asyncio
 async def test_llm_calls_unauthenticated(client) -> None:
-    res = await client.get("/admin/llm-calls")
+    res = await client.get("/api/admin/llm-calls")
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_llm_calls_member_forbidden(client) -> None:
     data = await register_user(client)
-    res = await client.get("/admin/llm-calls", headers=auth_header(data["access_token"]))
+    res = await client.get("/api/admin/llm-calls", headers=auth_header(data["access_token"]))
     assert res.status_code == 403
 
 
@@ -79,7 +79,7 @@ async def test_llm_calls_admin_lists_and_filters(client, db_session) -> None:
     await db_session.commit()
     headers = auth_header(data["access_token"])
 
-    res = await client.get("/admin/llm-calls", headers=headers)
+    res = await client.get("/api/admin/llm-calls", headers=headers)
     assert res.status_code == 200, res.text
     body = res.json()
     assert len(body["items"]) == 2
@@ -87,17 +87,17 @@ async def test_llm_calls_admin_lists_and_filters(client, db_session) -> None:
     # Summary must not leak prompt/response bodies.
     assert "system_prompt" not in body["items"][0]
 
-    res = await client.get("/admin/llm-calls?node=reviewer", headers=headers)
+    res = await client.get("/api/admin/llm-calls?node=reviewer", headers=headers)
     assert [i["node"] for i in res.json()["items"]] == ["reviewer"]
 
-    res = await client.get("/admin/llm-calls?status=provider_error", headers=headers)
+    res = await client.get("/api/admin/llm-calls?status=provider_error", headers=headers)
     items = res.json()["items"]
     assert len(items) == 1 and items[0]["fallback_used"] is True
 
-    res = await client.get("/admin/llm-calls?fallback_used=true", headers=headers)
+    res = await client.get("/api/admin/llm-calls?fallback_used=true", headers=headers)
     assert len(res.json()["items"]) == 1
 
-    res = await client.get("/admin/llm-calls?limit=1&offset=1", headers=headers)
+    res = await client.get("/api/admin/llm-calls?limit=1&offset=1", headers=headers)
     body = res.json()
     assert len(body["items"]) == 1 and body["limit"] == 1 and body["offset"] == 1
 
@@ -111,7 +111,7 @@ async def test_llm_call_detail_and_404(client, db_session) -> None:
     await db_session.commit()
     headers = auth_header(data["access_token"])
 
-    res = await client.get(f"/admin/llm-calls/{row.id}", headers=headers)
+    res = await client.get(f"/api/admin/llm-calls/{row.id}", headers=headers)
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["system_prompt"] == "sys"
@@ -119,7 +119,7 @@ async def test_llm_call_detail_and_404(client, db_session) -> None:
     assert body["response_text"] == '{"passed": true}'
     assert body["parse_ok"] is True
 
-    res = await client.get(f"/admin/llm-calls/{uuid.uuid4()}", headers=headers)
+    res = await client.get(f"/api/admin/llm-calls/{uuid.uuid4()}", headers=headers)
     assert res.status_code == 404
 
 
@@ -130,7 +130,7 @@ async def test_llm_call_detail_member_forbidden(client, db_session) -> None:
     db_session.add(row)
     await db_session.commit()
     res = await client.get(
-        f"/admin/llm-calls/{row.id}", headers=auth_header(data["access_token"])
+        f"/api/admin/llm-calls/{row.id}", headers=auth_header(data["access_token"])
     )
     assert res.status_code == 403
 
@@ -155,7 +155,7 @@ def _step(**overrides) -> SessionNodeStep:
 @pytest.mark.asyncio
 async def test_node_steps_member_forbidden(client) -> None:
     data = await register_user(client)
-    res = await client.get("/admin/node-steps", headers=auth_header(data["access_token"]))
+    res = await client.get("/api/admin/node-steps", headers=auth_header(data["access_token"]))
     assert res.status_code == 403
 
 
@@ -173,28 +173,28 @@ async def test_node_steps_list_detail_and_filters(client, db_session) -> None:
     await db_session.commit()
     headers = auth_header(data["access_token"])
 
-    res = await client.get("/admin/node-steps", headers=headers)
+    res = await client.get("/api/admin/node-steps", headers=headers)
     assert res.status_code == 200, res.text
     assert len(res.json()["items"]) == 2
     assert "output" not in res.json()["items"][0]
 
-    res = await client.get(f"/admin/node-steps?turn_id={turn_id}&node=reviewer", headers=headers)
+    res = await client.get(f"/api/admin/node-steps?turn_id={turn_id}&node=reviewer", headers=headers)
     items = res.json()["items"]
     assert len(items) == 1 and items[0]["node"] == "reviewer"
 
-    res = await client.get(f"/admin/node-steps/{step.id}", headers=headers)
+    res = await client.get(f"/api/admin/node-steps/{step.id}", headers=headers)
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["output"]["reviewer_passed"] is True or body["node"] == "brainstormer"
     # Detail for brainstormer has no sibling LLM; fetch reviewer step
-    reviewer = (await client.get("/admin/node-steps?node=reviewer", headers=headers)).json()[
+    reviewer = (await client.get("/api/admin/node-steps?node=reviewer", headers=headers)).json()[
         "items"
     ][0]
-    detail = await client.get(f"/admin/node-steps/{reviewer['id']}", headers=headers)
+    detail = await client.get(f"/api/admin/node-steps/{reviewer['id']}", headers=headers)
     assert detail.status_code == 200
     assert len(detail.json()["llm_calls"]) == 1
 
-    res = await client.get(f"/admin/node-steps/{uuid.uuid4()}", headers=headers)
+    res = await client.get(f"/api/admin/node-steps/{uuid.uuid4()}", headers=headers)
     assert res.status_code == 404
 
 
@@ -238,7 +238,7 @@ async def test_session_trace(client, db_session) -> None:
     await db_session.commit()
 
     headers = auth_header(data["access_token"])
-    res = await client.get(f"/admin/sessions/{session_id}/trace", headers=headers)
+    res = await client.get(f"/api/admin/sessions/{session_id}/trace", headers=headers)
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["id"] == str(session_id)
@@ -250,5 +250,5 @@ async def test_session_trace(client, db_session) -> None:
     assert len(body["turns"][0]["steps"]) == 1
     assert len(body["turns"][0]["llm_calls"]) == 1
 
-    res = await client.get(f"/admin/sessions/{uuid.uuid4()}/trace", headers=headers)
+    res = await client.get(f"/api/admin/sessions/{uuid.uuid4()}/trace", headers=headers)
     assert res.status_code == 404

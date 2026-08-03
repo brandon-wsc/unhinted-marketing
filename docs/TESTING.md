@@ -35,7 +35,7 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 
 **API test priorities (behavior, not %)**:
 
-1. `GET /health`
+1. `GET /api/health`
 2. Auth: register → login → me → refresh → logout (+ duplicate email, bad password, missing Bearer)
 3. Sessions CRUD + ownership `403`
 4. Confirm stub: invalid `approval_token` → 400; idempotency replay

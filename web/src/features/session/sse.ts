@@ -1,5 +1,7 @@
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 
+import { API_BASE } from "@/lib/api-base";
+
 export class SseAuthError extends Error {
   constructor() {
     super("sse-unauthorized");
@@ -25,7 +27,7 @@ export function subscribeSessionEvents({
   onEvent,
   onOpen,
 }: SubscribeOptions): Promise<void> {
-  return fetchEventSource(`/sessions/${sessionId}/events`, {
+  return fetchEventSource(`${API_BASE}/sessions/${sessionId}/events`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     signal,
     openWhenHidden: true,

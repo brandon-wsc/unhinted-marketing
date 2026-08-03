@@ -52,7 +52,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173/login](http://localhost:5173/login). Vite proxies `/auth`, `/sessions`, `/signals`, `/companies`, `/health` → `:8000`.
+Open [http://localhost:5173/login](http://localhost:5173/login). Vite proxies `/api` → `:8000`. SPA document routes (`/`, `/login`, `/admin`, …) are not proxied.
 
 ---
 
@@ -89,38 +89,46 @@ Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template
 
 ## API overview
 
+All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)).
+
 ### Auth
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/auth/register` | Create account + default company |
-| POST | `/auth/login` | Email/password login |
-| POST | `/auth/refresh` | Rotate tokens (httpOnly cookie) |
-| POST | `/auth/logout` | Revoke refresh token |
-| GET | `/auth/me` | Current user (Bearer access token) |
+| POST | `/api/auth/register` | Create account + default company |
+| POST | `/api/auth/login` | Email/password login |
+| POST | `/api/auth/refresh` | Rotate tokens (httpOnly cookie) |
+| POST | `/api/auth/logout` | Revoke refresh token |
+| GET | `/api/auth/me` | Current user (Bearer access token) |
 
 ### Signals & questions (Phase 1)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/signals/top` | Top HK market signals (auth required) |
-| GET | `/companies/{id}/recommended-questions` | Cached landing questions (12h TTL) |
+| GET | `/api/signals/top` | Top HK market signals (auth required) |
+| GET | `/api/companies/{id}/recommended-questions` | Cached landing questions (12h TTL) |
 
 ### Sessions (Phase 2–3)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/sessions?company_id=` | History list (pinned first; title or first-message preview) |
-| POST | `/sessions` | Create session |
-| PATCH | `/sessions/{id}` | Rename (`title` / `clear_title`) and/or `pinned` |
-| DELETE | `/sessions/{id}` | Delete session (+ cascaded messages/drafts) |
-| POST | `/sessions/{id}/messages` | User turn (LangGraph); 409 if busy or parked awaiting image |
-| GET | `/sessions/{id}/messages` | Hydrate transcript (`metadata.agent_actions` on user turns) |
-| POST | `/sessions/{id}/resume-image` | Resume parked graph into image plan/gen ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
-| POST | `/sessions/{id}/stop` | Discard in-flight or parked turn |
-| POST | `/sessions/{id}/draft` | Manual draft revision (no LLM) |
-| GET | `/sessions/{id}/events` | SSE stream (snapshot includes `interrupted` for Generate-image CTA) |
-| POST | `/sessions/{id}/confirm` | Confirm stub publish |
+| GET | `/api/sessions?company_id=` | History list (pinned first; title or first-message preview) |
+| POST | `/api/sessions` | Create session |
+| PATCH | `/api/sessions/{id}` | Rename (`title` / `clear_title`) and/or `pinned` |
+| DELETE | `/api/sessions/{id}` | Delete session (+ cascaded messages/drafts) |
+| POST | `/api/sessions/{id}/messages` | User turn (LangGraph); 409 if busy or parked awaiting image |
+| GET | `/api/sessions/{id}/messages` | Hydrate transcript (`metadata.agent_actions` on user turns) |
+| POST | `/api/sessions/{id}/resume-image` | Resume parked graph into image plan/gen ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
+| POST | `/api/sessions/{id}/stop` | Discard in-flight or parked turn |
+| POST | `/api/sessions/{id}/draft` | Manual draft revision (no LLM) |
+| GET | `/api/sessions/{id}/events` | SSE stream (snapshot includes `interrupted` for Generate-image CTA) |
+| POST | `/api/sessions/{id}/confirm` | Confirm stub publish |
+
+### Health
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Liveness → `{"status":"ok"}` |
 
 Full auth and session specs: [ROADMAP.md](./ROADMAP.md); what’s shipped: [STATUS.md](./STATUS.md). Agent SSOT map: [AGENTS.md](../AGENTS.md). Refresh OpenAPI / JSON Schema mirrors: `python -m scripts.export_contracts`.
 

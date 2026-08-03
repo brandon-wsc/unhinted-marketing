@@ -18,7 +18,7 @@ async def test_manual_draft_update(client, db_session) -> None:
     )
 
     res = await client.post(
-        f"/sessions/{session_id}/draft",
+        f"/api/sessions/{session_id}/draft",
         headers=auth_header(data["access_token"]),
         json={
             "caption": "Updated caption",
@@ -48,7 +48,7 @@ async def test_confirm_invalid_token(client, db_session) -> None:
     )
 
     res = await client.post(
-        f"/sessions/{session_id}/confirm",
+        f"/api/sessions/{session_id}/confirm",
         headers=auth_header(data["access_token"]),
         json={
             "approval_token": "wrong-token-xxxxxxxx",
@@ -80,12 +80,12 @@ async def test_confirm_idempotency(client, db_session) -> None:
         "platform": "stub",
     }
 
-    first = await client.post(f"/sessions/{session_id}/confirm", headers=headers, json=payload)
+    first = await client.post(f"/api/sessions/{session_id}/confirm", headers=headers, json=payload)
     assert first.status_code == 200, first.text
     receipt_id = first.json()["receipt_id"]
     assert first.json()["status"] == "stubbed"
 
-    second = await client.post(f"/sessions/{session_id}/confirm", headers=headers, json=payload)
+    second = await client.post(f"/api/sessions/{session_id}/confirm", headers=headers, json=payload)
     assert second.status_code == 200
     assert second.json()["receipt_id"] == receipt_id
     assert second.json()["idempotency_key"] == idem
@@ -122,7 +122,7 @@ async def test_confirm_idempotency_key_not_shared_across_users(client, db_sessio
 
     shared_idem = f"shared-idem-{uuid.uuid4().hex}"
     first = await client.post(
-        f"/sessions/{owner_sid}/confirm",
+        f"/api/sessions/{owner_sid}/confirm",
         headers=auth_header(owner["access_token"]),
         json={
             "approval_token": owner_token,
@@ -133,7 +133,7 @@ async def test_confirm_idempotency_key_not_shared_across_users(client, db_sessio
     assert first.status_code == 200, first.text
 
     conflict = await client.post(
-        f"/sessions/{other_sid}/confirm",
+        f"/api/sessions/{other_sid}/confirm",
         headers=auth_header(other["access_token"]),
         json={
             "approval_token": other_token,

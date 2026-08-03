@@ -1,4 +1,5 @@
 import { fetchWithAuth } from "@/context/auth-context";
+import { API_BASE } from "@/lib/api-base";
 import { parseApiErrorResponse } from "@/lib/parse-api-error";
 
 export type LlmCallRecordSummary = {
@@ -160,7 +161,7 @@ export async function apiAdminListLlmCalls(
   offset = 0,
 ): Promise<LlmCallRecordList> {
   const query = buildLlmCallQuery(filters, LLM_CALL_PAGE_SIZE, offset);
-  const res = await fetchWithAuth(accessToken, `/admin/llm-calls?${query}`);
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/admin/llm-calls?${query}`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }
@@ -169,7 +170,7 @@ export async function apiAdminGetLlmCall(
   accessToken: string | null,
   id: string,
 ): Promise<LlmCallRecordDetail> {
-  const res = await fetchWithAuth(accessToken, `/admin/llm-calls/${id}`);
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/admin/llm-calls/${id}`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }
@@ -180,7 +181,7 @@ export async function apiAdminListNodeSteps(
   offset = 0,
 ): Promise<NodeStepList> {
   const query = buildNodeStepQuery(filters, NODE_STEP_PAGE_SIZE, offset);
-  const res = await fetchWithAuth(accessToken, `/admin/node-steps?${query}`);
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/admin/node-steps?${query}`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }
@@ -189,7 +190,7 @@ export async function apiAdminGetNodeStep(
   accessToken: string | null,
   id: string,
 ): Promise<NodeStepDetail> {
-  const res = await fetchWithAuth(accessToken, `/admin/node-steps/${id}`);
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/admin/node-steps/${id}`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }
@@ -198,7 +199,10 @@ export async function apiAdminGetSessionTrace(
   accessToken: string | null,
   sessionId: string,
 ): Promise<SessionTrace> {
-  const res = await fetchWithAuth(accessToken, `/admin/sessions/${sessionId}/trace`);
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/admin/sessions/${sessionId}/trace`,
+  );
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }
