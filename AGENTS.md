@@ -13,6 +13,7 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 | Product / architecture | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Modes, graph scope, safety |
 | Shipped vs held + decisions | [`docs/STATUS.md`](docs/STATUS.md) | Progress checklists |
 | Locked decisions (ADR) | [`docs/adr/`](docs/adr/) | Prefer ADR over chat memory |
+| Admin prompt tuning (ops) | [`docs/PROMPT_TUNING.md`](docs/PROMPT_TUNING.md) | How to use LLM records / node steps / Session Trace; retention explained |
 | HTTP + Pydantic API shapes | [`schemas/`](schemas/) · FastAPI OpenAPI | Export: `python -m scripts.export_contracts` |
 | Canonical draft + SSE catalog | [`schemas/contracts.py`](schemas/contracts.py) · [`docs/contracts/`](docs/contracts/) | JSON Schema mirrors |
 | External tools | [`schemas/tools.py`](schemas/tools.py) | `query_market_trends`, `publish_social_post` |

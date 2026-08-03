@@ -15,7 +15,7 @@ LLM call records (ADR 0005) show prompts/responses but not the full graph path: 
 2. **Admin APIs** (gated by `require_platform_level(ADMIN)`, not tenant ownership):
    - `GET /admin/node-steps` + `/{id}` (sibling LLM calls by `turn_id`+`node`)
    - `GET /admin/sessions/{id}/trace` — messages, draft revisions, resolved signals, turns (steps + LLM calls)
-3. **Admin UI** at SPA `/admin` with tabs: LLM 呼叫 | Node steps | Session Trace; deep-link via `?tab=&turn=&session=`.
+3. **Admin UI** at SPA `/admin` with tabs: LLM calls | Node steps | Session Trace; deep-link via `?tab=&turn=&session=`.
 4. **Not** an end-user debugger. Retention/purge remains deferred.
 
 ## Consequences
