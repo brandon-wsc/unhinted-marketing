@@ -22,7 +22,8 @@ from internal.session.graph import get_session_graph
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
 from internal.session.trace import turn_trace
 from internal.session.turn_registry import TurnEntry, session_turn_registry
-from schemas.contracts import DraftCopy, PreviewUpdatedData
+from internal.session.media import image_format_from_plan, media_item_payload
+from schemas.contracts import DraftCopy, PreviewMediaItem, PreviewUpdatedData
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +73,81 @@ def preview_updated_payload(
     image_url: str | None,
     copy: dict[str, Any] | None,
     platform: str | None = None,
+    media: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    items = [PreviewMediaItem.model_validate(m) for m in (media or [])]
+    primary = image_url
+    if primary is None and items:
+        primary = items[0].url
     return PreviewUpdatedData(
         revision=revision,
         approval_token=approval_token,
-        image_url=image_url,
+        image_url=primary,
+        media=items,
         draft_copy=DraftCopy.model_validate(normalize_draft_copy(copy)),
         platform=platform or DEFAULT_PLATFORM,
     ).model_dump(by_alias=True)
+
+
+async def _media_for_new_draft(
+    db: AsyncSession,
+    session: Session,
+    *,
+    image_url: str | None,
+    image_plan: dict[str, Any] | None,
+    image_format: str | None,
+    reuse_media_ids: list[uuid.UUID] | None,
+    create_image_row: bool,
+) -> tuple[list[uuid.UUID], list[dict[str, Any]], str | None, dict[str, Any] | None]:
+    """Resolve media_ids for a new draft revision (ADR 0008).
+
+    - create_image_row: insert append-only preview_images from url/plan (gen path).
+    - else reuse_media_ids: caption-only path keeps same image versions.
+    """
+    if create_image_row and (image_url or image_plan):
+        fmt = image_format_from_plan(
+            image_plan, fallback=image_format or "single"
+        )
+        row = await repos.insert_preview_image(
+            db,
+            session_id=session.id,
+            url=image_url,
+            plan=image_plan,
+            format=fmt,
+            role="primary",
+            seq=0,
+            status="ready" if image_url else "pending",
+        )
+        media = [
+            media_item_payload(
+                image_id=row.id,
+                url=row.url,
+                plan=row.plan,
+                format=row.format,
+                role=row.role,
+                seq=row.seq,
+                status=row.status,
+            )
+        ]
+        return [row.id], media, row.url, dict(row.plan or {})
+
+    ids = list(reuse_media_ids or [])
+    rows = await repos.get_preview_images_by_ids(db, ids)
+    media = [
+        media_item_payload(
+            image_id=r.id,
+            url=r.url,
+            plan=r.plan,
+            format=r.format,
+            role=r.role,
+            seq=r.seq,
+            status=r.status,
+        )
+        for r in rows
+    ]
+    primary_url = media[0]["url"] if media else image_url
+    primary_plan = media[0]["plan"] if media else image_plan
+    return ids, media, primary_url, primary_plan
 
 
 def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str, Any]:
@@ -345,13 +413,27 @@ async def _persist_after_invoke(
                     existing_draft.platform if existing_draft else None
                 ) or DEFAULT_PLATFORM
                 draft_copy = normalize_draft_copy(values.get("draft"))
+                media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
+                    db,
+                    session,
+                    image_url=values.get("image_url"),
+                    image_plan=values.get("image_plan")
+                    if isinstance(values.get("image_plan"), dict)
+                    else None,
+                    image_format=values.get("image_format")
+                    if isinstance(values.get("image_format"), str)
+                    else None,
+                    reuse_media_ids=None,
+                    create_image_row=True,
+                )
                 await repos.upsert_preview_draft(
                     db,
                     session_id=session.id,
                     revision=rev,
                     copy=draft_copy,
-                    image_url=values.get("image_url"),
-                    image_plan=values.get("image_plan"),
+                    image_url=primary_url,
+                    image_plan=primary_plan,
+                    media_ids=media_ids,
                     source_signal_ids=values.get("source_signal_ids") or [],
                     approval_token=str(values["approval_token"]),
                     platform=platform,
@@ -362,9 +444,10 @@ async def _persist_after_invoke(
                         "data": preview_updated_payload(
                             revision=rev,
                             approval_token=str(values["approval_token"]),
-                            image_url=values.get("image_url"),
+                            image_url=primary_url,
                             copy=draft_copy,
                             platform=platform,
+                            media=media,
                         ),
                     }
                 )
@@ -720,8 +803,30 @@ async def update_session_draft(
     base_rev = existing.revision if existing else int(state.get("revision") or 0)
     rev = base_rev + 1
     token = secrets.token_urlsafe(24)
-    image_url = state.get("image_url") or (existing.image_url if existing else None)
-    image_plan = state.get("image_plan") or (existing.image_plan if existing else None)
+    # Caption-only: reuse media_ids (ADR 0008). Do not invent a new image row.
+    reuse_ids = list(existing.media_ids or []) if existing else []
+    media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
+        db,
+        session,
+        image_url=state.get("image_url") or (existing.image_url if existing else None),
+        image_plan=state.get("image_plan")
+        if isinstance(state.get("image_plan"), dict)
+        else (existing.image_plan if existing else None),
+        image_format=None,
+        reuse_media_ids=reuse_ids,
+        create_image_row=False,
+    )
+    # Legacy drafts without media_ids but with image_url: create one image once.
+    if not media_ids and (primary_url or primary_plan):
+        media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
+            db,
+            session,
+            image_url=primary_url,
+            image_plan=primary_plan if isinstance(primary_plan, dict) else None,
+            image_format=None,
+            reuse_media_ids=None,
+            create_image_row=True,
+        )
     source_signal_ids = list(state.get("source_signal_ids") or [])
     if existing and existing.source_signal_ids and not source_signal_ids:
         source_signal_ids = list(existing.source_signal_ids)
@@ -732,8 +837,9 @@ async def update_session_draft(
         session_id=session.id,
         revision=rev,
         copy=copy,
-        image_url=image_url,
-        image_plan=image_plan,
+        image_url=primary_url,
+        image_plan=primary_plan if isinstance(primary_plan, dict) else None,
+        media_ids=media_ids,
         source_signal_ids=source_signal_ids,
         approval_token=token,
         platform=platform,
@@ -742,7 +848,10 @@ async def update_session_draft(
     state["draft"] = copy
     state["revision"] = rev
     state["approval_token"] = token
-    state["image_url"] = image_url
+    state["image_url"] = primary_url
+    if isinstance(primary_plan, dict):
+        state["image_plan"] = primary_plan
+    state["media_ids"] = [str(i) for i in media_ids]
     state["pending_confirm"] = False
     state["need_image"] = False
     state["awaiting_image_ok"] = False
@@ -759,7 +868,7 @@ async def update_session_draft(
                 "draft": copy,
                 "revision": rev,
                 "approval_token": token,
-                "image_url": image_url,
+                "image_url": primary_url,
                 "mode": MODE_PREVIEW,
                 "pending_confirm": False,
                 "need_image": False,
@@ -779,9 +888,10 @@ async def update_session_draft(
             "data": preview_updated_payload(
                 revision=rev,
                 approval_token=token,
-                image_url=image_url,
+                image_url=primary_url,
                 copy=copy,
                 platform=platform,
+                media=media,
             ),
         },
     ]
@@ -791,7 +901,7 @@ async def update_session_draft(
         "revision": rev,
         "approval_token": token,
         "copy": copy,
-        "image_url": image_url,
+        "image_url": primary_url,
         "platform": platform,
         "mode": MODE_PREVIEW,
         "events": events,

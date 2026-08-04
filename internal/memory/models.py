@@ -12,7 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -155,6 +155,7 @@ class Session(Base):
 
     messages: Mapped[list["SessionMessage"]] = relationship(back_populates="session")
     drafts: Mapped[list["PreviewDraft"]] = relationship(back_populates="session")
+    images: Mapped[list["PreviewImage"]] = relationship(back_populates="session")
 
 
 class SessionMessage(Base):
@@ -172,6 +173,26 @@ class SessionMessage(Base):
     session: Mapped["Session"] = relationship(back_populates="messages")
 
 
+class PreviewImage(Base):
+    """Append-only image asset version for a session (ADR 0008)."""
+
+    __tablename__ = "preview_images"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    role: Mapped[str] = mapped_column(String(40), nullable=False, default="primary")
+    format: Mapped[str] = mapped_column(String(40), nullable=False, default="single")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="ready")
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    plan: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    session: Mapped["Session"] = relationship(back_populates="images")
+
+
 class PreviewDraft(Base):
     __tablename__ = "preview_drafts"
     __table_args__ = (
@@ -186,6 +207,10 @@ class PreviewDraft(Base):
     copy: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_plan: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Ordered refs into preview_images (ADR 0008). Empty = no media.
+    media_ids: Mapped[list] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), nullable=False, default=list
+    )
     platform: Mapped[str | None] = mapped_column(String(40), nullable=True)
     source_signal_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     approval_token: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)

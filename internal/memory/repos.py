@@ -11,6 +11,7 @@ from internal.memory.models import (
     Entity,
     OrganizationMember,
     PreviewDraft,
+    PreviewImage,
     RawNewsEvent,
     RecommendedQuestions,
     Session,
@@ -326,6 +327,44 @@ async def delete_session_messages_by_ids(
     return int(result.rowcount or 0)
 
 
+async def insert_preview_image(
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID,
+    url: str | None,
+    plan: dict | None,
+    format: str = "single",
+    role: str = "primary",
+    seq: int = 0,
+    status: str = "ready",
+) -> PreviewImage:
+    """Append-only image version (ADR 0008). Never mutate plan/url of returned rows later."""
+    row = PreviewImage(
+        session_id=session_id,
+        seq=seq,
+        role=role,
+        format=format,
+        status=status,
+        url=url,
+        plan=dict(plan or {}),
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def get_preview_images_by_ids(
+    db: AsyncSession, image_ids: list[uuid.UUID]
+) -> list[PreviewImage]:
+    if not image_ids:
+        return []
+    rows = (
+        await db.scalars(select(PreviewImage).where(PreviewImage.id.in_(image_ids)))
+    ).all()
+    by_id = {r.id: r for r in rows}
+    return [by_id[i] for i in image_ids if i in by_id]
+
+
 async def upsert_preview_draft(
     db: AsyncSession,
     *,
@@ -337,6 +376,7 @@ async def upsert_preview_draft(
     source_signal_ids: list[str],
     approval_token: str,
     platform: str | None = None,
+    media_ids: list[uuid.UUID] | None = None,
 ) -> PreviewDraft:
     row = PreviewDraft(
         session_id=session_id,
@@ -344,6 +384,7 @@ async def upsert_preview_draft(
         copy=copy,
         image_url=image_url,
         image_plan=image_plan,
+        media_ids=list(media_ids or []),
         source_signal_ids=source_signal_ids,
         approval_token=approval_token,
         platform=platform,

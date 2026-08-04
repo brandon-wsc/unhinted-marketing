@@ -20,6 +20,18 @@ class DraftCopy(BaseModel):
     cta: str = Field(default="", max_length=500)
 
 
+class PreviewMediaItem(BaseModel):
+    """One append-only image version referenced by a draft (ADR 0008)."""
+
+    id: str
+    url: str | None = None
+    plan: dict[str, Any] = Field(default_factory=dict)
+    format: Literal["single", "comic_4panel"] | str = "single"
+    role: str = "primary"
+    seq: int = 0
+    status: str = "ready"
+
+
 class PreviewUpdatedData(BaseModel):
     """Payload for SSE / turn event `preview.updated`."""
 
@@ -27,7 +39,8 @@ class PreviewUpdatedData(BaseModel):
 
     revision: int = Field(ge=0)
     approval_token: str = Field(min_length=1)
-    image_url: str | None = None
+    image_url: str | None = None  # compat: primary media url
+    media: list[PreviewMediaItem] = Field(default_factory=list)
     # JSON key stays `copy` (FE / ADR); Python name avoids shadowing BaseModel.copy
     draft_copy: DraftCopy = Field(default_factory=DraftCopy, alias="copy")
     platform: str = Field(default="instagram", max_length=40)

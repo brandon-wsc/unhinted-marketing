@@ -40,10 +40,15 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-08-05) — Image visual format (no new graph node):**
 
-- **Formats** — `image_format`: `single` (default) | `comic_4panel` (one PNG strip); still one `image_url` ([ADR 0001](./adr/0001-preview-canonical-draft.md))
+- **Formats** — `image_format`: `single` (default) | `comic_4panel` (one PNG strip); still one strip PNG per comic asset
 - **Where** — same `executor_image_plan` / `executor_image_gen`; plan schema gains `format` + optional `panels[]`
 - **Image format:** `single` (default) or `comic_4panel` via Generate-image chips / `POST /resume-image` body; revise text「4格」also sets format
 - **Comic craft:** panels 1–3 situational empathy (no product); panel 4 soft remedy — see [VOICE.md](./VOICE.md) §5 Unhinted Market
+
+**Decision (2026-08-05) — Append-only preview images:** → [ADR 0008](./adr/0008-preview-images-append-only.md)
+
+- **`preview_images`** + **`preview_drafts.media_ids`** `uuid[]`; publishable change → new draft; plan/regen/add → new image row
+- Compat: `image_url` / `image_plan` denormalized primary; SSE `preview.updated` includes `media[]`
 
 **Current user-facing flow:** Register or login → `/` chat → Agent brief/interrupt → Preview Mode (IG mock + editable draft) → Confirm (stub receipt). Meta ingest / BYOK / Trace still deferred.
 
@@ -229,7 +234,8 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `recommended_questions` | 12h cached landing question JSON |
 | `sessions` | Chat session (mode, user_id, company_id, title, pinned, state JSONB) |
 | `session_messages` | Chat log (user always; assistant for chat / ack / LLM errors — not every Agent node) |
-| `preview_drafts` | Revision chain + approval_token |
+| `preview_drafts` | Revision chain + approval_token + `media_ids` |
+| `preview_images` | Append-only image versions (url + plan) ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
 | `tool_receipts` | Idempotent Confirm / tool receipts |
 | `llm_call_records` | Per-call LLM record: correlation, prompts, response, tokens, latency, status, `parse_ok`/`fallback_used` ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | LangGraph checkpoint tables | Owned by `AsyncPostgresSaver.setup()` (not Alembic) |

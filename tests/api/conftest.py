@@ -24,6 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TRUNCATE_TABLES = (
     "tool_receipts",
     "preview_drafts",
+    "preview_images",
     "session_messages",
     "session_node_steps",
     "sessions",
