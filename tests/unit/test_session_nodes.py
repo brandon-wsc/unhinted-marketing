@@ -118,6 +118,8 @@ async def test_load_context_sets_agent_mode(no_llm: None, mock_db) -> None:
     assert out["mode"] == MODE_AGENT
     assert "company_context" in out
     assert out["company_context"]["personas"] == []
+    assert out["company_context"]["voice"]["roast_level"] == 1
+    assert out["company_context"]["voice"]["craft"] == "hk_social_editor"
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-03  
-> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Security: auth rate limit + confirm user-private idempotency (branch) · Observability: LLM call records + platform levels (backend, [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
+> **Last updated:** 2026-08-04  
+> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK 小編 + `roast_level` ([VOICE.md](./VOICE.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
 This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). For architecture and phase plans, see ROADMAP.
@@ -31,6 +31,12 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Confirm UI → stub `/confirm` | ✅ Done — receipt status in preview panel |
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
+
+**Decision (2026-08-04) — Default HK social craft + roast_level:** → [VOICE.md](./VOICE.md)
+
+- **Default craft** — 港式小編 (IKEA feel × Duolingo short/sharp): 貼地 · 有鉤 · 有畫面 · 短 · 有邊界
+- **Tunable** — `entities.profile.roast_level` 0–3 (missing → 1); injected as `company_context.voice` in `load_context`
+- **Prompts** — `BRAINSTORM` / `EXECUTOR_POST` / `EDIT_COPY` / `REVIEWER` share craft block + few-shots; chat stays assistant voice
 
 **Current user-facing flow:** Register or login → `/` chat → Agent brief/interrupt → Preview Mode (IG mock + editable draft) → Confirm (stub receipt). Meta ingest / BYOK / Trace still deferred.
 
@@ -310,6 +316,8 @@ unhinted-marketing/
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |
 | `LLM_RECORD_ENABLED` | Persist every LLM call to `llm_call_records` (default true; [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | `QUESTION_CACHE_TTL_HOURS` | Recommended questions cache (default 12) |
+
+**Company profile (JSONB on `entities`):** optional `roast_level` `0`–`3` (default `1`) — see [VOICE.md](./VOICE.md).
 
 See `.env.example`. Local `.env` is gitignored.
 

@@ -27,6 +27,7 @@ from internal.llm.router import (
 from internal.media.storage import media_object_key, persist_generated_image
 from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.repos import get_company, get_signals_by_ids, list_personas, list_top_signals
+from internal.session.voice import voice_context
 from internal.session import prompts
 from internal.session.context import get_db
 from internal.session.events import session_event_bus
@@ -217,15 +218,20 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
 async def load_context(state: SessionState) -> dict[str, Any]:
     db = get_db()
     company_id = state.get("company_id")
-    company_payload: dict[str, Any] = {"company_id": company_id}
+    company_payload: dict[str, Any] = {
+        "company_id": company_id,
+        "voice": voice_context(None),
+    }
     if company_id:
         company = await get_company(db, uuid.UUID(company_id))
         if company:
+            profile = company.profile or {}
             company_payload = {
                 "company_id": str(company.id),
                 "name": company.name,
                 "slug": company.slug,
-                "profile": company.profile or {},
+                "profile": profile,
+                "voice": voice_context(profile),
             }
     await ensure_default_personas(db)
     personas = await list_personas(db)
@@ -418,10 +424,10 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         company_name = ctx.get("name") or "我哋"
         draft = {
             "caption": (
-                f"「{company_name}」留意到「{title}」喺香港討論度上升。"
-                "我哋準備咗實用內容，歡迎留言話我哋知你最想知邊方面。"
+                f"最近成日聽到「{title}」？"
+                f"「{company_name}」都睇住——嚟緊有啲貼地內容，留言話我哋知你最想知邊方面。"
             ),
-            "hashtags": ["#HongKong", "#熱話", "#Marketing"],
+            "hashtags": ["#HongKong", "#熱話"],
             "cta": "留言話我哋知",
         }
         refs = signal_ids[:3]
