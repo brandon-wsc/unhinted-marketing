@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -79,6 +80,12 @@ class StopSessionResponse(BaseModel):
     status: str  # cancelled | idle
     interrupted: bool = False
     awaiting_image_ok: bool = False
+
+
+class ResumeImageRequest(BaseModel):
+    """Optional visual format when continuing past the image interrupt."""
+
+    image_format: Literal["single", "comic_4panel"] | None = None
 
 
 class ResumeImageResponse(BaseModel):

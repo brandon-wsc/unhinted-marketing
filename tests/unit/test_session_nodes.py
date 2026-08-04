@@ -298,6 +298,22 @@ async def test_executor_image_plan_fallback(no_llm: None) -> None:
     )
     assert "prompt" in out["image_plan"]
     assert "Acme" in out["image_plan"]["prompt"]
+    assert out["image_plan"]["format"] == "single"
+    assert out["image_format"] == "single"
+
+
+@pytest.mark.asyncio
+async def test_executor_image_plan_comic_fallback(no_llm: None) -> None:
+    out = await N.executor_image_plan(
+        _base_state(
+            draft={"caption": "奶茶熱潮"},
+            company_context={"name": "Acme"},
+            image_format="comic_4panel",
+        )
+    )
+    assert out["image_plan"]["format"] == "comic_4panel"
+    assert len(out["image_plan"]["panels"]) == 4
+    assert out["image_format"] == "comic_4panel"
 
 
 @pytest.mark.asyncio

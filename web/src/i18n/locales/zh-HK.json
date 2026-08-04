@@ -85,8 +85,11 @@
       },
       "interrupt": {
         "title": "文案已經準備好",
-        "subtitle": "繼續設計並生成圖片？",
-        "confirm": "生成圖片"
+        "subtitle": "揀視覺格式，然後生成圖片（預設單圖）。",
+        "confirm": "生成圖片",
+        "formatLabel": "圖片格式",
+        "formatSingle": "單圖",
+        "formatComic": "4格漫畫"
       },
       "imageOkMessage": "OK，幫我生成圖片。"
     },

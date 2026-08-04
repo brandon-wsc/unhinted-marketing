@@ -4,7 +4,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +30,7 @@ from schemas.session import (
     MessageResponse,
     PostMessageRequest,
     PostMessageResponse,
+    ResumeImageRequest,
     ResumeImageResponse,
     SessionListItem,
     SessionListResponse,
@@ -248,11 +249,16 @@ async def resume_image(
     session_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    body: Annotated[ResumeImageRequest, Body()] = ResumeImageRequest(),
 ) -> ResumeImageResponse:
     """Resume parked interrupt_before executor_image_plan (ADR 0004)."""
     session = await _require_owned_session(db, session_id, user)
     try:
-        result = await resume_image_turn(db, session)
+        result = await resume_image_turn(
+            db,
+            session,
+            image_format=body.image_format,
+        )
     except SessionTurnConflict as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

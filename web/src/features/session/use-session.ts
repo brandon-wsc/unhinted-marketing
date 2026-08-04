@@ -879,39 +879,43 @@ export function useSession(companyId: string | undefined) {
     [applyTurnEvent, ensureOutcomeActions, finishRunningActions],
   );
 
-  const resumeImage = useCallback(async () => {
-    if (!accessToken || !sessionId || sending || stopping || !awaitingImageOk) return;
-    setSending(true);
-    setLlmError(null);
-    const epoch = ++turnEpochRef.current;
-    suppressLiveTurnEventsRef.current = false;
-    const abort = new AbortController();
-    sendAbortRef.current = abort;
-    try {
-      const res = await apiResumeSessionImage(accessToken, sessionId, {
-        signal: abort.signal,
-      });
-      if (abort.signal.aborted || epoch !== turnEpochRef.current) {
-        return;
+  const resumeImage = useCallback(
+    async (imageFormat?: "single" | "comic_4panel") => {
+      if (!accessToken || !sessionId || sending || stopping || !awaitingImageOk) return;
+      setSending(true);
+      setLlmError(null);
+      const epoch = ++turnEpochRef.current;
+      suppressLiveTurnEventsRef.current = false;
+      const abort = new AbortController();
+      sendAbortRef.current = abort;
+      try {
+        const res = await apiResumeSessionImage(accessToken, sessionId, {
+          signal: abort.signal,
+          imageFormat,
+        });
+        if (abort.signal.aborted || epoch !== turnEpochRef.current) {
+          return;
+        }
+        applyTurnResponse(res);
+        void refreshHistory();
+      } catch (err) {
+        if (abort.signal.aborted || epoch !== turnEpochRef.current) return;
+        throw err;
+      } finally {
+        if (sendAbortRef.current === abort) sendAbortRef.current = null;
+        setSending(false);
       }
-      applyTurnResponse(res);
-      void refreshHistory();
-    } catch (err) {
-      if (abort.signal.aborted || epoch !== turnEpochRef.current) return;
-      throw err;
-    } finally {
-      if (sendAbortRef.current === abort) sendAbortRef.current = null;
-      setSending(false);
-    }
-  }, [
-    accessToken,
-    sessionId,
-    sending,
-    stopping,
-    awaitingImageOk,
-    applyTurnResponse,
-    refreshHistory,
-  ]);
+    },
+    [
+      accessToken,
+      sessionId,
+      sending,
+      stopping,
+      awaitingImageOk,
+      applyTurnResponse,
+      refreshHistory,
+    ],
+  );
 
   const stopTurn = useCallback(async () => {
     if (!accessToken || !sessionId || stopping) return;

@@ -85,8 +85,11 @@
       },
       "interrupt": {
         "title": "Copy is ready",
-        "subtitle": "Continue to plan and generate the image?",
-        "confirm": "Generate image"
+        "subtitle": "Pick a visual format, then generate (default: single image).",
+        "confirm": "Generate image",
+        "formatLabel": "Image format",
+        "formatSingle": "Single image",
+        "formatComic": "4-panel comic"
       },
       "imageOkMessage": "Looks good — please generate the image."
     },

@@ -88,13 +88,17 @@ export async function apiPostSessionMessage(
 export async function apiResumeSessionImage(
   accessToken: string | null,
   sessionId: string,
-  init?: { signal?: AbortSignal },
+  init?: { signal?: AbortSignal; imageFormat?: "single" | "comic_4panel" },
 ): Promise<PostMessageResponse> {
   const res = await fetchWithAuth(
     accessToken,
     `${API_BASE}/sessions/${sessionId}/resume-image`,
     {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image_format: init?.imageFormat ?? null,
+      }),
       signal: init?.signal,
     },
   );

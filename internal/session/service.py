@@ -533,6 +533,8 @@ async def run_session_turn(
 async def resume_image_turn(
     db: AsyncSession,
     session: Session,
+    *,
+    image_format: str | None = None,
 ) -> dict[str, Any]:
     """Resume parked graph at interrupt_before executor_image_plan (ADR 0004)."""
     if session_turn_registry.is_busy(session.id):
@@ -564,6 +566,18 @@ async def resume_image_turn(
     entry.message_ids = []
 
     try:
+        if image_format is not None:
+            from internal.session.image_format import normalize_image_format
+
+            fmt = normalize_image_format(image_format)
+            graph = get_session_graph()
+            config = _session_config(session.id)
+            await graph.aupdate_state(config, {"image_format": fmt})
+            st = dict(session.state or {})
+            st["image_format"] = fmt
+            session.state = st
+            await db.flush()
+
         values, still_interrupted, provider_error, progress_events = await _invoke_graph(
             db,
             session,

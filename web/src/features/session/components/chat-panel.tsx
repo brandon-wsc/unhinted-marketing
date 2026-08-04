@@ -172,9 +172,9 @@ export function ChatPanel() {
     }
   }
 
-  async function onResumeImageGen() {
+  async function onResumeImageGen(format?: "single" | "comic_4panel") {
     try {
-      await resumeImage();
+      await resumeImage(format);
     } catch {
       showError(t("chat.error.sendFailed"));
     }
@@ -298,7 +298,7 @@ export function ChatPanel() {
                 {awaitingImageOk && interruptAfterMessageId === m.id && (
                   <InterruptCard
                     sending={sending || stopping}
-                    onResume={() => void onResumeImageGen()}
+                    onResume={(format) => void onResumeImageGen(format)}
                   />
                 )}
                 {previewMode && previewAfterMessageId === m.id && (
@@ -326,7 +326,7 @@ export function ChatPanel() {
             !messages.some((m) => m.id === interruptAfterMessageId) && (
               <InterruptCard
                 sending={sending || stopping}
-                onResume={() => void onResumeImageGen()}
+                onResume={(format) => void onResumeImageGen(format)}
               />
             )}
           {previewMode &&
@@ -338,7 +338,7 @@ export function ChatPanel() {
           {awaitingImageOk && !interruptAfterMessageId && (
             <InterruptCard
               sending={sending || stopping}
-              onResume={() => void onResumeImageGen()}
+              onResume={(format) => void onResumeImageGen(format)}
             />
           )}
           {previewMode && !previewAfterMessageId && (
@@ -561,15 +561,64 @@ function BriefCard({ brief }: { brief: SessionBrief }) {
   );
 }
 
-function InterruptCard({ sending, onResume }: { sending: boolean; onResume: () => void }) {
+function InterruptCard({
+  sending,
+  onResume,
+}: {
+  sending: boolean;
+  onResume: (format?: "single" | "comic_4panel") => void;
+}) {
   const { t } = useTranslation();
+  const [format, setFormat] = useState<"single" | "comic_4panel">("single");
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-card)] p-4 text-sm shadow-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-card)] p-4 text-sm shadow-sm">
       <div>
-        <p className="font-medium">{t("chat.agent.interrupt.title")}</p>
+        <p className="font-medium text-[var(--color-foreground)]">
+          {t("chat.agent.interrupt.title")}
+        </p>
         <p className="mt-0.5 text-[var(--color-muted)]">{t("chat.agent.interrupt.subtitle")}</p>
       </div>
-      <Button onClick={onResume} disabled={sending} className="shrink-0">
+      <div
+        className="flex flex-wrap gap-2"
+        role="group"
+        aria-label={t("chat.agent.interrupt.formatLabel")}
+      >
+        <Button
+          type="button"
+          variant={format === "single" ? "primary" : "ghost"}
+          disabled={sending}
+          className={
+            format === "single"
+              ? "ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-card)]"
+              : "border border-[var(--color-border)]"
+          }
+          onClick={() => setFormat("single")}
+          aria-pressed={format === "single"}
+        >
+          {t("chat.agent.interrupt.formatSingle")}
+        </Button>
+        <Button
+          type="button"
+          variant={format === "comic_4panel" ? "primary" : "ghost"}
+          disabled={sending}
+          className={
+            format === "comic_4panel"
+              ? "ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-card)]"
+              : "border border-[var(--color-border)]"
+          }
+          onClick={() => setFormat("comic_4panel")}
+          aria-pressed={format === "comic_4panel"}
+        >
+          {t("chat.agent.interrupt.formatComic")}
+        </Button>
+      </div>
+      <Button
+        type="button"
+        variant="primary"
+        disabled={sending}
+        className="shrink-0 self-start"
+        onClick={() => onResume(format)}
+      >
         {t("chat.agent.interrupt.confirm")}
       </Button>
     </div>

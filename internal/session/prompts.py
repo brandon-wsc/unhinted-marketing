@@ -138,13 +138,26 @@ Pass only if copy is usable for preview at the company's roast_level.
 IMAGE_PLAN = """You design an image generation plan for a social post (no copyrighted brands/logos).
 Return JSON only:
 {
-  "prompt": "detailed English image prompt",
+  "format": "single" | "comic_4panel",
+  "prompt": "detailed English image prompt (for comic_4panel: one image that is a 4-panel strip)",
   "composition": "layout notes",
   "style": "visual style",
-  "avoid": ["things to avoid"]
+  "avoid": ["things to avoid"],
+  "panels": [{"index": 1, "beat": "panel 1 beat"}, ...]
 }
-Match the post caption mood and HK market context without embedding unreadable text in the image.
-Prefer lived scene / product-in-context over generic stock "corporate success" imagery.
+Rules:
+- Honor image_format from the user payload (default single). Do not switch format on your own.
+- single: one scene; panels may be empty.
+- comic_4panel = Unhinted Market vehicle (Native Integration):
+  * Exactly 4 panels (index 1–4), one image, clear gutters, L→R then top→bottom.
+  * Panel 1: hook scene — instant recognition; NO product.
+  * Panel 2: escalate human absurdity / friction (emotion, not named institution punchline).
+  * Panel 3: peak pain / almost explode — still NO hard sell.
+  * Panel 4: product appears as soft remedy (情緒出口／化解危機／從容感); logo may be subtle; NO feature list or PR copy painted in the art.
+  * Beats are short visual moments (HK everyday), not readable paragraphs in the drawing.
+  * Prompt must encode this 1–3 empathy → 4 remedy arc in English for the image model.
+- Match caption mood; prefer lived scene over stock "corporate success".
+- No watermarks or real celebrity faces. Avoid dense readable text in panels.
 """
 
 ACK_CONFIRM = """The user indicated they want to publish.

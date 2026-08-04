@@ -38,6 +38,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Tunable** — `entities.profile.roast_level` 0–3 (missing → 1); injected as `company_context.voice` in `load_context`
 - **Prompts** — `BRAINSTORM` / `EXECUTOR_POST` / `EDIT_COPY` / `REVIEWER` share craft block + few-shots; chat stays assistant voice
 
+**Decision (2026-08-05) — Image visual format (no new graph node):**
+
+- **Formats** — `image_format`: `single` (default) | `comic_4panel` (one PNG strip); still one `image_url` ([ADR 0001](./adr/0001-preview-canonical-draft.md))
+- **Where** — same `executor_image_plan` / `executor_image_gen`; plan schema gains `format` + optional `panels[]`
+- **Image format:** `single` (default) or `comic_4panel` via Generate-image chips / `POST /resume-image` body; revise text「4格」also sets format
+- **Comic craft:** panels 1–3 situational empathy (no product); panel 4 soft remedy — see [VOICE.md](./VOICE.md) §5 Unhinted Market
+
 **Current user-facing flow:** Register or login → `/` chat → Agent brief/interrupt → Preview Mode (IG mock + editable draft) → Confirm (stub receipt). Meta ingest / BYOK / Trace still deferred.
 
 **Decision (2026-07-29):** Remaining Phase 2 items are **held**; start Phase 3 product UI against the existing session APIs.
