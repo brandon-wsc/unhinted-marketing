@@ -153,6 +153,12 @@
       "hashtags": "Hashtags",
       "cta": "行動呼籲"
     },
+    "copy": {
+      "edit": "編輯文案",
+      "editTitle": "編輯文案",
+      "editHint": "Caption、CTA、hashtags 會一齊存成一個 draft revision。",
+      "empty": "加啲文案…"
+    },
     "media": {
       "title": "圖像計劃",
       "edit": "編輯圖像",

@@ -1,16 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { DraftCopy, PreviewDraft } from "@/features/session/types";
 
 type Props = {
   copy: DraftCopy;
-  imageUrl: string | null;
+  /** All carousel slides (primary + extras). Empty → placeholder. */
+  imageUrls: string[];
   accountName?: string;
-  /** When set, image area is interactive — hover overlay + click opens editor. */
+  /** When set, image area is interactive — click opens editor. */
   onEditImage?: () => void;
+  /** When set, caption area is clickable — opens copy editor. */
+  onEditCopy?: () => void;
 };
 
-function isRenderableImageUrl(url: string | null): url is string {
+export function isRenderableImageUrl(url: string | null | undefined): url is string {
   if (!url) return false;
   // OpenRouter / LiteLLM often return data: URLs (b64) instead of https.
   return (
@@ -23,12 +26,23 @@ function isRenderableImageUrl(url: string | null): url is string {
 
 export function IgPreviewMock({
   copy,
-  imageUrl,
+  imageUrls,
   accountName = "unhinted",
   onEditImage,
+  onEditCopy,
 }: Props) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  const [slide, setSlide] = useState(0);
+
+  const urls = useMemo(
+    () => imageUrls.filter(isRenderableImageUrl),
+    [imageUrls],
+  );
+
+  useEffect(() => {
+    setSlide((i) => (urls.length === 0 ? 0 : Math.min(i, urls.length - 1)));
+  }, [urls]);
 
   const captionBody = useMemo(() => {
     const parts = [copy.caption.trim()];
@@ -39,8 +53,9 @@ export function IgPreviewMock({
 
   const collapsed = captionBody.length > 120 && !expanded;
   const shown = collapsed ? `${captionBody.slice(0, 120).trimEnd()}…` : captionBody;
-  const showImage = isRenderableImageUrl(imageUrl);
-  const editable = typeof onEditImage === "function";
+  const multi = urls.length > 1;
+  const imageEditable = typeof onEditImage === "function";
+  const copyEditable = typeof onEditCopy === "function";
 
   return (
     <div className="mx-auto w-full max-w-[340px]">
@@ -57,26 +72,92 @@ export function IgPreviewMock({
           </div>
         </div>
 
-        <div className="relative aspect-square w-full bg-[var(--color-background)]">
-          {showImage ? (
-            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+        <div
+          className={`relative aspect-square w-full bg-[var(--color-background)]${
+            imageEditable
+              ? " cursor-pointer transition hover:brightness-[0.97] focus-within:ring-2 focus-within:ring-[var(--color-ring)] focus-within:ring-inset"
+              : ""
+          }`}
+        >
+          {urls.length > 0 ? (
+            <div className="absolute inset-0 overflow-hidden">
+              <div
+                className="flex h-full transition-transform duration-300 ease-out"
+                style={{ transform: `translateX(-${slide * 100}%)` }}
+              >
+                {urls.map((url, i) => (
+                  <img
+                    key={`${url}-${i}`}
+                    src={url}
+                    alt=""
+                    className="h-full w-full shrink-0 object-cover"
+                    draggable={false}
+                  />
+                ))}
+              </div>
+            </div>
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center">
               <div className="h-16 w-16 rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-card)]" />
               <p className="text-xs text-[var(--color-muted)]">{t("preview.mock.placeholder")}</p>
             </div>
           )}
-          {editable && (
+
+          {imageEditable && (
             <button
               type="button"
               onClick={onEditImage}
-              className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-100 transition hover:bg-black/45 focus-visible:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-inset group"
+              className="absolute inset-0 z-[1] bg-transparent focus-visible:outline-none"
               aria-label={t("preview.media.edit")}
-            >
-              <span className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-900 opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-visible:opacity-100 max-lg:opacity-100 max-lg:bg-white/90">
-                {t("preview.media.edit")}
-              </span>
-            </button>
+            />
+          )}
+
+          {multi && (
+            <>
+              {slide > 0 && (
+                <button
+                  type="button"
+                  className="absolute left-2 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white transition hover:bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  aria-label={t("preview.media.scrollPrev")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSlide((i) => Math.max(0, i - 1));
+                  }}
+                >
+                  <ChevronLeftIcon />
+                </button>
+              )}
+              {slide < urls.length - 1 && (
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white transition hover:bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  aria-label={t("preview.media.scrollNext")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSlide((i) => Math.min(urls.length - 1, i + 1));
+                  }}
+                >
+                  <ChevronRightIcon />
+                </button>
+              )}
+              <div className="absolute bottom-2.5 left-0 right-0 z-10 flex justify-center gap-1.5">
+                {urls.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={t("preview.media.slot", { n: i + 1 })}
+                    aria-current={i === slide ? "true" : undefined}
+                    className={`h-1.5 w-1.5 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                      i === slide ? "bg-white" : "bg-white/45 hover:bg-white/70"
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSlide(i);
+                    }}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </div>
 
@@ -86,19 +167,44 @@ export function IgPreviewMock({
             <CommentIcon />
             <ShareIcon />
           </div>
-          <p className="text-sm leading-relaxed">
-            <span className="font-semibold">{accountName}</span>{" "}
-            <span className="whitespace-pre-wrap">{shown}</span>
-            {collapsed && (
+          {copyEditable ? (
+            <div className="text-sm leading-relaxed">
               <button
                 type="button"
-                className="ml-1 text-[var(--color-muted)]"
-                onClick={() => setExpanded(true)}
+                onClick={onEditCopy}
+                className="-mx-1 w-[calc(100%+0.5rem)] rounded-md px-1 py-0.5 text-left transition hover:bg-[var(--color-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+                aria-label={t("preview.copy.edit")}
               >
-                {t("preview.mock.more")}
+                <span className="font-semibold">{accountName}</span>{" "}
+                <span className="whitespace-pre-wrap">
+                  {shown || t("preview.copy.empty")}
+                </span>
               </button>
-            )}
-          </p>
+              {collapsed && (
+                <button
+                  type="button"
+                  className="ml-1 text-[var(--color-muted)]"
+                  onClick={() => setExpanded(true)}
+                >
+                  {t("preview.mock.more")}
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm leading-relaxed">
+              <span className="font-semibold">{accountName}</span>{" "}
+              <span className="whitespace-pre-wrap">{shown}</span>
+              {collapsed && (
+                <button
+                  type="button"
+                  className="ml-1 text-[var(--color-muted)]"
+                  onClick={() => setExpanded(true)}
+                >
+                  {t("preview.mock.more")}
+                </button>
+              )}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -119,6 +225,34 @@ export function toEditableCopy(draft: PreviewDraft | null): DraftCopy {
     hashtags: draft?.copy.hashtags ?? [],
     cta: draft?.copy.cta ?? "",
   };
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path
+        d="M10 3.5 5.5 8 10 12.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path
+        d="M6 3.5 10.5 8 6 12.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function HeartIcon() {

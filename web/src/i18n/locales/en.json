@@ -153,6 +153,12 @@
       "hashtags": "Hashtags",
       "cta": "CTA"
     },
+    "copy": {
+      "edit": "Edit caption",
+      "editTitle": "Edit caption",
+      "editHint": "Caption, CTA, and hashtags save as one draft revision.",
+      "empty": "Add a caption…"
+    },
     "media": {
       "title": "Image plan",
       "edit": "Edit image",

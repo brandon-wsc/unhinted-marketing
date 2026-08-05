@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-05  
+> **Last updated:** 2026-08-06  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK 小編 + `roast_level` ([VOICE.md](./VOICE.md)) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -26,7 +26,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Chat token stream (`message.delta`) | ✅ Done — live deltas via SSE, batched in node |
 | Agent Mode UI (`agent.progress` + cards) | ✅ Done — action trail persisted on user-message metadata; interrupt CTA survives fail / refresh |
 | Landing recommended-question cards | ✅ Done — empty-state cards → `sendMessage` |
-| Preview Mode (IG mock + draft editor) | ✅ Done — desktop left chat / right preview; mobile push pages; Confirm auto-flush |
+| Preview Mode (IG mock + draft editor) | ✅ Done — Edit Copy / Edit Image dialogs; multi-image carousel; mobile push pages; Confirm auto-flush |
 | Manual draft API `POST …/draft` | ✅ Done — no LLM; revision + approval_token |
 | Confirm UI → stub `/confirm` | ✅ Done — receipt status in preview panel |
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
@@ -49,9 +49,9 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 - **`preview_images`** + **`preview_drafts.media_ids`** `uuid[]`; publishable change → new draft; plan/regen/add → new image row
 - Compat: `image_url` / `image_plan` denormalized primary; SSE `preview.updated` includes `media[]`
-- **HTTP + Preview UI:** `GET/POST /sessions/{id}/media`, `PATCH .../media/{id}/plan`, `POST .../media/{id}/regen`, `POST .../media/{id}/remove`, `POST .../media/{id}/upload`; Edit Image dialog (Select, uploader, Generate/Regenerate, Delete)
+- **HTTP + Preview UI:** `GET/POST /sessions/{id}/media`, `PATCH .../media/{id}/plan`, `POST .../media/{id}/regen`, `POST .../media/{id}/remove`, `POST .../media/{id}/upload`; Edit Image dialog (Select, uploader, Generate/Regenerate, Delete); Edit Copy dialog from IG mock (caption / hashtags / CTA); multi-image carousel when `media[]` length > 1
 
-**Current user-facing flow:** Register or login → `/` chat → Agent brief/interrupt → Preview Mode (IG mock + editable draft) → Confirm (stub receipt). Meta ingest / BYOK / Trace still deferred.
+**Current user-facing flow:** Register or login → `/` chat → Agent brief/interrupt → Preview Mode (IG mock + Edit Copy / Edit Image) → Confirm (stub receipt). Meta ingest / BYOK / Trace still deferred.
 
 **Decision (2026-07-29):** Remaining Phase 2 items are **held**; start Phase 3 product UI against the existing session APIs.
 
@@ -167,7 +167,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
 | Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer locked while in-flight or parked; Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
 | Landing: recommended questions cards | ✅ | Empty-state cards from `GET /api/companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
-| Preview Mode (left chat / right preview) | ✅ | Desktop: IG mock + editable copy; **hover/tap image → Edit image dialog** (plan / regen / add). Mobile (`< lg`): Preview push page with **上一頁** |
+| Preview Mode (left chat / right preview) | ✅ | Desktop: IG mock + **Edit Copy dialog** (caption / hashtags / CTA) + multi-image carousel; **hover/tap image → Edit image dialog** (plan / regen / add). Mobile (`< lg`): Preview push page with **上一頁** |
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |
 | Manual draft API `POST …/draft` | ✅ | No LLM; bump revision + `approval_token`; caption-only reuses `media_ids` ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
 | Preview media APIs | ✅ | `GET/POST …/media`, `PATCH …/media/{id}/plan`, `POST …/media/{id}/regen`, `POST …/media/{id}/remove`, `POST …/media/{id}/upload` — append-only image rows + new draft |
