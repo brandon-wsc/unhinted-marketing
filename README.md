@@ -6,7 +6,7 @@ AI marketing assistant for the Hong Kong market — background signal ingestion 
 
 Unhinted scans HK market signals (Google Trends today; more sources planned), surfaces recommended content angles tied to your company and personas, and will guide users through chat → preview → confirm post. Publishing uses traditional platform APIs; the LLM stays in the recommendation and preview loop only.
 
-**Today:** auth, signal ingestion, recommended-questions API, Phase 3 session UI (chat stream, agent action records, landing questions, IG Preview + Confirm stub, Gemini-style history sidebar), backend pytest (`tests/unit` + `tests/api`), and frontend Vitest (`cd web && npm test`) are live.
+**Today:** auth, signal ingestion, recommended-questions API, Phase 3 session UI (chat stream, agent action records, landing questions, IG Preview + Confirm stub, Gemini-style history sidebar), backend pytest (`tests/unit` + `tests/api`), and frontend Vitest (`cd web && pnpm test`) are live.
 
 ## Stack
 
@@ -34,8 +34,8 @@ alembic upgrade head
 uvicorn cmd.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Frontend: `cd web && npm install && npm run dev` → [http://localhost:5173/login](http://localhost:5173/login)
+Frontend: `cd web && pnpm install && pnpm run dev` → [http://localhost:5173/login](http://localhost:5173/login)
 
-Frontend tests: `cd web && npm test` (also `npm run test:coverage`, `npm run build`).
+Frontend tests: `cd web && pnpm test` (also `pnpm run test:coverage`, `pnpm run build`).
 
 See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) for full setup (DB, workers, scheduler, tests).
