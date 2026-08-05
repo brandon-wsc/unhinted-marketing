@@ -6,6 +6,8 @@ type Props = {
   copy: DraftCopy;
   imageUrl: string | null;
   accountName?: string;
+  /** When set, image area is interactive — hover overlay + click opens editor. */
+  onEditImage?: () => void;
 };
 
 function isRenderableImageUrl(url: string | null): url is string {
@@ -19,7 +21,12 @@ function isRenderableImageUrl(url: string | null): url is string {
   );
 }
 
-export function IgPreviewMock({ copy, imageUrl, accountName = "unhinted" }: Props) {
+export function IgPreviewMock({
+  copy,
+  imageUrl,
+  accountName = "unhinted",
+  onEditImage,
+}: Props) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
@@ -33,6 +40,7 @@ export function IgPreviewMock({ copy, imageUrl, accountName = "unhinted" }: Prop
   const collapsed = captionBody.length > 120 && !expanded;
   const shown = collapsed ? `${captionBody.slice(0, 120).trimEnd()}…` : captionBody;
   const showImage = isRenderableImageUrl(imageUrl);
+  const editable = typeof onEditImage === "function";
 
   return (
     <div className="mx-auto w-full max-w-[340px]">
@@ -57,6 +65,18 @@ export function IgPreviewMock({ copy, imageUrl, accountName = "unhinted" }: Prop
               <div className="h-16 w-16 rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-card)]" />
               <p className="text-xs text-[var(--color-muted)]">{t("preview.mock.placeholder")}</p>
             </div>
+          )}
+          {editable && (
+            <button
+              type="button"
+              onClick={onEditImage}
+              className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-100 transition hover:bg-black/45 focus-visible:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-inset group"
+              aria-label={t("preview.media.edit")}
+            >
+              <span className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-900 opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-visible:opacity-100 max-lg:opacity-100 max-lg:bg-white/90">
+                {t("preview.media.edit")}
+              </span>
+            </button>
           )}
         </div>
 

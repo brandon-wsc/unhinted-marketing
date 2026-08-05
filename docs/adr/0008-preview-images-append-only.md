@@ -18,7 +18,7 @@ In-place UPDATE + trigger log tables were rejected for publishable state: `appro
    - Change plan / regen / add / replace image → **INSERT** a new row (do not mutate plan/url of a row already referenced by a draft). `status` may move to `failed` without rewriting plan.
 3. **`preview_drafts.media_ids`** — ordered `uuid[]` referencing `preview_images.id` (composition record). No join table for MVP.
 4. **Compat:** keep `image_url` / `image_plan` on `preview_drafts` as denormalized primary (`media_ids[0]`) until FE/API fully switch; SSE/API may expose both `image_url` and `media[]`.
-5. **Not in this ADR:** dedicated plan-edit / add-image HTTP UX (follow-up); image slot parent table; trigger-based history.
+5. **Not in this ADR:** image slot parent table; trigger-based history. Plan-edit / add-image HTTP + Preview UI shipped as follow-up on ADR 0008.
 
 ## Consequences
 

@@ -57,9 +57,20 @@ export type DraftCopy = {
   cta: string;
 };
 
+export type PreviewMediaItem = {
+  id: string;
+  url: string | null;
+  plan: Record<string, unknown>;
+  format: "single" | "comic_4panel" | string;
+  role: string;
+  seq: number;
+  status: string;
+};
+
 export type PreviewDraft = {
   copy: DraftCopy;
   image_url: string | null;
+  media: PreviewMediaItem[];
   revision: number;
   approval_token: string;
   platform: string;
@@ -111,9 +122,12 @@ export type UpdateDraftResponse = {
   approval_token: string;
   copy: DraftCopy;
   image_url: string | null;
+  media?: PreviewMediaItem[];
   platform: string;
   mode: string;
 };
+
+export type PreviewMediaMutationResponse = UpdateDraftResponse;
 
 export type ConfirmSessionResponse = {
   receipt_id: string;
@@ -130,6 +144,7 @@ export type SessionSnapshot = {
   revision: number | null;
   approval_token: string | null;
   image_url: string | null;
+  media?: PreviewMediaItem[];
   copy?: DraftCopy | Record<string, unknown> | null;
   platform?: string | null;
 };

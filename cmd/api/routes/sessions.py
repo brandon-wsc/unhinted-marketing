@@ -4,11 +4,21 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
+from internal.media.storage import MediaStorageError
 from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import Session, User
@@ -16,29 +26,39 @@ from internal.session.events import format_sse, session_event_bus
 from internal.session.service import (
     DEFAULT_PLATFORM,
     SessionTurnConflict,
+    add_session_image,
+    list_latest_session_media,
     normalize_draft_copy,
+    regen_session_image,
+    remove_session_image,
     resume_image_turn,
     run_session_turn,
     stop_session_turn,
     update_session_draft,
+    update_session_image_plan,
+    upload_session_image,
 )
-from schemas.contracts import SessionBriefData
+from schemas.contracts import PreviewMediaItem, SessionBriefData
 from schemas.session import (
+    AddSessionImageRequest,
     ConfirmSessionRequest,
     ConfirmSessionResponse,
     CreateSessionRequest,
     MessageResponse,
     PostMessageRequest,
     PostMessageResponse,
+    PreviewMediaMutationResponse,
     ResumeImageRequest,
     ResumeImageResponse,
     SessionListItem,
     SessionListResponse,
+    SessionMediaListResponse,
     SessionMessagesResponse,
     SessionResponse,
     StopSessionResponse,
     UpdateDraftRequest,
     UpdateDraftResponse,
+    UpdateImagePlanRequest,
     UpdateSessionRequest,
 )
 
@@ -333,6 +353,7 @@ async def session_events(
         (draft.copy if draft else None) or state.get("draft")
     )
     platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
+    media_items = await list_latest_session_media(db, session)
 
     interrupted = bool(state.get("awaiting_image_ok"))
     try:
@@ -353,6 +374,7 @@ async def session_events(
         "revision": draft.revision if draft else state.get("revision"),
         "approval_token": draft.approval_token if draft else state.get("approval_token"),
         "image_url": draft.image_url if draft else state.get("image_url"),
+        "media": media_items,
         "copy": copy,
         "platform": platform,
         "interrupted": interrupted,
@@ -402,9 +424,177 @@ async def update_draft(
         approval_token=str(result["approval_token"]),
         copy=result["copy"],
         image_url=result.get("image_url"),
+        media=[PreviewMediaItem.model_validate(m) for m in (result.get("media") or [])],
         platform=str(result["platform"]),
         mode=str(result["mode"]),
     )
+
+
+def _media_mutation_response(result: dict) -> PreviewMediaMutationResponse:
+    return PreviewMediaMutationResponse(
+        revision=int(result["revision"]),
+        approval_token=str(result["approval_token"]),
+        copy=result["copy"],
+        image_url=result.get("image_url"),
+        media=[PreviewMediaItem.model_validate(m) for m in (result.get("media") or [])],
+        platform=str(result["platform"]),
+        mode=str(result["mode"]),
+    )
+
+
+@router.get("/{session_id}/media", response_model=SessionMediaListResponse)
+async def get_session_media(
+    session_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SessionMediaListResponse:
+    """List media for the latest preview draft (ADR 0008)."""
+    session = await _require_owned_session(db, session_id, user)
+    items = await list_latest_session_media(db, session)
+    return SessionMediaListResponse(
+        media=[PreviewMediaItem.model_validate(m) for m in items]
+    )
+
+
+@router.patch(
+    "/{session_id}/media/{image_id}/plan",
+    response_model=PreviewMediaMutationResponse,
+)
+async def patch_session_image_plan(
+    session_id: uuid.UUID,
+    image_id: uuid.UUID,
+    body: UpdateImagePlanRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PreviewMediaMutationResponse:
+    """Edit image plan → new image row + new draft (no LLM)."""
+    session = await _require_owned_session(db, session_id, user)
+    try:
+        result = await update_session_image_plan(
+            db, session, image_id=image_id, plan=dict(body.plan or {})
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    await db.commit()
+    return _media_mutation_response(result)
+
+
+@router.post(
+    "/{session_id}/media/{image_id}/regen",
+    response_model=PreviewMediaMutationResponse,
+)
+async def post_session_image_regen(
+    session_id: uuid.UUID,
+    image_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PreviewMediaMutationResponse:
+    """Regenerate image from plan → new image row + new draft."""
+    from internal.llm.router import LlmProviderError
+
+    session = await _require_owned_session(db, session_id, user)
+    try:
+        result = await regen_session_image(db, session, image_id=image_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except LlmProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"reason": "llm_error", "message": str(exc)},
+        ) from exc
+    await db.commit()
+    return _media_mutation_response(result)
+
+
+@router.post("/{session_id}/media", response_model=PreviewMediaMutationResponse)
+async def post_session_media(
+    session_id: uuid.UUID,
+    body: AddSessionImageRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PreviewMediaMutationResponse:
+    """Add a pending image slot → new image row + new draft."""
+    session = await _require_owned_session(db, session_id, user)
+    try:
+        result = await add_session_image(
+            db,
+            session,
+            format=str(body.format or "single"),
+            plan=body.plan,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    await db.commit()
+    return _media_mutation_response(result)
+
+
+@router.post(
+    "/{session_id}/media/{image_id}/remove",
+    response_model=PreviewMediaMutationResponse,
+)
+async def post_session_image_remove(
+    session_id: uuid.UUID,
+    image_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PreviewMediaMutationResponse:
+    """Remove image from current draft media_ids → new draft (orphan row OK)."""
+    session = await _require_owned_session(db, session_id, user)
+    try:
+        result = await remove_session_image(db, session, image_id=image_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    await db.commit()
+    return _media_mutation_response(result)
+
+
+@router.post(
+    "/{session_id}/media/{image_id}/upload",
+    response_model=PreviewMediaMutationResponse,
+)
+async def post_session_image_upload(
+    session_id: uuid.UUID,
+    image_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File(...)],
+) -> PreviewMediaMutationResponse:
+    """Upload image bytes → new preview_images row + replace slot in draft."""
+    session = await _require_owned_session(db, session_id, user)
+    raw = await file.read()
+    content_type = file.content_type or "application/octet-stream"
+    try:
+        result = await upload_session_image(
+            db,
+            session,
+            image_id=image_id,
+            data=raw,
+            content_type=content_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except MediaStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    await db.commit()
+    return _media_mutation_response(result)
 
 
 @router.post("/{session_id}/confirm", response_model=ConfirmSessionResponse)

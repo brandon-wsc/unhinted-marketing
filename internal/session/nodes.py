@@ -27,15 +27,14 @@ from internal.llm.router import (
 from internal.media.storage import media_object_key, persist_generated_image
 from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.repos import get_company, get_signals_by_ids, list_personas, list_top_signals
-from internal.session.voice import voice_context
+from internal.session import prompts
+from internal.session.context import get_db
+from internal.session.events import session_event_bus
 from internal.session.image_format import (
     compose_generation_prompt,
     image_format_from_text,
     normalize_image_format,
 )
-from internal.session import prompts
-from internal.session.context import get_db
-from internal.session.events import session_event_bus
 from internal.session.io import (
     BriefOut,
     DraftOut,
@@ -48,6 +47,7 @@ from internal.session.io import (
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW, SessionState
 from internal.session.tiers import NODE_MODEL_TIERS
 from internal.session.trace import record_node_step
+from internal.session.voice import voice_context
 
 logger = logging.getLogger(__name__)
 

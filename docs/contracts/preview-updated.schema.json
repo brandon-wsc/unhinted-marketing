@@ -25,6 +25,68 @@
       },
       "title": "DraftCopy",
       "type": "object"
+    },
+    "PreviewMediaItem": {
+      "description": "One append-only image version referenced by a draft (ADR 0008).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "plan": {
+          "additionalProperties": true,
+          "title": "Plan",
+          "type": "object"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "enum": [
+                "single",
+                "comic_4panel"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": "single",
+          "title": "Format"
+        },
+        "role": {
+          "default": "primary",
+          "title": "Role",
+          "type": "string"
+        },
+        "seq": {
+          "default": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "status": {
+          "default": "ready",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "PreviewMediaItem",
+      "type": "object"
     }
   },
   "description": "Payload for SSE / turn event `preview.updated`.",
@@ -50,6 +112,13 @@
       ],
       "default": null,
       "title": "Image Url"
+    },
+    "media": {
+      "items": {
+        "$ref": "#/$defs/PreviewMediaItem"
+      },
+      "title": "Media",
+      "type": "array"
     },
     "copy": {
       "$ref": "#/$defs/DraftCopy"

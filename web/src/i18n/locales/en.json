@@ -153,6 +153,32 @@
       "hashtags": "Hashtags",
       "cta": "CTA"
     },
+    "media": {
+      "title": "Image plan",
+      "edit": "Edit image",
+      "editTitle": "Edit image",
+      "editHint": "Save the plan, generate or regenerate the image, or upload a file.",
+      "empty": "No image yet — add one, then edit the plan.",
+      "prompt": "Prompt",
+      "additionalPrompt": "Additional prompt",
+      "style": "Style",
+      "composition": "Composition",
+      "panel": "Panel {{n}}",
+      "formatSingle": "Single image",
+      "formatComic": "4-panel comic",
+      "savePlan": "Save plan",
+      "generate": "Generate",
+      "regen": "Regenerate",
+      "regenWorking": "Generating…",
+      "cancel": "Cancel",
+      "delete": "Delete image",
+      "uploadHint": "Drop an image here, or click to upload.",
+      "add": "Add image",
+      "scrollPrev": "Scroll slots left",
+      "scrollNext": "Scroll slots right",
+      "slot": "Image {{n}}",
+      "pending": "pending"
+    },
     "mock": {
       "sponsored": "Instagram preview",
       "placeholder": "Image placeholder",
@@ -160,7 +186,12 @@
     },
     "error": {
       "saveFailed": "Failed to save the draft. Please try again.",
-      "confirmFailed": "Failed to confirm. Please try again."
+      "confirmFailed": "Failed to confirm. Please try again.",
+      "planFailed": "Failed to save the image plan. Please try again.",
+      "regenFailed": "Failed to regenerate the image. Please try again.",
+      "addFailed": "Failed to add an image. Please try again.",
+      "removeFailed": "Failed to remove the image. Please try again.",
+      "uploadFailed": "Failed to upload the image. Please try again."
     }
   },
   "admin": {

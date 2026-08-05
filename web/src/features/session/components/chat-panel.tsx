@@ -53,6 +53,11 @@ export function ChatPanel() {
     resumeImage,
     stopTurn,
     updateDraft,
+    saveImagePlan,
+    regenImage,
+    addImage,
+    removeImage,
+    uploadImage,
     confirmPost,
     openSession,
     startNewChat,
@@ -201,6 +206,50 @@ export function ChatPanel() {
       await confirmPost(copy);
     } catch {
       showError(t("preview.error.confirmFailed"));
+    }
+  }
+
+  async function onSavePlan(imageId: string, plan: Record<string, unknown>) {
+    try {
+      return await saveImagePlan(imageId, plan);
+    } catch {
+      showError(t("preview.error.planFailed"));
+      return null;
+    }
+  }
+
+  async function onRegenImage(imageId: string) {
+    try {
+      await regenImage(imageId);
+    } catch {
+      showError(t("preview.error.regenFailed"));
+    }
+  }
+
+  async function onAddImage(format?: "single" | "comic_4panel") {
+    try {
+      return await addImage(format);
+    } catch {
+      showError(t("preview.error.addFailed"));
+      return null;
+    }
+  }
+
+  async function onRemoveImage(imageId: string) {
+    try {
+      return await removeImage(imageId);
+    } catch {
+      showError(t("preview.error.removeFailed"));
+      return null;
+    }
+  }
+
+  async function onUploadImage(imageId: string, file: File) {
+    try {
+      return await uploadImage(imageId, file);
+    } catch {
+      showError(t("preview.error.uploadFailed"));
+      return null;
     }
   }
 
@@ -411,6 +460,11 @@ export function ChatPanel() {
       confirming={confirming}
       onApply={onApplyDraft}
       onConfirm={onConfirmDraft}
+      onSavePlan={onSavePlan}
+      onRegenImage={onRegenImage}
+      onAddImage={onAddImage}
+      onRemoveImage={onRemoveImage}
+      onUploadImage={onUploadImage}
       onBack={goToChat}
     />
   ) : null;

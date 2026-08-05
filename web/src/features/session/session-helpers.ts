@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   DraftCopy,
   PreviewDraft,
+  PreviewMediaItem,
   SessionBrief,
 } from "./types";
 
@@ -107,6 +108,7 @@ export function mergePreviewDraft(
   patch: {
     copy?: DraftCopy | null;
     image_url?: string | null;
+    media?: PreviewMediaItem[] | null;
     revision?: number | null;
     approval_token?: string | null;
     platform?: string | null;
@@ -119,6 +121,10 @@ export function mergePreviewDraft(
       : (prev?.approval_token ?? null);
   const revision =
     typeof patch.revision === "number" ? patch.revision : (prev?.revision ?? null);
+  const media =
+    patch.media !== undefined && patch.media !== null
+      ? patch.media
+      : (prev?.media ?? []);
   if (!copy || !approval_token || revision == null) {
     if (copy && prev) {
       return {
@@ -126,6 +132,7 @@ export function mergePreviewDraft(
         copy,
         image_url:
           patch.image_url !== undefined ? patch.image_url : prev.image_url,
+        media,
         platform: patch.platform || prev.platform,
       };
     }
@@ -137,10 +144,34 @@ export function mergePreviewDraft(
       patch.image_url !== undefined
         ? patch.image_url
         : (prev?.image_url ?? null),
+    media,
     revision,
     approval_token,
     platform: patch.platform || prev?.platform || "instagram",
   };
+}
+
+export function parseMediaItems(raw: unknown): PreviewMediaItem[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: PreviewMediaItem[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.id !== "string") continue;
+    out.push({
+      id: rec.id,
+      url: typeof rec.url === "string" ? rec.url : null,
+      plan:
+        rec.plan && typeof rec.plan === "object" && !Array.isArray(rec.plan)
+          ? (rec.plan as Record<string, unknown>)
+          : {},
+      format: typeof rec.format === "string" ? rec.format : "single",
+      role: typeof rec.role === "string" ? rec.role : "primary",
+      seq: typeof rec.seq === "number" ? rec.seq : out.length,
+      status: typeof rec.status === "string" ? rec.status : "ready",
+    });
+  }
+  return out;
 }
 
 type SseReadyHandle = { promise: Promise<void>; resolve: () => void };

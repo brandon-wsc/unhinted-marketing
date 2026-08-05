@@ -59,13 +59,24 @@ async def seed_preview_session(
     )
     db_session.add(session)
     await db_session.flush()
+    image = await repos.insert_preview_image(
+        db_session,
+        session_id=session.id,
+        url="placeholder://seed",
+        plan={"prompt": "seed plan", "format": "single"},
+        format="single",
+        role="primary",
+        seq=0,
+        status="ready",
+    )
     await repos.upsert_preview_draft(
         db_session,
         session_id=session.id,
         revision=revision,
         copy={"caption": "seed", "hashtags": [], "cta": ""},
         image_url="placeholder://seed",
-        image_plan=None,
+        image_plan={"prompt": "seed plan", "format": "single"},
+        media_ids=[image.id],
         source_signal_ids=[],
         approval_token=approval_token,
         platform="instagram",

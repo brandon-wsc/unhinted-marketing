@@ -19,10 +19,10 @@ from internal.memory.models import Session
 from internal.session.context import session_db
 from internal.session.events import session_event_bus
 from internal.session.graph import get_session_graph
+from internal.session.media import image_format_from_plan, media_item_payload
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
 from internal.session.trace import turn_trace
 from internal.session.turn_registry import TurnEntry, session_turn_registry
-from internal.session.media import image_format_from_plan, media_item_payload
 from schemas.contracts import DraftCopy, PreviewMediaItem, PreviewUpdatedData
 
 logger = logging.getLogger(__name__)
@@ -788,11 +788,9 @@ async def update_session_draft(
     hashtags: list[str],
     cta: str,
 ) -> dict[str, Any]:
-    """Persist a user manual edit in PREVIEW mode — no LangGraph / LLM turn."""
+    """Persist a user manual caption edit in PREVIEW mode — no LangGraph / LLM turn."""
     if session.mode != MODE_PREVIEW:
         raise ValueError("Session is not in PREVIEW mode")
-    if session.status == "confirmed":
-        raise ValueError("Session already confirmed")
 
     state = dict(session.state or {})
     copy = normalize_draft_copy({"caption": caption, "hashtags": hashtags, "cta": cta})
@@ -800,9 +798,6 @@ async def update_session_draft(
         raise ValueError("caption is required")
 
     existing = await repos.get_latest_preview_draft(db, session.id)
-    base_rev = existing.revision if existing else int(state.get("revision") or 0)
-    rev = base_rev + 1
-    token = secrets.token_urlsafe(24)
     # Caption-only: reuse media_ids (ADR 0008). Do not invent a new image row.
     reuse_ids = list(existing.media_ids or []) if existing else []
     media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
@@ -827,6 +822,42 @@ async def update_session_draft(
             reuse_media_ids=None,
             create_image_row=True,
         )
+    return await _bump_preview_revision(
+        db,
+        session,
+        media_ids=media_ids,
+        media=media,
+        primary_url=primary_url,
+        primary_plan=primary_plan if isinstance(primary_plan, dict) else None,
+        copy=copy,
+    )
+
+
+async def _bump_preview_revision(
+    db: AsyncSession,
+    session: Session,
+    *,
+    media_ids: list[uuid.UUID],
+    media: list[dict[str, Any]],
+    primary_url: str | None,
+    primary_plan: dict[str, Any] | None,
+    copy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Insert a new preview_drafts row + sync session.state / SSE (ADR 0008)."""
+    if session.status == "confirmed":
+        raise ValueError("Session already confirmed")
+
+    state = dict(session.state or {})
+    existing = await repos.get_latest_preview_draft(db, session.id)
+    draft_copy = normalize_draft_copy(
+        copy if copy is not None else (existing.copy if existing else state.get("draft"))
+    )
+    if not draft_copy["caption"].strip():
+        raise ValueError("caption is required")
+
+    base_rev = existing.revision if existing else int(state.get("revision") or 0)
+    rev = base_rev + 1
+    token = secrets.token_urlsafe(24)
     source_signal_ids = list(state.get("source_signal_ids") or [])
     if existing and existing.source_signal_ids and not source_signal_ids:
         source_signal_ids = list(existing.source_signal_ids)
@@ -836,20 +867,20 @@ async def update_session_draft(
         db,
         session_id=session.id,
         revision=rev,
-        copy=copy,
+        copy=draft_copy,
         image_url=primary_url,
-        image_plan=primary_plan if isinstance(primary_plan, dict) else None,
+        image_plan=primary_plan,
         media_ids=media_ids,
         source_signal_ids=source_signal_ids,
         approval_token=token,
         platform=platform,
     )
 
-    state["draft"] = copy
+    state["draft"] = draft_copy
     state["revision"] = rev
     state["approval_token"] = token
     state["image_url"] = primary_url
-    if isinstance(primary_plan, dict):
+    if primary_plan is not None:
         state["image_plan"] = primary_plan
     state["media_ids"] = [str(i) for i in media_ids]
     state["pending_confirm"] = False
@@ -865,10 +896,11 @@ async def update_session_draft(
         await graph.aupdate_state(
             config,
             {
-                "draft": copy,
+                "draft": draft_copy,
                 "revision": rev,
                 "approval_token": token,
                 "image_url": primary_url,
+                "image_plan": primary_plan or {},
                 "mode": MODE_PREVIEW,
                 "pending_confirm": False,
                 "need_image": False,
@@ -876,20 +908,20 @@ async def update_session_draft(
         )
     except Exception:
         logger.warning(
-            "Failed to sync graph checkpoint after manual draft update (session=%s)",
+            "Failed to sync graph checkpoint after preview revision (session=%s)",
             session.id,
             exc_info=True,
         )
 
     events = [
-        {"type": "draft.copy_updated", "data": copy},
+        {"type": "draft.copy_updated", "data": draft_copy},
         {
             "type": "preview.updated",
             "data": preview_updated_payload(
                 revision=rev,
                 approval_token=token,
                 image_url=primary_url,
-                copy=copy,
+                copy=draft_copy,
                 platform=platform,
                 media=media,
             ),
@@ -900,9 +932,382 @@ async def update_session_draft(
     return {
         "revision": rev,
         "approval_token": token,
-        "copy": copy,
+        "copy": draft_copy,
         "image_url": primary_url,
+        "media": media,
         "platform": platform,
         "mode": MODE_PREVIEW,
         "events": events,
     }
+
+
+async def list_latest_session_media(
+    db: AsyncSession, session: Session
+) -> list[dict[str, Any]]:
+    draft = await repos.get_latest_preview_draft(db, session.id)
+    ids = list(draft.media_ids or []) if draft else []
+    if not ids:
+        state_ids = (session.state or {}).get("media_ids") or []
+        ids = [uuid.UUID(str(i)) for i in state_ids]
+    rows = await repos.get_preview_images_by_ids(db, ids)
+    return [
+        media_item_payload(
+            image_id=r.id,
+            url=r.url,
+            plan=r.plan,
+            format=r.format,
+            role=r.role,
+            seq=r.seq,
+            status=r.status,
+        )
+        for r in rows
+    ]
+
+
+def _replace_media_id(
+    media_ids: list[uuid.UUID], old_id: uuid.UUID, new_id: uuid.UUID
+) -> list[uuid.UUID]:
+    return [new_id if i == old_id else i for i in media_ids]
+
+
+async def update_session_image_plan(
+    db: AsyncSession,
+    session: Session,
+    *,
+    image_id: uuid.UUID,
+    plan: dict[str, Any],
+) -> dict[str, Any]:
+    """User edits plan → new image row + new draft (no LLM)."""
+    if session.mode != MODE_PREVIEW:
+        raise ValueError("Session is not in PREVIEW mode")
+    existing = await repos.get_latest_preview_draft(db, session.id)
+    if not existing:
+        raise ValueError("No preview draft yet")
+    media_ids = list(existing.media_ids or [])
+    if image_id not in media_ids:
+        raise ValueError("Image is not part of the current draft")
+    old = await repos.get_preview_image(db, image_id)
+    if old is None or old.session_id != session.id:
+        raise ValueError("Image not found")
+
+    fmt = image_format_from_plan(plan, fallback=old.format)
+    new_plan = dict(plan)
+    new_plan["format"] = fmt
+    row = await repos.insert_preview_image(
+        db,
+        session_id=session.id,
+        url=old.url,
+        plan=new_plan,
+        format=fmt,
+        role=old.role,
+        seq=old.seq,
+        status=old.status if old.url else "pending",
+    )
+    new_ids = _replace_media_id(media_ids, image_id, row.id)
+    rows = await repos.get_preview_images_by_ids(db, new_ids)
+    media = [
+        media_item_payload(
+            image_id=r.id,
+            url=r.url,
+            plan=r.plan,
+            format=r.format,
+            role=r.role,
+            seq=r.seq,
+            status=r.status,
+        )
+        for r in rows
+    ]
+    primary = media[0] if media else None
+    return await _bump_preview_revision(
+        db,
+        session,
+        media_ids=new_ids,
+        media=media,
+        primary_url=primary["url"] if primary else None,
+        primary_plan=primary["plan"] if primary else None,
+    )
+
+
+async def regen_session_image(
+    db: AsyncSession,
+    session: Session,
+    *,
+    image_id: uuid.UUID,
+) -> dict[str, Any]:
+    """Regenerate image from current plan → new image row + new draft."""
+    from internal.llm.router import (
+        LlmProviderError,
+        generate_image,
+        has_llm_credentials,
+        resolve_image_model,
+    )
+    from internal.media.storage import media_object_key, persist_generated_image
+    from internal.session.image_format import compose_generation_prompt
+
+    if session.mode != MODE_PREVIEW:
+        raise ValueError("Session is not in PREVIEW mode")
+    existing = await repos.get_latest_preview_draft(db, session.id)
+    if not existing:
+        raise ValueError("No preview draft yet")
+    media_ids = list(existing.media_ids or [])
+    if image_id not in media_ids:
+        raise ValueError("Image is not part of the current draft")
+    old = await repos.get_preview_image(db, image_id)
+    if old is None or old.session_id != session.id:
+        raise ValueError("Image not found")
+
+    plan = dict(old.plan or {})
+    fmt = image_format_from_plan(plan, fallback=old.format)
+    plan["format"] = fmt
+    prompt = compose_generation_prompt(plan)
+    if not prompt:
+        prompt = f"Clean modern social media image for Hong Kong brand, format={fmt}"
+
+    image_model = resolve_image_model()
+    if not has_llm_credentials() or (image_model and image_model.lower() == "placeholder"):
+        url = f"placeholder://local/{session.id}/regen-{secrets.token_hex(4)}.png"
+    elif not image_model:
+        raise LlmProviderError(
+            "No image model configured (set LLM_IMAGE_MODEL).",
+            kind="unsupported",
+        )
+    else:
+        raw_ref = await generate_image(prompt=prompt)
+        rev = (existing.revision if existing else 0) + 1
+        key = media_object_key(session_id=str(session.id), revision=rev)
+        url = await persist_generated_image(raw_ref, key=key)
+
+    row = await repos.insert_preview_image(
+        db,
+        session_id=session.id,
+        url=url,
+        plan=plan,
+        format=fmt,
+        role=old.role,
+        seq=old.seq,
+        status="ready",
+    )
+    new_ids = _replace_media_id(media_ids, image_id, row.id)
+    rows = await repos.get_preview_images_by_ids(db, new_ids)
+    media = [
+        media_item_payload(
+            image_id=r.id,
+            url=r.url,
+            plan=r.plan,
+            format=r.format,
+            role=r.role,
+            seq=r.seq,
+            status=r.status,
+        )
+        for r in rows
+    ]
+    primary = media[0] if media else None
+    return await _bump_preview_revision(
+        db,
+        session,
+        media_ids=new_ids,
+        media=media,
+        primary_url=primary["url"] if primary else None,
+        primary_plan=primary["plan"] if primary else None,
+    )
+
+
+async def add_session_image(
+    db: AsyncSession,
+    session: Session,
+    *,
+    format: str = "single",
+    plan: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Add a new image slot (pending plan) → new image row + new draft."""
+    if session.mode != MODE_PREVIEW:
+        raise ValueError("Session is not in PREVIEW mode")
+    existing = await repos.get_latest_preview_draft(db, session.id)
+    if not existing:
+        raise ValueError("No preview draft yet")
+    media_ids = list(existing.media_ids or [])
+    fmt = image_format_from_plan(plan, fallback=format)
+    new_plan = dict(plan or {})
+    new_plan.setdefault("format", fmt)
+    if fmt == "comic_4panel" and not new_plan.get("panels"):
+        new_plan["panels"] = [
+            {"index": 1, "beat": "hook scene — no product"},
+            {"index": 2, "beat": "escalate friction"},
+            {"index": 3, "beat": "peak pain"},
+            {"index": 4, "beat": "product as soft remedy"},
+        ]
+    seq = len(media_ids)
+    row = await repos.insert_preview_image(
+        db,
+        session_id=session.id,
+        url=None,
+        plan=new_plan,
+        format=fmt,
+        role="primary" if seq == 0 else "extra",
+        seq=seq,
+        status="pending",
+    )
+    new_ids = media_ids + [row.id]
+    rows = await repos.get_preview_images_by_ids(db, new_ids)
+    media = [
+        media_item_payload(
+            image_id=r.id,
+            url=r.url,
+            plan=r.plan,
+            format=r.format,
+            role=r.role,
+            seq=r.seq,
+            status=r.status,
+        )
+        for r in rows
+    ]
+    primary = media[0] if media else None
+    return await _bump_preview_revision(
+        db,
+        session,
+        media_ids=new_ids,
+        media=media,
+        primary_url=primary["url"] if primary else None,
+        primary_plan=primary["plan"] if primary else None,
+    )
+
+
+_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+_UPLOAD_CONTENT_TYPES = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+}
+
+
+async def remove_session_image(
+    db: AsyncSession,
+    session: Session,
+    *,
+    image_id: uuid.UUID,
+) -> dict[str, Any]:
+    """Remove image id from current draft media_ids → new draft (orphan row OK)."""
+    if session.mode != MODE_PREVIEW:
+        raise ValueError("Session is not in PREVIEW mode")
+    existing = await repos.get_latest_preview_draft(db, session.id)
+    if not existing:
+        raise ValueError("No preview draft yet")
+    media_ids = list(existing.media_ids or [])
+    if image_id not in media_ids:
+        raise ValueError("Image is not part of the current draft")
+    if len(media_ids) <= 1:
+        raise ValueError("Cannot remove the last remaining image")
+    new_ids = [i for i in media_ids if i != image_id]
+    rows = await repos.get_preview_images_by_ids(db, new_ids)
+    media = [
+        media_item_payload(
+            image_id=r.id,
+            url=r.url,
+            plan=r.plan,
+            format=r.format,
+            role=r.role,
+            seq=r.seq,
+            status=r.status,
+        )
+        for r in rows
+    ]
+    primary = media[0] if media else None
+    return await _bump_preview_revision(
+        db,
+        session,
+        media_ids=new_ids,
+        media=media,
+        primary_url=primary["url"] if primary else None,
+        primary_plan=primary["plan"] if primary else None,
+    )
+
+
+async def upload_session_image(
+    db: AsyncSession,
+    session: Session,
+    *,
+    image_id: uuid.UUID,
+    data: bytes,
+    content_type: str,
+) -> dict[str, Any]:
+    """Upload user image → new preview_images row + replace slot in draft."""
+    from internal.media.storage import (
+        MediaStorageError,
+        ensure_bucket,
+        media_object_key,
+        media_storage_configured,
+        put_bytes,
+    )
+
+    if session.mode != MODE_PREVIEW:
+        raise ValueError("Session is not in PREVIEW mode")
+    existing = await repos.get_latest_preview_draft(db, session.id)
+    if not existing:
+        raise ValueError("No preview draft yet")
+    media_ids = list(existing.media_ids or [])
+    if image_id not in media_ids:
+        raise ValueError("Image is not part of the current draft")
+    old = await repos.get_preview_image(db, image_id)
+    if old is None or old.session_id != session.id:
+        raise ValueError("Image not found")
+
+    ct = (content_type or "").split(";", 1)[0].strip().lower()
+    ext = _UPLOAD_CONTENT_TYPES.get(ct)
+    if not ext:
+        raise ValueError("File must be an image (jpeg, png, webp, or gif)")
+    if not data:
+        raise ValueError("Empty upload")
+    if len(data) > _UPLOAD_MAX_BYTES:
+        raise ValueError("Image too large (max 10MB)")
+
+    plan = dict(old.plan or {})
+    fmt = image_format_from_plan(plan, fallback=old.format)
+    plan["format"] = fmt
+
+    if media_storage_configured():
+        rev = (existing.revision if existing else 0) + 1
+        key = media_object_key(session_id=str(session.id), revision=rev, ext=ext)
+        try:
+            await ensure_bucket()
+            url = await put_bytes(key=key, data=data, content_type=ct)
+        except MediaStorageError as exc:
+            raise MediaStorageError(str(exc)) from exc
+    else:
+        # Dev/tests without S3 — keep a renderable-enough placeholder URL.
+        url = f"placeholder://local/{session.id}/upload-{secrets.token_hex(4)}.{ext}"
+
+    row = await repos.insert_preview_image(
+        db,
+        session_id=session.id,
+        url=url,
+        plan=plan,
+        format=fmt,
+        role=old.role,
+        seq=old.seq,
+        status="ready",
+    )
+    new_ids = _replace_media_id(media_ids, image_id, row.id)
+    rows = await repos.get_preview_images_by_ids(db, new_ids)
+    media = [
+        media_item_payload(
+            image_id=r.id,
+            url=r.url,
+            plan=r.plan,
+            format=r.format,
+            role=r.role,
+            seq=r.seq,
+            status=r.status,
+        )
+        for r in rows
+    ]
+    primary = media[0] if media else None
+    return await _bump_preview_revision(
+        db,
+        session,
+        media_ids=new_ids,
+        media=media,
+        primary_url=primary["url"] if primary else None,
+        primary_plan=primary["plan"] if primary else None,
+    )

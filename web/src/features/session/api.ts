@@ -5,6 +5,7 @@ import type {
   ConfirmSessionResponse,
   DraftCopy,
   PostMessageResponse,
+  PreviewMediaMutationResponse,
   RecommendedQuestionsResponse,
   Session,
   SessionListItem,
@@ -135,6 +136,87 @@ export async function apiUpdateSessionDraft(
       cta: copy.cta,
     }),
   });
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiUpdateImagePlan(
+  accessToken: string | null,
+  sessionId: string,
+  imageId: string,
+  plan: Record<string, unknown>,
+): Promise<PreviewMediaMutationResponse> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/sessions/${sessionId}/media/${imageId}/plan`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan }),
+    },
+  );
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiRegenImage(
+  accessToken: string | null,
+  sessionId: string,
+  imageId: string,
+): Promise<PreviewMediaMutationResponse> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/sessions/${sessionId}/media/${imageId}/regen`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiAddSessionImage(
+  accessToken: string | null,
+  sessionId: string,
+  body?: { format?: "single" | "comic_4panel"; plan?: Record<string, unknown> },
+): Promise<PreviewMediaMutationResponse> {
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      format: body?.format ?? "single",
+      plan: body?.plan ?? null,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiRemoveImage(
+  accessToken: string | null,
+  sessionId: string,
+  imageId: string,
+): Promise<PreviewMediaMutationResponse> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/sessions/${sessionId}/media/${imageId}/remove`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiUploadImage(
+  accessToken: string | null,
+  sessionId: string,
+  imageId: string,
+  file: File,
+): Promise<PreviewMediaMutationResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/sessions/${sessionId}/media/${imageId}/upload`,
+    { method: "POST", body: form },
+  );
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }

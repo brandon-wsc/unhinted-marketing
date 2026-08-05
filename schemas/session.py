@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from schemas.contracts import DraftCopy, SessionBriefData
+from schemas.contracts import DraftCopy, PreviewMediaItem, SessionBriefData
 
 
 class CreateSessionRequest(BaseModel):
@@ -125,6 +125,34 @@ class UpdateDraftResponse(BaseModel):
     approval_token: str
     draft_copy: DraftCopy = Field(alias="copy")
     image_url: str | None = None
+    media: list[PreviewMediaItem] = Field(default_factory=list)
+    platform: str
+    mode: str
+
+
+class SessionMediaListResponse(BaseModel):
+    media: list[PreviewMediaItem] = Field(default_factory=list)
+
+
+class UpdateImagePlanRequest(BaseModel):
+    plan: dict = Field(default_factory=dict)
+
+
+class AddSessionImageRequest(BaseModel):
+    format: Literal["single", "comic_4panel"] | str = "single"
+    plan: dict | None = None
+
+
+class PreviewMediaMutationResponse(BaseModel):
+    """Shared shape after plan edit / regen / add (new draft revision)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    revision: int
+    approval_token: str
+    draft_copy: DraftCopy = Field(alias="copy")
+    image_url: str | None = None
+    media: list[PreviewMediaItem] = Field(default_factory=list)
     platform: str
     mode: str
 

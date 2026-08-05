@@ -236,6 +236,7 @@ describe("mergePreviewDraft", () => {
   const full: PreviewDraft = {
     copy: { caption: "c", hashtags: ["#a"], cta: "go" },
     image_url: "https://img",
+    media: [],
     revision: 1,
     approval_token: "tok",
     platform: "instagram",
@@ -269,6 +270,7 @@ describe("mergePreviewDraft", () => {
     ).toEqual({
       copy: { caption: "hi", hashtags: [], cta: "" },
       image_url: "https://x",
+      media: [],
       revision: 2,
       approval_token: "t1",
       platform: "instagram",

@@ -353,6 +353,12 @@ async def insert_preview_image(
     return row
 
 
+async def get_preview_image(
+    db: AsyncSession, image_id: uuid.UUID
+) -> PreviewImage | None:
+    return await db.scalar(select(PreviewImage).where(PreviewImage.id == image_id))
+
+
 async def get_preview_images_by_ids(
     db: AsyncSession, image_ids: list[uuid.UUID]
 ) -> list[PreviewImage]:
