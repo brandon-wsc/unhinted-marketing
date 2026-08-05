@@ -14,6 +14,7 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 | Shipped vs held + decisions | [`docs/STATUS.md`](docs/STATUS.md) | Progress checklists |
 | Locked decisions (ADR) | [`docs/adr/`](docs/adr/) | Prefer ADR over chat memory |
 | Admin prompt tuning (ops) | [`docs/PROMPT_TUNING.md`](docs/PROMPT_TUNING.md) | How to use LLM records / node steps / Session Trace; retention explained |
+| HK social craft (draft voice) | [`docs/VOICE.md`](docs/VOICE.md) | Default 小編 craft + company `roast_level`; prompts in `internal/session/prompts.py` |
 | HTTP + Pydantic API shapes | [`schemas/`](schemas/) · FastAPI OpenAPI | Export: `python -m scripts.export_contracts` |
 | Canonical draft + SSE catalog | [`schemas/contracts.py`](schemas/contracts.py) · [`docs/contracts/`](docs/contracts/) | JSON Schema mirrors |
 | External tools | [`schemas/tools.py`](schemas/tools.py) | `query_market_trends`, `publish_social_post` |
@@ -26,7 +27,7 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 ## Hard boundaries (do not violate)
 
 1. **Confirm ≠ chat** — Publishing only via UI Confirm → `POST /confirm` with `approval_token`. Chat phrases like「可以出」must not publish ([ADR 0003](docs/adr/0003-confirm-without-llm.md)).
-2. **Canonical draft** — Shared `{ caption, hashtags, cta }` + `image_url`; not per-platform copy trees; not a markdown editor ([ADR 0001](docs/adr/0001-preview-canonical-draft.md)).
+2. **Canonical draft** — Shared `{ caption, hashtags, cta }` + media via `preview_images` / `media_ids` ([ADR 0008](docs/adr/0008-preview-images-append-only.md)); `image_url` compat on preview payload ([ADR 0001](docs/adr/0001-preview-canonical-draft.md)).
 3. **Knowledge** — PostgreSQL only (signals, entities, edges). No parallel knowledge store.
 4. **Graph scope** — LangGraph = session LLM zone. Preview persist / confirm are outside LLM publish.
 5. **Stop ≠ blind resume** — Parked image OK resumes only via `POST /resume-image`; Stop discards the turn ([ADR 0004](docs/adr/0004-stop-discard-and-image-resume.md)). Chat/JSON LLM calls stream + `aclose` on cancel (best-effort upstream abort).

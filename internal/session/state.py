@@ -39,3 +39,5 @@ class SessionState(TypedDict, total=False):
     grounding_ok: NotRequired[bool]
     company_context: NotRequired[dict[str, Any]]
     error: NotRequired[str]
+    # Visual format for executor_image_plan (default single). Set via resume-image body or revise.
+    image_format: NotRequired[Literal["single", "comic_4panel"]]

@@ -1,7 +1,7 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-03  
-> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Security: auth rate limit + confirm user-private idempotency (branch) · Observability: LLM call records + platform levels (backend, [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
+> **Last updated:** 2026-08-06  
+> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK 小編 + `roast_level` ([VOICE.md](./VOICE.md)) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
 This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). For architecture and phase plans, see ROADMAP.
@@ -26,13 +26,32 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Chat token stream (`message.delta`) | ✅ Done — live deltas via SSE, batched in node |
 | Agent Mode UI (`agent.progress` + cards) | ✅ Done — action trail persisted on user-message metadata; interrupt CTA survives fail / refresh |
 | Landing recommended-question cards | ✅ Done — empty-state cards → `sendMessage` |
-| Preview Mode (IG mock + draft editor) | ✅ Done — desktop left chat / right preview; mobile push pages; Confirm auto-flush |
+| Preview Mode (IG mock + draft editor) | ✅ Done — Edit Copy / Edit Image dialogs; multi-image carousel; mobile push pages; Confirm auto-flush |
 | Manual draft API `POST …/draft` | ✅ Done — no LLM; revision + approval_token |
 | Confirm UI → stub `/confirm` | ✅ Done — receipt status in preview panel |
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
-**Current user-facing flow:** Register or login → `/` chat → Agent brief/interrupt → Preview Mode (IG mock + editable draft) → Confirm (stub receipt). Meta ingest / BYOK / Trace still deferred.
+**Decision (2026-08-04) — Default HK social craft + roast_level:** → [VOICE.md](./VOICE.md)
+
+- **Default craft** — 港式小編 (IKEA feel × Duolingo short/sharp): 貼地 · 有鉤 · 有畫面 · 短 · 有邊界
+- **Tunable** — `entities.profile.roast_level` 0–3 (missing → 1); injected as `company_context.voice` in `load_context`
+- **Prompts** — `BRAINSTORM` / `EXECUTOR_POST` / `EDIT_COPY` / `REVIEWER` share craft block + few-shots; chat stays assistant voice
+
+**Decision (2026-08-05) — Image visual format (no new graph node):**
+
+- **Formats** — `image_format`: `single` (default) | `comic_4panel` (one PNG strip); still one strip PNG per comic asset
+- **Where** — same `executor_image_plan` / `executor_image_gen`; plan schema gains `format` + optional `panels[]`
+- **Image format:** `single` (default) or `comic_4panel` via Generate-image chips / `POST /resume-image` body; revise text「4格」also sets format
+- **Comic craft:** panels 1–3 situational empathy (no product); panel 4 soft remedy — see [VOICE.md](./VOICE.md) §5 Unhinted Market
+
+**Decision (2026-08-05) — Append-only preview images:** → [ADR 0008](./adr/0008-preview-images-append-only.md)
+
+- **`preview_images`** + **`preview_drafts.media_ids`** `uuid[]`; publishable change → new draft; plan/regen/add → new image row
+- Compat: `image_url` / `image_plan` denormalized primary; SSE `preview.updated` includes `media[]`
+- **HTTP + Preview UI:** `GET/POST /sessions/{id}/media`, `PATCH .../media/{id}/plan`, `POST .../media/{id}/regen`, `POST .../media/{id}/remove`, `POST .../media/{id}/upload`; Edit Image dialog (Select, uploader, Generate/Regenerate, Delete); Edit Copy dialog from IG mock (caption / hashtags / CTA); multi-image carousel when `media[]` length > 1
+
+**Current user-facing flow:** Register or login → `/` chat → Agent brief/interrupt → Preview Mode (IG mock + Edit Copy / Edit Image) → Confirm (stub receipt). Meta ingest / BYOK / Trace still deferred.
 
 **Decision (2026-07-29):** Remaining Phase 2 items are **held**; start Phase 3 product UI against the existing session APIs.
 
@@ -125,12 +144,12 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Item | Status | Notes |
 |------|--------|-------|
 | ROADMAP graph contract | ✅ | 12 nodes + `persist_preview`; edges + interrupt |
-| Migrations | ✅ | Alembic `526ca8643303` sessions tables; `86f20bd3cb7d` session `title` + `pinned` |
+| Migrations | ✅ | Alembic `526ca8643303` sessions; `86f20bd3cb7d` title/pinned; `7d7a1918bde7` `preview_images` + `media_ids` ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
 | LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /resume-image` ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)); Stop mid-resume re-parks CTA; Stop while parked discards turn |
 | Postgres checkpointer | ✅ | `AsyncPostgresSaver` + pool (`check` / keepalives / idle recycle); `setup()` on API lifespan; `thread_id = session.id` |
 | Node logic | ✅ | LiteLLM + structured I/O; heuristic fallbacks; PG load/grounding |
-| Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}`, `/messages`, `/draft`, `/confirm` |
-| SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform`; snapshot `interrupted` from graph checkpoint (+ `sessions.state.awaiting_image_ok`) |
+| Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}`, `/messages`, `/draft`, `/media` (+ plan/regen/remove/upload), `/confirm` |
+| SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform` + `media[]`; snapshot hydrates `media` from latest draft |
 | Image generation worker | 🟡 Soft | LiteLLM ``aimage_generation`` via ``LLM_IMAGE_MODEL``; chat-only / unset → ``llm.failed``. ``data:`` results upload to S3-compatible store (MinIO) when ``S3_*`` configured; else remain data URLs. ``placeholder`` / no credentials → mock URL |
 | `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
 | Curl exit-criteria script | ⏸ **Held** | Manual/API path works; formal curl checklist later |
@@ -148,9 +167,10 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
 | Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer locked while in-flight or parked; Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
 | Landing: recommended questions cards | ✅ | Empty-state cards from `GET /api/companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
-| Preview Mode (left chat / right preview) | ✅ | Desktop: IG mock + editable fields beside chat. Mobile (`< lg`): Preview is a push page with **上一頁**; open from chat ready banner |
+| Preview Mode (left chat / right preview) | ✅ | Desktop: IG mock + **Edit Copy dialog** (caption / hashtags / CTA) + multi-image carousel; **hover/tap image → Edit image dialog** (plan / regen / add). Mobile (`< lg`): Preview push page with **上一頁** |
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |
-| Manual draft API `POST …/draft` | ✅ | No LLM; bump revision + `approval_token`; sync graph checkpoint |
+| Manual draft API `POST …/draft` | ✅ | No LLM; bump revision + `approval_token`; caption-only reuses `media_ids` ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
+| Preview media APIs | ✅ | `GET/POST …/media`, `PATCH …/media/{id}/plan`, `POST …/media/{id}/regen`, `POST …/media/{id}/remove`, `POST …/media/{id}/upload` — append-only image rows + new draft |
 | Chat history hydrate + list | ✅ | `GET /api/sessions`, `GET …/messages`, `PATCH/DELETE …/{id}` (`title`/`pinned`); localStorage last session; desktop Gemini-style sidebar; mobile Record page (history icon → full list; **上一頁** back to Chat) |
 | LLM call records + admin page | ✅ | [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — `llm_call_records` + platform levels + recorder; `/api/admin/llm-calls` API + web `/admin` |
 | API `/api` path prefix | ✅ | [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md) — hard cut; SPA `/admin` refresh no longer collides |
@@ -169,7 +189,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 - **Auth:** Full email/password flow with JWT access token (15 min) + refresh token (7 days, httpOnly cookie on `/api/auth`)
 - **Signals:** `GET /api/signals/top` — latest HK market signals from PostgreSQL
 - **Questions:** `GET /api/companies/{id}/recommended-questions` — cached 12h question batch
-- **Sessions:** `GET /api/sessions`, `POST /api/sessions`, `PATCH /api/sessions/{id}` (title / pinned), `DELETE /api/sessions/{id}`, `POST /api/sessions/{id}/messages`, `GET /api/sessions/{id}/messages`, `POST /api/sessions/{id}/resume-image`, `POST /api/sessions/{id}/stop`, `POST /api/sessions/{id}/draft`, `GET /api/sessions/{id}/events` (SSE), `POST /api/sessions/{id}/confirm`
+- **Sessions:** `GET /api/sessions`, `POST /api/sessions`, `PATCH /api/sessions/{id}` (title / pinned), `DELETE /api/sessions/{id}`, `POST /api/sessions/{id}/messages`, `GET /api/sessions/{id}/messages`, `POST /api/sessions/{id}/resume-image`, `POST /api/sessions/{id}/stop`, `POST /api/sessions/{id}/draft`, `GET/POST /api/sessions/{id}/media`, `PATCH /api/sessions/{id}/media/{image_id}/plan`, `POST /api/sessions/{id}/media/{image_id}/regen`, `POST /api/sessions/{id}/media/{image_id}/remove`, `POST /api/sessions/{id}/media/{image_id}/upload`, `GET /api/sessions/{id}/events` (SSE), `POST /api/sessions/{id}/confirm`
 - **LangGraph:** Session nodes + Postgres checkpointer; image URL still placeholder
 - **Security:** Argon2 password hashing, refresh token rotation + revoke on logout
 - **Multi-tenant bootstrap:** Register auto-creates `entities` (type `company`) + `organization_members` (role `owner`)
@@ -216,7 +236,8 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `recommended_questions` | 12h cached landing question JSON |
 | `sessions` | Chat session (mode, user_id, company_id, title, pinned, state JSONB) |
 | `session_messages` | Chat log (user always; assistant for chat / ack / LLM errors — not every Agent node) |
-| `preview_drafts` | Revision chain + approval_token |
+| `preview_drafts` | Revision chain + approval_token + `media_ids` |
+| `preview_images` | Append-only image versions (url + plan) ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
 | `tool_receipts` | Idempotent Confirm / tool receipts |
 | `llm_call_records` | Per-call LLM record: correlation, prompts, response, tokens, latency, status, `parse_ok`/`fallback_used` ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | LangGraph checkpoint tables | Owned by `AsyncPostgresSaver.setup()` (not Alembic) |
@@ -310,6 +331,8 @@ unhinted-marketing/
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |
 | `LLM_RECORD_ENABLED` | Persist every LLM call to `llm_call_records` (default true; [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | `QUESTION_CACHE_TTL_HOURS` | Recommended questions cache (default 12) |
+
+**Company profile (JSONB on `entities`):** optional `roast_level` `0`–`3` (default `1`) — see [VOICE.md](./VOICE.md).
 
 See `.env.example`. Local `.env` is gitignored.
 

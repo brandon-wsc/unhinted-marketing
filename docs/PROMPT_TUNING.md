@@ -107,6 +107,7 @@ A retention policy would typically decide:
 
 ## Related
 
+- [VOICE.md](./VOICE.md) — default HK 小編 craft + `roast_level` (tune `EXECUTOR_POST` / `BRAINSTORM` / `REVIEWER` against this)
 - [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — platform levels + LLM call records  
 - [ADR 0007](./adr/0007-admin-trace-viewer.md) — node steps + Session Trace  
 - Bootstrap admin: `python -m cmd.worker set-platform-role --email … --level superadmin`  

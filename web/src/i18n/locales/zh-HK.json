@@ -85,8 +85,11 @@
       },
       "interrupt": {
         "title": "文案已經準備好",
-        "subtitle": "繼續設計並生成圖片？",
-        "confirm": "生成圖片"
+        "subtitle": "揀視覺格式，然後生成圖片（預設單圖）。",
+        "confirm": "生成圖片",
+        "formatLabel": "圖片格式",
+        "formatSingle": "單圖",
+        "formatComic": "4格漫畫"
       },
       "imageOkMessage": "OK，幫我生成圖片。"
     },
@@ -150,6 +153,38 @@
       "hashtags": "Hashtags",
       "cta": "行動呼籲"
     },
+    "copy": {
+      "edit": "編輯文案",
+      "editTitle": "編輯文案",
+      "editHint": "Caption、CTA、hashtags 會一齊存成一個 draft revision。",
+      "empty": "加啲文案…"
+    },
+    "media": {
+      "title": "圖像計劃",
+      "edit": "編輯圖像",
+      "editTitle": "編輯圖像",
+      "editHint": "可以儲存 plan、生成／重新生成圖像，或者上載檔案。",
+      "empty": "未有圖像 — 可以加一張再改 plan。",
+      "prompt": "Prompt",
+      "additionalPrompt": "額外 Prompt",
+      "style": "風格",
+      "composition": "構圖",
+      "panel": "第 {{n}} 格",
+      "formatSingle": "單圖",
+      "formatComic": "四格漫畫",
+      "savePlan": "儲存計劃",
+      "generate": "生成",
+      "regen": "重新生成",
+      "regenWorking": "生成緊…",
+      "cancel": "取消",
+      "delete": "刪除圖像",
+      "uploadHint": "拖放圖像到呢度，或者撳一下上載。",
+      "add": "加圖",
+      "scrollPrev": "向左睇更多圖",
+      "scrollNext": "向右睇更多圖",
+      "slot": "圖 {{n}}",
+      "pending": "待生成"
+    },
     "mock": {
       "sponsored": "Instagram 預覽",
       "placeholder": "圖片佔位",
@@ -157,7 +192,12 @@
     },
     "error": {
       "saveFailed": "草稿儲存失敗，請再試一次",
-      "confirmFailed": "確認失敗，請再試一次"
+      "confirmFailed": "確認失敗，請再試一次",
+      "planFailed": "圖像計劃儲存失敗，請再試一次",
+      "regenFailed": "重新生成失敗，請再試一次",
+      "addFailed": "加圖失敗，請再試一次",
+      "removeFailed": "刪除圖像失敗，請再試一次",
+      "uploadFailed": "上載圖像失敗，請再試一次"
     }
   },
   "admin": {

@@ -30,6 +30,11 @@ from internal.memory.repos import get_company, get_signals_by_ids, list_personas
 from internal.session import prompts
 from internal.session.context import get_db
 from internal.session.events import session_event_bus
+from internal.session.image_format import (
+    compose_generation_prompt,
+    image_format_from_text,
+    normalize_image_format,
+)
 from internal.session.io import (
     BriefOut,
     DraftOut,
@@ -42,6 +47,7 @@ from internal.session.io import (
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW, SessionState
 from internal.session.tiers import NODE_MODEL_TIERS
 from internal.session.trace import record_node_step
+from internal.session.voice import voice_context
 
 logger = logging.getLogger(__name__)
 
@@ -217,15 +223,20 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
 async def load_context(state: SessionState) -> dict[str, Any]:
     db = get_db()
     company_id = state.get("company_id")
-    company_payload: dict[str, Any] = {"company_id": company_id}
+    company_payload: dict[str, Any] = {
+        "company_id": company_id,
+        "voice": voice_context(None),
+    }
     if company_id:
         company = await get_company(db, uuid.UUID(company_id))
         if company:
+            profile = company.profile or {}
             company_payload = {
                 "company_id": str(company.id),
                 "name": company.name,
                 "slug": company.slug,
-                "profile": company.profile or {},
+                "profile": profile,
+                "voice": voice_context(profile),
             }
     await ensure_default_personas(db)
     personas = await list_personas(db)
@@ -418,10 +429,10 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         company_name = ctx.get("name") or "我哋"
         draft = {
             "caption": (
-                f"「{company_name}」留意到「{title}」喺香港討論度上升。"
-                "我哋準備咗實用內容，歡迎留言話我哋知你最想知邊方面。"
+                f"最近成日聽到「{title}」？"
+                f"「{company_name}」都睇住——嚟緊有啲貼地內容，留言話我哋知你最想知邊方面。"
             ),
-            "hashtags": ["#HongKong", "#熱話", "#Marketing"],
+            "hashtags": ["#HongKong", "#熱話"],
             "cta": "留言話我哋知",
         }
         refs = signal_ids[:3]
@@ -528,7 +539,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     allowed = set(signal_ids)
     if parsed:
         refs = [sid for sid in parsed.source_signal_ids if sid in allowed] or signal_ids
-        return {
+        out: dict[str, Any] = {
             "draft": {
                 "caption": parsed.caption,
                 "hashtags": parsed.hashtags,
@@ -538,6 +549,11 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
             "need_image": parsed.need_image or _wants_image_change(user),
             "grounding_ok": True,
         }
+        fmt = image_format_from_text(user)
+        if fmt:
+            out["image_format"] = fmt
+            out["need_image"] = True
+        return out
 
     draft = dict(state.get("draft") or {})
     note = feedback or user
@@ -545,19 +561,26 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     if note:
         caption = f"{caption}\n\n（修訂：{note[:200]}）"
     draft["caption"] = caption
-    return {
+    out: dict[str, Any] = {
         "draft": draft,
         "need_image": _wants_image_change(user),
         "grounding_ok": True,
     }
+    fmt = image_format_from_text(user)
+    if fmt:
+        out["image_format"] = fmt
+        out["need_image"] = True
+    return out
 
 
 @agent_progress("executor_image_plan")
 async def executor_image_plan(state: SessionState) -> dict[str, Any]:
+    fmt = normalize_image_format(state.get("image_format"))
     payload = {
         "draft": state.get("draft") or {},
         "brief": state.get("brief") or {},
         "company": state.get("company_context") or {},
+        "image_format": fmt,
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["executor_image_plan"] or ModelTier.MEDIUM,
@@ -566,12 +589,35 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
         ImagePlanOut,
     )
     if parsed:
-        return {"image_plan": parsed.model_dump()}
+        plan = parsed.model_dump()
+        plan["format"] = normalize_image_format(plan.get("format") or fmt)
+        if plan["format"] != "comic_4panel":
+            plan["panels"] = []
+        return {"image_plan": plan, "image_format": plan["format"]}
 
     company = (state.get("company_context") or {}).get("name") or "brand"
     caption = ((state.get("draft") or {}).get("caption") or "")[:120]
-    return {
-        "image_plan": {
+    if fmt == "comic_4panel":
+        plan = {
+            "format": "comic_4panel",
+            "prompt": (
+                f"4-panel comic strip for {company}, Hong Kong everyday scenes "
+                f"inspired by: {caption or 'market trends'}, clear gutters, "
+                "no logos, no unreadable text"
+            ),
+            "composition": "2x2 comic grid, equal panels, reading L→R then top→bottom",
+            "style": "clean line comic, contemporary HK urban",
+            "avoid": ["logos", "watermarks", "real celebrity faces", "dense readable text"],
+            "panels": [
+                {"index": 1, "beat": "hook scene — instant everyday recognition; no product"},
+                {"index": 2, "beat": "escalate human friction / absurdity"},
+                {"index": 3, "beat": "peak pain — still no hard sell"},
+                {"index": 4, "beat": "product as soft remedy; attitude, not feature list"},
+            ],
+        }
+    else:
+        plan = {
+            "format": "single",
             "prompt": (
                 f"Clean modern social media image for {company}, Hong Kong urban mood, "
                 f"inspired by: {caption or 'market trends'}, no logos, no unreadable text"
@@ -579,8 +625,9 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
             "composition": "subject centered, negative space for optional caption overlay",
             "style": "bright, contemporary, editorial",
             "avoid": ["logos", "watermarks", "real celebrity faces"],
+            "panels": [],
         }
-    }
+    return {"image_plan": plan, "image_format": fmt}
 
 
 @agent_progress("executor_image_gen")
@@ -610,7 +657,7 @@ async def executor_image_gen(state: SessionState) -> dict[str, Any]:
         )
 
     plan = state.get("image_plan") or {}
-    prompt = str(plan.get("prompt") or "").strip()
+    prompt = compose_generation_prompt(plan)
     if not prompt:
         company = (state.get("company_context") or {}).get("name") or "brand"
         prompt = f"Clean modern social media image for {company}, Hong Kong urban mood"

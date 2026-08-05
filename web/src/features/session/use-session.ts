@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import {
+  apiAddSessionImage,
   apiConfirmSession,
   apiCreateSession,
   apiDeleteSession,
   apiGetSessionMessages,
   apiListSessions,
   apiPostSessionMessage,
+  apiRegenImage,
+  apiRemoveImage,
   apiResumeSessionImage,
   apiStopSessionTurn,
+  apiUpdateImagePlan,
   apiUpdateSession,
   apiUpdateSessionDraft,
+  apiUploadImage,
 } from "./api";
 import {
   agentActionsFromMessages,
@@ -20,6 +25,7 @@ import {
   parseAgentProgress,
   parseBrief,
   parseDraftCopy,
+  parseMediaItems,
   previewAnchorFromActions,
   waitForSseReady,
 } from "./session-helpers";
@@ -32,6 +38,7 @@ import type {
   ConfirmSessionResponse,
   DraftCopy,
   PreviewDraft,
+  PreviewMediaMutationResponse,
   Session,
   SessionBrief,
   SessionListItem,
@@ -336,11 +343,13 @@ export function useSession(companyId: string | undefined) {
         setInterruptAfterMessageId(null);
         setPreviewAfterMessageId(lastUserMessageId());
         const copy = parseDraftCopy(data.copy);
+        const media = parseMediaItems(data.media);
         setDraft((prev) =>
           mergePreviewDraft(prev, {
             copy,
             image_url:
               typeof data.image_url === "string" ? data.image_url : null,
+            media,
             revision: typeof data.revision === "number" ? data.revision : null,
             approval_token:
               typeof data.approval_token === "string"
@@ -409,6 +418,7 @@ export function useSession(companyId: string | undefined) {
           }
           const copy =
             parseDraftCopy(data.copy) || parseDraftCopy(state?.draft);
+          const media = parseMediaItems(data.media);
           setDraft((prev) =>
             mergePreviewDraft(prev, {
               copy,
@@ -418,6 +428,7 @@ export function useSession(companyId: string | undefined) {
                   : typeof state?.image_url === "string"
                     ? state.image_url
                     : null,
+              media,
               revision:
                 typeof data.revision === "number"
                   ? data.revision
@@ -768,6 +779,7 @@ export function useSession(companyId: string | undefined) {
           res.approval_token &&
           typeof res.revision === "number"
         ) {
+          const previewEv = res.events?.find((ev) => ev.type === "preview.updated");
           const copyFromEvents = res.events
             ?.map((ev) =>
               ev.type === "preview.updated" || ev.type === "draft.copy_updated"
@@ -781,8 +793,8 @@ export function useSession(companyId: string | undefined) {
               approval_token: res.approval_token,
               revision: res.revision,
               image_url:
-                (res.events?.find((ev) => ev.type === "preview.updated")?.data
-                  ?.image_url as string | undefined) ?? prev?.image_url,
+                (previewEv?.data?.image_url as string | undefined) ?? prev?.image_url,
+              media: parseMediaItems(previewEv?.data?.media) ?? prev?.media,
             }),
           );
         }
@@ -855,6 +867,7 @@ export function useSession(companyId: string | undefined) {
         res.approval_token &&
         typeof res.revision === "number"
       ) {
+        const previewEv = res.events?.find((ev) => ev.type === "preview.updated");
         const copyFromEvents = res.events
           ?.map((ev) =>
             ev.type === "preview.updated" || ev.type === "draft.copy_updated"
@@ -868,8 +881,8 @@ export function useSession(companyId: string | undefined) {
             approval_token: res.approval_token ?? null,
             revision: res.revision ?? null,
             image_url:
-              (res.events?.find((ev) => ev.type === "preview.updated")?.data
-                ?.image_url as string | undefined) ?? prev?.image_url,
+              (previewEv?.data?.image_url as string | undefined) ?? prev?.image_url,
+            media: parseMediaItems(previewEv?.data?.media) ?? prev?.media,
           }),
         );
       }
@@ -879,39 +892,43 @@ export function useSession(companyId: string | undefined) {
     [applyTurnEvent, ensureOutcomeActions, finishRunningActions],
   );
 
-  const resumeImage = useCallback(async () => {
-    if (!accessToken || !sessionId || sending || stopping || !awaitingImageOk) return;
-    setSending(true);
-    setLlmError(null);
-    const epoch = ++turnEpochRef.current;
-    suppressLiveTurnEventsRef.current = false;
-    const abort = new AbortController();
-    sendAbortRef.current = abort;
-    try {
-      const res = await apiResumeSessionImage(accessToken, sessionId, {
-        signal: abort.signal,
-      });
-      if (abort.signal.aborted || epoch !== turnEpochRef.current) {
-        return;
+  const resumeImage = useCallback(
+    async (imageFormat?: "single" | "comic_4panel") => {
+      if (!accessToken || !sessionId || sending || stopping || !awaitingImageOk) return;
+      setSending(true);
+      setLlmError(null);
+      const epoch = ++turnEpochRef.current;
+      suppressLiveTurnEventsRef.current = false;
+      const abort = new AbortController();
+      sendAbortRef.current = abort;
+      try {
+        const res = await apiResumeSessionImage(accessToken, sessionId, {
+          signal: abort.signal,
+          imageFormat,
+        });
+        if (abort.signal.aborted || epoch !== turnEpochRef.current) {
+          return;
+        }
+        applyTurnResponse(res);
+        void refreshHistory();
+      } catch (err) {
+        if (abort.signal.aborted || epoch !== turnEpochRef.current) return;
+        throw err;
+      } finally {
+        if (sendAbortRef.current === abort) sendAbortRef.current = null;
+        setSending(false);
       }
-      applyTurnResponse(res);
-      void refreshHistory();
-    } catch (err) {
-      if (abort.signal.aborted || epoch !== turnEpochRef.current) return;
-      throw err;
-    } finally {
-      if (sendAbortRef.current === abort) sendAbortRef.current = null;
-      setSending(false);
-    }
-  }, [
-    accessToken,
-    sessionId,
-    sending,
-    stopping,
-    awaitingImageOk,
-    applyTurnResponse,
-    refreshHistory,
-  ]);
+    },
+    [
+      accessToken,
+      sessionId,
+      sending,
+      stopping,
+      awaitingImageOk,
+      applyTurnResponse,
+      refreshHistory,
+    ],
+  );
 
   const stopTurn = useCallback(async () => {
     if (!accessToken || !sessionId || stopping) return;
@@ -971,27 +988,102 @@ export function useSession(companyId: string | undefined) {
     refreshHistory,
   ]);
 
+  const applyMediaMutation = useCallback((res: PreviewMediaMutationResponse) => {
+    const next: PreviewDraft = {
+      copy: res.copy,
+      image_url: res.image_url,
+      media: res.media ?? [],
+      revision: res.revision,
+      approval_token: res.approval_token,
+      platform: res.platform,
+    };
+    setDraft(next);
+    setMode(res.mode);
+    return next;
+  }, []);
+
   const updateDraft = useCallback(
     async (copy: DraftCopy) => {
       if (!accessToken || !sessionId || draftSaving) return null;
       setDraftSaving(true);
       try {
         const res = await apiUpdateSessionDraft(accessToken, sessionId, copy);
-        const next: PreviewDraft = {
-          copy: res.copy,
-          image_url: res.image_url,
-          revision: res.revision,
-          approval_token: res.approval_token,
-          platform: res.platform,
-        };
-        setDraft(next);
-        setMode(res.mode);
-        return next;
+        return applyMediaMutation(res);
       } finally {
         setDraftSaving(false);
       }
     },
-    [accessToken, sessionId, draftSaving],
+    [accessToken, sessionId, draftSaving, applyMediaMutation],
+  );
+
+  const saveImagePlan = useCallback(
+    async (imageId: string, plan: Record<string, unknown>) => {
+      if (!accessToken || !sessionId || draftSaving) return null;
+      setDraftSaving(true);
+      try {
+        const res = await apiUpdateImagePlan(accessToken, sessionId, imageId, plan);
+        return applyMediaMutation(res);
+      } finally {
+        setDraftSaving(false);
+      }
+    },
+    [accessToken, sessionId, draftSaving, applyMediaMutation],
+  );
+
+  const regenImage = useCallback(
+    async (imageId: string) => {
+      if (!accessToken || !sessionId || draftSaving) return null;
+      setDraftSaving(true);
+      try {
+        const res = await apiRegenImage(accessToken, sessionId, imageId);
+        return applyMediaMutation(res);
+      } finally {
+        setDraftSaving(false);
+      }
+    },
+    [accessToken, sessionId, draftSaving, applyMediaMutation],
+  );
+
+  const addImage = useCallback(
+    async (format: "single" | "comic_4panel" = "single") => {
+      if (!accessToken || !sessionId || draftSaving) return null;
+      setDraftSaving(true);
+      try {
+        const res = await apiAddSessionImage(accessToken, sessionId, { format });
+        return applyMediaMutation(res);
+      } finally {
+        setDraftSaving(false);
+      }
+    },
+    [accessToken, sessionId, draftSaving, applyMediaMutation],
+  );
+
+  const removeImage = useCallback(
+    async (imageId: string) => {
+      if (!accessToken || !sessionId || draftSaving) return null;
+      setDraftSaving(true);
+      try {
+        const res = await apiRemoveImage(accessToken, sessionId, imageId);
+        return applyMediaMutation(res);
+      } finally {
+        setDraftSaving(false);
+      }
+    },
+    [accessToken, sessionId, draftSaving, applyMediaMutation],
+  );
+
+  const uploadImage = useCallback(
+    async (imageId: string, file: File) => {
+      if (!accessToken || !sessionId || draftSaving) return null;
+      setDraftSaving(true);
+      try {
+        const res = await apiUploadImage(accessToken, sessionId, imageId, file);
+        return applyMediaMutation(res);
+      } finally {
+        setDraftSaving(false);
+      }
+    },
+    [accessToken, sessionId, draftSaving, applyMediaMutation],
   );
 
   const confirmPost = useCallback(
@@ -1013,14 +1105,7 @@ export function useSession(companyId: string | undefined) {
           const saved = await apiUpdateSessionDraft(accessToken, sessionId, localCopy);
           token = saved.approval_token;
           platform = saved.platform;
-          setDraft({
-            copy: saved.copy,
-            image_url: saved.image_url,
-            revision: saved.revision,
-            approval_token: saved.approval_token,
-            platform: saved.platform,
-          });
-          setMode(saved.mode);
+          applyMediaMutation(saved);
         }
         if (!token) throw new Error("Missing approval_token");
 
@@ -1041,7 +1126,7 @@ export function useSession(companyId: string | undefined) {
         setConfirming(false);
       }
     },
-    [accessToken, sessionId, confirming, draft],
+    [accessToken, sessionId, confirming, draft, applyMediaMutation],
   );
 
   return {
@@ -1072,6 +1157,11 @@ export function useSession(companyId: string | undefined) {
     resumeImage,
     stopTurn,
     updateDraft,
+    saveImagePlan,
+    regenImage,
+    addImage,
+    removeImage,
+    uploadImage,
     confirmPost,
     openSession,
     startNewChat,

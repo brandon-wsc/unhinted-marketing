@@ -40,6 +40,29 @@ def test_preview_updated_payload_defaults_platform() -> None:
     assert payload["approval_token"] == "tok"
     assert payload["platform"] == "instagram"
     assert payload["copy"]["hashtags"] == ["x"]
+    assert payload["media"] == []
+
+
+def test_preview_updated_payload_with_media() -> None:
+    payload = preview_updated_payload(
+        revision=1,
+        approval_token="tok",
+        image_url=None,
+        copy={"caption": "c"},
+        media=[
+            {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "url": "https://cdn/x.png",
+                "plan": {"prompt": "p"},
+                "format": "comic_4panel",
+                "role": "primary",
+                "seq": 0,
+                "status": "ready",
+            }
+        ],
+    )
+    assert payload["image_url"] == "https://cdn/x.png"
+    assert payload["media"][0]["format"] == "comic_4panel"
 
 
 def test_preview_updated_payload_custom_platform() -> None:

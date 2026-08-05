@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/auth-layout";
+import { EditCopyDialog } from "@/features/session/components/edit-copy-dialog";
+import { EditImageDialog } from "@/features/session/components/edit-image-dialog";
 import {
   draftEquals,
   IgPreviewMock,
+  isRenderableImageUrl,
   toEditableCopy,
 } from "@/features/session/components/ig-preview-mock";
 import type {
@@ -20,6 +23,19 @@ type Props = {
   confirming: boolean;
   onApply: (copy: DraftCopy) => Promise<unknown>;
   onConfirm: (copy: DraftCopy) => Promise<unknown>;
+  onSavePlan: (
+    imageId: string,
+    plan: Record<string, unknown>,
+  ) => Promise<PreviewDraft | null | unknown>;
+  onRegenImage: (imageId: string) => Promise<unknown>;
+  onAddImage: (
+    format?: "single" | "comic_4panel",
+  ) => Promise<PreviewDraft | null | unknown>;
+  onRemoveImage: (imageId: string) => Promise<PreviewDraft | null | unknown>;
+  onUploadImage: (
+    imageId: string,
+    file: File,
+  ) => Promise<PreviewDraft | null | unknown>;
   onBack?: () => void;
 };
 
@@ -31,45 +47,55 @@ export function PreviewPanel({
   confirming,
   onApply,
   onConfirm,
+  onSavePlan,
+  onRegenImage,
+  onAddImage,
+  onRemoveImage,
+  onUploadImage,
   onBack,
 }: Props) {
   const { t } = useTranslation();
   const [local, setLocal] = useState<DraftCopy>(() => toEditableCopy(draft));
-  const [hashtagsText, setHashtagsText] = useState(() => draft.copy.hashtags.join(" "));
+  const [editImageOpen, setEditImageOpen] = useState(false);
+  const [editCopyOpen, setEditCopyOpen] = useState(false);
 
   // Server wins on SSE / AI revise — reset local dirty state.
   useEffect(() => {
     setLocal(toEditableCopy(draft));
-    setHashtagsText(draft.copy.hashtags.join(" "));
   }, [draft.revision, draft.approval_token, draft.copy.caption, draft.copy.cta, draft.copy.hashtags]);
 
-  const parsedHashtags = useMemo(
-    () =>
-      hashtagsText
-        .split(/[\s,]+/)
-        .map((h) => h.trim())
-        .filter(Boolean)
-        .map((h) => (h.startsWith("#") ? h : `#${h}`)),
-    [hashtagsText],
-  );
+  useEffect(() => {
+    if (confirmed) {
+      setEditImageOpen(false);
+      setEditCopyOpen(false);
+    }
+  }, [confirmed]);
 
-  const working: DraftCopy = {
-    caption: local.caption,
-    cta: local.cta,
-    hashtags: parsedHashtags,
-  };
-  const dirty = !draftEquals(working, draft.copy);
+  const dirty = !draftEquals(local, draft.copy);
   const busy = draftSaving || confirming;
-  const canConfirm = !!draft.approval_token && !confirmed && working.caption.trim().length > 0;
+  const canConfirm = !!draft.approval_token && !confirmed && local.caption.trim().length > 0;
+  const previewUrls = useMemo(() => {
+    const fromMedia = [...(draft.media ?? [])]
+      .sort((a, b) => a.seq - b.seq)
+      .map((m) => m.url)
+      .filter(isRenderableImageUrl);
+    if (fromMedia.length > 0) return fromMedia;
+    return isRenderableImageUrl(draft.image_url) ? [draft.image_url] : [];
+  }, [draft.media, draft.image_url]);
 
   async function handleApply() {
     if (!dirty || busy) return;
-    await onApply(working);
+    await onApply(local);
   }
 
   async function handleConfirm() {
     if (!canConfirm || busy) return;
-    await onConfirm(working);
+    await onConfirm(local);
+  }
+
+  async function handleSaveCopy(copy: DraftCopy) {
+    setLocal(copy);
+    await onApply(copy);
   }
 
   return (
@@ -111,47 +137,12 @@ export function PreviewPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-5 px-4 py-5">
-          <IgPreviewMock copy={working} imageUrl={draft.image_url} />
-
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-[var(--color-muted)]">
-                {t("preview.fields.caption")}
-              </span>
-              <textarea
-                value={local.caption}
-                onChange={(e) => setLocal((prev) => ({ ...prev, caption: e.target.value }))}
-                rows={5}
-                disabled={confirmed || busy}
-                className="resize-y rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-ring)] focus:ring-2 focus:ring-[var(--color-ring)]/30 disabled:opacity-60"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-[var(--color-muted)]">
-                {t("preview.fields.hashtags")}
-              </span>
-              <input
-                value={hashtagsText}
-                onChange={(e) => setHashtagsText(e.target.value)}
-                disabled={confirmed || busy}
-                placeholder="#HongKong #Marketing"
-                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-ring)] focus:ring-2 focus:ring-[var(--color-ring)]/30 disabled:opacity-60"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-[var(--color-muted)]">
-                {t("preview.fields.cta")}
-              </span>
-              <input
-                value={local.cta}
-                onChange={(e) => setLocal((prev) => ({ ...prev, cta: e.target.value }))}
-                disabled={confirmed || busy}
-                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-ring)] focus:ring-2 focus:ring-[var(--color-ring)]/30 disabled:opacity-60"
-              />
-            </label>
-          </div>
+          <IgPreviewMock
+            copy={local}
+            imageUrls={previewUrls}
+            onEditImage={confirmed ? undefined : () => setEditImageOpen(true)}
+            onEditCopy={confirmed ? undefined : () => setEditCopyOpen(true)}
+          />
         </div>
       </div>
 
@@ -184,6 +175,29 @@ export function PreviewPanel({
           {t("preview.confirmHint")}
         </p>
       </div>
+
+      {!confirmed && (
+        <>
+          <EditImageDialog
+            open={editImageOpen}
+            onOpenChange={setEditImageOpen}
+            draft={draft}
+            busy={busy}
+            onSavePlan={onSavePlan}
+            onRegenImage={onRegenImage}
+            onAddImage={onAddImage}
+            onRemoveImage={onRemoveImage}
+            onUploadImage={onUploadImage}
+          />
+          <EditCopyDialog
+            open={editCopyOpen}
+            onOpenChange={setEditCopyOpen}
+            copy={local}
+            busy={busy}
+            onSave={handleSaveCopy}
+          />
+        </>
+      )}
     </aside>
   );
 }

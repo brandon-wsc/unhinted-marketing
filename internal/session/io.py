@@ -36,11 +36,20 @@ class ReviewOut(BaseModel):
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
 
 
+class ImagePlanPanel(BaseModel):
+    """One beat in a multi-panel comic (folded into a single image prompt)."""
+
+    index: int = Field(ge=1, le=4)
+    beat: str = Field(min_length=1, max_length=400)
+
+
 class ImagePlanOut(BaseModel):
     prompt: str
+    format: Literal["single", "comic_4panel"] = "single"
     composition: str = ""
     style: str = ""
     avoid: list[str] = Field(default_factory=list)
+    panels: list[ImagePlanPanel] = Field(default_factory=list)
 
 
 class EditOut(BaseModel):

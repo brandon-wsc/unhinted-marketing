@@ -603,6 +603,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeImageRequest",
+                "default": {}
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -765,6 +775,368 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdateDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/media": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Get Session Media",
+        "description": "List media for the latest preview draft (ADR 0008).",
+        "operationId": "get_session_media_api_sessions__session_id__media_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionMediaListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Post Session Media",
+        "description": "Add a pending image slot → new image row + new draft.",
+        "operationId": "post_session_media_api_sessions__session_id__media_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddSessionImageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewMediaMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/media/{image_id}/plan": {
+      "patch": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Patch Session Image Plan",
+        "description": "Edit image plan → new image row + new draft (no LLM).",
+        "operationId": "patch_session_image_plan_api_sessions__session_id__media__image_id__plan_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateImagePlanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewMediaMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/media/{image_id}/regen": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Post Session Image Regen",
+        "description": "Regenerate image from plan → new image row + new draft.",
+        "operationId": "post_session_image_regen_api_sessions__session_id__media__image_id__regen_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewMediaMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/media/{image_id}/remove": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Post Session Image Remove",
+        "description": "Remove image from current draft media_ids → new draft (orphan row OK).",
+        "operationId": "post_session_image_remove_api_sessions__session_id__media__image_id__remove_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewMediaMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/media/{image_id}/upload": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Post Session Image Upload",
+        "description": "Upload image bytes → new preview_images row + replace slot in draft.",
+        "operationId": "post_session_image_upload_api_sessions__session_id__media__image_id__upload_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_session_image_upload_api_sessions__session_id__media__image_id__upload_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewMediaMutationResponse"
                 }
               }
             }
@@ -1369,6 +1741,54 @@
   },
   "components": {
     "schemas": {
+      "AddSessionImageRequest": {
+        "properties": {
+          "format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "comic_4panel"
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Format",
+            "default": "single"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          }
+        },
+        "type": "object",
+        "title": "AddSessionImageRequest"
+      },
+      "Body_post_session_image_upload_api_sessions__session_id__media__image_id__upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_post_session_image_upload_api_sessions__session_id__media__image_id__upload_post"
+      },
       "ConfirmSessionRequest": {
         "properties": {
           "approval_token": {
@@ -2320,6 +2740,118 @@
         ],
         "title": "PostMessageResponse"
       },
+      "PreviewMediaItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "plan": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Plan"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "comic_4panel"
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Format",
+            "default": "single"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "primary"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "default": 0
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "ready"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "PreviewMediaItem",
+        "description": "One append-only image version referenced by a draft (ADR 0008)."
+      },
+      "PreviewMediaMutationResponse": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "approval_token": {
+            "type": "string",
+            "title": "Approval Token"
+          },
+          "copy": {
+            "$ref": "#/components/schemas/DraftCopy"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "media": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMediaItem"
+            },
+            "type": "array",
+            "title": "Media"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "approval_token",
+          "copy",
+          "platform",
+          "mode"
+        ],
+        "title": "PreviewMediaMutationResponse",
+        "description": "Shared shape after plan edit / regen / add (new draft revision)."
+      },
       "RecommendedQuestionItem": {
         "properties": {
           "id": {
@@ -2453,6 +2985,28 @@
           "display_name"
         ],
         "title": "RegisterRequest"
+      },
+      "ResumeImageRequest": {
+        "properties": {
+          "image_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "comic_4panel"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Format"
+          }
+        },
+        "type": "object",
+        "title": "ResumeImageRequest",
+        "description": "Optional visual format when continuing past the image interrupt."
       },
       "ResumeImageResponse": {
         "properties": {
@@ -2642,6 +3196,19 @@
           "sessions"
         ],
         "title": "SessionListResponse"
+      },
+      "SessionMediaListResponse": {
+        "properties": {
+          "media": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMediaItem"
+            },
+            "type": "array",
+            "title": "Media"
+          }
+        },
+        "type": "object",
+        "title": "SessionMediaListResponse"
       },
       "SessionMessagesResponse": {
         "properties": {
@@ -3205,6 +3772,13 @@
             ],
             "title": "Image Url"
           },
+          "media": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMediaItem"
+            },
+            "type": "array",
+            "title": "Media"
+          },
           "platform": {
             "type": "string",
             "title": "Platform"
@@ -3223,6 +3797,17 @@
           "mode"
         ],
         "title": "UpdateDraftResponse"
+      },
+      "UpdateImagePlanRequest": {
+        "properties": {
+          "plan": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Plan"
+          }
+        },
+        "type": "object",
+        "title": "UpdateImagePlanRequest"
       },
       "UpdateSessionRequest": {
         "properties": {
