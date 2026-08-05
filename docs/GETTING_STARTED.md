@@ -7,7 +7,7 @@ Local development setup for Unhinted Marketing Agent. For current feature status
 ## Prerequisites
 
 - Python 3.11+
-- Node.js 20+ and pnpm 11+ (frontend; enable via `corepack enable`)
+- Node.js 22+ and pnpm 11.20+ (frontend; enable via `corepack enable`)
 - PostgreSQL with pgvector (dev DB or your own instance)
 
 ---
