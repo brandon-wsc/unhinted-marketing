@@ -1,8 +1,12 @@
 import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { AuthLayout, Button, ErrorAlert, Field } from "@/components/auth-layout";
+import { AuthLayout } from "@/components/auth-layout";
 import { PasswordBox } from "@/components/password-box";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
 import { mapApiError } from "@/lib/map-api-error";
 import { getRememberedUser, patchRememberedUser } from "@/lib/remembered-user";
@@ -45,23 +49,34 @@ export function LoginPage() {
       footer={
         <>
           {t("auth.login.noAccount")}{" "}
-          <Link to="/register" className="text-[var(--color-primary-hover)] hover:underline">
+          <Link to="/register" className="text-primary hover:underline">
             {t("auth.login.registerLink")}
           </Link>
         </>
       }
     >
       <form onSubmit={onSubmit} className="space-y-4">
-        {error && <ErrorAlert message={error} />}
-        <Field
-          id="email"
-          label={t("common.email")}
-          type="email"
-          value={email}
-          onChange={onEmailChange}
-          autoComplete="email"
-          required
-        />
+        {error && (
+          <Alert
+            variant="destructive"
+            className="border-destructive/30 bg-[var(--color-destructive-soft)] text-[var(--color-destructive-text)]"
+          >
+            <AlertDescription className="text-[var(--color-destructive-text)]">
+              {error}
+            </AlertDescription>
+          </Alert>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="email">{t("common.email")}</Label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => onEmailChange(e.target.value)}
+            autoComplete="email"
+            required
+          />
+        </div>
         <PasswordBox
           id="password"
           label={t("common.password")}

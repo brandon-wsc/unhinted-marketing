@@ -2,7 +2,7 @@ import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { cjk } from "@streamdown/cjk";
-import { Button } from "@/components/auth-layout";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
@@ -639,12 +639,12 @@ function InterruptCard({
       >
         <Button
           type="button"
-          variant={format === "single" ? "primary" : "ghost"}
+          variant={format === "single" ? "default" : "outline"}
           disabled={sending}
           className={
             format === "single"
-              ? "ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-card)]"
-              : "border border-[var(--color-border)]"
+              ? "ring-2 ring-primary ring-offset-2 ring-offset-card"
+              : undefined
           }
           onClick={() => setFormat("single")}
           aria-pressed={format === "single"}
@@ -653,12 +653,12 @@ function InterruptCard({
         </Button>
         <Button
           type="button"
-          variant={format === "comic_4panel" ? "primary" : "ghost"}
+          variant={format === "comic_4panel" ? "default" : "outline"}
           disabled={sending}
           className={
             format === "comic_4panel"
-              ? "ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-card)]"
-              : "border border-[var(--color-border)]"
+              ? "ring-2 ring-primary ring-offset-2 ring-offset-card"
+              : undefined
           }
           onClick={() => setFormat("comic_4panel")}
           aria-pressed={format === "comic_4panel"}
@@ -668,7 +668,6 @@ function InterruptCard({
       </div>
       <Button
         type="button"
-        variant="primary"
         disabled={sending}
         className="shrink-0 self-start"
         onClick={() => onResume(format)}
