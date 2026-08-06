@@ -9,6 +9,7 @@ import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
+import { sessionLayoutMode } from "@/features/session/session-layout";
 import { useRecommendedQuestions } from "@/features/session/use-recommended-questions";
 import { useSession } from "@/features/session/use-session";
 import type {
@@ -18,10 +19,11 @@ import type {
   RecommendedQuestion,
   SessionBrief,
 } from "@/features/session/types";
+import { useContainerWidth } from "@/hooks/use-container-width";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
 
-type MobileTab = "record" | "chat" | "preview";
+type PagedPane = "record" | "chat" | "preview";
 
 export function ChatPanel() {
   const { t } = useTranslation();
@@ -79,19 +81,25 @@ export function ChatPanel() {
       return false;
     }
   });
-  const [mobileTab, setMobileTab] = useState<MobileTab>("chat");
+  const [pagedPane, setPagedPane] = useState<PagedPane>("chat");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { ref: shellRef, width: shellWidth } = useContainerWidth();
   const previewMode = mode === "PREVIEW" && !!draft;
+  const layoutMode = sessionLayoutMode(shellWidth, {
+    historyCollapsed,
+    previewReady: previewMode,
+  });
+  const isSplit = layoutMode === "split";
 
   // Preview page only exists while a draft is ready — fall back to chat.
   useEffect(() => {
-    if (!previewMode && mobileTab === "preview") {
-      setMobileTab("chat");
+    if (!previewMode && pagedPane === "preview") {
+      setPagedPane("chat");
     }
-  }, [previewMode, mobileTab]);
+  }, [previewMode, pagedPane]);
 
   function goToChat() {
-    setMobileTab("chat");
+    setPagedPane("chat");
   }
 
   function toggleHistoryCollapsed() {
@@ -288,26 +296,28 @@ export function ChatPanel() {
 
   const chatColumn = (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="absolute left-4 top-3 z-10 lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileTab("record")}
-          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card/90 text-muted-foreground backdrop-blur transition hover:bg-accent hover:text-foreground"
-          title={t("chat.history.open")}
-          aria-label={t("chat.history.open")}
-        >
-          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
-            <path d="M6 2.5v11" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
-        </button>
-      </div>
+      {!isSplit && (
+        <div className="absolute left-4 top-3 z-10">
+          <button
+            type="button"
+            onClick={() => setPagedPane("record")}
+            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card/90 text-muted-foreground backdrop-blur transition hover:bg-accent hover:text-foreground"
+            title={t("chat.history.open")}
+            aria-label={t("chat.history.open")}
+          >
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M6 2.5v11" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div
-          className={`mx-auto flex w-full flex-col gap-5 px-4 pb-6 pt-14 sm:px-6 lg:pt-6 ${
-            previewMode ? "max-w-none" : "max-w-3xl"
-          }`}
+          className={`mx-auto flex w-full flex-col gap-5 px-4 pb-6 sm:px-6 ${
+            isSplit ? "pt-6" : "pt-14"
+          } ${previewMode ? "max-w-none" : "max-w-3xl"}`}
         >
           {restoring ? (
             <p className="py-16 text-center text-sm text-muted-foreground">
@@ -351,8 +361,8 @@ export function ChatPanel() {
                     onResume={(format) => void onResumeImageGen(format)}
                   />
                 )}
-                {previewMode && previewAfterMessageId === m.id && (
-                  <PreviewReadyBanner onOpen={() => setMobileTab("preview")} />
+                {previewMode && previewAfterMessageId === m.id && !isSplit && (
+                  <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
                 )}
               </div>
               );
@@ -381,8 +391,9 @@ export function ChatPanel() {
             )}
           {previewMode &&
             previewAfterMessageId &&
-            !messages.some((m) => m.id === previewAfterMessageId) && (
-              <PreviewReadyBanner onOpen={() => setMobileTab("preview")} />
+            !messages.some((m) => m.id === previewAfterMessageId) &&
+            !isSplit && (
+              <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
             )}
           {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
           {awaitingImageOk && !interruptAfterMessageId && (
@@ -391,8 +402,8 @@ export function ChatPanel() {
               onResume={(format) => void onResumeImageGen(format)}
             />
           )}
-          {previewMode && !previewAfterMessageId && (
-            <PreviewReadyBanner onOpen={() => setMobileTab("preview")} />
+          {previewMode && !previewAfterMessageId && !isSplit && (
+            <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
           )}
           {/* Inline LLM error when failed before an assistant row was persisted. */}
           {llmError && !messages.some((m) => isLlmErrorContent(m.content)) && (
@@ -466,17 +477,17 @@ export function ChatPanel() {
       onAddImage={onAddImage}
       onRemoveImage={onRemoveImage}
       onUploadImage={onUploadImage}
+      paged={!isSplit}
       onBack={goToChat}
     />
   ) : null;
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
-      <div className="hidden h-full min-h-0 lg:flex">{historySidebar}</div>
+    <div ref={shellRef} className="flex min-h-0 flex-1 overflow-hidden">
+      {isSplit && <div className="flex h-full min-h-0">{historySidebar}</div>}
 
-      {/* Mobile record page */}
-      {mobileTab === "record" && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
+      {!isSplit && pagedPane === "record" && (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <SessionHistorySidebar
             collapsed={false}
             onToggle={() => undefined}
@@ -487,25 +498,19 @@ export function ChatPanel() {
         </div>
       )}
 
-      {/* Chat — primary on mobile; always visible on desktop */}
       <div
         className={`min-h-0 min-w-0 flex-col overflow-hidden ${
-          mobileTab === "chat" ? "flex" : "hidden"
-        } ${
-          previewMode
-            ? "flex-1 lg:flex lg:flex-none lg:basis-[38%]"
-            : "flex-1 lg:flex"
-        }`}
+          isSplit || pagedPane === "chat" ? "flex" : "hidden"
+        } ${isSplit && previewMode ? "flex-none basis-[38%]" : "flex-1"}`}
       >
         {chatColumn}
       </div>
 
-      {/* Preview — push page on mobile; side pane on desktop */}
       {previewMode && previewPane ? (
         <div
           className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
-            mobileTab === "preview" ? "flex" : "hidden"
-          } lg:flex`}
+            isSplit || pagedPane === "preview" ? "flex" : "hidden"
+          }`}
         >
           {previewPane}
         </div>
@@ -520,7 +525,7 @@ function PreviewReadyBanner({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition hover:border-ring hover:text-foreground lg:hidden"
+      className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition hover:border-ring hover:text-foreground"
     >
       {t("preview.readyBanner")}
     </button>

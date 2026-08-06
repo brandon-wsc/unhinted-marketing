@@ -28,8 +28,8 @@ alwaysApply: false
 3. Never re-export a second `Button` / `Input` / `Dialog` from feature or auth helpers
 4. Prefer composed helpers in `components/` for repeated stacks: `FormField`, `IconButton`
 
-## Responsive (interim)
+## Responsive
 
-- Prefer standard `sm` / `md` / `lg` only (no one-off `min-[…px]:`)
-- Session split vs paged chrome: keep breakpoint decisions in the shell (`chat-panel` / future `SessionShell`), not in leaf widgets
-- Content-based / container-query mode switch is a later pass — don't scatter device naming in new code
+- Prefer standard `sm` / `md` / `lg` for micro chrome only (no one-off `min-[…px]:`)
+- Session workspace: **content-based** `split` | `paged` in the shell (`session-layout.ts` + `useContainerWidth`) — do not gate panes on viewport `lg` or device names
+- Leaf widgets take a `paged` / mode prop from the shell; they do not decide layout mode themselves

@@ -36,6 +36,8 @@ type Props = {
     imageId: string,
     file: File,
   ) => Promise<PreviewDraft | null | unknown>;
+  /** When true, show back affordance (paged shell); split shell hides it. */
+  paged?: boolean;
   onBack?: () => void;
 };
 
@@ -52,6 +54,7 @@ export function PreviewPanel({
   onAddImage,
   onRemoveImage,
   onUploadImage,
+  paged = false,
   onBack,
 }: Props) {
   const { t } = useTranslation();
@@ -99,14 +102,18 @@ export function PreviewPanel({
   }
 
   return (
-    <aside className="flex min-h-0 flex-1 flex-col overflow-hidden border-border bg-background lg:border-l">
+    <aside
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden border-border bg-background ${
+        paged ? "" : "border-l"
+      }`}
+    >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          {onBack && (
+          {paged && onBack && (
             <button
               type="button"
               onClick={onBack}
-              className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground lg:hidden"
+              className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
               aria-label={t("chat.mobile.back")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
