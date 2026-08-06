@@ -91,13 +91,16 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.20.0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
       - name: Vitest + path-tiered coverage
-        run: npm run test:coverage
+        run: pnpm run test:coverage
       - name: Typecheck + production build
-        run: npm run build
+        run: pnpm run build

@@ -20,6 +20,7 @@ build/
 
 # Node / React
 node_modules/
+.pnpm-store/
 web/dist/
 web/.vite/
 web/coverage/

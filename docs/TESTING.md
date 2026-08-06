@@ -1,6 +1,6 @@
 # Testing & Coverage Policy
 
-> **Status:** Backend Tier 1 unit + Tier 2 API landed (`tests/unit`, `tests/api`). Frontend Vitest Tier 1 utils + Tier 2 shared components landed (`cd web && npm test`). GitHub Actions CI in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).  
+> **Status:** Backend Tier 1 unit + Tier 2 API landed (`tests/unit`, `tests/api`). Frontend Vitest Tier 1 utils + Tier 2 shared components landed (`cd web && pnpm test`). GitHub Actions CI in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).  
 > **Principle:** path-tiered gates — **no single repo-wide 80%**. Utils and API earn hard floors; pages / large feature UI / LLM stay low or omitted.
 
 ---
@@ -53,7 +53,7 @@ Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 | **4 — Pages** | `web/src/pages/**` | **20–40%** or smoke only | No hard gate — logic lives in lib/context |
 | **5 — Feature UI** | `features/session/components/**` (`chat-panel`, `session-history`, …) | **15–30%** later | No gate in v1 CI |
 | **6 — Hooks** | `use-session.ts` (large) · related hooks | **25–40%** progressive | Pure helpers extracted (`session-helpers.ts`); hook suite via mocked RTL `renderHook` — still omitted from hard cov gate |
-| **Static** | `npm run build` (`tsc -b && vite build`) | Must pass | **Fail** |
+| **Static** | `pnpm run build` (`tsc -b && vite build`) | Must pass | **Fail** |
 
 ---
 
@@ -66,7 +66,7 @@ Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — runs on 
 | `lint` | `ruff check .` |
 | `backend-unit` | `pytest tests/unit` + utils cov ≥85%; session nodes mock-LLM cov ≥70% |
 | `backend-api` | `pgvector/pgvector:pg18` service + `pytest tests/api` + routes cov ≥70% |
-| `frontend` | `npm ci` → `npm run test:coverage` → `npm run build` |
+| `frontend` | `pnpm install --frozen-lockfile` → `pnpm run test:coverage` → `pnpm run build` |
 
 **Do not** require whole-repo 80%. Local equivalents:
 
@@ -110,10 +110,10 @@ TEST_DATABASE_URL=... pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
 
 # Frontend
 cd web
-npm test              # vitest run
-npm run test:watch    # vitest
-npm run test:coverage # vitest run --coverage (path-tiered thresholds)
-npm run build
+pnpm test              # vitest run
+pnpm run test:watch    # vitest
+pnpm run test:coverage # vitest run --coverage (path-tiered thresholds)
+pnpm run build
 ```
 
 If `TEST_DATABASE_URL` is unset, `tests/api` is **skipped**; `tests/unit` still runs.

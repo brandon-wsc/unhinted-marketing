@@ -7,7 +7,7 @@ Local development setup for Unhinted Marketing Agent. For current feature status
 ## Prerequisites
 
 - Python 3.11+
-- Node.js 20+ (frontend)
+- Node.js 22+ and pnpm 11.20+ (frontend; enable via `corepack enable`)
 - PostgreSQL with pgvector (dev DB or your own instance)
 
 ---
@@ -48,8 +48,8 @@ API docs: http://localhost:8000/docs
 
 ```bash
 cd web
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 Open [http://localhost:5173/login](http://localhost:5173/login). Vite proxies `/api` → `:8000`. SPA document routes (`/`, `/login`, `/admin`, …) are not proxied.
@@ -155,9 +155,9 @@ TEST_DATABASE_URL=... pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
 
 # Frontend — Vitest (Tier 1 utils + Tier 2 shared components)
 cd web
-npm test
-npm run test:coverage
-npm run build
+pnpm test
+pnpm run test:coverage
+pnpm run build
 ```
 
 API fixtures run `alembic upgrade head` against `TEST_DATABASE_URL` and truncate tables between tests. Do **not** point `TEST_DATABASE_URL` at your main `unhinted` dev database if you care about its data.
