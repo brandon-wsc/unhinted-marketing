@@ -7,9 +7,7 @@ import { useLayoutEffect, useRef, useState } from "react";
  */
 export function useContainerWidth<T extends HTMLElement = HTMLDivElement>() {
   const ref = useRef<T | null>(null);
-  const [width, setWidth] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth : 0,
-  );
+  const [width, setWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 0));
 
   useLayoutEffect(() => {
     const el = ref.current;

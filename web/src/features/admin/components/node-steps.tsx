@@ -1,6 +1,6 @@
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -117,9 +117,13 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <label
+          htmlFor="admin-steps-filter-node"
+          className="flex flex-col gap-1 text-xs text-muted-foreground"
+        >
           {t("admin.filters.node")}
           <Input
+            id="admin-steps-filter-node"
             type="text"
             value={nodeInput}
             onChange={(e) => setNodeInput(e.target.value)}
@@ -127,18 +131,26 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
             className="w-36"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <label
+          htmlFor="admin-steps-filter-session"
+          className="flex flex-col gap-1 text-xs text-muted-foreground"
+        >
           {t("admin.filters.sessionId")}
           <Input
+            id="admin-steps-filter-session"
             type="text"
             value={sessionInput}
             onChange={(e) => setSessionInput(e.target.value)}
             className="w-56 font-mono text-xs"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <label
+          htmlFor="admin-steps-filter-turn"
+          className="flex flex-col gap-1 text-xs text-muted-foreground"
+        >
           {t("admin.filters.turnId")}
           <Input
+            id="admin-steps-filter-turn"
             type="text"
             value={turnInput}
             onChange={(e) => setTurnInput(e.target.value)}

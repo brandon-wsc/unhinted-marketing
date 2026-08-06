@@ -31,13 +31,7 @@ type Props = {
   onSave: (copy: DraftCopy) => Promise<unknown>;
 };
 
-export function EditCopyDialog({
-  open,
-  onOpenChange,
-  copy,
-  busy,
-  onSave,
-}: Props) {
+export function EditCopyDialog({ open, onOpenChange, copy, busy, onSave }: Props) {
   const { t } = useTranslation();
   const [caption, setCaption] = useState(copy.caption);
   const [cta, setCta] = useState(copy.cta);
@@ -120,12 +114,7 @@ export function EditCopyDialog({
             >
               {t("preview.media.cancel")}
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!canSave}
-              onClick={() => void handleSave()}
-            >
+            <Button type="button" size="sm" disabled={!canSave} onClick={() => void handleSave()}>
               {busy ? t("preview.applySaving") : t("preview.apply")}
             </Button>
           </div>

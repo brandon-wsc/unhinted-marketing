@@ -35,10 +35,7 @@ export function IgPreviewMock({
   const [expanded, setExpanded] = useState(false);
   const [slide, setSlide] = useState(0);
 
-  const urls = useMemo(
-    () => imageUrls.filter(isRenderableImageUrl),
-    [imageUrls],
-  );
+  const urls = useMemo(() => imageUrls.filter(isRenderableImageUrl), [imageUrls]);
 
   useEffect(() => {
     setSlide((i) => (urls.length === 0 ? 0 : Math.min(i, urls.length - 1)));
@@ -176,9 +173,7 @@ export function IgPreviewMock({
                 aria-label={t("preview.copy.edit")}
               >
                 <span className="font-semibold">{accountName}</span>{" "}
-                <span className="whitespace-pre-wrap">
-                  {shown || t("preview.copy.empty")}
-                </span>
+                <span className="whitespace-pre-wrap">{shown || t("preview.copy.empty")}</span>
               </button>
               {collapsed && (
                 <button
@@ -213,9 +208,7 @@ export function IgPreviewMock({
 
 export function draftEquals(a: DraftCopy, b: DraftCopy): boolean {
   return (
-    a.caption === b.caption &&
-    a.cta === b.cta &&
-    a.hashtags.join("\0") === b.hashtags.join("\0")
+    a.caption === b.caption && a.cta === b.cta && a.hashtags.join("\0") === b.hashtags.join("\0")
   );
 }
 

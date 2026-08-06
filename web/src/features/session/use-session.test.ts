@@ -412,9 +412,7 @@ describe("useSession", () => {
       ],
     });
 
-    let onEvent:
-      | ((type: string, data: Record<string, unknown>) => void)
-      | undefined;
+    let onEvent: ((type: string, data: Record<string, unknown>) => void) | undefined;
     subscribeSessionEvents.mockImplementation(
       (opts: {
         onOpen?: () => void;

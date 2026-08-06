@@ -100,6 +100,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: Biome lint + format
+        run: pnpm run lint
       - name: Vitest + path-tiered coverage
         run: pnpm run test:coverage
       - name: Typecheck + production build

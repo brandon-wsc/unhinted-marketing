@@ -119,19 +119,15 @@ export function mergePreviewDraft(
     typeof patch.approval_token === "string"
       ? patch.approval_token
       : (prev?.approval_token ?? null);
-  const revision =
-    typeof patch.revision === "number" ? patch.revision : (prev?.revision ?? null);
+  const revision = typeof patch.revision === "number" ? patch.revision : (prev?.revision ?? null);
   const media =
-    patch.media !== undefined && patch.media !== null
-      ? patch.media
-      : (prev?.media ?? []);
+    patch.media !== undefined && patch.media !== null ? patch.media : (prev?.media ?? []);
   if (!copy || !approval_token || revision == null) {
     if (copy && prev) {
       return {
         ...prev,
         copy,
-        image_url:
-          patch.image_url !== undefined ? patch.image_url : prev.image_url,
+        image_url: patch.image_url !== undefined ? patch.image_url : prev.image_url,
         media,
         platform: patch.platform || prev.platform,
       };
@@ -140,10 +136,7 @@ export function mergePreviewDraft(
   }
   return {
     copy,
-    image_url:
-      patch.image_url !== undefined
-        ? patch.image_url
-        : (prev?.image_url ?? null),
+    image_url: patch.image_url !== undefined ? patch.image_url : (prev?.image_url ?? null),
     media,
     revision,
     approval_token,
@@ -189,10 +182,7 @@ export async function waitForSseReady(
     const handle = ref.current;
     if (handle) {
       const remaining = Math.max(0, timeoutMs - (Date.now() - start));
-      await Promise.race([
-        handle.promise,
-        new Promise<void>((r) => setTimeout(r, remaining)),
-      ]);
+      await Promise.race([handle.promise, new Promise<void>((r) => setTimeout(r, remaining))]);
       return;
     }
     await new Promise<void>((r) => setTimeout(r, 25));

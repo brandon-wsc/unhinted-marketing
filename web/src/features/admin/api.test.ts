@@ -18,19 +18,15 @@ describe("buildLlmCallQuery", () => {
   });
 
   it("includes turn and session filters", () => {
-    const query = buildLlmCallQuery(
-      { turnId: " t1 ", sessionId: " s1 " },
-      10,
-      0,
-    );
+    const query = buildLlmCallQuery({ turnId: " t1 ", sessionId: " s1 " }, 10, 0);
     expect(query).toBe("turn_id=t1&session_id=s1&limit=10&offset=0");
   });
 });
 
 describe("buildNodeStepQuery", () => {
   it("includes node turn session filters", () => {
-    expect(
-      buildNodeStepQuery({ node: "reviewer", turnId: "t1", sessionId: "s1" }, 50, 0),
-    ).toBe("node=reviewer&session_id=s1&turn_id=t1&limit=50&offset=0");
+    expect(buildNodeStepQuery({ node: "reviewer", turnId: "t1", sessionId: "s1" }, 50, 0)).toBe(
+      "node=reviewer&session_id=s1&turn_id=t1&limit=50&offset=0",
+    );
   });
 });

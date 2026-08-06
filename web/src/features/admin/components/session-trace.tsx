@@ -1,6 +1,6 @@
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -57,21 +57,24 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
     void load();
   }, [load]);
 
-  const selectedDraft =
-    trace?.draft_revisions.find((d) => d.revision === selectedRevision) ?? null;
+  const selectedDraft = trace?.draft_revisions.find((d) => d.revision === selectedRevision) ?? null;
   const grounded =
     selectedDraft == null
       ? []
-      : trace?.signals.filter((s) =>
+      : (trace?.signals.filter((s) =>
           (selectedDraft.source_signal_ids as string[]).includes(s.signal_id),
-        ) ?? [];
+        ) ?? []);
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <label
+          htmlFor="admin-trace-filter-session"
+          className="flex flex-col gap-1 text-xs text-muted-foreground"
+        >
           {t("admin.filters.sessionId")}
           <Input
+            id="admin-trace-filter-session"
             type="text"
             value={sessionInput}
             onChange={(e) => setSessionInput(e.target.value)}
@@ -82,11 +85,7 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
             className="w-80 font-mono text-xs"
           />
         </label>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setSessionId(sessionInput.trim())}
-        >
+        <Button type="button" variant="outline" onClick={() => setSessionId(sessionInput.trim())}>
           {t("admin.sessionTrace.load")}
         </Button>
         <Button
@@ -146,7 +145,9 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
               <h2 className="mb-2 text-sm font-semibold">{t("admin.sessionTrace.messages")}</h2>
               <ul className="max-h-80 space-y-2 overflow-y-auto">
                 {trace.messages.length === 0 && (
-                  <li className="text-xs text-muted-foreground">{t("admin.sessionTrace.noMessages")}</li>
+                  <li className="text-xs text-muted-foreground">
+                    {t("admin.sessionTrace.noMessages")}
+                  </li>
                 )}
                 {trace.messages.map((m) => (
                   <li key={m.id} className="rounded-lg border border-border px-3 py-2 text-xs">
@@ -164,7 +165,9 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
               <h2 className="mb-2 text-sm font-semibold">{t("admin.sessionTrace.revisions")}</h2>
               <ul className="space-y-2">
                 {trace.draft_revisions.length === 0 && (
-                  <li className="text-xs text-muted-foreground">{t("admin.sessionTrace.noRevisions")}</li>
+                  <li className="text-xs text-muted-foreground">
+                    {t("admin.sessionTrace.noRevisions")}
+                  </li>
                 )}
                 {trace.draft_revisions.map((d) => (
                   <li key={d.id}>
@@ -200,13 +203,18 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
             <div className="rounded-xl border border-border bg-card p-4">
               <h2 className="mb-2 text-sm font-semibold">{t("admin.sessionTrace.grounding")}</h2>
               {selectedDraft == null ? (
-                <p className="text-xs text-muted-foreground">{t("admin.sessionTrace.pickRevision")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("admin.sessionTrace.pickRevision")}
+                </p>
               ) : grounded.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("admin.sessionTrace.noSignals")}</p>
               ) : (
                 <ul className="space-y-2">
                   {grounded.map((s) => (
-                    <li key={s.signal_id} className="rounded-lg border border-border px-3 py-2 text-xs">
+                    <li
+                      key={s.signal_id}
+                      className="rounded-lg border border-border px-3 py-2 text-xs"
+                    >
                       <p className="font-medium">{s.title}</p>
                       <p className="text-muted-foreground">
                         {s.source} · {s.signal_id}
@@ -231,7 +239,9 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
               <h2 className="mb-2 text-sm font-semibold">{t("admin.sessionTrace.turns")}</h2>
               <ul className="space-y-3">
                 {trace.turns.length === 0 && (
-                  <li className="text-xs text-muted-foreground">{t("admin.sessionTrace.noTurns")}</li>
+                  <li className="text-xs text-muted-foreground">
+                    {t("admin.sessionTrace.noTurns")}
+                  </li>
                 )}
                 {trace.turns.map((turn) => (
                   <li key={turn.turn_id} className="rounded-lg border border-border p-3 text-xs">

@@ -53,7 +53,7 @@ Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 | **4 — Pages** | `web/src/pages/**` | **20–40%** or smoke only | No hard gate — logic lives in lib/context |
 | **5 — Feature UI** | `features/session/components/**` (`chat-panel`, `session-history`, …) | **15–30%** later | No gate in v1 CI — shell mode logic covered via `session-layout.ts` |
 | **6 — Hooks** | `use-session.ts` (large) · `use-container-width.ts` · related hooks | **25–40%** progressive | Pure helpers extracted (`session-helpers.ts` / `session-layout.ts`); hook suite via mocked RTL `renderHook` — still omitted from hard cov gate |
-| **Static** | `pnpm run build` (`tsc -b && vite build`) | Must pass | **Fail** |
+| **Static** | `pnpm run lint` (Biome) · `pnpm run build` (`tsc -b && vite build`) | Must pass | **Fail** |
 
 ---
 
@@ -66,7 +66,7 @@ Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — runs on 
 | `lint` | `ruff check .` |
 | `backend-unit` | `pytest tests/unit` + utils cov ≥85%; session nodes mock-LLM cov ≥70% |
 | `backend-api` | `pgvector/pgvector:pg18` service + `pytest tests/api` + routes cov ≥70% |
-| `frontend` | `pnpm install --frozen-lockfile` → `pnpm run test:coverage` → `pnpm run build` |
+| `frontend` | `pnpm install --frozen-lockfile` → `pnpm run lint` (Biome) → `pnpm run test:coverage` → `pnpm run build` |
 
 **Do not** require whole-repo 80%. Local equivalents:
 
@@ -110,6 +110,8 @@ TEST_DATABASE_URL=... pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
 
 # Frontend
 cd web
+pnpm run lint          # biome check .
+pnpm run lint:fix     # biome check --write .
 pnpm test              # vitest run
 pnpm run test:watch    # vitest
 pnpm run test:coverage # vitest run --coverage (path-tiered thresholds)
@@ -129,7 +131,7 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 1. ~~**Tier 1 utils** (BE jwt/helpers)~~ — `tests/unit`
 2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
 3. ~~**Frontend Vitest**~~ — Tier 1 `web/src/lib/**` + Tier 2 PasswordBox / UserMenuDropdown
-4. ~~**CI/CD**~~ — `.github/workflows/ci.yml` (ruff + pytest unit/API + Vitest + build)
+4. ~~**CI/CD**~~ — `.github/workflows/ci.yml` (ruff + pytest unit/API + Biome + Vitest + build)
 5. Hold: SSE E2E, Playwright chat→preview→confirm; live LLM eval = manual/nightly only (`@pytest.mark.live_llm` — not yet wired). **Branch rules:** configured on GitHub but **Not enforced** (account-plan limit) — CI still runs on PRs; merge is not blocked by required checks until enforcement is available.
 6. ~~**Contracts SSOT**~~ — `AGENTS.md`, ADRs, `schemas/contracts.py` / `tools.py`, `docs/contracts/` + OpenAPI export
 7. ~~**Graph mock-LLM node tests + CI**~~ — `tests/unit/test_session_nodes.py` + routing; opt-in `node_trace_recording()`; CI Tier 1b ≥70%

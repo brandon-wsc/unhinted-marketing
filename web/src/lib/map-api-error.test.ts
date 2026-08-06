@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import type { TFunction } from "i18next";
+import { describe, expect, it, vi } from "vitest";
 import { mapApiError } from "@/lib/map-api-error";
 
 describe("mapApiError", () => {
@@ -13,12 +13,8 @@ describe("mapApiError", () => {
     expect(mapApiError("Password must be at least 8 characters", t)).toBe(
       "i18n:errors.passwordTooShort",
     );
-    expect(mapApiError("Email already registered", t)).toBe(
-      "i18n:errors.emailAlreadyRegistered",
-    );
-    expect(mapApiError("Invalid email or password", t)).toBe(
-      "i18n:errors.invalidCredentials",
-    );
+    expect(mapApiError("Email already registered", t)).toBe("i18n:errors.emailAlreadyRegistered");
+    expect(mapApiError("Invalid email or password", t)).toBe("i18n:errors.invalidCredentials");
   });
 
   it("maps Request failed (N) to errors.requestFailed with status", () => {

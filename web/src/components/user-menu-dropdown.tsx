@@ -1,12 +1,6 @@
 import { ChevronDown } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import i18n from "@/i18n";
-import {
-  LOCALE_LABELS,
-  SUPPORTED_LOCALES,
-  type SupportedLocale,
-} from "@/i18n/locales";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,7 +13,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/context/auth-context";
-import { useTheme, type ThemeMode } from "@/context/theme-context";
+import { type ThemeMode, useTheme } from "@/context/theme-context";
+import i18n from "@/i18n";
+import { LOCALE_LABELS, SUPPORTED_LOCALES, type SupportedLocale } from "@/i18n/locales";
 import { isAdmin } from "@/lib/platform-level";
 
 const THEME_MODES: ThemeMode[] = ["light", "dark", "system"];
@@ -36,11 +32,7 @@ export function UserMenuDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-2 px-3 font-medium"
-        >
+        <Button type="button" variant="outline" className="gap-2 px-3 font-medium">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
             {user ? user.display_name.charAt(0).toUpperCase() : "?"}
           </span>
@@ -67,10 +59,7 @@ export function UserMenuDropdown() {
         <DropdownMenuSeparator />
 
         <DropdownMenuLabel>{t("header.menu.theme")}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={mode}
-          onValueChange={(next) => setMode(next as ThemeMode)}
-        >
+        <DropdownMenuRadioGroup value={mode} onValueChange={(next) => setMode(next as ThemeMode)}>
           {THEME_MODES.map((item) => (
             <DropdownMenuRadioItem key={item} value={item}>
               {t(`theme.${item}`)}

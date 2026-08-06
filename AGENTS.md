@@ -55,5 +55,5 @@ pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
  tests/unit/test_session_trace.py \
  --cov=internal.session.nodes --cov=internal.session.trace --cov-fail-under=70
 python -m scripts.export_contracts   # OpenAPI + JSON Schema under docs/
-cd web && pnpm test && pnpm run build
+cd web && pnpm run lint && pnpm test && pnpm run build
 ```

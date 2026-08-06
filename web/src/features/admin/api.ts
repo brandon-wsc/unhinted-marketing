@@ -123,11 +123,7 @@ export type SessionTrace = {
 export const LLM_CALL_PAGE_SIZE = 50;
 export const NODE_STEP_PAGE_SIZE = 50;
 
-export function buildLlmCallQuery(
-  filters: LlmCallFilters,
-  limit: number,
-  offset: number,
-): string {
+export function buildLlmCallQuery(filters: LlmCallFilters, limit: number, offset: number): string {
   const params = new URLSearchParams();
   const node = filters.node?.trim();
   if (node) params.set("node", node);
@@ -199,10 +195,7 @@ export async function apiAdminGetSessionTrace(
   accessToken: string | null,
   sessionId: string,
 ): Promise<SessionTrace> {
-  const res = await fetchWithAuth(
-    accessToken,
-    `${API_BASE}/admin/sessions/${sessionId}/trace`,
-  );
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/admin/sessions/${sessionId}/trace`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }

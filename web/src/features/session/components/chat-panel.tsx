@@ -1,7 +1,7 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { cjk } from "@streamdown/cjk";
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
-import { cjk } from "@streamdown/cjk";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/auth-context";
@@ -10,8 +10,6 @@ import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
 import { sessionLayoutMode } from "@/features/session/session-layout";
-import { useRecommendedQuestions } from "@/features/session/use-recommended-questions";
-import { useSession } from "@/features/session/use-session";
 import type {
   AgentActionRecord,
   ChatMessage,
@@ -19,6 +17,8 @@ import type {
   RecommendedQuestion,
   SessionBrief,
 } from "@/features/session/types";
+import { useRecommendedQuestions } from "@/features/session/use-recommended-questions";
+import { useSession } from "@/features/session/use-session";
 import { useContainerWidth } from "@/hooks/use-container-width";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
@@ -68,11 +68,7 @@ export function ChatPanel() {
     pinSession,
     deleteSession,
   } = useSession(companyId);
-  const {
-    questions,
-    loading: questionsLoading,
-    isStale,
-  } = useRecommendedQuestions(companyId);
+  const { questions, loading: questionsLoading, isStale } = useRecommendedQuestions(companyId);
   const [input, setInput] = useState("");
   const [historyCollapsed, setHistoryCollapsed] = useState(() => {
     try {
@@ -271,8 +267,7 @@ export function ChatPanel() {
     }
   }
 
-  const showLanding =
-    messages.length === 0 && !sending && !stopping && streamingText === null;
+  const showLanding = messages.length === 0 && !sending && !stopping && streamingText === null;
   const confirmed = session?.status === "confirmed" || !!confirmReceipt;
 
   const historyProps = {
@@ -306,7 +301,15 @@ export function ChatPanel() {
             aria-label={t("chat.history.open")}
           >
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+              <rect
+                x="2"
+                y="2.5"
+                width="12"
+                height="11"
+                rx="1.5"
+                stroke="currentColor"
+                strokeWidth="1.2"
+              />
               <path d="M6 2.5v11" stroke="currentColor" strokeWidth="1.2" />
             </svg>
           </button>
@@ -342,45 +345,41 @@ export function ChatPanel() {
               const prevUser = findPreviousUserContent(messages, index);
               const turnActions = agentActions.filter((a) => a.afterMessageId === m.id);
               return (
-              <div key={m.id} className="flex flex-col gap-5">
-                <ChatMessageItem
-                  message={m}
-                  retryContent={prevUser}
-                  retryDisabled={composerLocked}
-                  onRetry={
-                    prevUser
-                      ? () => void onRetryUserMessage(prevUser)
-                      : undefined
-                  }
-                />
-                {turnActions.length > 0 && <AgentActionList actions={turnActions} />}
-                {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
-                {awaitingImageOk && interruptAfterMessageId === m.id && (
-                  <InterruptCard
-                    sending={sending || stopping}
-                    onResume={(format) => void onResumeImageGen(format)}
+                <div key={m.id} className="flex flex-col gap-5">
+                  <ChatMessageItem
+                    message={m}
+                    retryContent={prevUser}
+                    retryDisabled={composerLocked}
+                    onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
                   />
-                )}
-                {previewMode && previewAfterMessageId === m.id && !isSplit && (
-                  <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
-                )}
-              </div>
+                  {turnActions.length > 0 && <AgentActionList actions={turnActions} />}
+                  {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
+                  {awaitingImageOk && interruptAfterMessageId === m.id && (
+                    <InterruptCard
+                      sending={sending || stopping}
+                      onResume={(format) => void onResumeImageGen(format)}
+                    />
+                  )}
+                  {previewMode && previewAfterMessageId === m.id && !isSplit && (
+                    <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
+                  )}
+                </div>
               );
             })
           )}
           {/* Fallback if anchor message was replaced / missing — keep cards visible. */}
-          {agentActions.some((a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId)) && (
+          {agentActions.some(
+            (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
+          ) && (
             <AgentActionList
               actions={agentActions.filter(
                 (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
               )}
             />
           )}
-          {brief &&
-            briefAfterMessageId &&
-            !messages.some((m) => m.id === briefAfterMessageId) && (
-              <BriefCard brief={brief} />
-            )}
+          {brief && briefAfterMessageId && !messages.some((m) => m.id === briefAfterMessageId) && (
+            <BriefCard brief={brief} />
+          )}
           {awaitingImageOk &&
             interruptAfterMessageId &&
             !messages.some((m) => m.id === interruptAfterMessageId) && (
@@ -392,9 +391,7 @@ export function ChatPanel() {
           {previewMode &&
             previewAfterMessageId &&
             !messages.some((m) => m.id === previewAfterMessageId) &&
-            !isSplit && (
-              <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
-            )}
+            !isSplit && <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />}
           {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
           {awaitingImageOk && !interruptAfterMessageId && (
             <InterruptCard
@@ -553,9 +550,7 @@ function AgentActionList({ actions }: { actions: AgentActionRecord[] }) {
               )}
             </span>
             <span className="min-w-0">
-              <span className={action.status === "running" ? "text-foreground" : ""}>
-                {label}
-              </span>
+              <span className={action.status === "running" ? "text-foreground" : ""}>{label}</span>
               {action.model && (
                 <span className="ml-1.5 opacity-70">
                   {action.model_tier ? `${action.model_tier} · ` : ""}
@@ -633,9 +628,7 @@ function InterruptCard({
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-primary/40 bg-card p-4 text-sm shadow-sm">
       <div>
-        <p className="font-medium text-foreground">
-          {t("chat.agent.interrupt.title")}
-        </p>
+        <p className="font-medium text-foreground">{t("chat.agent.interrupt.title")}</p>
         <p className="mt-0.5 text-muted-foreground">{t("chat.agent.interrupt.subtitle")}</p>
       </div>
       <div
@@ -648,9 +641,7 @@ function InterruptCard({
           variant={format === "single" ? "default" : "outline"}
           disabled={sending}
           className={
-            format === "single"
-              ? "ring-2 ring-primary ring-offset-2 ring-offset-card"
-              : undefined
+            format === "single" ? "ring-2 ring-primary ring-offset-2 ring-offset-card" : undefined
           }
           onClick={() => setFormat("single")}
           aria-pressed={format === "single"}
@@ -685,10 +676,7 @@ function InterruptCard({
 }
 
 function isLlmErrorContent(content: string): boolean {
-  return (
-    content.startsWith("AI 服務暫時唔可用") ||
-    content.startsWith("AI service unavailable")
-  );
+  return content.startsWith("AI 服務暫時唔可用") || content.startsWith("AI service unavailable");
 }
 
 function findPreviousUserContent(messages: ChatMessage[], index: number): string | null {
