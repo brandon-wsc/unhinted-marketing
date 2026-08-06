@@ -105,6 +105,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Tokens** — Prefer semantic utilities (`bg-card`, `text-muted-foreground`, …) from `web/src/index.css` `@theme`; avoid `var(--color-*)` in JSX classNames
 - **Responsive (interim)** — Standard `sm`/`md`/`lg` only; session split vs paged chrome stays in the shell for now (content/container-query mode later)
 - **Agent rule** — [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc)
+- **Composed helpers** — `FormField`, `IconButton` in `web/src/components/`; menus/confirm via `DropdownMenu` / `AlertDialog`
 
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 

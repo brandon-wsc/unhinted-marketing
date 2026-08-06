@@ -26,6 +26,7 @@ alwaysApply: false
 1. Check `components/ui` first
 2. If missing: `pnpm dlx shadcn@latest add <name>`
 3. Never re-export a second `Button` / `Input` / `Dialog` from feature or auth helpers
+4. Prefer composed helpers in `components/` for repeated stacks: `FormField`, `IconButton`
 
 ## Responsive (interim)
 
