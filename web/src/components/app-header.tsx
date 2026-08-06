@@ -9,7 +9,7 @@ type AppHeaderProps = {
 export function AppHeader({ className = "" }: AppHeaderProps) {
   return (
     <header
-      className={`z-40 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-card)]/80 backdrop-blur ${className}`}
+      className={`z-40 shrink-0 border-b border-border bg-card/80 backdrop-blur ${className}`}
     >
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <AppLogo />

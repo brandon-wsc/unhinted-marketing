@@ -1,0 +1,34 @@
+---
+description: Frontend UI system boundaries — tokens, shadcn ui/*, composition layers
+globs: web/**/*.{tsx,ts,css}
+alwaysApply: false
+---
+
+# Web UI system
+
+## Layers
+
+| Layer | Role |
+|-------|------|
+| `web/src/components/ui/*` | shadcn primitives only; own/edit here; add variants via `cva`, don't break call sites |
+| `web/src/components/*` | App chrome / composed widgets (`AppShell`, `AuthLayout`, `PasswordBox`) |
+| `web/src/features/*/components/*` | Domain UI — compose `ui/*`, no parallel Button/Input/Dialog |
+| `web/src/pages/*` | Route shells; keep thin |
+
+## Tokens
+
+- Prefer semantic utilities: `bg-card`, `text-muted-foreground`, `border-border`, `bg-primary`, `text-destructive`
+- Do **not** invent parallel controls with `var(--color-*)` in classNames; use theme utilities from `index.css` `@theme`
+- Raw palette (`bg-blue-600`, `text-zinc-500`) only when no semantic token fits (rare status tones → prefer `Badge` variants)
+
+## Adding UI
+
+1. Check `components/ui` first
+2. If missing: `pnpm dlx shadcn@latest add <name>`
+3. Never re-export a second `Button` / `Input` / `Dialog` from feature or auth helpers
+
+## Responsive (interim)
+
+- Prefer standard `sm` / `md` / `lg` only (no one-off `min-[…px]:`)
+- Session split vs paged chrome: keep breakpoint decisions in the shell (`chat-panel` / future `SessionShell`), not in leaf widgets
+- Content-based / container-query mode switch is a later pass — don't scatter device naming in new code

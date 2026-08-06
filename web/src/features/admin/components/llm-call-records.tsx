@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -34,16 +43,22 @@ function formatLatency(ms: number | null): string {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const tone =
+  const variant =
     status === "ok"
-      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      ? "secondary"
       : status === "provider_error" || status === "error"
-        ? "bg-[var(--color-destructive-soft)] text-[var(--color-destructive-text)]"
-        : "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+        ? "destructive"
+        : "outline";
+  const className =
+    status === "ok"
+      ? "border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      : status === "provider_error" || status === "error"
+        ? "border-transparent bg-destructive-soft text-destructive-foreground"
+        : "border-transparent bg-amber-500/10 text-amber-600 dark:text-amber-400";
   return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>
+    <Badge variant={variant} className={className}>
       {status}
-    </span>
+    </Badge>
   );
 }
 
@@ -52,14 +67,14 @@ function Flags({ row }: { row: LlmCallRecordSummary }) {
   return (
     <span className="flex flex-wrap gap-1">
       {row.parse_ok === false && (
-        <span className="rounded-full bg-[var(--color-destructive-soft)] px-2 py-0.5 text-xs font-medium text-[var(--color-destructive-text)]">
+        <Badge className="border-transparent bg-destructive-soft text-destructive-foreground">
           {t("admin.badges.parseFailed")}
-        </span>
+        </Badge>
       )}
       {row.fallback_used && (
-        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+        <Badge className="border-transparent bg-amber-500/10 text-amber-600 dark:text-amber-400">
           {t("admin.badges.fallback")}
-        </span>
+        </Badge>
       )}
     </span>
   );
@@ -70,7 +85,7 @@ function DetailBlock({ label, value }: { label: string; value: string | null }) 
   return (
     <div>
       <p className="mb-1 text-xs font-medium text-muted-foreground">{label}</p>
-      <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-hover/40 p-3 text-xs text-foreground">
+      <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-accent/40 p-3 text-xs text-foreground">
         {value}
       </pre>
     </div>
@@ -300,30 +315,37 @@ export function LlmCallRecords({ onOpenTurn, onOpenSession }: LlmCallRecordsProp
       <div className="mb-3 flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           {t("admin.filters.node")}
-          <input
+          <Input
             type="text"
             value={nodeInput}
             onChange={(e) => setNodeInput(e.target.value)}
             placeholder={t("admin.filters.nodePlaceholder")}
-            className="w-40 rounded-lg border border-input bg-card px-2.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+            className="w-40"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           {t("admin.filters.status")}
-          <select
-            value={filters.status ?? ""}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, status: e.target.value || undefined }))
+          <Select
+            value={filters.status ?? "all"}
+            onValueChange={(value) =>
+              setFilters((f) => ({
+                ...f,
+                status: !value || value === "all" ? undefined : value,
+              }))
             }
-            className="rounded-lg border border-input bg-card px-2.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
           >
-            <option value="">{t("admin.filters.statusAll")}</option>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder={t("admin.filters.statusAll")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("admin.filters.statusAll")}</SelectItem>
+              {STATUS_OPTIONS.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
         <label className="flex items-center gap-2 pb-2 text-sm text-foreground">
           <input
@@ -332,7 +354,7 @@ export function LlmCallRecords({ onOpenTurn, onOpenSession }: LlmCallRecordsProp
             onChange={(e) =>
               setFilters((f) => ({ ...f, fallbackOnly: e.target.checked || undefined }))
             }
-            className="h-4 w-4 accent-[var(--color-primary)]"
+            className="h-4 w-4 accent-primary"
           />
           {t("admin.filters.fallbackOnly")}
         </label>
@@ -349,7 +371,7 @@ export function LlmCallRecords({ onOpenTurn, onOpenSession }: LlmCallRecordsProp
       </div>
 
       {error && (
-        <p className="mb-3 rounded-lg bg-[var(--color-destructive-soft)] px-3 py-2 text-sm text-[var(--color-destructive-text)]">
+        <p className="mb-3 rounded-lg bg-destructive-soft px-3 py-2 text-sm text-destructive-foreground">
           {t("admin.loadFailed")}: {error}
         </p>
       )}

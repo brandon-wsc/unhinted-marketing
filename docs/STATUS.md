@@ -99,6 +99,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 - Production `session_node_steps` + `turn_id` correlation with `llm_call_records`; admin tabs Node steps / Session Trace
 
+**Decision (2026-08-06) — Frontend UI system (tokens + shadcn layers):**
+
+- **Primitives** — `web/src/components/ui/*` is the only control stack (shadcn); compose in `components/` / `features/`; no parallel Button/Input/Dialog
+- **Tokens** — Prefer semantic utilities (`bg-card`, `text-muted-foreground`, …) from `web/src/index.css` `@theme`; avoid `var(--color-*)` in JSX classNames
+- **Responsive (interim)** — Standard `sm`/`md`/`lg` only; session split vs paged chrome stays in the shell for now (content/container-query mode later)
+- **Agent rule** — [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc)
+
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
 ---
@@ -251,6 +258,9 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/login` | Email/password login |
 | `/register` | Sign up + default workspace |
 | `/` | Protected **chat workspace** — desktop history sidebar + chat (+ preview); mobile Record / Chat / Preview pages |
+| `/admin` | Platform admin (level ≥ 6) — LLM calls / node steps / session trace |
+
+**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; layers / adopt rules in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*`; app chrome in `components/` (`AppShell`, `AuthLayout`, `PasswordBox`).
 
 **UX features:**
 

@@ -44,7 +44,7 @@ export function AdminPage() {
   if (loading) {
     return (
       <AppShell mainClassName="flex items-center justify-center overflow-y-auto">
-        <p className="text-[var(--color-muted)]">{t("common.loading")}</p>
+        <p className="text-muted-foreground">{t("common.loading")}</p>
       </AppShell>
     );
   }
@@ -55,13 +55,13 @@ export function AdminPage() {
     return (
       <AppShell mainClassName="flex items-center justify-center overflow-y-auto">
         <div className="text-center">
-          <h1 className="text-lg font-semibold text-[var(--color-foreground)]">
+          <h1 className="text-lg font-semibold text-foreground">
             {t("admin.forbidden.title")}
           </h1>
-          <p className="mt-1 text-sm text-[var(--color-muted)]">{t("admin.forbidden.body")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("admin.forbidden.body")}</p>
           <Link
             to="/"
-            className="mt-4 inline-block rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+            className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
           >
             {t("admin.forbidden.back")}
           </Link>
@@ -73,7 +73,7 @@ export function AdminPage() {
   return (
     <AppShell mainClassName="overflow-y-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <h1 className="mb-4 text-lg font-semibold text-[var(--color-foreground)]">
+        <h1 className="mb-4 text-lg font-semibold text-foreground">
           {t("admin.title")}
         </h1>
         <Tabs

@@ -27,7 +27,7 @@ function CheckIcon() {
 function MenuSection({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="py-1">
-      <p className="px-3 py-1.5 text-xs font-medium text-[var(--color-muted)]">{label}</p>
+      <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">{label}</p>
       <div className="px-1">{children}</div>
     </div>
   );
@@ -50,8 +50,8 @@ function MenuItem({
       onClick={onClick}
       className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm transition ${
         active
-          ? "bg-[var(--color-primary)]/10 text-[var(--color-foreground)]"
-          : "text-[var(--color-foreground)] hover:bg-[var(--color-hover)]"
+          ? "bg-primary/10 text-foreground"
+          : "text-foreground hover:bg-accent"
       }`}
     >
       <span className={`w-4 ${active ? "opacity-100" : "opacity-0"}`}>
@@ -115,13 +115,13 @@ export function UserMenuDropdown() {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm font-medium transition hover:bg-[var(--color-hover)]"
+        className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:bg-accent"
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] text-xs font-semibold text-white">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white">
           {user ? user.display_name.charAt(0).toUpperCase() : "?"}
         </span>
         <span className="hidden sm:inline max-w-[8rem] truncate">{triggerLabel}</span>
-        <svg viewBox="0 0 16 16" className="h-4 w-4 shrink-0 text-[var(--color-muted)]" aria-hidden="true">
+        <svg viewBox="0 0 16 16" className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true">
           <path fill="currentColor" d="M4.5 6 8 9.5 11.5 6h-7Z" />
         </svg>
       </button>
@@ -129,7 +129,7 @@ export function UserMenuDropdown() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] py-1 shadow-lg"
+          className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-border bg-card py-1 shadow-lg"
           style={{ boxShadow: `0 12px 32px var(--shadow-color)` }}
         >
           <MenuSection label={t("header.menu.language")}>
@@ -144,7 +144,7 @@ export function UserMenuDropdown() {
             ))}
           </MenuSection>
 
-          <div className="my-1 border-t border-[var(--color-border)]" />
+          <div className="my-1 border-t border-border" />
 
           <MenuSection label={t("header.menu.theme")}>
             {THEME_MODES.map((item) => (
@@ -156,13 +156,13 @@ export function UserMenuDropdown() {
 
           {user && isAdmin(user.platform_level) && (
             <>
-              <div className="my-1 border-t border-[var(--color-border)]" />
+              <div className="my-1 border-t border-border" />
               <div className="px-1 py-1">
                 <button
                   type="button"
                   role="menuitem"
                   onClick={onOpenAdmin}
-                  className="flex w-full items-center rounded-md px-3 py-2 text-sm text-[var(--color-foreground)] transition hover:bg-[var(--color-hover)]"
+                  className="flex w-full items-center rounded-md px-3 py-2 text-sm text-foreground transition hover:bg-accent"
                 >
                   {t("admin.menuEntry")}
                 </button>
@@ -172,13 +172,13 @@ export function UserMenuDropdown() {
 
           {user && (
             <>
-              <div className="my-1 border-t border-[var(--color-border)]" />
+              <div className="my-1 border-t border-border" />
               <div className="px-1 py-1">
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => void onLogout()}
-                  className="flex w-full items-center rounded-md px-3 py-2 text-sm text-[var(--color-destructive-text)] transition hover:bg-[var(--color-destructive-soft)]"
+                  className="flex w-full items-center rounded-md px-3 py-2 text-sm text-destructive-foreground transition hover:bg-destructive-soft"
                 >
                   {t("auth.logout")}
                 </button>

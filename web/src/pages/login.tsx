@@ -59,9 +59,9 @@ export function LoginPage() {
         {error && (
           <Alert
             variant="destructive"
-            className="border-destructive/30 bg-[var(--color-destructive-soft)] text-[var(--color-destructive-text)]"
+            className="border-destructive/30 bg-destructive-soft text-destructive-foreground"
           >
-            <AlertDescription className="text-[var(--color-destructive-text)]">
+            <AlertDescription className="text-destructive-foreground">
               {error}
             </AlertDescription>
           </Alert>

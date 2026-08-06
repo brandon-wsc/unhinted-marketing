@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { cjk } from "@streamdown/cjk";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
@@ -291,7 +292,7 @@ export function ChatPanel() {
         <button
           type="button"
           onClick={() => setMobileTab("record")}
-          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-card)]/90 text-[var(--color-muted)] backdrop-blur transition hover:bg-[var(--color-hover)] hover:text-[var(--color-foreground)]"
+          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card/90 text-muted-foreground backdrop-blur transition hover:bg-accent hover:text-foreground"
           title={t("chat.history.open")}
           aria-label={t("chat.history.open")}
         >
@@ -309,13 +310,13 @@ export function ChatPanel() {
           }`}
         >
           {restoring ? (
-            <p className="py-16 text-center text-sm text-[var(--color-muted)]">
+            <p className="py-16 text-center text-sm text-muted-foreground">
               {t("chat.history.restoring")}
             </p>
           ) : showLanding ? (
             <div className="flex flex-col items-center justify-center py-16 text-center sm:py-24">
               <h1 className="text-2xl font-semibold tracking-tight">{t("chat.empty.title")}</h1>
-              <p className="mt-2 max-w-md text-sm text-[var(--color-muted)]">
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
                 {t("chat.empty.subtitle")}
               </p>
               <RecommendedQuestions
@@ -415,21 +416,21 @@ export function ChatPanel() {
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-card)]">
+      <div className="shrink-0 border-t border-border bg-card">
         <form
           onSubmit={onSubmit}
           className={`mx-auto flex w-full items-end gap-3 px-4 py-4 sm:px-6 ${
             previewMode ? "max-w-none" : "max-w-3xl"
           }`}
         >
-          <textarea
+          <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             rows={2}
             placeholder={t("chat.input.placeholder")}
             disabled={composerLocked}
-            className="flex-1 resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-3 text-sm outline-none transition focus:border-[var(--color-ring)] focus:ring-2 focus:ring-[var(--color-ring)]/30 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-0 flex-1 resize-none rounded-xl px-4 py-3"
           />
           {composerLocked ? (
             <Button
@@ -519,7 +520,7 @@ function PreviewReadyBanner({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-left text-xs text-[var(--color-muted)] transition hover:border-[var(--color-ring)] hover:text-[var(--color-foreground)] lg:hidden"
+      className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition hover:border-ring hover:text-foreground lg:hidden"
     >
       {t("preview.readyBanner")}
     </button>
@@ -537,17 +538,17 @@ function AgentActionList({ actions }: { actions: AgentActionRecord[] }) {
         return (
           <li
             key={action.id}
-            className="flex items-start gap-2 text-xs leading-snug text-[var(--color-muted)]"
+            className="flex items-start gap-2 text-xs leading-snug text-muted-foreground"
           >
             <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center">
               {action.status === "running" ? (
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-primary)]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
               ) : (
                 <CheckIcon />
               )}
             </span>
             <span className="min-w-0">
-              <span className={action.status === "running" ? "text-[var(--color-foreground)]" : ""}>
+              <span className={action.status === "running" ? "text-foreground" : ""}>
                 {label}
               </span>
               {action.model && (
@@ -587,13 +588,13 @@ function BriefCard({ brief }: { brief: SessionBrief }) {
   ].filter((s) => s.items.length > 0);
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-sm shadow-sm">
+    <div className="rounded-xl border border-border bg-card p-4 text-sm shadow-sm">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("chat.agent.brief.title")}
         </span>
         {brief.persona && (
-          <span className="rounded-md border border-[var(--color-border)] px-1.5 py-0.5 text-[11px] leading-none text-[var(--color-muted)]">
+          <span className="rounded-md border border-border px-1.5 py-0.5 text-[11px] leading-none text-muted-foreground">
             {brief.persona}
           </span>
         )}
@@ -602,7 +603,7 @@ function BriefCard({ brief }: { brief: SessionBrief }) {
       <div className="flex flex-col gap-3">
         {sections.map((section) => (
           <div key={section.title}>
-            <p className="mb-1 text-xs font-medium text-[var(--color-muted)]">{section.title}</p>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">{section.title}</p>
             <ul className="list-disc space-y-0.5 pl-5 leading-relaxed">
               {section.items.map((item) => (
                 <li key={item}>{item}</li>
@@ -625,12 +626,12 @@ function InterruptCard({
   const { t } = useTranslation();
   const [format, setFormat] = useState<"single" | "comic_4panel">("single");
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-card)] p-4 text-sm shadow-sm">
+    <div className="flex flex-col gap-3 rounded-xl border border-primary/40 bg-card p-4 text-sm shadow-sm">
       <div>
-        <p className="font-medium text-[var(--color-foreground)]">
+        <p className="font-medium text-foreground">
           {t("chat.agent.interrupt.title")}
         </p>
-        <p className="mt-0.5 text-[var(--color-muted)]">{t("chat.agent.interrupt.subtitle")}</p>
+        <p className="mt-0.5 text-muted-foreground">{t("chat.agent.interrupt.subtitle")}</p>
       </div>
       <div
         className="flex flex-wrap gap-2"
@@ -711,11 +712,7 @@ function LlmErrorCard({
   const { t } = useTranslation();
   return (
     <div
-      className="flex flex-col gap-3 rounded-xl border border-[var(--color-destructive)]/40 px-4 py-3 text-sm shadow-sm sm:flex-row sm:items-start sm:justify-between"
-      style={{
-        backgroundColor: "var(--color-destructive-soft)",
-        color: "var(--color-destructive-text)",
-      }}
+      className="flex flex-col gap-3 rounded-xl border border-destructive/40 bg-destructive-soft px-4 py-3 text-sm text-destructive-foreground shadow-sm sm:flex-row sm:items-start sm:justify-between"
       role="alert"
     >
       <p className="min-w-0 flex-1 whitespace-pre-wrap leading-relaxed">{message}</p>
@@ -725,7 +722,7 @@ function LlmErrorCard({
           variant="ghost"
           disabled={retryDisabled}
           onClick={onRetry}
-          className="shrink-0 border border-[var(--color-destructive)]/40 text-[var(--color-destructive-text)] hover:bg-[var(--color-destructive)]/10"
+          className="shrink-0 border border-destructive/40 text-destructive-foreground hover:bg-destructive/10"
         >
           {t("chat.error.retry")}
         </Button>
@@ -748,7 +745,7 @@ function ChatMessageItem({
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-[var(--color-primary)] px-4 py-2.5 text-sm text-white sm:max-w-[75%]">
+        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-white sm:max-w-[75%]">
           {message.content}
         </div>
       </div>
