@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/auth-layout";
+import { Button } from "@/components/ui/button";
 import { EditCopyDialog } from "@/features/session/components/edit-copy-dialog";
 import { EditImageDialog } from "@/features/session/components/edit-image-dialog";
 import {

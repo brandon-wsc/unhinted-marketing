@@ -32,6 +32,7 @@
   --color-muted-foreground: #71717a;
   --color-border: #e4e4e7;
   --color-card: #ffffff;
+  --color-card-foreground: #18181b;
   --color-hover: rgb(0 0 0 / 0.05);
 
   /* shadcn/ui tokens (light); dark overrides below. */
@@ -59,6 +60,7 @@
   --color-muted-foreground: #a1a1aa;
   --color-border: #27272a;
   --color-card: #18181b;
+  --color-card-foreground: #fafafa;
   --color-hover: rgb(255 255 255 / 0.05);
   --color-destructive-soft: rgb(239 68 68 / 0.1);
   --color-destructive-text: #fca5a5;

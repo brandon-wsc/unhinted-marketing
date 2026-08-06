@@ -1,8 +1,11 @@
 import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { AuthLayout, Button, Field } from "@/components/auth-layout";
+import { AuthLayout } from "@/components/auth-layout";
 import { PasswordBox } from "@/components/password-box";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { mapApiError } from "@/lib/map-api-error";
@@ -58,37 +61,43 @@ export function RegisterPage() {
       footer={
         <>
           {t("auth.register.hasAccount")}{" "}
-          <Link to="/login" className="text-[var(--color-primary-hover)] hover:underline">
+          <Link to="/login" className="text-primary hover:underline">
             {t("auth.register.loginLink")}
           </Link>
         </>
       }
     >
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field
-          id="displayName"
-          label={t("auth.register.displayName")}
-          value={displayName}
-          onChange={setDisplayName}
-          autoComplete="name"
-          required
-        />
-        <Field
-          id="organizationName"
-          label={t("auth.register.organizationName")}
-          value={organizationName}
-          onChange={setOrganizationName}
-          autoComplete="organization"
-        />
-        <Field
-          id="email"
-          label={t("common.email")}
-          type="email"
-          value={email}
-          onChange={setEmail}
-          autoComplete="email"
-          required
-        />
+        <div className="space-y-2">
+          <Label htmlFor="displayName">{t("auth.register.displayName")}</Label>
+          <Input
+            id="displayName"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            autoComplete="name"
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="organizationName">{t("auth.register.organizationName")}</Label>
+          <Input
+            id="organizationName"
+            value={organizationName}
+            onChange={(e) => setOrganizationName(e.target.value)}
+            autoComplete="organization"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">{t("common.email")}</Label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            required
+          />
+        </div>
         <PasswordBox
           id="password"
           label={t("auth.register.passwordHint")}
