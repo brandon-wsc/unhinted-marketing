@@ -25,9 +25,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
           <CardContent>{children}</CardContent>
         </Card>
 
-        {footer && (
-          <div className="mt-6 text-center text-sm text-muted-foreground">{footer}</div>
-        )}
+        {footer && <div className="mt-6 text-center text-sm text-muted-foreground">{footer}</div>}
       </div>
     </AppShell>
   );

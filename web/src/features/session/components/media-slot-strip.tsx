@@ -1,13 +1,9 @@
-import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PreviewMediaItem } from "@/features/session/types";
 
 type Props = {
@@ -28,13 +24,7 @@ function readScrollState(el: HTMLDivElement | null) {
 }
 
 /** Horizontal media slot strip: ScrollArea (hidden bar) + chevrons + add icon. */
-export function MediaSlotStrip({
-  media,
-  selectedId,
-  busy,
-  onSelect,
-  onAdd,
-}: Props) {
+export function MediaSlotStrip({ media, selectedId, busy, onSelect, onAdd }: Props) {
   const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);

@@ -261,7 +261,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
 | `/admin` | Platform admin (level ≥ 6) — LLM calls / node steps / session trace |
 
-**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`). Session shell uses content-width `split`/`paged` (`session-layout.ts`).
+**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
 
 **UX features:**
 

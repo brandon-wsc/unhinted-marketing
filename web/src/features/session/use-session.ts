@@ -68,17 +68,13 @@ export function useSession(companyId: string | undefined) {
   const [brief, setBrief] = useState<SessionBrief | null>(null);
   // Anchor cards after the user message that produced them (not after the whole list).
   const [briefAfterMessageId, setBriefAfterMessageId] = useState<string | null>(null);
-  const [interruptAfterMessageId, setInterruptAfterMessageId] = useState<string | null>(
-    null,
-  );
+  const [interruptAfterMessageId, setInterruptAfterMessageId] = useState<string | null>(null);
   // Mobile preview-ready banner — anchor to the turn that produced preview.updated.
   const [previewAfterMessageId, setPreviewAfterMessageId] = useState<string | null>(null);
   // True while the graph sits at interrupt_before executor_image_plan.
   const [awaitingImageOk, setAwaitingImageOk] = useState(false);
   const [draft, setDraft] = useState<PreviewDraft | null>(null);
-  const [confirmReceipt, setConfirmReceipt] = useState<ConfirmSessionResponse | null>(
-    null,
-  );
+  const [confirmReceipt, setConfirmReceipt] = useState<ConfirmSessionResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [draftSaving, setDraftSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -138,11 +134,7 @@ export function useSession(companyId: string | undefined) {
           a.status === "running" ? { ...a, status: "done" as const } : a,
         );
         const last = marked[marked.length - 1];
-        if (
-          last &&
-          last.node === progress.node &&
-          last.afterMessageId === anchor
-        ) {
+        if (last && last.node === progress.node && last.afterMessageId === anchor) {
           return [
             ...marked.slice(0, -1),
             {
@@ -156,10 +148,7 @@ export function useSession(companyId: string | undefined) {
         // Dedupe identical completed node already recorded for this turn (REST replay).
         if (
           marked.some(
-            (a) =>
-              a.node === progress.node &&
-              a.afterMessageId === anchor &&
-              a.status === "done",
+            (a) => a.node === progress.node && a.afterMessageId === anchor && a.status === "done",
           )
         ) {
           return marked;
@@ -224,9 +213,7 @@ export function useSession(companyId: string | undefined) {
       setAgentActions((prev) => {
         const hasForTurn = prev.some((a) => a.afterMessageId === afterMessageId);
         if (hasForTurn) {
-          return prev.map((a) =>
-            a.status === "running" ? { ...a, status: "done" as const } : a,
-          );
+          return prev.map((a) => (a.status === "running" ? { ...a, status: "done" as const } : a));
         }
         const seen = new Set<string>();
         const synthesized: AgentActionRecord[] = [];
@@ -275,8 +262,7 @@ export function useSession(companyId: string | undefined) {
           setAgentProgress(null);
           // Optimistic prune — stopTurn hydrate is source of truth right after.
           if (discardedAnchor) {
-            const drop = (id: string) =>
-              id === discardedAnchor || id.startsWith("local-");
+            const drop = (id: string) => id === discardedAnchor || id.startsWith("local-");
             messagesRef.current = messagesRef.current.filter((m) => !drop(m.id));
             setMessages(messagesRef.current);
             setAgentActions((prev) =>
@@ -330,12 +316,9 @@ export function useSession(companyId: string | undefined) {
         return;
       }
       if (type === "draft.updated") {
-        const imageUrl =
-          typeof data.image_url === "string" ? data.image_url : null;
+        const imageUrl = typeof data.image_url === "string" ? data.image_url : null;
         setAwaitingImageOk(false);
-        setDraft((prev) =>
-          mergePreviewDraft(prev, { image_url: imageUrl }),
-        );
+        setDraft((prev) => mergePreviewDraft(prev, { image_url: imageUrl }));
         return;
       }
       if (type === "preview.updated") {
@@ -347,16 +330,11 @@ export function useSession(companyId: string | undefined) {
         setDraft((prev) =>
           mergePreviewDraft(prev, {
             copy,
-            image_url:
-              typeof data.image_url === "string" ? data.image_url : null,
+            image_url: typeof data.image_url === "string" ? data.image_url : null,
             media,
             revision: typeof data.revision === "number" ? data.revision : null,
-            approval_token:
-              typeof data.approval_token === "string"
-                ? data.approval_token
-                : null,
-            platform:
-              typeof data.platform === "string" ? data.platform : null,
+            approval_token: typeof data.approval_token === "string" ? data.approval_token : null,
+            platform: typeof data.platform === "string" ? data.platform : null,
           }),
         );
         return;
@@ -366,20 +344,21 @@ export function useSession(companyId: string | undefined) {
           receipt_id: typeof data.receipt_id === "string" ? data.receipt_id : "",
           status: typeof data.status === "string" ? data.status : "stubbed",
           tool_name: "publish_social_post",
-          idempotency_key:
-            typeof data.idempotency_key === "string" ? data.idempotency_key : "",
+          idempotency_key: typeof data.idempotency_key === "string" ? data.idempotency_key : "",
         });
       }
       if (type === "llm.failed") {
         const err =
-          typeof data.error === "string" && data.error
-            ? data.error
-            : "AI service unavailable";
+          typeof data.error === "string" && data.error ? data.error : "AI service unavailable";
         setLlmError(err);
         finishRunningActions();
         return;
       }
-      if (type === "message.assistant" || type === "review.failed" || type === "confirm.completed") {
+      if (
+        type === "message.assistant" ||
+        type === "review.failed" ||
+        type === "confirm.completed"
+      ) {
         finishRunningActions();
       }
     },
@@ -416,8 +395,7 @@ export function useSession(companyId: string | undefined) {
             setBrief(snapshotBrief);
             setBriefAfterMessageId(lastUserMessageId());
           }
-          const copy =
-            parseDraftCopy(data.copy) || parseDraftCopy(state?.draft);
+          const copy = parseDraftCopy(data.copy) || parseDraftCopy(state?.draft);
           const media = parseMediaItems(data.media);
           setDraft((prev) =>
             mergePreviewDraft(prev, {
@@ -441,8 +419,7 @@ export function useSession(companyId: string | undefined) {
                   : typeof state?.approval_token === "string"
                     ? state.approval_token
                     : null,
-              platform:
-                typeof data.platform === "string" ? data.platform : null,
+              platform: typeof data.platform === "string" ? data.platform : null,
             }),
           );
           if (typeof data.mode === "string" && data.mode === "PREVIEW") {
@@ -458,8 +435,7 @@ export function useSession(companyId: string | undefined) {
               );
             });
           }
-          const interrupted =
-            data.interrupted === true || state?.awaiting_image_ok === true;
+          const interrupted = data.interrupted === true || state?.awaiting_image_ok === true;
           if (interrupted) {
             setAwaitingImageOk(true);
             const anchor = lastUserMessageId();
@@ -550,10 +526,7 @@ export function useSession(companyId: string | undefined) {
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
       if (res.session.mode === "PREVIEW") {
         setPreviewAfterMessageId(
-          previewAnchorFromActions(
-            agentActionsFromMessages(res.messages),
-            res.messages,
-          ),
+          previewAnchorFromActions(agentActionsFromMessages(res.messages), res.messages),
         );
       } else {
         setPreviewAfterMessageId(null);
@@ -608,9 +581,11 @@ export function useSession(companyId: string | undefined) {
     async (targetSessionId: string, title: string) => {
       if (!accessToken) return;
       const cleaned = title.trim();
-      const updated = await apiUpdateSession(accessToken, targetSessionId, cleaned
-        ? { title: cleaned }
-        : { clear_title: true });
+      const updated = await apiUpdateSession(
+        accessToken,
+        targetSessionId,
+        cleaned ? { title: cleaned } : { clear_title: true },
+      );
       setHistory((prev) =>
         prev
           .map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
@@ -735,9 +710,7 @@ export function useSession(companyId: string | undefined) {
         setAwaitingImageOk(res.interrupted);
         if (!res.interrupted) setInterruptAfterMessageId(null);
 
-        const serverLastUser = [...res.messages]
-          .reverse()
-          .find((m) => m.role === "user");
+        const serverLastUser = [...res.messages].reverse().find((m) => m.role === "user");
         if (serverLastUser) {
           turnAnchorRef.current = serverLastUser.id;
           setAgentActions((prev) =>
@@ -754,18 +727,14 @@ export function useSession(companyId: string | undefined) {
         }
         if (serverLastUser) {
           const hasBriefEvent = res.events?.some((ev) => ev.type === "brief.updated");
-          const hasInterruptEvent = res.events?.some(
-            (ev) => ev.type === "draft.awaiting_image_ok",
-          );
+          const hasInterruptEvent = res.events?.some((ev) => ev.type === "draft.awaiting_image_ok");
           if (hasBriefEvent) setBriefAfterMessageId(serverLastUser.id);
           if (res.interrupted || hasInterruptEvent) {
             setInterruptAfterMessageId(serverLastUser.id);
           }
           const hasPreviewEvent = res.events?.some((ev) => ev.type === "preview.updated");
           if (hasPreviewEvent) setPreviewAfterMessageId(serverLastUser.id);
-          setBriefAfterMessageId((prev) =>
-            prev?.startsWith("local-") ? serverLastUser.id : prev,
-          );
+          setBriefAfterMessageId((prev) => (prev?.startsWith("local-") ? serverLastUser.id : prev));
           setInterruptAfterMessageId((prev) =>
             prev?.startsWith("local-") ? serverLastUser.id : prev,
           );
@@ -774,11 +743,7 @@ export function useSession(companyId: string | undefined) {
           );
           ensureOutcomeActions(res.events ?? [], serverLastUser.id);
         }
-        if (
-          res.mode === "PREVIEW" &&
-          res.approval_token &&
-          typeof res.revision === "number"
-        ) {
+        if (res.mode === "PREVIEW" && res.approval_token && typeof res.revision === "number") {
           const previewEv = res.events?.find((ev) => ev.type === "preview.updated");
           const copyFromEvents = res.events
             ?.map((ev) =>
@@ -792,8 +757,7 @@ export function useSession(companyId: string | undefined) {
               copy: copyFromEvents ?? prev?.copy ?? null,
               approval_token: res.approval_token,
               revision: res.revision,
-              image_url:
-                (previewEv?.data?.image_url as string | undefined) ?? prev?.image_url,
+              image_url: (previewEv?.data?.image_url as string | undefined) ?? prev?.image_url,
               media: parseMediaItems(previewEv?.data?.media) ?? prev?.media,
             }),
           );
@@ -810,9 +774,7 @@ export function useSession(companyId: string | undefined) {
           const failed = optimistic;
           setMessages((prev) => prev.filter((m) => m.id !== failed.id));
           messagesRef.current = messagesRef.current.filter((m) => m.id !== failed.id);
-          setAgentActions((prev) =>
-            prev.filter((a) => a.afterMessageId !== failed.id),
-          );
+          setAgentActions((prev) => prev.filter((a) => a.afterMessageId !== failed.id));
         }
         setStreamingText(null);
         finishRunningActions();
@@ -862,11 +824,7 @@ export function useSession(companyId: string | undefined) {
       for (const ev of res.events ?? []) {
         applyTurnEvent(ev.type, ev.data ?? {});
       }
-      if (
-        res.mode === "PREVIEW" &&
-        res.approval_token &&
-        typeof res.revision === "number"
-      ) {
+      if (res.mode === "PREVIEW" && res.approval_token && typeof res.revision === "number") {
         const previewEv = res.events?.find((ev) => ev.type === "preview.updated");
         const copyFromEvents = res.events
           ?.map((ev) =>
@@ -880,8 +838,7 @@ export function useSession(companyId: string | undefined) {
             copy: copyFromEvents ?? prev?.copy ?? null,
             approval_token: res.approval_token ?? null,
             revision: res.revision ?? null,
-            image_url:
-              (previewEv?.data?.image_url as string | undefined) ?? prev?.image_url,
+            image_url: (previewEv?.data?.image_url as string | undefined) ?? prev?.image_url,
             media: parseMediaItems(previewEv?.data?.media) ?? prev?.media,
           }),
         );
@@ -919,15 +876,7 @@ export function useSession(companyId: string | undefined) {
         setSending(false);
       }
     },
-    [
-      accessToken,
-      sessionId,
-      sending,
-      stopping,
-      awaitingImageOk,
-      applyTurnResponse,
-      refreshHistory,
-    ],
+    [accessToken, sessionId, sending, stopping, awaitingImageOk, applyTurnResponse, refreshHistory],
   );
 
   const stopTurn = useCallback(async () => {
@@ -947,11 +896,8 @@ export function useSession(companyId: string | undefined) {
       setMessages(hydrated.messages);
       setMode(hydrated.session.mode);
       setSession(hydrated.session);
-      const lastUser = [...hydrated.messages]
-        .reverse()
-        .find((m) => m.role === "user");
-      const parked =
-        stillParked || hydrated.awaiting_image_ok === true;
+      const lastUser = [...hydrated.messages].reverse().find((m) => m.role === "user");
+      const parked = stillParked || hydrated.awaiting_image_ok === true;
       setAwaitingImageOk(parked);
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
       // Restore BriefCard from sessions.state (Stop must not wipe a surviving brief).
@@ -966,9 +912,7 @@ export function useSession(companyId: string | undefined) {
       const actions = agentActionsFromMessages(hydrated.messages);
       setAgentActions(actions);
       if (hydrated.session.mode === "PREVIEW") {
-        setPreviewAfterMessageId(
-          previewAnchorFromActions(actions, hydrated.messages),
-        );
+        setPreviewAfterMessageId(previewAnchorFromActions(actions, hydrated.messages));
       } else {
         setPreviewAfterMessageId(null);
       }

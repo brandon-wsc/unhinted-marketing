@@ -69,9 +69,11 @@ describe("parseDraftCopy", () => {
   });
 
   it("parses caption / hashtags / cta", () => {
-    expect(
-      parseDraftCopy({ caption: "hi", hashtags: ["#hk", 1], cta: "go" }),
-    ).toEqual({ caption: "hi", hashtags: ["#hk"], cta: "go" });
+    expect(parseDraftCopy({ caption: "hi", hashtags: ["#hk", 1], cta: "go" })).toEqual({
+      caption: "hi",
+      hashtags: ["#hk"],
+      cta: "go",
+    });
   });
 });
 

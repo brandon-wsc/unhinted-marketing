@@ -1,6 +1,6 @@
-import { FormEvent, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
 import { FormField } from "@/components/form-field";
 import { PasswordBox } from "@/components/password-box";

@@ -41,10 +41,7 @@ export async function apiRegister(input: {
   return res.json();
 }
 
-export async function apiLogin(input: {
-  email: string;
-  password: string;
-}): Promise<TokenResponse> {
+export async function apiLogin(input: { email: string; password: string }): Promise<TokenResponse> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

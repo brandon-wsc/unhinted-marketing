@@ -9,19 +9,11 @@ type Props = {
   onSelect: (question: RecommendedQuestion) => void;
 };
 
-export function RecommendedQuestions({
-  questions,
-  loading,
-  isStale,
-  disabled,
-  onSelect,
-}: Props) {
+export function RecommendedQuestions({ questions, loading, isStale, disabled, onSelect }: Props) {
   const { t } = useTranslation();
 
   if (loading) {
-    return (
-      <p className="mt-8 text-sm text-muted-foreground">{t("chat.questions.loading")}</p>
-    );
+    return <p className="mt-8 text-sm text-muted-foreground">{t("chat.questions.loading")}</p>;
   }
 
   if (questions.length === 0) return null;

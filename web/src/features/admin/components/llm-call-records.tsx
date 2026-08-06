@@ -1,6 +1,6 @@
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -313,9 +313,13 @@ export function LlmCallRecords({ onOpenTurn, onOpenSession }: LlmCallRecordsProp
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <label
+          htmlFor="admin-llm-filter-node"
+          className="flex flex-col gap-1 text-xs text-muted-foreground"
+        >
           {t("admin.filters.node")}
           <Input
+            id="admin-llm-filter-node"
             type="text"
             value={nodeInput}
             onChange={(e) => setNodeInput(e.target.value)}
@@ -323,7 +327,10 @@ export function LlmCallRecords({ onOpenTurn, onOpenSession }: LlmCallRecordsProp
             className="w-40"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <label
+          htmlFor="admin-llm-filter-status"
+          className="flex flex-col gap-1 text-xs text-muted-foreground"
+        >
           {t("admin.filters.status")}
           <Select
             value={filters.status ?? "all"}
@@ -334,7 +341,7 @@ export function LlmCallRecords({ onOpenTurn, onOpenSession }: LlmCallRecordsProp
               }))
             }
           >
-            <SelectTrigger className="w-40">
+            <SelectTrigger id="admin-llm-filter-status" className="w-40">
               <SelectValue placeholder={t("admin.filters.statusAll")} />
             </SelectTrigger>
             <SelectContent>

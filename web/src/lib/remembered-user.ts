@@ -15,8 +15,7 @@ export function getRememberedUser(): RememberedUser | null {
     return {
       email: parsed.email,
       displayName: typeof parsed.displayName === "string" ? parsed.displayName : "",
-      organizationName:
-        typeof parsed.organizationName === "string" ? parsed.organizationName : "",
+      organizationName: typeof parsed.organizationName === "string" ? parsed.organizationName : "",
     };
   } catch {
     return null;

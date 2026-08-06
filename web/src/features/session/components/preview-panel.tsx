@@ -9,11 +9,7 @@ import {
   isRenderableImageUrl,
   toEditableCopy,
 } from "@/features/session/components/ig-preview-mock";
-import type {
-  ConfirmSessionResponse,
-  DraftCopy,
-  PreviewDraft,
-} from "@/features/session/types";
+import type { ConfirmSessionResponse, DraftCopy, PreviewDraft } from "@/features/session/types";
 
 type Props = {
   draft: PreviewDraft;
@@ -28,14 +24,9 @@ type Props = {
     plan: Record<string, unknown>,
   ) => Promise<PreviewDraft | null | unknown>;
   onRegenImage: (imageId: string) => Promise<unknown>;
-  onAddImage: (
-    format?: "single" | "comic_4panel",
-  ) => Promise<PreviewDraft | null | unknown>;
+  onAddImage: (format?: "single" | "comic_4panel") => Promise<PreviewDraft | null | unknown>;
   onRemoveImage: (imageId: string) => Promise<PreviewDraft | null | unknown>;
-  onUploadImage: (
-    imageId: string,
-    file: File,
-  ) => Promise<PreviewDraft | null | unknown>;
+  onUploadImage: (imageId: string, file: File) => Promise<PreviewDraft | null | unknown>;
   /** When true, show back affordance (paged shell); split shell hides it. */
   paged?: boolean;
   onBack?: () => void;
@@ -65,7 +56,13 @@ export function PreviewPanel({
   // Server wins on SSE / AI revise — reset local dirty state.
   useEffect(() => {
     setLocal(toEditableCopy(draft));
-  }, [draft.revision, draft.approval_token, draft.copy.caption, draft.copy.cta, draft.copy.hashtags]);
+  }, [
+    draft.revision,
+    draft.approval_token,
+    draft.copy.caption,
+    draft.copy.cta,
+    draft.copy.hashtags,
+  ]);
 
   useEffect(() => {
     if (confirmed) {
@@ -173,7 +170,11 @@ export function PreviewPanel({
             >
               {draftSaving ? t("preview.applySaving") : t("preview.apply")}
             </Button>
-            <Button type="button" disabled={!canConfirm || busy} onClick={() => void handleConfirm()}>
+            <Button
+              type="button"
+              disabled={!canConfirm || busy}
+              onClick={() => void handleConfirm()}
+            >
               {confirming ? t("preview.confirmWorking") : t("preview.confirm")}
             </Button>
           </div>

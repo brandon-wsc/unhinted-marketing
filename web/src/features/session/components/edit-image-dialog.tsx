@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
 import { RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
+import { type DragEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,8 +76,7 @@ function planToPayload(fields: PlanFields): Record<string, unknown> {
   };
   if (fields.format === "comic_4panel") {
     out.composition =
-      fields.composition.trim() ||
-      "2x2 comic grid, equal panels, reading L→R then top→bottom";
+      fields.composition.trim() || "2x2 comic grid, equal panels, reading L→R then top→bottom";
     const beats = fields.panels.map((beat, i) => beat.trim() || DEFAULT_COMIC_PANELS[i]);
     out.panels = beats.map((beat, i) => ({
       index: i + 1,
@@ -100,10 +99,7 @@ function isRenderableImageUrl(url: string | null): url is string {
   );
 }
 
-function matchBySeq(
-  media: PreviewMediaItem[],
-  seq: number,
-): PreviewMediaItem | null {
+function matchBySeq(media: PreviewMediaItem[], seq: number): PreviewMediaItem | null {
   return media.find((m) => m.seq === seq) ?? media[0] ?? null;
 }
 
@@ -117,14 +113,9 @@ type Props = {
     plan: Record<string, unknown>,
   ) => Promise<PreviewDraft | null | unknown>;
   onRegenImage: (imageId: string) => Promise<unknown>;
-  onAddImage: (
-    format?: "single" | "comic_4panel",
-  ) => Promise<PreviewDraft | null | unknown>;
+  onAddImage: (format?: "single" | "comic_4panel") => Promise<PreviewDraft | null | unknown>;
   onRemoveImage: (imageId: string) => Promise<PreviewDraft | null | unknown>;
-  onUploadImage: (
-    imageId: string,
-    file: File,
-  ) => Promise<PreviewDraft | null | unknown>;
+  onUploadImage: (imageId: string, file: File) => Promise<PreviewDraft | null | unknown>;
 };
 
 export function EditImageDialog({
@@ -139,16 +130,14 @@ export function EditImageDialog({
   onUploadImage,
 }: Props) {
   const { t } = useTranslation();
-  const primary =
-    draft.media?.find((m) => m.role === "primary") ?? draft.media?.[0] ?? null;
+  const primary = draft.media?.find((m) => m.role === "primary") ?? draft.media?.[0] ?? null;
   const [selectedId, setSelectedId] = useState<string | null>(primary?.id ?? null);
   const [planFields, setPlanFields] = useState<PlanFields>(() => planFromMedia(primary));
   const [dragOver, setDragOver] = useState(false);
   const pendingSelectIdRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const selected =
-    draft.media?.find((m) => m.id === selectedId) ?? primary;
+  const selected = draft.media?.find((m) => m.id === selectedId) ?? primary;
   // Only this slot's URL — never fall back to primary/draft, or pending
   // slots incorrectly show Regenerate + another image's preview.
   const previewUrl = selected?.url ?? null;
@@ -188,16 +177,13 @@ export function EditImageDialog({
   function setFormat(format: PlanFormat) {
     setPlanFields((prev) => {
       if (format === "comic_4panel") {
-        const panels = prev.panels.some((p) => p.trim())
-          ? prev.panels
-          : [...DEFAULT_COMIC_PANELS];
+        const panels = prev.panels.some((p) => p.trim()) ? prev.panels : [...DEFAULT_COMIC_PANELS];
         return {
           ...prev,
           format,
           panels,
           composition:
-            prev.composition.trim() ||
-            "2x2 comic grid, equal panels, reading L→R then top→bottom",
+            prev.composition.trim() || "2x2 comic grid, equal panels, reading L→R then top→bottom",
           style: prev.style.trim() || "clean line comic, contemporary HK urban",
         };
       }
@@ -237,9 +223,7 @@ export function EditImageDialog({
     if (!result || typeof result !== "object" || !("media" in result)) return;
     const media = (result as PreviewDraft).media ?? [];
     const added =
-      [...media].reverse().find((m) => !prevIds.has(m.id)) ??
-      media[media.length - 1] ??
-      null;
+      [...media].reverse().find((m) => !prevIds.has(m.id)) ?? media[media.length - 1] ?? null;
     if (!added) return;
     pendingSelectIdRef.current = added.id;
     setSelectedId(added.id);
@@ -253,9 +237,7 @@ export function EditImageDialog({
     if (!result || typeof result !== "object" || !("media" in result)) return;
     const media = (result as PreviewDraft).media ?? [];
     const next =
-      media[Math.min(Math.max(idx, 0), Math.max(media.length - 1, 0))] ??
-      media[0] ??
-      null;
+      media[Math.min(Math.max(idx, 0), Math.max(media.length - 1, 0))] ?? media[0] ?? null;
     if (next) {
       pendingSelectIdRef.current = next.id;
       setSelectedId(next.id);
@@ -285,19 +267,13 @@ export function EditImageDialog({
     void handleUploadFile(file);
   }
 
-  const primaryLabel = hasRenderable
-    ? t("preview.media.regen")
-    : t("preview.media.generate");
+  const primaryLabel = hasRenderable ? t("preview.media.regen") : t("preview.media.generate");
 
   const previewPane = (
     <div
       className={
         "overflow-hidden rounded-lg border transition-colors " +
-        (hasRenderable
-          ? "border-border"
-          : dragOver
-            ? "border-ring"
-            : "border-border")
+        (hasRenderable ? "border-border" : dragOver ? "border-ring" : "border-border")
       }
     >
       <div className="relative aspect-square w-full">
@@ -325,9 +301,7 @@ export function EditImageDialog({
             }}
           >
             <Upload className="size-8 text-muted-foreground" aria-hidden />
-            <p className="text-sm text-muted-foreground">
-              {t("preview.media.uploadHint")}
-            </p>
+            <p className="text-sm text-muted-foreground">{t("preview.media.uploadHint")}</p>
             <Input
               ref={fileInputRef}
               type="file"
@@ -361,9 +335,7 @@ export function EditImageDialog({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="single">{t("preview.media.formatSingle")}</SelectItem>
-            <SelectItem value="comic_4panel">
-              {t("preview.media.formatComic")}
-            </SelectItem>
+            <SelectItem value="comic_4panel">{t("preview.media.formatComic")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -396,24 +368,18 @@ export function EditImageDialog({
             <Textarea
               id="image-plan-style"
               value={planFields.style}
-              onChange={(e) =>
-                setPlanFields((prev) => ({ ...prev, style: e.target.value }))
-              }
+              onChange={(e) => setPlanFields((prev) => ({ ...prev, style: e.target.value }))}
               disabled={busy}
               rows={2}
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="image-plan-prompt">
-              {t("preview.media.additionalPrompt")}
-            </Label>
+            <Label htmlFor="image-plan-prompt">{t("preview.media.additionalPrompt")}</Label>
             <Textarea
               id="image-plan-prompt"
               value={planFields.prompt}
-              onChange={(e) =>
-                setPlanFields((prev) => ({ ...prev, prompt: e.target.value }))
-              }
+              onChange={(e) => setPlanFields((prev) => ({ ...prev, prompt: e.target.value }))}
               disabled={busy}
               rows={3}
             />
@@ -426,9 +392,7 @@ export function EditImageDialog({
             <Textarea
               id="image-plan-prompt"
               value={planFields.prompt}
-              onChange={(e) =>
-                setPlanFields((prev) => ({ ...prev, prompt: e.target.value }))
-              }
+              onChange={(e) => setPlanFields((prev) => ({ ...prev, prompt: e.target.value }))}
               disabled={busy}
               rows={4}
             />
@@ -439,18 +403,14 @@ export function EditImageDialog({
             <Textarea
               id="image-plan-style"
               value={planFields.style}
-              onChange={(e) =>
-                setPlanFields((prev) => ({ ...prev, style: e.target.value }))
-              }
+              onChange={(e) => setPlanFields((prev) => ({ ...prev, style: e.target.value }))}
               disabled={busy}
               rows={2}
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="image-plan-composition">
-              {t("preview.media.composition")}
-            </Label>
+            <Label htmlFor="image-plan-composition">{t("preview.media.composition")}</Label>
             <Textarea
               id="image-plan-composition"
               value={planFields.composition}
@@ -533,13 +493,7 @@ export function EditImageDialog({
 
         <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
           <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy}
-              onClick={handleCancel}
-            >
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={handleCancel}>
               {t("preview.media.cancel")}
             </Button>
             <Button

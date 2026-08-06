@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/app-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/auth-context";
@@ -55,9 +55,7 @@ export function AdminPage() {
     return (
       <AppShell mainClassName="flex items-center justify-center overflow-y-auto">
         <div className="text-center">
-          <h1 className="text-lg font-semibold text-foreground">
-            {t("admin.forbidden.title")}
-          </h1>
+          <h1 className="text-lg font-semibold text-foreground">{t("admin.forbidden.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("admin.forbidden.body")}</p>
           <Link
             to="/"
@@ -73,13 +71,8 @@ export function AdminPage() {
   return (
     <AppShell mainClassName="overflow-y-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <h1 className="mb-4 text-lg font-semibold text-foreground">
-          {t("admin.title")}
-        </h1>
-        <Tabs
-          value={tab}
-          onValueChange={(value) => setTab(parseTab(value))}
-        >
+        <h1 className="mb-4 text-lg font-semibold text-foreground">{t("admin.title")}</h1>
+        <Tabs value={tab} onValueChange={(value) => setTab(parseTab(value))}>
           <TabsList>
             <TabsTrigger value="llm">{t("admin.tabs.llm")}</TabsTrigger>
             <TabsTrigger value="steps">{t("admin.tabs.steps")}</TabsTrigger>

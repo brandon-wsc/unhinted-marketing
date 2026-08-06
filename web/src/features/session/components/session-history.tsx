@@ -1,6 +1,6 @@
 import {
-  FormEvent,
-  KeyboardEvent as ReactKeyboardEvent,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useMemo,
   useRef,
@@ -212,10 +212,7 @@ export function SessionHistorySidebar({
                     <RenameIcon />
                     {t("chat.history.rename")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => setConfirmDeleteId(s.id)}
-                  >
+                  <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDeleteId(s.id)}>
                     <TrashIcon />
                     {t("chat.history.delete")}
                   </DropdownMenuItem>
@@ -256,9 +253,7 @@ export function SessionHistorySidebar({
   return (
     <aside
       className={`flex h-full min-h-0 shrink-0 flex-col overflow-hidden bg-background ${
-        pageMode
-          ? "w-full"
-          : "w-[280px] border-r border-border"
+        pageMode ? "w-full" : "w-[280px] border-r border-border"
       }`}
     >
       <div className="flex shrink-0 items-center gap-1 px-3 pb-1 pt-3">
@@ -361,9 +356,7 @@ export function SessionHistorySidebar({
                 if (confirmDeleteId) void handleDelete(confirmDeleteId);
               }}
             >
-              {busyId === confirmDeleteId
-                ? t("chat.history.deleting")
-                : t("chat.history.delete")}
+              {busyId === confirmDeleteId ? t("chat.history.deleting") : t("chat.history.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -513,7 +506,12 @@ function SearchIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
       <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M10.5 10.5 13.5 13.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path
+        d="M10.5 10.5 13.5 13.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

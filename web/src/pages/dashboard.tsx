@@ -1,5 +1,5 @@
-import { Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { Navigate } from "react-router-dom";
 import { AppShell } from "@/components/app-header";
 import { useAuth } from "@/context/auth-context";
 import { ChatPanel } from "@/features/session/components/chat-panel";

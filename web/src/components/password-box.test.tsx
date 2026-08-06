@@ -11,17 +11,13 @@ vi.mock("react-i18next", () => ({
 
 describe("PasswordBox", () => {
   it("renders the label", () => {
-    render(
-      <PasswordBox id="password" label="Password" value="" onChange={() => {}} />,
-    );
+    render(<PasswordBox id="password" label="Password" value="" onChange={() => {}} />);
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
   });
 
   it("toggles input type between password and text", async () => {
     const user = userEvent.setup();
-    render(
-      <PasswordBox id="password" label="Password" value="secret" onChange={() => {}} />,
-    );
+    render(<PasswordBox id="password" label="Password" value="secret" onChange={() => {}} />);
 
     const input = screen.getByLabelText("Password");
     expect(input).toHaveAttribute("type", "password");

@@ -18,9 +18,7 @@ export function sessionSplitMinWidth({
   historyCollapsed,
   previewReady,
 }: SessionLayoutInput): number {
-  const history = historyCollapsed
-    ? SESSION_PANE.historyCollapsed
-    : SESSION_PANE.historyExpanded;
+  const history = historyCollapsed ? SESSION_PANE.historyCollapsed : SESSION_PANE.historyExpanded;
   const preview = previewReady ? SESSION_PANE.previewMin : 0;
   return history + SESSION_PANE.chatMin + preview;
 }

@@ -91,18 +91,14 @@ export async function apiResumeSessionImage(
   sessionId: string,
   init?: { signal?: AbortSignal; imageFormat?: "single" | "comic_4panel" },
 ): Promise<PostMessageResponse> {
-  const res = await fetchWithAuth(
-    accessToken,
-    `${API_BASE}/sessions/${sessionId}/resume-image`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        image_format: init?.imageFormat ?? null,
-      }),
-      signal: init?.signal,
-    },
-  );
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/resume-image`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image_format: init?.imageFormat ?? null,
+    }),
+    signal: init?.signal,
+  });
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }
