@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
+import { FormField } from "@/components/form-field";
+import { IconButton } from "@/components/icon-button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 type PasswordBoxProps = {
   id: string;
@@ -28,8 +28,7 @@ export function PasswordBox({
   const [visible, setVisible] = useState(false);
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+    <FormField id={id} label={label}>
       <div className="relative">
         <Input
           id={id}
@@ -41,18 +40,16 @@ export function PasswordBox({
           required={required}
           className="pr-10"
         />
-        <Button
+        <IconButton
           type="button"
-          variant="ghost"
-          size="icon"
           onClick={() => setVisible((current) => !current)}
           aria-label={visible ? t("common.hidePassword") : t("common.showPassword")}
           aria-pressed={visible}
-          className="absolute top-1/2 right-1 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          className="absolute top-1/2 right-1 h-7 w-7 -translate-y-1/2"
         >
           {visible ? <EyeOff /> : <Eye />}
-        </Button>
+        </IconButton>
       </div>
-    </div>
+    </FormField>
   );
 }

@@ -71,7 +71,7 @@ describe("UserMenuDropdown", () => {
     await user.click(trigger);
     expect(screen.getByRole("menu")).toBeInTheDocument();
 
-    await user.click(trigger);
+    await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 

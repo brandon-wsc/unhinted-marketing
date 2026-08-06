@@ -5,9 +5,25 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { IconButton } from "@/components/icon-button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { SessionListItem } from "@/features/session/types";
 
 type Props = {
@@ -86,7 +102,6 @@ export function SessionHistorySidebar({
 }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
-  const [menuId, setMenuId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -125,7 +140,6 @@ export function SessionHistorySidebar({
   }
 
   async function handlePin(id: string, pinnedNext: boolean) {
-    setMenuId(null);
     setBusyId(id);
     try {
       await onPin(id, pinnedNext);
@@ -139,7 +153,6 @@ export function SessionHistorySidebar({
     try {
       await onDelete(id);
       setConfirmDeleteId(null);
-      setMenuId(null);
     } finally {
       setBusyId(null);
     }
@@ -149,7 +162,6 @@ export function SessionHistorySidebar({
     const active = s.id === activeSessionId;
     const title = s.title?.trim() || t("chat.history.untitled");
     const renaming = renamingId === s.id;
-    const menuOpen = menuId === s.id;
     const busy = busyId === s.id;
 
     return (
@@ -164,55 +176,51 @@ export function SessionHistorySidebar({
         ) : (
           <div
             className={`flex items-center gap-0.5 rounded-full transition ${
-              active
-                ? "bg-[var(--color-hover)]"
-                : "hover:bg-[var(--color-hover)]"
+              active ? "bg-accent" : "hover:bg-accent"
             }`}
           >
             <button
               type="button"
               onClick={() => onSelect(s.id)}
-              className="min-w-0 flex-1 truncate px-3 py-2 text-left text-[13px] leading-snug text-[var(--color-foreground)]"
+              className="min-w-0 flex-1 truncate px-3 py-2 text-left text-[13px] leading-snug text-foreground"
               title={title}
             >
               {s.pinned ? (
-                <span className="mr-1.5 inline-flex text-[var(--color-muted)]" aria-hidden>
+                <span className="mr-1.5 inline-flex text-muted-foreground" aria-hidden>
                   <PinIcon filled />
                 </span>
               ) : null}
               {title}
             </button>
             <div className="relative shrink-0 pr-1">
-              <button
-                type="button"
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-muted)] transition hover:bg-[var(--color-card)] hover:text-[var(--color-foreground)] ${
-                  menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
-                }`}
-                aria-label={t("chat.history.more")}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuId((prev) => (prev === s.id ? null : s.id));
-                }}
-              >
-                <MoreIcon />
-              </button>
-              {menuOpen && (
-                <SessionRowMenu
-                  pinned={!!s.pinned}
-                  onClose={() => setMenuId(null)}
-                  onPin={() => void handlePin(s.id, !s.pinned)}
-                  onRename={() => {
-                    setMenuId(null);
-                    setRenamingId(s.id);
-                  }}
-                  onDelete={() => {
-                    setMenuId(null);
-                    setConfirmDeleteId(s.id);
-                  }}
-                />
-              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <IconButton
+                    type="button"
+                    className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100"
+                    aria-label={t("chat.history.more")}
+                  >
+                    <MoreIcon />
+                  </IconButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem onSelect={() => void handlePin(s.id, !s.pinned)}>
+                    <PinIcon filled={!!s.pinned} />
+                    {s.pinned ? t("chat.history.unpin") : t("chat.history.pin")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setRenamingId(s.id)}>
+                    <RenameIcon />
+                    {t("chat.history.rename")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => setConfirmDeleteId(s.id)}
+                  >
+                    <TrashIcon />
+                    {t("chat.history.delete")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         )}
@@ -222,35 +230,35 @@ export function SessionHistorySidebar({
 
   if (collapsed) {
     return (
-      <aside className="flex h-full min-h-0 w-12 shrink-0 flex-col items-center gap-2 overflow-hidden border-r border-[var(--color-border)] bg-[var(--color-background)] py-3">
-        <button
+      <aside className="flex h-full min-h-0 w-12 shrink-0 flex-col items-center gap-2 overflow-hidden border-r border-border bg-background py-3">
+        <IconButton
           type="button"
           onClick={onToggle}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-muted)] transition hover:bg-[var(--color-hover)] hover:text-[var(--color-foreground)]"
+          className="h-8 w-8 rounded-full"
           title={t("chat.history.open")}
           aria-label={t("chat.history.open")}
         >
           <SidebarIcon />
-        </button>
-        <button
+        </IconButton>
+        <IconButton
           type="button"
           onClick={onNewChat}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-muted)] transition hover:bg-[var(--color-hover)] hover:text-[var(--color-foreground)]"
+          className="h-8 w-8 rounded-full"
           title={t("chat.history.new")}
           aria-label={t("chat.history.new")}
         >
           <PlusIcon />
-        </button>
+        </IconButton>
       </aside>
     );
   }
 
   return (
     <aside
-      className={`flex h-full min-h-0 shrink-0 flex-col overflow-hidden bg-[var(--color-background)] ${
+      className={`flex h-full min-h-0 shrink-0 flex-col overflow-hidden bg-background ${
         pageMode
           ? "w-full"
-          : "w-[280px] border-r border-[var(--color-border)]"
+          : "w-[280px] border-r border-border"
       }`}
     >
       <div className="flex shrink-0 items-center gap-1 px-3 pb-1 pt-3">
@@ -258,27 +266,27 @@ export function SessionHistorySidebar({
           <button
             type="button"
             onClick={onBack}
-            className="flex h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-sm text-[var(--color-muted)] transition hover:bg-[var(--color-hover)] hover:text-[var(--color-foreground)]"
+            className="flex h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
             aria-label={t("chat.mobile.back")}
           >
             <BackIcon />
             {t("chat.mobile.back")}
           </button>
         ) : !pageMode ? (
-          <button
+          <IconButton
             type="button"
             onClick={onToggle}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--color-muted)] transition hover:bg-[var(--color-hover)] hover:text-[var(--color-foreground)]"
+            className="h-9 w-9 rounded-full"
             title={t("chat.history.collapse")}
             aria-label={t("chat.history.collapse")}
           >
             <SidebarIcon />
-          </button>
+          </IconButton>
         ) : null}
         <button
           type="button"
           onClick={onNewChat}
-          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-[var(--color-card)] px-3 text-sm font-medium text-[var(--color-foreground)] shadow-sm ring-1 ring-[var(--color-border)] transition hover:bg-[var(--color-hover)]"
+          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-card px-3 text-sm font-medium text-foreground shadow-sm ring-1 ring-border transition hover:bg-accent"
         >
           <PlusIcon />
           {t("chat.history.new")}
@@ -287,32 +295,32 @@ export function SessionHistorySidebar({
 
       <div className="shrink-0 px-3 pb-2 pt-2">
         <div className="relative">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
             <SearchIcon />
           </span>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("chat.history.search")}
-            className="w-full rounded-full border-0 bg-[var(--color-card)] py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-[var(--color-border)] transition placeholder:text-[var(--color-muted)] focus:ring-[var(--color-ring)]"
+            className="w-full rounded-full border-0 bg-card py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-border transition placeholder:text-muted-foreground focus:ring-ring"
           />
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {loading && sessions.length === 0 ? (
-          <p className="px-3 py-8 text-center text-xs text-[var(--color-muted)]">
+          <p className="px-3 py-8 text-center text-xs text-muted-foreground">
             {t("chat.history.loading")}
           </p>
         ) : pinned.length === 0 && groups.length === 0 ? (
-          <p className="px-3 py-8 text-center text-xs text-[var(--color-muted)]">
+          <p className="px-3 py-8 text-center text-xs text-muted-foreground">
             {t("chat.history.empty")}
           </p>
         ) : (
           <>
             {pinned.length > 0 && (
               <div className="mb-2">
-                <p className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--color-muted)]">
+                <p className="px-3 pb-1 pt-2 text-[11px] font-medium text-muted-foreground">
                   {t("chat.history.group.pinned")}
                 </p>
                 <ul className="flex flex-col gap-0.5">{pinned.map(renderRow)}</ul>
@@ -320,7 +328,7 @@ export function SessionHistorySidebar({
             )}
             {groups.map((group) => (
               <div key={group.key} className="mb-2">
-                <p className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--color-muted)]">
+                <p className="px-3 pb-1 pt-2 text-[11px] font-medium text-muted-foreground">
                   {group.label}
                 </p>
                 <ul className="flex flex-col gap-0.5">{group.items.map(renderRow)}</ul>
@@ -330,13 +338,36 @@ export function SessionHistorySidebar({
         )}
       </div>
 
-      {confirmDeleteId && (
-        <DeleteConfirmDialog
-          busy={busyId === confirmDeleteId}
-          onCancel={() => setConfirmDeleteId(null)}
-          onConfirm={() => void handleDelete(confirmDeleteId)}
-        />
-      )}
+      <AlertDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDeleteId(null);
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("chat.history.deleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("chat.history.deleteBody")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busyId === confirmDeleteId}>
+              {t("chat.history.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={busyId === confirmDeleteId || !confirmDeleteId}
+              onClick={(e) => {
+                e.preventDefault();
+                if (confirmDeleteId) void handleDelete(confirmDeleteId);
+              }}
+            >
+              {busyId === confirmDeleteId
+                ? t("chat.history.deleting")
+                : t("chat.history.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 }
@@ -384,141 +415,9 @@ function RenameField({
         onBlur={() => submit()}
         maxLength={200}
         aria-label={t("chat.history.rename")}
-        className="w-full rounded-full bg-[var(--color-card)] px-3 py-2 text-[13px] outline-none ring-2 ring-[var(--color-ring)]"
+        className="w-full rounded-full bg-card px-3 py-2 text-[13px] outline-none ring-2 ring-ring"
       />
     </form>
-  );
-}
-
-function SessionRowMenu({
-  pinned,
-  onClose,
-  onPin,
-  onRename,
-  onDelete,
-}: {
-  pinned: boolean;
-  onClose: () => void;
-  onPin: () => void;
-  onRename: () => void;
-  onDelete: () => void;
-}) {
-  const { t } = useTranslation();
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) onClose();
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      ref={rootRef}
-      role="menu"
-      className="absolute right-0 top-full z-30 mt-1 w-40 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] py-1 shadow-lg"
-    >
-      <MenuButton onClick={onPin}>
-        <PinIcon filled={pinned} />
-        {pinned ? t("chat.history.unpin") : t("chat.history.pin")}
-      </MenuButton>
-      <MenuButton onClick={onRename}>
-        <RenameIcon />
-        {t("chat.history.rename")}
-      </MenuButton>
-      <MenuButton onClick={onDelete} danger>
-        <TrashIcon />
-        {t("chat.history.delete")}
-      </MenuButton>
-    </div>
-  );
-}
-
-function MenuButton({
-  onClick,
-  children,
-  danger,
-}: {
-  onClick: () => void;
-  children: ReactNode;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      onClick={onClick}
-      className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition ${
-        danger
-          ? "text-[var(--color-destructive-text)] hover:bg-[var(--color-destructive-soft)]"
-          : "text-[var(--color-foreground)] hover:bg-[var(--color-hover)]"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function DeleteConfirmDialog({
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  busy?: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/45"
-        aria-label={t("chat.history.close")}
-        onClick={onCancel}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="delete-chat-title"
-        className="relative w-full max-w-sm rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-xl"
-      >
-        <h2 id="delete-chat-title" className="text-base font-semibold">
-          {t("chat.history.deleteTitle")}
-        </h2>
-        <p className="mt-2 text-sm text-[var(--color-muted)]">
-          {t("chat.history.deleteBody")}
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onCancel}
-            className="rounded-full px-4 py-2 text-sm font-medium text-[var(--color-foreground)] transition hover:bg-[var(--color-hover)]"
-          >
-            {t("chat.history.cancel")}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onConfirm}
-            className="rounded-full px-4 py-2 text-sm font-medium text-white transition"
-            style={{ backgroundColor: "var(--color-destructive)" }}
-          >
-            {busy ? t("chat.history.deleting") : t("chat.history.delete")}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 

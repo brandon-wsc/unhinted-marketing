@@ -72,10 +72,10 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Chat “可以出” ≠ publish** — UI Confirm button only (existing `ack_confirm`)
 - **Still deferred** — real image gen, Meta Graph publish, multi-platform switcher
 
-**Decision (2026-07-31) — Mobile workspace layout:**
+**Decision (2026-07-31) — Mobile workspace layout:** *(superseded layout trigger 2026-08-06 — see content-based shell below; UX pages unchanged)*
 
-- **Chat is primary** — default page on `< lg`; desktop (`lg+`) keeps sidebar + chat + preview side-by-side
-- **Three pages on mobile** — Record / Chat / Preview as separate full-height views (not stacked)
+- **Chat is primary** — default page in paged mode; split mode keeps sidebar + chat + preview side-by-side
+- **Three pages when paged** — Record / Chat / Preview as separate full-height views (not stacked)
 - **Navigation** — Chat shows top-left history icon → Record; Record / Preview show **上一頁** back to Chat; open Preview from in-chat ready banner (no auto-jump, no bottom tab bar)
 - **Still deferred** — history control in the app header top bar (icon currently overlays chat)
 
@@ -99,6 +99,14 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 - Production `session_node_steps` + `turn_id` correlation with `llm_call_records`; admin tabs Node steps / Session Trace
 
+**Decision (2026-08-06) — Frontend UI system (tokens + shadcn layers):**
+
+- **Primitives** — `web/src/components/ui/*` is the only control stack (shadcn); compose in `components/` / `features/`; no parallel Button/Input/Dialog
+- **Tokens** — Prefer semantic utilities (`bg-card`, `text-muted-foreground`, …) from `web/src/index.css` `@theme`; avoid `var(--color-*)` in JSX classNames
+- **Session shell layout** — `split` vs `paged` from **container width vs content min-widths** (`session-layout.ts`: history + chat [+ preview]), not viewport `lg` / device names; measured via `useContainerWidth` on the chat shell
+- **Agent rule** — [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc)
+- **Composed helpers** — `FormField`, `IconButton` in `web/src/components/`; menus/confirm via `DropdownMenu` / `AlertDialog`
+
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
 ---
@@ -120,7 +128,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | README | ✅ | Project intro; setup in GETTING_STARTED |
 | `docker-compose.yml` | ✅ | Local `db` (pgvector) + `minio` / `minio-init` (S3-compatible media) + adminer |
 | Auth rate limiting | ✅ | In-memory sliding window on register/login/refresh (`AUTH_RATE_LIMIT_*`); Redis later |
-| Automated tests | ✅ Backend + FE Tier 1/2 + CI | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && pnpm test` (Vitest + RTL — lib utils + `session-helpers` / `useSession` + PasswordBox / UserMenuDropdown). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
+| Automated tests | ✅ Backend + FE Tier 1/2 + CI | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && pnpm test` (Vitest + RTL — lib utils + `session-helpers` / `session-layout` / `useSession` + PasswordBox / UserMenuDropdown). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
 ### Phase 1 — Data & Autopilot Backend · **100%**
 
@@ -167,7 +175,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
 | Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer locked while in-flight or parked; Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
 | Landing: recommended questions cards | ✅ | Empty-state cards from `GET /api/companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
-| Preview Mode (left chat / right preview) | ✅ | Desktop: IG mock + **Edit Copy dialog** (caption / hashtags / CTA) + multi-image carousel; **hover/tap image → Edit image dialog** (plan / regen / add). Mobile (`< lg`): Preview push page with **上一頁** |
+| Preview Mode (left chat / right preview) | ✅ | Split: IG mock + **Edit Copy dialog** + multi-image carousel; **hover/tap image → Edit image**. Paged: Preview push page with **上一頁** (content-width shell, not `lg`) |
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |
 | Manual draft API `POST …/draft` | ✅ | No LLM; bump revision + `approval_token`; caption-only reuses `media_ids` ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
 | Preview media APIs | ✅ | `GET/POST …/media`, `PATCH …/media/{id}/plan`, `POST …/media/{id}/regen`, `POST …/media/{id}/remove`, `POST …/media/{id}/upload` — append-only image rows + new draft |
@@ -250,7 +258,10 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 |-------|-------------|
 | `/login` | Email/password login |
 | `/register` | Sign up + default workspace |
-| `/` | Protected **chat workspace** — desktop history sidebar + chat (+ preview); mobile Record / Chat / Preview pages |
+| `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
+| `/admin` | Platform admin (level ≥ 6) — LLM calls / node steps / session trace |
+
+**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`). Session shell uses content-width `split`/`paged` (`session-layout.ts`).
 
 **UX features:**
 
@@ -259,9 +270,9 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 - **Theme:** Light / dark / system, persisted in `localStorage`
 - **Form memory:** Last user email / display name / org name from `localStorage` (not fake placeholders)
 - **Auth:** Access token in memory; refresh via cookie; auto-refresh on app load
-- **Phase 3 (shipped):** Chat workspace at `/` — `useSession` REST-first + SSE; Streamdown + `@streamdown/cjk`; live `message.delta`; Agent Mode UI (`agent.progress` trail persisted on user-message `metadata.agent_actions`; brief / `draft.awaiting_image_ok` interrupt; snapshot `interrupted` rehydrates Generate-image CTA); landing recommended-question cards; IG Preview + Confirm; Gemini-style history (desktop sidebar; mobile Record push page); mobile Chat primary with history icon + Preview via ready banner / **上一頁**; `llm.failed` inline error + Retry; shell fits `h-dvh` with per-pane scroll; no `useChat`
-- **Session client:** `web/src/features/session/` — `api.ts` (REST), `sse.ts` (`@microsoft/fetch-event-source` with Bearer), `use-session.ts` + `session-helpers.ts`, `session-storage.ts` (per-company last session id), `use-recommended-questions.ts`, `components/chat-panel.tsx` + `session-history.tsx` + `preview-panel.tsx` + `ig-preview-mock.tsx` + `recommended-questions.tsx`
-- **Chat persistence:** Backend writes `session_messages` (user always; assistant for `chat` / `ack_confirm` / LLM failure / review exhausted). Agent turns often **do not** append assistant chat rows — brief/draft live in `sessions.state` + `preview_drafts`. **Agent action trail:** after each turn, `agent.progress` payloads are stored on that turn’s **user** message as `metadata.agent_actions` (`[{node, model_tier, model}, …]`); `GET …/messages` returns `metadata` so refresh rebuilds the trail. **Interrupt hydrate:** `sessions.state.awaiting_image_ok` + SSE `session.snapshot.interrupted` (graph `next`) restore the Generate-image card after reopen / API drop. **Hydrate:** `GET /sessions/{id}/messages` + remembered session id in `localStorage`. **History:** desktop left sidebar lists `GET /sessions?company_id=` (pinned group + date groups + search); mobile opens the same list as a full-page Record view; `PATCH` rename/pin, `DELETE` removes session (+ cascades).
+- **Phase 3 (shipped):** Chat workspace at `/` — `useSession` REST-first + SSE; Streamdown + `@streamdown/cjk`; live `message.delta`; Agent Mode UI (`agent.progress` trail persisted on user-message `metadata.agent_actions`; brief / `draft.awaiting_image_ok` interrupt; snapshot `interrupted` rehydrates Generate-image CTA); landing recommended-question cards; IG Preview + Confirm; Gemini-style history; **content-based shell** (`split` vs `paged` from pane min-widths, not viewport `lg`); paged Chat primary with history icon + Preview via ready banner / **上一頁**; `llm.failed` inline error + Retry; shell fits `h-dvh` with per-pane scroll; no `useChat`
+- **Session client:** `web/src/features/session/` — `api.ts` (REST), `sse.ts` (`@microsoft/fetch-event-source` with Bearer), `use-session.ts` + `session-helpers.ts` + `session-layout.ts`, `session-storage.ts` (per-company last session id), `use-recommended-questions.ts`, `components/chat-panel.tsx` + `session-history.tsx` + `preview-panel.tsx` + `ig-preview-mock.tsx` + `recommended-questions.tsx`
+- **Chat persistence:** Backend writes `session_messages` (user always; assistant for `chat` / `ack_confirm` / LLM failure / review exhausted). Agent turns often **do not** append assistant chat rows — brief/draft live in `sessions.state` + `preview_drafts`. **Agent action trail:** after each turn, `agent.progress` payloads are stored on that turn’s **user** message as `metadata.agent_actions` (`[{node, model_tier, model}, …]`); `GET …/messages` returns `metadata` so refresh rebuilds the trail. **Interrupt hydrate:** `sessions.state.awaiting_image_ok` + SSE `session.snapshot.interrupted` (graph `next`) restore the Generate-image card after reopen / API drop. **Hydrate:** `GET /sessions/{id}/messages` + remembered session id in `localStorage`. **History:** split mode left sidebar lists `GET /sessions?company_id=` (pinned group + date groups + search); paged mode opens the same list as a full-page Record view; `PATCH` rename/pin, `DELETE` removes session (+ cascades).
 
 **Run:**
 

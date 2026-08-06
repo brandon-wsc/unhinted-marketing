@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/auth-context";
 import { apiAdminGetSessionTrace, type SessionTrace } from "@/features/admin/api";
@@ -70,7 +71,7 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
       <div className="mb-3 flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           {t("admin.filters.sessionId")}
-          <input
+          <Input
             type="text"
             value={sessionInput}
             onChange={(e) => setSessionInput(e.target.value)}
@@ -78,7 +79,7 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
               if (e.key === "Enter") setSessionId(sessionInput.trim());
             }}
             placeholder={t("admin.sessionTrace.placeholder")}
-            className="w-80 rounded-lg border border-input bg-card px-2.5 py-2 font-mono text-xs text-foreground focus:border-primary focus:outline-none"
+            className="w-80 font-mono text-xs"
           />
         </label>
         <Button
@@ -101,7 +102,7 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
       </div>
 
       {error && (
-        <p className="mb-3 rounded-lg bg-[var(--color-destructive-soft)] px-3 py-2 text-sm text-[var(--color-destructive-text)]">
+        <p className="mb-3 rounded-lg bg-destructive-soft px-3 py-2 text-sm text-destructive-foreground">
           {t("admin.loadFailed")}: {error}
         </p>
       )}
@@ -173,7 +174,7 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
                       className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition ${
                         selectedRevision === d.revision
                           ? "border-primary bg-primary/5"
-                          : "border-border hover:bg-hover"
+                          : "border-border hover:bg-accent"
                       }`}
                     >
                       <div className="flex justify-between">

@@ -59,23 +59,23 @@ export function IgPreviewMock({
 
   return (
     <div className="mx-auto w-full max-w-[340px]">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm">
-        <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-3 py-2.5">
+      <div className="overflow-hidden rounded-[28px] border border-border bg-card shadow-sm">
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-amber-400 via-rose-500 to-violet-600 p-[2px]">
-            <div className="h-full w-full rounded-full bg-[var(--color-card)]" />
+            <div className="h-full w-full rounded-full bg-card" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{accountName}</p>
-            <p className="truncate text-[11px] text-[var(--color-muted)]">
+            <p className="truncate text-[11px] text-muted-foreground">
               {t("preview.mock.sponsored")}
             </p>
           </div>
         </div>
 
         <div
-          className={`relative aspect-square w-full bg-[var(--color-background)]${
+          className={`relative aspect-square w-full bg-background${
             imageEditable
-              ? " cursor-pointer transition hover:brightness-[0.97] focus-within:ring-2 focus-within:ring-[var(--color-ring)] focus-within:ring-inset"
+              ? " cursor-pointer transition hover:brightness-[0.97] focus-within:ring-2 focus-within:ring-ring focus-within:ring-inset"
               : ""
           }`}
         >
@@ -98,8 +98,8 @@ export function IgPreviewMock({
             </div>
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center">
-              <div className="h-16 w-16 rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-card)]" />
-              <p className="text-xs text-[var(--color-muted)]">{t("preview.mock.placeholder")}</p>
+              <div className="h-16 w-16 rounded-2xl border border-dashed border-border bg-card" />
+              <p className="text-xs text-muted-foreground">{t("preview.mock.placeholder")}</p>
             </div>
           )}
 
@@ -162,7 +162,7 @@ export function IgPreviewMock({
         </div>
 
         <div className="space-y-2 px-3 py-3">
-          <div className="flex gap-3 text-[var(--color-muted)]">
+          <div className="flex gap-3 text-muted-foreground">
             <HeartIcon />
             <CommentIcon />
             <ShareIcon />
@@ -172,7 +172,7 @@ export function IgPreviewMock({
               <button
                 type="button"
                 onClick={onEditCopy}
-                className="-mx-1 w-[calc(100%+0.5rem)] rounded-md px-1 py-0.5 text-left transition hover:bg-[var(--color-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+                className="-mx-1 w-[calc(100%+0.5rem)] rounded-md px-1 py-0.5 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={t("preview.copy.edit")}
               >
                 <span className="font-semibold">{accountName}</span>{" "}
@@ -183,7 +183,7 @@ export function IgPreviewMock({
               {collapsed && (
                 <button
                   type="button"
-                  className="ml-1 text-[var(--color-muted)]"
+                  className="ml-1 text-muted-foreground"
                   onClick={() => setExpanded(true)}
                 >
                   {t("preview.mock.more")}
@@ -197,7 +197,7 @@ export function IgPreviewMock({
               {collapsed && (
                 <button
                   type="button"
-                  className="ml-1 text-[var(--color-muted)]"
+                  className="ml-1 text-muted-foreground"
                   onClick={() => setExpanded(true)}
                 >
                   {t("preview.mock.more")}

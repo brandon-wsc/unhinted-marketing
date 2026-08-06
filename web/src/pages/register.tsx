@@ -2,10 +2,10 @@ import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { AuthLayout } from "@/components/auth-layout";
+import { FormField } from "@/components/form-field";
 import { PasswordBox } from "@/components/password-box";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { mapApiError } from "@/lib/map-api-error";
@@ -68,8 +68,7 @@ export function RegisterPage() {
       }
     >
       <form onSubmit={onSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="displayName">{t("auth.register.displayName")}</Label>
+        <FormField id="displayName" label={t("auth.register.displayName")}>
           <Input
             id="displayName"
             value={displayName}
@@ -77,18 +76,16 @@ export function RegisterPage() {
             autoComplete="name"
             required
           />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="organizationName">{t("auth.register.organizationName")}</Label>
+        </FormField>
+        <FormField id="organizationName" label={t("auth.register.organizationName")}>
           <Input
             id="organizationName"
             value={organizationName}
             onChange={(e) => setOrganizationName(e.target.value)}
             autoComplete="organization"
           />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="email">{t("common.email")}</Label>
+        </FormField>
+        <FormField id="email" label={t("common.email")}>
           <Input
             id="email"
             type="email"
@@ -97,7 +94,7 @@ export function RegisterPage() {
             autoComplete="email"
             required
           />
-        </div>
+        </FormField>
         <PasswordBox
           id="password"
           label={t("auth.register.passwordHint")}

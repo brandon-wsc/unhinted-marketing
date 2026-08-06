@@ -20,7 +20,8 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 | External tools | [`schemas/tools.py`](schemas/tools.py) | `query_market_trends`, `publish_social_post` |
 | DB schema history | [`migrations/`](migrations/) | Alembic hex revisions — see `.cursor/rules` |
 | Test policy | [`docs/TESTING.md`](docs/TESTING.md) | Path-tiered gates; LLM nodes mocked in CI |
-| Cursor execution rules | [`.cursor/rules/`](.cursor/rules/) | Scoped (e.g. commits, Alembic); not a second product SSOT |
+| Frontend UI system | [`web/src/components/ui/`](web/src/components/ui/) · [`web/src/index.css`](web/src/index.css) | shadcn primitives + semantic tokens; layers in [`.cursor/rules/web-ui-system.mdc`](.cursor/rules/web-ui-system.mdc) |
+| Cursor execution rules | [`.cursor/rules/`](.cursor/rules/) | Scoped (e.g. commits, Alembic, web UI); not a second product SSOT |
 
 **Runtime state:** REST (e.g. `POST /api/sessions/{id}/messages`) is the client source of truth. SSE is an enhancement layer (live deltas / progress) that merges with dedupe — see [ADR 0002](docs/adr/0002-rest-source-of-truth-sse-enhancement.md). Public HTTP routes live under `/api` ([ADR 0006](docs/adr/0006-api-path-prefix-and-spa-proxy.md)); SPA document routes (`/admin`, …) are separate.
 

@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type ToastItem = {
   id: number;
@@ -38,16 +39,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2 px-4 sm:px-0"
       >
         {toasts.map((toast) => (
-          <div
+          <Alert
             key={toast.id}
-            className="rounded-lg border border-[var(--color-destructive)]/30 px-4 py-3 text-sm shadow-lg"
-            style={{
-              backgroundColor: "var(--color-destructive-soft)",
-              color: "var(--color-destructive-text)",
-            }}
+            variant="destructive"
+            className="border-destructive/30 bg-destructive-soft text-destructive-foreground shadow-lg"
           >
-            {toast.message}
-          </div>
+            <AlertDescription className="text-destructive-foreground">
+              {toast.message}
+            </AlertDescription>
+          </Alert>
         ))}
       </div>
     </ToastContext.Provider>

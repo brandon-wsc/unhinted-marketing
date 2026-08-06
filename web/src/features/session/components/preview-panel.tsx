@@ -36,6 +36,8 @@ type Props = {
     imageId: string,
     file: File,
   ) => Promise<PreviewDraft | null | unknown>;
+  /** When true, show back affordance (paged shell); split shell hides it. */
+  paged?: boolean;
   onBack?: () => void;
 };
 
@@ -52,6 +54,7 @@ export function PreviewPanel({
   onAddImage,
   onRemoveImage,
   onUploadImage,
+  paged = false,
   onBack,
 }: Props) {
   const { t } = useTranslation();
@@ -99,14 +102,18 @@ export function PreviewPanel({
   }
 
   return (
-    <aside className="flex min-h-0 flex-1 flex-col overflow-hidden border-[var(--color-border)] bg-[var(--color-background)] lg:border-l">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+    <aside
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden border-border bg-background ${
+        paged ? "" : "border-l"
+      }`}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          {onBack && (
+          {paged && onBack && (
             <button
               type="button"
               onClick={onBack}
-              className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-sm text-[var(--color-muted)] transition hover:bg-[var(--color-hover)] hover:text-[var(--color-foreground)] lg:hidden"
+              className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
               aria-label={t("chat.mobile.back")}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -123,13 +130,13 @@ export function PreviewPanel({
           )}
           <div className="min-w-0">
             <p className="text-sm font-semibold">{t("preview.title")}</p>
-            <p className="text-xs text-[var(--color-muted)]">
+            <p className="text-xs text-muted-foreground">
               {t("preview.revision", { n: draft.revision })} · {draft.platform}
             </p>
           </div>
         </div>
         {dirty && !confirmed && (
-          <span className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-muted)]">
+          <span className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
             {t("preview.dirty")}
           </span>
         )}
@@ -146,11 +153,11 @@ export function PreviewPanel({
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">
+      <div className="shrink-0 border-t border-border bg-card px-4 py-3">
         {confirmReceipt || confirmed ? (
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm">
             <p className="font-medium">{t("preview.confirmDone")}</p>
-            <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {t("preview.confirmReceipt", {
                 status: confirmReceipt?.status ?? "confirmed",
               })}
@@ -171,7 +178,7 @@ export function PreviewPanel({
             </Button>
           </div>
         )}
-        <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
           {t("preview.confirmHint")}
         </p>
       </div>

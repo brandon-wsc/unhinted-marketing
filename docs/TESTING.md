@@ -47,12 +47,12 @@ Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 
 | Tier | Paths | Target | Gate |
 |------|-------|--------|------|
-| **1 — Utils** | `web/src/lib/**` (except deferred `api.ts` fetch wrappers) · `features/session/session-storage.ts` · `features/session/session-helpers.ts` | **85–95%** | **Fail** |
+| **1 — Utils** | `web/src/lib/**` (except deferred `api.ts` fetch wrappers) · `features/session/session-storage.ts` · `features/session/session-helpers.ts` · `features/session/session-layout.ts` | **85–95%** | **Fail** |
 | **2 — Shared (behavioral)** | `components/password-box.tsx` · `components/user-menu-dropdown.tsx` | **50–70%** behavior | Soft floor (50%) in Vitest thresholds |
-| **3 — Shared (presentational)** | `app-header.tsx` · `app-logo.tsx` · mostly-layout `auth-layout.tsx` | **Omit** or snapshot optional | No gate |
+| **3 — Shared (presentational)** | `app-header.tsx` · `app-logo.tsx` · mostly-layout `auth-layout.tsx` · `form-field.tsx` · `icon-button.tsx` | **Omit** or snapshot optional | No gate |
 | **4 — Pages** | `web/src/pages/**` | **20–40%** or smoke only | No hard gate — logic lives in lib/context |
-| **5 — Feature UI** | `features/session/components/**` (`chat-panel`, `session-history`, …) | **15–30%** later | No gate in v1 CI |
-| **6 — Hooks** | `use-session.ts` (large) · related hooks | **25–40%** progressive | Pure helpers extracted (`session-helpers.ts`); hook suite via mocked RTL `renderHook` — still omitted from hard cov gate |
+| **5 — Feature UI** | `features/session/components/**` (`chat-panel`, `session-history`, …) | **15–30%** later | No gate in v1 CI — shell mode logic covered via `session-layout.ts` |
+| **6 — Hooks** | `use-session.ts` (large) · `use-container-width.ts` · related hooks | **25–40%** progressive | Pure helpers extracted (`session-helpers.ts` / `session-layout.ts`); hook suite via mocked RTL `renderHook` — still omitted from hard cov gate |
 | **Static** | `pnpm run build` (`tsc -b && vite build`) | Must pass | **Fail** |
 
 ---

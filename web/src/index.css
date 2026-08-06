@@ -18,9 +18,10 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --color-primary: #6366f1;
-  --color-primary-hover: #818cf8;
   --color-primary-foreground: #ffffff;
   --color-destructive: #ef4444;
+  --color-destructive-foreground: #b91c1c;
+  --color-destructive-soft: rgb(239 68 68 / 0.1);
   --color-ring: #6366f1;
 
   /* Light surfaces; :root.dark below overrides at runtime. Declared in @theme
@@ -33,7 +34,6 @@
   --color-border: #e4e4e7;
   --color-card: #ffffff;
   --color-card-foreground: #18181b;
-  --color-hover: rgb(0 0 0 / 0.05);
 
   /* shadcn/ui tokens (light); dark overrides below. */
   --color-accent: rgb(0 0 0 / 0.05);
@@ -47,8 +47,6 @@
 
 :root,
 :root[data-theme="light"] {
-  --color-destructive-soft: rgb(239 68 68 / 0.1);
-  --color-destructive-text: #b91c1c;
   --shadow-color: rgb(0 0 0 / 0.08);
 }
 
@@ -61,9 +59,8 @@
   --color-border: #27272a;
   --color-card: #18181b;
   --color-card-foreground: #fafafa;
-  --color-hover: rgb(255 255 255 / 0.05);
+  --color-destructive-foreground: #fca5a5;
   --color-destructive-soft: rgb(239 68 68 / 0.1);
-  --color-destructive-text: #fca5a5;
   --shadow-color: rgb(0 0 0 / 0.35);
 
   --color-accent: rgb(255 255 255 / 0.05);
@@ -82,7 +79,7 @@ body,
 }
 
 body {
-  @apply bg-[var(--color-background)] text-[var(--color-foreground)] font-sans antialiased h-dvh overflow-hidden transition-colors duration-200;
+  @apply bg-background text-foreground font-sans antialiased h-dvh overflow-hidden transition-colors duration-200;
 }
 
 #root {

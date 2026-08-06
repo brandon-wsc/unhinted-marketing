@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -118,30 +119,30 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
       <div className="mb-3 flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           {t("admin.filters.node")}
-          <input
+          <Input
             type="text"
             value={nodeInput}
             onChange={(e) => setNodeInput(e.target.value)}
             placeholder={t("admin.filters.nodePlaceholder")}
-            className="w-36 rounded-lg border border-input bg-card px-2.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+            className="w-36"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           {t("admin.filters.sessionId")}
-          <input
+          <Input
             type="text"
             value={sessionInput}
             onChange={(e) => setSessionInput(e.target.value)}
-            className="w-56 rounded-lg border border-input bg-card px-2.5 py-2 font-mono text-xs text-foreground focus:border-primary focus:outline-none"
+            className="w-56 font-mono text-xs"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           {t("admin.filters.turnId")}
-          <input
+          <Input
             type="text"
             value={turnInput}
             onChange={(e) => setTurnInput(e.target.value)}
-            className="w-56 rounded-lg border border-input bg-card px-2.5 py-2 font-mono text-xs text-foreground focus:border-primary focus:outline-none"
+            className="w-56 font-mono text-xs"
           />
         </label>
         <Button
@@ -157,7 +158,7 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
       </div>
 
       {error && (
-        <p className="mb-3 rounded-lg bg-[var(--color-destructive-soft)] px-3 py-2 text-sm text-[var(--color-destructive-text)]">
+        <p className="mb-3 rounded-lg bg-destructive-soft px-3 py-2 text-sm text-destructive-foreground">
           {t("admin.loadFailed")}: {error}
         </p>
       )}
@@ -292,7 +293,7 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
                 <p className="mb-1 text-xs font-medium text-muted-foreground">
                   {t("admin.nodeStepDetail.output")}
                 </p>
-                <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-hover/40 p-3 text-xs">
+                <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-accent/40 p-3 text-xs">
                   {JSON.stringify(detail.output, null, 2)}
                 </pre>
               </div>
