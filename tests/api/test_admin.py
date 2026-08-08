@@ -252,3 +252,106 @@ async def test_session_trace(client, db_session) -> None:
 
     res = await client.get(f"/api/admin/sessions/{uuid.uuid4()}/trace", headers=headers)
     assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_session_research(client, db_session) -> None:
+    data = await register_user(client)
+    await _grant_platform_level(db_session, data["user"]["id"], 6)
+    user_id = uuid.UUID(data["user"]["id"])
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    session_id = await seed_preview_session(
+        db_session, user_id=user_id, company_id=company_id
+    )
+    turn_id = uuid.uuid4()
+    db_session.add(
+        _step(
+            session_id=session_id,
+            turn_id=turn_id,
+            seq=0,
+            node="fast_rule_checker",
+            output_keys=["research_rule_pass", "research"],
+            output={
+                "research_rule_pass": True,
+                "research": {"semantic_route": "need_search"},
+            },
+        )
+    )
+    db_session.add(
+        _step(
+            session_id=session_id,
+            turn_id=turn_id,
+            seq=1,
+            node="route_intent",
+            output_keys=["research"],
+            output={
+                "research": {
+                    "need_facts": True,
+                    "ambiguous": False,
+                    "ask_clarify": False,
+                    "entity_surface": "usagi",
+                    "semantic_route": "need_search",
+                }
+            },
+        )
+    )
+    db_session.add(
+        _step(
+            session_id=session_id,
+            turn_id=turn_id,
+            seq=2,
+            node="query_generator",
+            output_keys=["search_query", "search_queries"],
+            output={
+                "search_query": "usagi rabbit food Hong Kong",
+                "search_queries": ["usagi rabbit food Hong Kong", "兔糧 香港"],
+                "research": {"search_queries": ["usagi rabbit food Hong Kong", "兔糧 香港"]},
+            },
+        )
+    )
+    db_session.add(
+        _step(
+            session_id=session_id,
+            turn_id=turn_id,
+            seq=3,
+            node="research_ingest",
+            output_keys=["source_signal_ids", "research_signals"],
+            output={
+                "source_signal_ids": ["sig-r1"],
+                "search_queries": ["usagi rabbit food Hong Kong", "兔糧 香港"],
+                "research_signals": [
+                    {
+                        "signal_id": "sig-r1",
+                        "source": "tavily",
+                        "title": "Best rabbit food",
+                        "url": "https://example.com/r",
+                        "excerpt": "pellets",
+                        "metrics": {"query": "usagi rabbit food Hong Kong"},
+                    }
+                ],
+            },
+        )
+    )
+    await db_session.commit()
+
+    headers = auth_header(data["access_token"])
+    res = await client.get(f"/api/admin/sessions/{session_id}/research", headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["session_id"] == str(session_id)
+    assert len(body["turns"]) == 1
+    turn = body["turns"][0]
+    assert turn["turn_id"] == str(turn_id)
+    assert turn["semantic_route"] == "need_search"
+    assert turn["research_rule_pass"] is True
+    assert turn["need_facts"] is True
+    assert turn["ask_clarify"] is False
+    assert turn["entity_surface"] == "usagi"
+    assert turn["ran_research_ingest"] is True
+    assert turn["search_queries"] == ["usagi rabbit food Hong Kong", "兔糧 香港"]
+    assert len(turn["signals"]) == 1
+    assert turn["signals"][0]["source"] == "tavily"
+    assert turn["signals"][0]["query"] == "usagi rabbit food Hong Kong"
+
+    res = await client.get(f"/api/admin/sessions/{uuid.uuid4()}/research", headers=headers)
+    assert res.status_code == 404

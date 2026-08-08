@@ -6,13 +6,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/auth-context";
 import { LlmCallRecords } from "@/features/admin/components/llm-call-records";
 import { NodeStepsPanel } from "@/features/admin/components/node-steps";
+import { ResearchPanel } from "@/features/admin/components/research-panel";
 import { SessionTracePanel } from "@/features/admin/components/session-trace";
 import { isAdmin } from "@/lib/platform-level";
 
-type AdminTab = "llm" | "steps" | "trace";
+type AdminTab = "llm" | "steps" | "trace" | "research";
 
 function parseTab(raw: string | null): AdminTab {
-  if (raw === "steps" || raw === "trace") return raw;
+  if (raw === "steps" || raw === "trace" || raw === "research") return raw;
   return "llm";
 }
 
@@ -76,12 +77,14 @@ export function AdminPage() {
           <TabsList>
             <TabsTrigger value="llm">{t("admin.tabs.llm")}</TabsTrigger>
             <TabsTrigger value="steps">{t("admin.tabs.steps")}</TabsTrigger>
+            <TabsTrigger value="research">{t("admin.tabs.research")}</TabsTrigger>
             <TabsTrigger value="trace">{t("admin.tabs.trace")}</TabsTrigger>
           </TabsList>
           <TabsContent value="llm">
             <LlmCallRecords
               onOpenTurn={(id) => setTab("steps", { turn: id })}
               onOpenSession={(id) => setTab("trace", { session: id })}
+              onOpenResearch={(id) => setTab("research", { session: id })}
             />
           </TabsContent>
           <TabsContent value="steps">
@@ -90,10 +93,17 @@ export function AdminPage() {
               onOpenSession={(id) => setTab("trace", { session: id })}
             />
           </TabsContent>
+          <TabsContent value="research">
+            <ResearchPanel
+              initialSessionId={sessionId}
+              onOpenTurn={(id) => setTab("steps", { turn: id })}
+            />
+          </TabsContent>
           <TabsContent value="trace">
             <SessionTracePanel
               initialSessionId={sessionId}
               onOpenTurn={(id) => setTab("steps", { turn: id })}
+              onOpenResearch={(id) => setTab("research", { session: id })}
             />
           </TabsContent>
         </Tabs>

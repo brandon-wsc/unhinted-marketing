@@ -96,7 +96,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Platform privilege** — numeric `users.platform_level` ladder 0–10 with named rungs + gaps (`MEMBER`=3 default, `ADMIN`=6 read-only records, `SUPERADMIN`=9 full); threshold checks via `require_platform_level`; tenant `organization_members.role` stays separate
 - **Bootstrap** — CLI only: `python -m cmd.worker set-platform-role --email … --level superadmin`
 - **LLM call records** — every provider call (10 session LLM nodes + `question_generator` worker) persisted to `llm_call_records` with prompts, response, tokens, latency, status, `parse_ok` / `fallback_used`; instrumented at the `internal/llm/router.py` choke point; correlation via contextvars; toggle `LLM_RECORD_ENABLED` (default on)
-- **Admin surface** — `GET /api/admin/llm-calls` (+ `/{id}`), `GET /api/admin/node-steps` (+ `/{id}`), `GET /api/admin/sessions/{id}/trace` gated by `require_platform_level(ADMIN)`; web `/admin` (UserMenu, level ≥ 6) with tabs: LLM calls | Node steps | Session Trace ([ADR 0007](./adr/0007-admin-trace-viewer.md))
+- **Admin surface** — `GET /api/admin/llm-calls` (+ `/{id}`), `GET /api/admin/node-steps` (+ `/{id}`), `GET /api/admin/sessions/{id}/trace`, `GET /api/admin/sessions/{id}/research` gated by `require_platform_level(ADMIN)`; web `/admin` (UserMenu, level ≥ 6) with tabs: LLM calls | Node steps | Research | Session Trace ([ADR 0007](./adr/0007-admin-trace-viewer.md))
 
 **Decision (2026-08-03) — API `/api` prefix vs SPA proxy collision:** → [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)
 
