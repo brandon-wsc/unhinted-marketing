@@ -3,7 +3,10 @@
 from internal.llm.router import ModelTier
 
 NODE_MODEL_TIERS: dict[str, ModelTier | None] = {
+    "fast_rule_checker": None,
     "route_intent": ModelTier.CHEAP,
+    "query_generator": ModelTier.CHEAP,
+    "research_ingest": None,
     "chat": ModelTier.CHEAP,
     "ack_confirm": ModelTier.CHEAP,
     "trend_searcher": ModelTier.CHEAP,

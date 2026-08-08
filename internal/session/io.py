@@ -5,9 +5,26 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class ResearchFlags(BaseModel):
+    """Side channel on route_intent (ADR 0009) — does not replace graph_intent."""
+
+    need_facts: bool = False
+    ambiguous: bool = False
+    ask_clarify: bool = False
+    entity_surface: str = ""
+    rationale: str = ""
+
+
 class IntentRoute(BaseModel):
     intent: Literal["chat", "start", "revise", "confirm_intent"]
     rationale: str = ""
+    research: ResearchFlags = Field(default_factory=ResearchFlags)
+
+
+class QueryGenOut(BaseModel):
+    search_query: str = Field(min_length=1, max_length=200)
+    topic: Literal["general", "news", "finance"] = "news"
+    time_range: Literal["day", "week", "month", "year"] | None = "week"
 
 
 class TrendRank(BaseModel):

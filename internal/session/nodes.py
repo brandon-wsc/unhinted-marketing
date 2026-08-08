@@ -26,10 +26,18 @@ from internal.llm.router import (
 )
 from internal.media.storage import media_object_key, persist_generated_image
 from internal.memory.knowledge_seed import ensure_default_personas
-from internal.memory.repos import get_company, get_signals_by_ids, list_personas, list_top_signals
+from internal.memory.repos import (
+    get_company,
+    get_signals_by_ids,
+    list_personas,
+    list_top_signals,
+    upsert_signal,
+)
+from internal.perception.tavily import search_tavily
 from internal.session import prompts
 from internal.session.context import get_db
 from internal.session.events import session_event_bus
+from internal.session.fast_rules import normalize_search_query, research_rule_pass
 from internal.session.image_format import (
     compose_generation_prompt,
     image_format_from_text,
@@ -41,6 +49,8 @@ from internal.session.io import (
     EditOut,
     ImagePlanOut,
     IntentRoute,
+    QueryGenOut,
+    ResearchFlags,
     ReviewOut,
     TrendRank,
 )
@@ -197,12 +207,36 @@ def agent_progress(node: str) -> Callable[[NodeFn], NodeFn]:
     return decorator
 
 
+def _heuristic_research() -> dict[str, Any]:
+    """Offline / parse-fail fallback — no facts path without a real classifier."""
+    return ResearchFlags().model_dump()
+
+
+def _should_research(state: SessionState) -> bool:
+    if not state.get("research_rule_pass", False):
+        return False
+    research = state.get("research") or {}
+    if research.get("ask_clarify") or research.get("ambiguous"):
+        return False
+    return bool(research.get("need_facts"))
+
+
+@agent_progress("fast_rule_checker")
+async def fast_rule_checker(state: SessionState) -> dict[str, Any]:
+    text = _last_user_text(state)
+    return {"research_rule_pass": research_rule_pass(text)}
+
+
 @agent_progress("route_intent")
 async def route_intent(state: SessionState) -> dict[str, Any]:
+    rule_pass = state.get("research_rule_pass")
+    if rule_pass is None:
+        rule_pass = research_rule_pass(_last_user_text(state))
     payload = {
         "mode": state.get("mode", MODE_CHAT),
         "has_draft": bool((state.get("draft") or {}).get("caption")),
         "last_user_message": _last_user_text(state),
+        "research_rule_pass": bool(rule_pass),
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["route_intent"] or ModelTier.CHEAP,
@@ -211,12 +245,140 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
         IntentRoute,
     )
     intent = parsed.intent if parsed else _heuristic_intent(state)
+    research = (
+        parsed.research.model_dump()
+        if parsed
+        else _heuristic_research()
+    )
+    if not rule_pass:
+        research = {**research, "need_facts": False}
     mode = state.get("mode", MODE_CHAT)
     if intent == "revise" and mode != MODE_PREVIEW:
         intent = "start" if _heuristic_intent(state) == "start" else "chat"
     if intent == "confirm_intent" and mode != MODE_PREVIEW:
         intent = "chat"
-    return {"intent": intent}
+    # Ambiguity gates act: clarify in chat before start/revise on a guessed sense.
+    if (research.get("ask_clarify") or research.get("ambiguous")) and intent in (
+        "start",
+        "revise",
+    ):
+        intent = "chat"
+    return {
+        "intent": intent,
+        "research": research,
+        "research_rule_pass": bool(rule_pass),
+    }
+
+
+@agent_progress("query_generator")
+async def query_generator(state: SessionState) -> dict[str, Any]:
+    user = _last_user_text(state)
+    research = state.get("research") or {}
+    normalized = normalize_search_query(user)
+    if normalized:
+        return {
+            "search_query": normalized,
+        }
+
+    payload = {
+        "last_user_message": user,
+        "research": research,
+        "company": (state.get("company_context") or {}).get("name"),
+    }
+    parsed = await _parse_llm_json(
+        NODE_MODEL_TIERS["query_generator"] or ModelTier.CHEAP,
+        prompts.QUERY_GENERATOR,
+        json.dumps(payload, ensure_ascii=False),
+        QueryGenOut,
+    )
+    if parsed and parsed.search_query.strip():
+        return {
+            "search_query": parsed.search_query.strip()[:200],
+            "research": {
+                **research,
+                "tavily_topic": parsed.topic,
+                "tavily_time_range": parsed.time_range,
+            },
+        }
+    # Fallback: truncated user text + HK bias
+    fallback = normalize_search_query(user[:60]) or f"{user[:80]} Hong Kong".strip()
+    return {"search_query": fallback[:200]}
+
+
+@agent_progress("research_ingest")
+async def research_ingest(state: SessionState) -> dict[str, Any]:
+    """PG ∪ Tavily: always load PG; always attempt Tavily upsert when query set."""
+    db = get_db()
+    query = (state.get("search_query") or "").strip()
+    research = dict(state.get("research") or {})
+    topic = str(research.get("tavily_topic") or "news")
+    time_range = research.get("tavily_time_range") or "week"
+    if time_range not in ("day", "week", "month", "year"):
+        time_range = "week"
+
+    tavily_items: list[dict[str, Any]] = []
+    if query:
+        tavily_items = await search_tavily(
+            query,
+            max_results=5,
+            topic=topic if topic in ("general", "news", "finance") else "news",
+            time_range=time_range,
+        )
+        for item in tavily_items:
+            try:
+                await upsert_signal(
+                    db,
+                    signal_id=item["signal_id"],
+                    source=item["source"],
+                    title=item["title"],
+                    url=item.get("url"),
+                    excerpt=item.get("excerpt"),
+                    metrics=item.get("metrics") or {},
+                )
+            except Exception:
+                logger.exception("failed to upsert Tavily signal %s", item.get("signal_id"))
+        if tavily_items:
+            try:
+                await db.commit()
+            except Exception:
+                logger.exception("commit after Tavily upsert failed")
+                await db.rollback()
+
+    pg_signals = await list_top_signals(db, limit=20, region="HK")
+    pg_rows = _signals_payload(pg_signals)
+    by_id = {row["signal_id"]: row for row in pg_rows}
+    # Prefer freshly ingested Tavily rows at the front.
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in tavily_items:
+        sid = item["signal_id"]
+        if sid in seen:
+            continue
+        seen.add(sid)
+        merged.append(
+            {
+                "signal_id": sid,
+                "source": item["source"],
+                "title": item["title"],
+                "excerpt": item.get("excerpt"),
+                "metrics": item.get("metrics") or {},
+            }
+        )
+    for sid, row in by_id.items():
+        if sid in seen:
+            continue
+        seen.add(sid)
+        merged.append(row)
+
+    ctx = dict(state.get("company_context") or {})
+    ctx["research_signals"] = merged[:20]
+    if query:
+        ctx["search_query"] = query
+    return {
+        "research_signals": merged[:20],
+        "company_context": ctx,
+        "source_signal_ids": [r["signal_id"] for r in merged[:8]],
+    }
 
 
 @agent_progress("load_context")
@@ -243,17 +405,57 @@ async def load_context(state: SessionState) -> dict[str, Any]:
     persona_rows = [
         {"slug": p.slug, "name": p.name, "profile": p.profile or {}} for p in personas
     ]
+    prev = state.get("company_context") or {}
+    ctx = {**company_payload, "personas": persona_rows}
+    if state.get("research_signals"):
+        ctx["research_signals"] = state["research_signals"]
+    elif prev.get("research_signals"):
+        ctx["research_signals"] = prev["research_signals"]
+    if state.get("search_query"):
+        ctx["search_query"] = state["search_query"]
+    elif prev.get("search_query"):
+        ctx["search_query"] = prev["search_query"]
     return {
         "mode": MODE_AGENT,
-        "company_context": {**company_payload, "personas": persona_rows},
+        "company_context": ctx,
     }
 
 
 @agent_progress("trend_searcher")
 async def trend_searcher(state: SessionState) -> dict[str, Any]:
     db = get_db()
-    signals = await list_top_signals(db, limit=20, region="HK")
     ctx = dict(state.get("company_context") or {})
+    # Prefer PG∪Tavily merge from research_ingest when present (ADR 0009).
+    prior = list(state.get("research_signals") or ctx.get("research_signals") or [])
+    if prior:
+        signals_payload = prior[:20]
+        # Still load ORM rows only if we need LLM re-rank with DB objects — use payload ids.
+        ranked_ids = [s["signal_id"] for s in signals_payload if s.get("signal_id")][:8]
+        payload = {
+            "company": ctx,
+            "user_request": _last_user_text(state),
+            "signals": signals_payload,
+        }
+        parsed = await _parse_llm_json(
+            NODE_MODEL_TIERS["trend_searcher"] or ModelTier.CHEAP,
+            prompts.TREND_SEARCH,
+            json.dumps(payload, ensure_ascii=False),
+            TrendRank,
+        )
+        valid = {s["signal_id"] for s in signals_payload if s.get("signal_id")}
+        if parsed and parsed.ranked_signal_ids:
+            ranked_ids = [sid for sid in parsed.ranked_signal_ids if sid in valid][:8]
+        order = {sid: i for i, sid in enumerate(ranked_ids)}
+        ranked = sorted(
+            [s for s in signals_payload if s.get("signal_id") in order],
+            key=lambda s: order[str(s["signal_id"])],
+        )
+        ctx["ranked_signals"] = ranked
+        if parsed and parsed.notes:
+            ctx["trend_notes"] = parsed.notes
+        return {"source_signal_ids": ranked_ids, "company_context": ctx}
+
+    signals = await list_top_signals(db, limit=20, region="HK")
     if not signals:
         ctx["ranked_signals"] = []
         return {"source_signal_ids": [], "company_context": ctx}
@@ -307,7 +509,17 @@ async def _publish_deltas(
 async def _chat_stream(state: SessionState, user: str) -> str | None:
     """Stream the chat reply, publishing message.delta events live per turn."""
     history = (state.get("messages") or [])[-8:]
-    payload = json.dumps({"history": history, "latest": user}, ensure_ascii=False)
+    research = state.get("research") or {}
+    payload = json.dumps(
+        {
+            "history": history,
+            "latest": user,
+            "ask_clarify": bool(research.get("ask_clarify") or research.get("ambiguous")),
+            "entity_surface": research.get("entity_surface") or "",
+            "research_signals": (state.get("research_signals") or [])[:8],
+        },
+        ensure_ascii=False,
+    )
     tier = NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP
     session_id = _thread_uuid(state)
 
@@ -339,10 +551,22 @@ async def chat(state: SessionState) -> dict[str, Any]:
             logger.exception("chat LLM stream failed — retrying without stream")
             try:
                 history = (state.get("messages") or [])[-8:]
+                research = state.get("research") or {}
                 reply = await complete_text(
                     tier=NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP,
                     system=prompts.CHAT,
-                    user=json.dumps({"history": history, "latest": user}, ensure_ascii=False),
+                    user=json.dumps(
+                        {
+                            "history": history,
+                            "latest": user,
+                            "ask_clarify": bool(
+                                research.get("ask_clarify") or research.get("ambiguous")
+                            ),
+                            "entity_surface": research.get("entity_surface") or "",
+                            "research_signals": (state.get("research_signals") or [])[:8],
+                        },
+                        ensure_ascii=False,
+                    ),
                 )
             except LlmProviderError as exc:
                 logger.warning("chat LLM failed: %s", exc.message)
@@ -715,6 +939,20 @@ async def persist_preview(state: SessionState) -> dict[str, Any]:
 
 
 def route_after_intent(state: SessionState) -> str:
+    if _should_research(state):
+        return "query_generator"
+    intent = state.get("intent") or "chat"
+    if intent == "start":
+        return "load_context"
+    if intent == "revise":
+        return "edit_copy"
+    if intent == "confirm_intent":
+        return "ack_confirm"
+    return "chat"
+
+
+def route_after_research(state: SessionState) -> str:
+    """After PG∪Tavily ingest — continue to act/chat; search failure already soft."""
     intent = state.get("intent") or "chat"
     if intent == "start":
         return "load_context"

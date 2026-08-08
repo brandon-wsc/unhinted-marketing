@@ -54,7 +54,12 @@ def build_session_graph(*, checkpointer: Any | None = None):
     g: StateGraph = StateGraph(SessionState)
 
     # LLM nodes get an ADR 0005 record context; non-LLM nodes stay plain.
+    g.add_node("fast_rule_checker", N.fast_rule_checker)
     g.add_node("route_intent", _with_llm_record_context("route_intent", N.route_intent))
+    g.add_node(
+        "query_generator", _with_llm_record_context("query_generator", N.query_generator)
+    )
+    g.add_node("research_ingest", N.research_ingest)
     g.add_node("load_context", N.load_context)
     g.add_node("trend_searcher", _with_llm_record_context("trend_searcher", N.trend_searcher))
     g.add_node("brainstormer", _with_llm_record_context("brainstormer", N.brainstormer))
@@ -76,10 +81,23 @@ def build_session_graph(*, checkpointer: Any | None = None):
     g.add_node("review_exhausted", N.review_exhausted)
     g.add_node("_reviewer_fail_bump", _wrap_reviewer_fail)
 
-    g.add_edge(START, "route_intent")
+    g.add_edge(START, "fast_rule_checker")
+    g.add_edge("fast_rule_checker", "route_intent")
     g.add_conditional_edges(
         "route_intent",
         N.route_after_intent,
+        {
+            "query_generator": "query_generator",
+            "load_context": "load_context",
+            "edit_copy": "edit_copy",
+            "ack_confirm": "ack_confirm",
+            "chat": "chat",
+        },
+    )
+    g.add_edge("query_generator", "research_ingest")
+    g.add_conditional_edges(
+        "research_ingest",
+        N.route_after_research,
         {
             "load_context": "load_context",
             "edit_copy": "edit_copy",

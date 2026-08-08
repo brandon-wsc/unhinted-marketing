@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-06  
+> **Last updated:** 2026-08-08  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK 小編 + `roast_level` ([VOICE.md](./VOICE.md)) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -31,6 +31,14 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Confirm UI → stub `/confirm` | ✅ Done — receipt status in preview panel |
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
+
+**Decision (2026-08-08) — Chat research gate + Tavily∪PG:** → [ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)
+
+- **Unified `route_intent`** — one structured call: `graph_intent` + `research` (`need_facts` / `ambiguous` / `ask_clarify`); no separate graph-routing classifier
+- **`fast_rule_checker` → (pass) classifier → `query_generator` → Tavily upsert + PG read**; rule/clarify fail → chat without search
+- **Both sources** — research always uses PostgreSQL **and** Tavily; do not skip Tavily on PG hit; both land in `raw_news_events`
+- **Act ≠ search** — `start` / revise gated on clear intent (+ clarify if ambiguous), not on Tavily success; search does not replace NLU
+- **Implementation** — in progress on `feat/session-research-tavily` (schema, nodes, Tavily adapter; wire `TAVILY_API_KEY`)
 
 **Decision (2026-08-04) — Default HK social craft + roast_level:** → [VOICE.md](./VOICE.md)
 
@@ -160,6 +168,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform` + `media[]`; snapshot hydrates `media` from latest draft |
 | Image generation worker | 🟡 Soft | LiteLLM ``aimage_generation`` via ``LLM_IMAGE_MODEL``; chat-only / unset → ``llm.failed``. ``data:`` results upload to S3-compatible store (MinIO) when ``S3_*`` configured; else remain data URLs. ``placeholder`` / no credentials → mock URL |
 | `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
+| Chat research + Tavily ingest | 🟡 | ADR 0009; graph gate + adapter on branch; needs `TAVILY_API_KEY` for live search |
 | Curl exit-criteria script | ⏸ **Held** | Manual/API path works; formal curl checklist later |
 
 **Held Phase 2 work does not block Phase 3 UI.**

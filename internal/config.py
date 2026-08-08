@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     scheduler_hot_search_interval_minutes: int = 60
     scheduler_questions_interval_hours: int = 12
 
+    # Tavily web search ingest (ADR 0009) — session research upserts into raw_news_events
+    tavily_api_key: str | None = None
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

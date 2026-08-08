@@ -3,9 +3,11 @@
 from internal.session.nodes import (
     MAX_REVIEW_RETRIES,
     _heuristic_intent,
+    _should_research,
     _wants_image_change,
     bump_review_attempt,
     route_after_intent,
+    route_after_research,
     route_after_reviewer,
 )
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW
@@ -55,6 +57,40 @@ def test_route_after_intent() -> None:
     assert route_after_intent({"intent": "confirm_intent"}) == "ack_confirm"
     assert route_after_intent({"intent": "chat"}) == "chat"
     assert route_after_intent({}) == "chat"
+
+
+def test_route_after_intent_research_gate() -> None:
+    state = {
+        "intent": "chat",
+        "research_rule_pass": True,
+        "research": {"need_facts": True, "ambiguous": False, "ask_clarify": False},
+    }
+    assert route_after_intent(state) == "query_generator"
+    assert (
+        route_after_intent({**state, "research": {"need_facts": True, "ambiguous": True}})
+        == "chat"
+    )
+
+
+def test_route_after_research() -> None:
+    assert route_after_research({"intent": "start"}) == "load_context"
+    assert route_after_research({"intent": "chat"}) == "chat"
+
+
+def test_should_research() -> None:
+    assert (
+        _should_research(
+            {
+                "research_rule_pass": True,
+                "research": {"need_facts": True},
+            }
+        )
+        is True
+    )
+    assert (
+        _should_research({"research_rule_pass": False, "research": {"need_facts": True}})
+        is False
+    )
 
 
 def test_route_after_reviewer_paths() -> None:
