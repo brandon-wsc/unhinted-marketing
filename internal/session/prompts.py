@@ -47,9 +47,10 @@ Return JSON only:
 Rules:
 - Prefer search_queries: 1–3 SHORT atomic queries (keywords / proper nouns), NOT spoken sentences
 - Strip Cantonese colloquial wrappers (想食嘅、啲、係咪、有冇…) — keep the entity + product type
+- NEVER emit entity_surface verbatim when it mixes Latin brand + Chinese nouns (e.g. "usagi 兔糧") — always expand the Chinese noun to English
 - Examples:
   - user「usagi想食嘅兔糧」+ entity_surface「usagi 兔糧」
-    → ["Usagi rabbit food", "Usagi pet rabbit feed Hong Kong"]
+    → ["Usagi rabbit food", "Usagi pet rabbit feed Hong Kong"]  (NOT "usagi 兔糧")
   - user「香港最近熱話」→ ["Hong Kong trending topics", "Hong Kong hot search"]
 - Each query: 2–8 words, mix English keywords + preserve brand/IP spelling when useful
 - Do not paste the raw chat dump; do not include "help me" / "write a post"

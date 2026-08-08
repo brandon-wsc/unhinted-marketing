@@ -145,6 +145,20 @@ async def test_query_generator_colloquial_uses_llm(
 
 
 @pytest.mark.asyncio
+async def test_query_generator_fallback_glosses_entity(no_llm: None) -> None:
+    out = await N.query_generator(
+        _base_state(
+            messages=[{"role": "user", "content": "usagi想食嘅兔糧"}],
+            research={"entity_surface": "usagi 兔糧", "need_facts": True},
+        )
+    )
+    assert "兔糧" not in out["search_query"]
+    assert "rabbit food" in out["search_query"].lower()
+    assert "usagi" in out["search_query"].lower()
+    assert all("兔糧" not in q for q in out["research"]["search_queries"])
+
+
+@pytest.mark.asyncio
 async def test_research_ingest_pg_and_tavily(
     monkeypatch: pytest.MonkeyPatch, mock_db
 ) -> None:

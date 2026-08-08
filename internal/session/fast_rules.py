@@ -63,11 +63,106 @@ def research_rule_pass(text: str) -> bool:
     return research_pass_for_route(classify_semantic_route(raw), raw)
 
 
+# Common product / topic nouns → English for fail-closed Tavily fallback.
+_CJK_SEARCH_GLOSS: tuple[tuple[str, str], ...] = (
+    ("兔糧", "rabbit food"),
+    ("狗糧", "dog food"),
+    ("貓糧", "cat food"),
+    ("飼料", "pet feed"),
+    ("周邊", "merchandise"),
+    ("聯乘", "collaboration"),
+    ("熱話", "trending topics"),
+    ("熱搜", "hot search"),
+)
+
+
+def _has_latin_token(text: str) -> bool:
+    return bool(re.search(r"[A-Za-z]{2,}", text or ""))
+
+
+def _has_cjk(text: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", text or ""))
+
+
+def gloss_cjk_search_terms(text: str) -> str:
+    """Replace known CJK product/topic nouns with English keywords."""
+    out = text or ""
+    for zh, en in _CJK_SEARCH_GLOSS:
+        if zh in out:
+            out = out.replace(zh, f" {en} ")
+    return " ".join(out.split())
+
+
+def fallback_search_queries(
+    entity: str,
+    user: str,
+    *,
+    max_len: int = 160,
+) -> list[str]:
+    """Deterministic Tavily queries when query_generator LLM is unavailable.
+
+    Never paste mixed-script ``entity_surface`` (e.g. ``usagi 兔糧``) as-is.
+    """
+    seed = " ".join((entity or user or "").split())
+    if not seed:
+        return ["Hong Kong trending topics"]
+
+    glossed = gloss_cjk_search_terms(seed)
+    # Drop leftover CJK so we don't ship brand+漢字 blobs to Tavily.
+    latinish = " ".join(re.sub(r"[\u4e00-\u9fff]+", " ", glossed).split())
+    candidates: list[str] = []
+    for raw in (latinish, glossed):
+        if not raw:
+            continue
+        q = normalize_search_query(raw)
+        if q is None:
+            # normalize may reject mixed script; strip CJK and retry
+            stripped = " ".join(re.sub(r"[\u4e00-\u9fff]+", " ", raw).split())
+            if stripped:
+                q = normalize_search_query(stripped) or f"{stripped} Hong Kong"
+            else:
+                continue
+        q = q[:max_len].strip()
+        if q and q.lower() not in {c.lower() for c in candidates}:
+            candidates.append(q)
+    return candidates[:3] or ["Hong Kong trending topics"]
+
+
+def polish_search_queries(queries: list[str], *, max_n: int = 3) -> list[str]:
+    """Gloss CJK product nouns; expand mixed-script leftovers; dedupe."""
+    polished: list[str] = []
+    seen: set[str] = set()
+
+    def _add(q: str) -> None:
+        q = (q or "").strip()[:200]
+        if not q:
+            return
+        key = q.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        polished.append(q)
+
+    for raw in queries:
+        q = gloss_cjk_search_terms(raw)
+        if normalize_search_query(q) is None and _has_cjk(q):
+            for fb in fallback_search_queries(q, ""):
+                _add(fb)
+                if len(polished) >= max_n:
+                    return polished
+        else:
+            _add(q)
+            if len(polished) >= max_n:
+                return polished
+    return polished
+
+
 def normalize_search_query(text: str, *, max_len: int = 160) -> str | None:
     """Cheap rewrite only when text is already keyword-like; None = need LLM.
 
     Spoken Cantonese / full clauses must NOT become Tavily queries (e.g.
     ``usagi想食嘅兔糧`` → None so query_generator can emit atomic keywords).
+    Mixed Latin+CJK entity pastes (``usagi 兔糧``) also force LLM expansion.
     """
     raw = " ".join((text or "").split())
     if not raw:
@@ -100,6 +195,9 @@ def normalize_search_query(text: str, *, max_len: int = 160) -> str | None:
             "帮",
         )
     ):
+        return None
+    # Brand/IP + CJK noun needs bilingual expansion (not a ready Tavily query).
+    if _has_latin_token(raw) and _has_cjk(raw):
         return None
     # Require mostly keyword shape: short token count
     if len(raw.split()) > 8:

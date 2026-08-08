@@ -37,7 +37,12 @@ from internal.perception.tavily import search_tavily
 from internal.session import prompts
 from internal.session.context import get_db
 from internal.session.events import session_event_bus
-from internal.session.fast_rules import normalize_search_query, research_rule_pass
+from internal.session.fast_rules import (
+    fallback_search_queries,
+    normalize_search_query,
+    polish_search_queries,
+    research_rule_pass,
+)
 from internal.session.image_format import (
     compose_generation_prompt,
     image_format_from_text,
@@ -310,7 +315,7 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
         QueryGenOut,
     )
     if parsed:
-        queries = parsed.atomic_queries()
+        queries = polish_search_queries(parsed.atomic_queries())
         if queries:
             return {
                 "search_query": queries[0],
@@ -321,17 +326,11 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
                     "tavily_time_range": parsed.time_range,
                 },
             }
-    # Fallback: prefer entity keywords over raw spoken clause
-    seed = entity or user
-    fallback = normalize_search_query(seed) or (
-        f"{entity} Hong Kong".strip() if entity else f"{user[:40]} Hong Kong".strip()
-    )
-    # If seed still has colloquial markers, strip common ones lightly
-    if normalize_search_query(fallback) is None and entity:
-        fallback = f"{entity} Hong Kong".strip()
+    # Fallback: gloss entity/user — never paste mixed-script entity_surface
+    queries = fallback_search_queries(entity, user)
     return {
-        "search_query": fallback[:200],
-        "research": {**research, "search_queries": [fallback[:200]]},
+        "search_query": queries[0],
+        "research": {**research, "search_queries": queries},
     }
 
 

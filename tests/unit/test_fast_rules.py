@@ -53,6 +53,21 @@ def test_normalize_search_query_rejects_colloquial() -> None:
     assert normalize_search_query("有冇熱話") is None
 
 
+def test_normalize_search_query_rejects_mixed_script_entity() -> None:
+    assert normalize_search_query("usagi 兔糧") is None
+    assert normalize_search_query("usagi 兔糧 Hong Kong") is None
+
+
+def test_fallback_search_queries_glosses_rabbit_food() -> None:
+    from internal.session.fast_rules import fallback_search_queries
+
+    qs = fallback_search_queries("usagi 兔糧", "usagi想食嘅兔糧")
+    assert qs
+    assert all("兔糧" not in q for q in qs)
+    assert any("rabbit food" in q.lower() for q in qs)
+    assert any("usagi" in q.lower() for q in qs)
+
+
 def test_normalize_search_query_rejects_long() -> None:
     assert normalize_search_query("想" * 100) is None
 
