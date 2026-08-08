@@ -68,6 +68,17 @@ def test_fallback_search_queries_glosses_rabbit_food() -> None:
     assert any("usagi" in q.lower() for q in qs)
 
 
+def test_polish_search_queries_expands_mixed_script() -> None:
+    from internal.session.fast_rules import polish_search_queries
+
+    qs = polish_search_queries(["usagi 兔糧", "Usagi rabbit food Hong Kong"])
+    assert qs
+    assert all("兔糧" not in q for q in qs)
+    assert any("rabbit food" in q.lower() for q in qs)
+    # Dedupe-friendly: English atomic query kept
+    assert any(q == "Usagi rabbit food Hong Kong" or "usagi rabbit food" in q.lower() for q in qs)
+
+
 def test_normalize_search_query_rejects_long() -> None:
     assert normalize_search_query("想" * 100) is None
 

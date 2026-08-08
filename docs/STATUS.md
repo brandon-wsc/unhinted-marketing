@@ -34,11 +34,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-08-08) — Chat research gate + Tavily∪PG:** → [ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)
 
-- **Unified `route_intent`** — one structured call: `graph_intent` + `research` (`need_facts` / `ambiguous` / `ask_clarify`); no separate graph-routing classifier
+- **Unified `route_intent`** — one structured call: `graph_intent` + `research` (`need_facts` / `ambiguous` / `ask_clarify` / `entity_surface`); no separate graph-routing classifier
 - **`fast_rule_checker`** — semantic-router + FastEmbed (multilingual MiniLM; e5-small not in FastEmbed registry) with regex fallback; only `need_search` → `research_rule_pass`
+- **`query_generator`** — 1–3 atomic `search_queries`; reject spoken clauses and mixed Latin+CJK entity pastes; gloss fallback (`兔糧` → `rabbit food`) when LLM unavailable
 - **Both sources** — research always uses PostgreSQL **and** Tavily; do not skip Tavily on PG hit; both land in `raw_news_events`
 - **Act ≠ search** — `start` / revise gated on clear intent (+ clarify if ambiguous), not on Tavily success; **ambiguity does not block research** — searchable phrases search best-effort first; ask_clarify is for drafting, not a quiz instead of search
-- **Implementation** — in progress on `feat/session-research-tavily` (schema, nodes, `TAVILY_API_KEY`, semantic-router)
+- **Admin** — `GET /api/admin/sessions/{id}/research` + `/admin` Research tab
+- **Implementation** — shipped on `feat/session-research-tavily` (`TAVILY_API_KEY`, semantic-router, nodes, admin)
 
 **Decision (2026-08-04) — Default HK social craft + roast_level:** → [VOICE.md](./VOICE.md)
 
@@ -168,7 +170,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform` + `media[]`; snapshot hydrates `media` from latest draft |
 | Image generation worker | 🟡 Soft | LiteLLM ``aimage_generation`` via ``LLM_IMAGE_MODEL``; chat-only / unset → ``llm.failed``. ``data:`` results upload to S3-compatible store (MinIO) when ``S3_*`` configured; else remain data URLs. ``placeholder`` / no credentials → mock URL |
 | `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
-| Chat research + Tavily ingest | 🟡 | ADR 0009; semantic-router FastEmbed gate + Tavily adapter; `TAVILY_API_KEY` for live search |
+| Chat research + Tavily ingest | ✅ | ADR 0009; semantic gate + multi-query + gloss; Tavily adapter; admin Research tab; `TAVILY_API_KEY` for live search |
 | Curl exit-criteria script | ⏸ **Held** | Manual/API path works; formal curl checklist later |
 
 **Held Phase 2 work does not block Phase 3 UI.**

@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-08
 - **Supersedes:** —
+- **Related:** [ADR 0007](./0007-admin-trace-viewer.md) (admin Research tab aggregates gate + ingest)
 
 ## Context
 
@@ -14,23 +15,28 @@ We also lack a clear policy for: when to search, how to turn messy user text int
 
 1. **Single classifier node (extend `route_intent`)** — One structured LLM call outputs both:
    - `graph_intent`: `chat` | `start` | `revise` | `confirm_intent` (unchanged graph routing)
-   - `research`: `{ need_facts, ambiguous, ask_clarify, … }` (chat/research side channel)
+   - `research`: `{ need_facts, ambiguous, ask_clarify, entity_surface, … }` (chat/research side channel)
    Do **not** keep a separate `intent_classifier` node that re-decides graph routing.
 
-2. **`fast_rule_checker` before the classifier (optional short-circuit)** — Deterministic rules may skip research / Tavily (e.g. pure chitchat, product-howto). Fail → proceed to `chat` (or agent path from `graph_intent`) without query generation. Pass → still run the unified classifier. Rules do not replace ambiguity handling.
+2. **`fast_rule_checker` before the classifier** — Prefer semantic-router + FastEmbed (multilingual MiniLM; fail closed to regex if disabled/unavailable). Only `need_search` → `research_rule_pass=true`. Fail → proceed from `graph_intent` without `query_generator` / Tavily. Pass → still run the unified classifier. Rules do not replace ambiguity handling for **drafting**.
 
-3. **`query_generator` only after gates pass** — When `need_facts` and not `ask_clarify` / not `ambiguous`, a node (or step) emits a **short** `search_query` (+ optional `time_range` / `topic`). Never send raw multi-turn chat verbatim to Tavily. Simple already-search-like utterances may skip an extra LLM and only normalize.
+3. **`query_generator` after research gates** — When `research_rule_pass` and `need_facts`, emit **1–3 atomic `search_queries`** (+ optional `time_range` / `topic`). Never send raw multi-turn chat or spoken Cantonese clauses verbatim to Tavily.
+   - Cheap path: only when the *user* line is already keyword-like (`normalize_search_query`).
+   - Colloquial user text always goes through LLM; `entity_surface` is a hint only.
+   - **Mixed Latin+CJK** pastes (e.g. `usagi 兔糧`) are **not** ready Tavily queries — reject in normalize; LLM must expand CJK product nouns to English; deterministic gloss fallback if LLM unavailable (`兔糧` → `rabbit food`).
+   - **Ambiguity does not block this node** — searchable phrases still generate queries best-effort.
 
-4. **PG ∪ Tavily (both)** — When research runs, **always** query existing PostgreSQL signals **and** call Tavily (or equivalent), then **upsert** Tavily hits into `raw_news_events` with provenance (`source=tavily`, url, excerpt, `signal_id`). Do **not** skip Tavily because PG already has rows — corpora differ. Token/credit savings are not a reason to skip either source.
+4. **PG ∪ Tavily (both)** — When research runs, **always** query existing PostgreSQL signals **and** call Tavily for each atomic query, then **upsert** hits into `raw_news_events` with provenance (`source=tavily`, url, excerpt, `signal_id`). Do **not** skip Tavily because PG already has rows — corpora differ.
 
-5. **Understand ≠ search; act ≠ search success** — Clarifying what the user wants for **drafting** (`graph_intent` start/revise) may use `ask_clarify` when senses conflict. **Searchable user phrases must still run research** (best-effort `search_query` from `entity_surface`) even if `ambiguous` is true — do not replace Tavily with a clarify quiz. Taking action (`start` / revise) is gated on clear intent when ambiguous; failure to search must not block `start` when intent is clear.
+5. **Understand ≠ search; act ≠ search success** — Clarifying what the user wants for **drafting** (`graph_intent` start/revise) may use `ask_clarify` when senses conflict. **Searchable user phrases must still run research** even if `ambiguous` is true — do not replace Tavily with a clarify quiz. Taking action (`start` / revise) is gated on clear intent when ambiguous; failure to search must not block `start` when intent is clear.
 
-6. **LLM zone still read-only on tools** — Session nodes consume PG (via repos / `query_market_trends` shape). Tavily is an **ingest adapter** (worker or session-triggered upsert), not a free-browse tool that answers without persistence. Publish remains HTTP Confirm only ([ADR 0003](./0003-confirm-without-llm.md)).
+6. **LLM zone still read-only on tools** — Session nodes consume PG (via repos). Tavily is an **ingest adapter** (`internal/perception/tavily.py`), not a free-browse tool that answers without persistence. Publish remains HTTP Confirm only ([ADR 0003](./0003-confirm-without-llm.md)).
+
+7. **Admin Research surface** — Ops inspect gate + ingest via `GET /api/admin/sessions/{id}/research` and `/admin?tab=research` ([ADR 0007](./0007-admin-trace-viewer.md)).
 
 ## Consequences
 
-- Extend `IntentRoute` (or successor schema) + `ROUTE_INTENT` prompt; add `fast_rule_checker`, `query_generator`, Tavily ingest adapter; wire chat (and optionally `trend_searcher`) to merged PG+Tavily signal sets.
-- Heuristic `_heuristic_intent` remains offline / parse-fail fallback only; research flags need a deterministic fallback policy (e.g. `need_facts=false` when no LLM).
-- Env: `TAVILY_API_KEY` (and related); STATUS/ROADMAP list Tavily as an ingest source alongside Trends / future Meta.
-- Ambiguous entities (e.g. “usagi”) → `ask_clarify` / chat clarification **before** query generation or acting on a guessed sense.
-- Implementation is accepted as product contract; shipping code may land in follow-up PRs without changing this ADR unless superseded.
+- Extend `IntentRoute` + `ROUTE_INTENT` / `QUERY_GENERATOR` prompts; add `fast_rule_checker`, `query_generator`, `research_ingest`, Tavily adapter; wire chat (and optionally `trend_searcher`) to merged PG+Tavily signal sets.
+- Heuristic `_heuristic_intent` remains offline / parse-fail fallback only; research flags default `need_facts=false` when no LLM.
+- Env: `TAVILY_API_KEY`, `SEMANTIC_ROUTER_*`; STATUS/ROADMAP list Tavily as an ingest source alongside Trends / future Meta.
+- Implementation ships on `feat/session-research-tavily`; further prompt/utterance tuning does not require a superseding ADR unless the gate contract changes.
