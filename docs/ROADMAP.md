@@ -343,7 +343,7 @@ Personas are seeded on first question generation; promoted topics are created by
 | Phase | Source | Method |
 |-------|--------|--------|
 | MVP | Google Trends HK | pytrends / SerpAPI |
-| Next | Tavily web search (session/on-demand + optional batch) | Ingest → `raw_news_events` ([ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)); not free-browse from chat |
+| MVP+ | Tavily web search (session on-demand) | Ingest → `raw_news_events` ([ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)); optional batch later; not free-browse from chat |
 | P3 | Meta trending / insights | Graph API (business account) |
 
 Google News RSS was evaluated and **removed** — poor HK relevance, redirect URLs, not true hot search. No news RSS in future phases.
@@ -410,7 +410,7 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 - [ ] Image generation worker (`executor_image_gen` dispatches; placeholder/local URL in `preview_drafts` for MVP)
 - [x] `POST /sessions/{id}/confirm` — **traditional handler**, stub platform adapter → writes `tool_receipts` row
 - [x] Tool schema validators (Pydantic + JSON Schema) for `query_market_trends` / `publish_social_post` / canonical draft + SSE catalog (`schemas/contracts.py`, `schemas/tools.py`; mirrors in `docs/contracts/`). Node wiring to tool adapters remains a follow-up.
-- [ ] Research gate: extend `route_intent` + `fast_rule_checker` + `query_generator` + Tavily∪PG ingest ([ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)) — **in progress** on `feat/session-research-tavily`
+- [x] Research gate: extend `route_intent` + `fast_rule_checker` + `query_generator` + Tavily∪PG ingest ([ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)); admin Research tab ([ADR 0007](./adr/0007-admin-trace-viewer.md))
 
 **Exit criteria:** curl/HTTPie flow from question → draft → 3 revisions → confirm → receipt row.
 

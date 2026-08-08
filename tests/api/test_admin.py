@@ -255,6 +255,17 @@ async def test_session_trace(client, db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_research_member_forbidden(client) -> None:
+    data = await register_user(client)
+    session_id = uuid.uuid4()
+    res = await client.get(
+        f"/api/admin/sessions/{session_id}/research",
+        headers=auth_header(data["access_token"]),
+    )
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_session_research(client, db_session) -> None:
     data = await register_user(client)
     await _grant_platform_level(db_session, data["user"]["id"], 6)
