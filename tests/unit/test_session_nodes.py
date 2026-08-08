@@ -9,7 +9,15 @@ import pytest
 
 from internal.session import nodes as N
 from internal.session.context import session_db
-from internal.session.io import BriefOut, DraftOut, IntentRoute, ReviewOut, TrendRank
+from internal.session.io import (
+    BriefOut,
+    DraftOut,
+    IntentRoute,
+    QueryGenOut,
+    ResearchFlags,
+    ReviewOut,
+    TrendRank,
+)
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW
 from internal.session.trace import get_node_trace, node_trace_recording
 from schemas.contracts import DraftCopy, SessionBriefData
@@ -54,8 +62,140 @@ async def test_route_intent_heuristic_without_llm(no_llm: None) -> None:
     with node_trace_recording() as steps:
         out = await N.route_intent(_base_state())
     assert out["intent"] == "start"
+    assert out["research"]["need_facts"] is False
     assert steps[-1].node == "route_intent"
     assert steps[-1].intent_out == "start"
+
+
+@pytest.mark.asyncio
+async def test_fast_rule_checker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "internal.session.semantic_gate.classify_semantic_route",
+        lambda _t: "chitchat",
+    )
+    out = await N.fast_rule_checker(
+        _base_state(messages=[{"role": "user", "content": "你好"}])
+    )
+    assert out["research_rule_pass"] is False
+    assert out["research"]["semantic_route"] == "chitchat"
+
+
+@pytest.mark.asyncio
+async def test_route_intent_ambiguity_blocks_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+
+    async def fake_complete_json(**_kwargs):
+        return IntentRoute(
+            intent="start",
+            research=ResearchFlags(
+                need_facts=True,
+                ambiguous=True,
+                ask_clarify=True,
+                entity_surface="usagi",
+            ),
+        ).model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    out = await N.route_intent(
+        _base_state(
+            research_rule_pass=True,
+            messages=[{"role": "user", "content": "usagi 熱話"}],
+        )
+    )
+    assert out["intent"] == "chat"
+    assert out["research"]["ask_clarify"] is True
+
+
+@pytest.mark.asyncio
+async def test_query_generator_normalize_without_llm(no_llm: None) -> None:
+    out = await N.query_generator(
+        _base_state(messages=[{"role": "user", "content": "香港加班"}])
+    )
+    assert "search_query" in out
+    assert "Hong Kong" in out["search_query"] or "香港" in out["search_query"]
+
+
+@pytest.mark.asyncio
+async def test_query_generator_colloquial_uses_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+
+    async def fake_complete_json(**_kwargs):
+        return QueryGenOut(
+            search_queries=["Usagi rabbit food", "Usagi pet feed Hong Kong"],
+            topic="general",
+            time_range="month",
+        ).model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    out = await N.query_generator(
+        _base_state(
+            messages=[{"role": "user", "content": "usagi想食嘅兔糧"}],
+            research={"entity_surface": "usagi 兔糧", "need_facts": True},
+        )
+    )
+    assert out["search_query"] == "Usagi rabbit food"
+    assert out["research"]["search_queries"] == [
+        "Usagi rabbit food",
+        "Usagi pet feed Hong Kong",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_generator_fallback_glosses_entity(no_llm: None) -> None:
+    out = await N.query_generator(
+        _base_state(
+            messages=[{"role": "user", "content": "usagi想食嘅兔糧"}],
+            research={"entity_surface": "usagi 兔糧", "need_facts": True},
+        )
+    )
+    assert "兔糧" not in out["search_query"]
+    assert "rabbit food" in out["search_query"].lower()
+    assert "usagi" in out["search_query"].lower()
+    assert all("兔糧" not in q for q in out["research"]["search_queries"])
+
+
+@pytest.mark.asyncio
+async def test_research_ingest_pg_and_tavily(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    monkeypatch.setattr(
+        N,
+        "search_tavily",
+        AsyncMock(
+            return_value=[
+                {
+                    "signal_id": "tavily:abc",
+                    "source": "tavily",
+                    "title": "HK trend",
+                    "url": "https://example.com/a",
+                    "excerpt": "hello",
+                    "metrics": {"rank": 1},
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(N, "upsert_signal", AsyncMock())
+    monkeypatch.setattr(
+        N,
+        "list_top_signals",
+        AsyncMock(return_value=[fake_signal(signal_id="google_trends_hk:1", title="PG")]),
+    )
+    with session_db(mock_db):
+        out = await N.research_ingest(
+            _base_state(
+                search_query="Hong Kong overtime",
+                research={"search_queries": ["Hong Kong overtime", "HK work culture"]},
+            )
+        )
+    assert out["research_signals"][0]["signal_id"] == "tavily:abc"
+    assert any(s["signal_id"] == "google_trends_hk:1" for s in out["research_signals"])
+    assert N.search_tavily.await_count == 2
+    N.upsert_signal.assert_awaited()
+    mock_db.commit.assert_awaited()
 
 
 @pytest.mark.asyncio

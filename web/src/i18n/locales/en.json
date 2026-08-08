@@ -209,9 +209,11 @@
     "loadFailed": "Failed to load",
     "openNodeSteps": "View steps for this turn",
     "openSessionTrace": "View session trace",
+    "openResearch": "View Research",
     "tabs": {
       "llm": "LLM calls",
       "steps": "Node steps",
+      "research": "Research",
       "trace": "Session Trace"
     },
     "forbidden": {
@@ -291,6 +293,24 @@
       "turns": "Graph turns",
       "noTurns": "No node-step / LLM turn records",
       "llmCount": "{{n}} LLM calls"
+    },
+    "research": {
+      "placeholder": "Paste session UUID…",
+      "load": "Load",
+      "empty": "Enter a session ID to view Research (semantic gate + Tavily∪PG)",
+      "noTurns": "No research-related node steps for this session",
+      "turnDetail": "Turn detail",
+      "semantic": "Semantic",
+      "rulePass": "rule_pass",
+      "needFacts": "need_facts",
+      "askClarify": "ask_clarify",
+      "entity": "entity",
+      "ingest": "ran ingest",
+      "queries": "Search queries",
+      "noQueries": "No atomic queries",
+      "hits": "Hits",
+      "signals": "Signals (Tavily∪PG)",
+      "noSignals": "No research_signals"
     }
   },
   "theme": {

@@ -20,6 +20,8 @@ dependencies = [
     "langgraph>=0.2.0",
     "langgraph-checkpoint-postgres>=2.0.0",
     "boto3>=1.35.0",
+    "httpx>=0.28.0",
+    "semantic-router[fastembed]>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -68,6 +70,7 @@ ignore = [
 "internal/llm/**" = ["UP042", "I001"]  # I001: pydantic.root_model must import before litellm
 "internal/perception/**" = ["BLE001"]
 "internal/session/service.py" = ["BLE001", "RUF005"]
+"internal/session/semantic_gate.py" = ["BLE001"]
 "cmd/api/routes/sessions.py" = ["BLE001"]
 
 [tool.ruff.lint.isort]

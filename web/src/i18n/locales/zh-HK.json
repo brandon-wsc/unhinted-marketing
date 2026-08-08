@@ -209,9 +209,11 @@
     "loadFailed": "載入失敗",
     "openNodeSteps": "睇呢個 turn 嘅 steps",
     "openSessionTrace": "睇 Session Trace",
+    "openResearch": "睇 Research",
     "tabs": {
       "llm": "LLM 呼叫",
       "steps": "Node steps",
+      "research": "Research",
       "trace": "Session Trace"
     },
     "forbidden": {
@@ -291,6 +293,24 @@
       "turns": "Graph turns",
       "noTurns": "未有 node-step / LLM turn 紀錄",
       "llmCount": "{{n}} 個 LLM calls"
+    },
+    "research": {
+      "placeholder": "貼上 session UUID…",
+      "load": "載入",
+      "empty": "輸入 session ID 睇 Research（semantic gate + Tavily∪PG）",
+      "noTurns": "呢個 session 未有 research 相關 node steps",
+      "turnDetail": "Turn 明細",
+      "semantic": "Semantic",
+      "rulePass": "rule_pass",
+      "needFacts": "need_facts",
+      "askClarify": "ask_clarify",
+      "entity": "entity",
+      "ingest": "ran ingest",
+      "queries": "Search queries",
+      "noQueries": "未有 atomic queries",
+      "hits": "Hits",
+      "signals": "Signals（Tavily∪PG）",
+      "noSignals": "未有 research_signals"
     }
   },
   "theme": {

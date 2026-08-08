@@ -14,9 +14,10 @@ function formatTime(iso: string): string {
 type Props = {
   initialSessionId?: string;
   onOpenTurn?: (turnId: string) => void;
+  onOpenResearch?: (sessionId: string) => void;
 };
 
-export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) {
+export function SessionTracePanel({ initialSessionId = "", onOpenTurn, onOpenResearch }: Props) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
   const [sessionInput, setSessionInput] = useState(initialSessionId);
@@ -122,7 +123,19 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn }: Props) 
         <div className="grid gap-4 lg:grid-cols-2">
           <section className="space-y-4">
             <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="mb-2 text-sm font-semibold">{t("admin.sessionTrace.summary")}</h2>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold">{t("admin.sessionTrace.summary")}</h2>
+                {onOpenResearch ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onOpenResearch(trace.id)}
+                  >
+                    {t("admin.openResearch")}
+                  </Button>
+                ) : null}
+              </div>
               <dl className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <dt className="text-muted-foreground">{t("admin.table.mode")}</dt>

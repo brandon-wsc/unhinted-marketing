@@ -24,6 +24,11 @@ class SessionState(TypedDict, total=False):
     user_id: str
     thread_id: str
     intent: Intent
+    # ADR 0009 research gate
+    research_rule_pass: NotRequired[bool]
+    research: NotRequired[dict[str, Any]]
+    search_query: NotRequired[str]
+    research_signals: NotRequired[list[dict[str, Any]]]
     brief: dict[str, Any]
     draft: dict[str, Any]
     image_plan: dict[str, Any]

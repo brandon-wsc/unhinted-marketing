@@ -120,6 +120,36 @@ export type SessionTrace = {
   }>;
 };
 
+export type ResearchSignalHit = {
+  signal_id: string;
+  source: string;
+  title: string;
+  url: string | null;
+  excerpt: string | null;
+  query: string | null;
+};
+
+export type ResearchTurn = {
+  turn_id: string;
+  created_at: string | null;
+  research_rule_pass: boolean | null;
+  semantic_route: string | null;
+  need_facts: boolean | null;
+  ambiguous: boolean | null;
+  ask_clarify: boolean | null;
+  entity_surface: string | null;
+  search_query: string | null;
+  search_queries: string[];
+  signals: ResearchSignalHit[];
+  source_signal_ids: string[];
+  ran_research_ingest: boolean;
+};
+
+export type SessionResearch = {
+  session_id: string;
+  turns: ResearchTurn[];
+};
+
 export const LLM_CALL_PAGE_SIZE = 50;
 export const NODE_STEP_PAGE_SIZE = 50;
 
@@ -196,6 +226,15 @@ export async function apiAdminGetSessionTrace(
   sessionId: string,
 ): Promise<SessionTrace> {
   const res = await fetchWithAuth(accessToken, `${API_BASE}/admin/sessions/${sessionId}/trace`);
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiAdminGetSessionResearch(
+  accessToken: string | null,
+  sessionId: string,
+): Promise<SessionResearch> {
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/admin/sessions/${sessionId}/research`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }

@@ -26,6 +26,9 @@ from schemas.admin import (
     NodeStepDetail,
     NodeStepList,
     NodeStepSummary,
+    ResearchSignalHit,
+    ResearchTurn,
+    SessionResearch,
     SessionTrace,
     TraceDraftRevision,
     TraceMessage,
@@ -270,6 +273,113 @@ async def get_session_trace(
             )
             for s in signal_rows
         ],
+        turns=[turns_map[tid] for tid in turn_order],
+    )
+
+
+@router.get("/sessions/{session_id}/research", response_model=SessionResearch)
+async def get_session_research(
+    session_id: uuid.UUID,
+    _admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SessionResearch:
+    """Aggregate ADR 0009 research gate + Tavily∪PG ingest from node-step outputs."""
+    session = await db.get(Session, session_id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
+    steps = (
+        await db.scalars(
+            select(SessionNodeStep)
+            .where(SessionNodeStep.session_id == session_id)
+            .order_by(asc(SessionNodeStep.created_at), asc(SessionNodeStep.seq))
+        )
+    ).all()
+
+    research_nodes = {
+        "fast_rule_checker",
+        "route_intent",
+        "query_generator",
+        "research_ingest",
+    }
+    turns_map: dict[uuid.UUID, ResearchTurn] = {}
+    turn_order: list[uuid.UUID] = []
+
+    def _ensure(tid: uuid.UUID, created_at: datetime | None) -> ResearchTurn:
+        if tid not in turns_map:
+            turns_map[tid] = ResearchTurn(turn_id=tid, created_at=created_at)
+            turn_order.append(tid)
+        return turns_map[tid]
+
+    for step in steps:
+        if step.node not in research_nodes:
+            continue
+        turn = _ensure(step.turn_id, step.created_at)
+        if turn.created_at is None:
+            turn.created_at = step.created_at
+        out = step.output if isinstance(step.output, dict) else {}
+        research = out.get("research") if isinstance(out.get("research"), dict) else {}
+
+        if step.node == "fast_rule_checker":
+            if "research_rule_pass" in out:
+                turn.research_rule_pass = bool(out.get("research_rule_pass"))
+            if research.get("semantic_route") is not None:
+                turn.semantic_route = str(research.get("semantic_route"))
+        elif step.node == "route_intent":
+            if "research_rule_pass" in out:
+                turn.research_rule_pass = bool(out.get("research_rule_pass"))
+            if "need_facts" in research:
+                turn.need_facts = bool(research.get("need_facts"))
+            if "ambiguous" in research:
+                turn.ambiguous = bool(research.get("ambiguous"))
+            if "ask_clarify" in research:
+                turn.ask_clarify = bool(research.get("ask_clarify"))
+            if research.get("entity_surface"):
+                turn.entity_surface = str(research.get("entity_surface"))
+            if research.get("semantic_route") is not None:
+                turn.semantic_route = str(research.get("semantic_route"))
+        elif step.node == "query_generator":
+            if out.get("search_query"):
+                turn.search_query = str(out.get("search_query"))
+            qs = research.get("search_queries") or out.get("search_queries")
+            if isinstance(qs, list):
+                turn.search_queries = [str(q) for q in qs if q]
+            elif turn.search_query:
+                turn.search_queries = [turn.search_query]
+        elif step.node == "research_ingest":
+            turn.ran_research_ingest = True
+            if out.get("search_query"):
+                turn.search_query = str(out.get("search_query"))
+            qs = research.get("search_queries") or out.get("search_queries")
+            if isinstance(qs, list) and qs:
+                turn.search_queries = [str(q) for q in qs if q]
+            ids = out.get("source_signal_ids")
+            if isinstance(ids, list):
+                turn.source_signal_ids = [str(i) for i in ids if i]
+            signals_raw = out.get("research_signals")
+            hits: list[ResearchSignalHit] = []
+            if isinstance(signals_raw, list):
+                for row in signals_raw:
+                    if not isinstance(row, dict):
+                        continue
+                    sid = row.get("signal_id")
+                    if not sid:
+                        continue
+                    metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+                    hits.append(
+                        ResearchSignalHit(
+                            signal_id=str(sid),
+                            source=str(row.get("source") or ""),
+                            title=str(row.get("title") or ""),
+                            url=str(row["url"]) if row.get("url") else None,
+                            excerpt=str(row["excerpt"]) if row.get("excerpt") else None,
+                            query=str(metrics["query"]) if metrics.get("query") else None,
+                        )
+                    )
+            turn.signals = hits
+
+    return SessionResearch(
+        session_id=session_id,
         turns=[turns_map[tid] for tid in turn_order],
     )
 

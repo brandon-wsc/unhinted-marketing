@@ -99,6 +99,7 @@ function DetailSheet({
   onOpenChange,
   onOpenTurn,
   onOpenSession,
+  onOpenResearch,
 }: {
   detail: LlmCallRecordDetail | null;
   loading: boolean;
@@ -106,6 +107,7 @@ function DetailSheet({
   onOpenChange: (open: boolean) => void;
   onOpenTurn?: (turnId: string) => void;
   onOpenSession?: (sessionId: string) => void;
+  onOpenResearch?: (sessionId: string) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -204,6 +206,16 @@ function DetailSheet({
                         {t("admin.openSessionTrace")}
                       </Button>
                     )}
+                    {onOpenResearch && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onOpenResearch(detail.session_id!)}
+                      >
+                        {t("admin.openResearch")}
+                      </Button>
+                    )}
                   </dd>
                 </div>
               )}
@@ -234,9 +246,14 @@ function DetailSheet({
 type LlmCallRecordsProps = {
   onOpenTurn?: (turnId: string) => void;
   onOpenSession?: (sessionId: string) => void;
+  onOpenResearch?: (sessionId: string) => void;
 };
 
-export function LlmCallRecords({ onOpenTurn, onOpenSession }: LlmCallRecordsProps = {}) {
+export function LlmCallRecords({
+  onOpenTurn,
+  onOpenSession,
+  onOpenResearch,
+}: LlmCallRecordsProps = {}) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
 
@@ -480,6 +497,7 @@ export function LlmCallRecords({ onOpenTurn, onOpenSession }: LlmCallRecordsProp
         }}
         onOpenTurn={onOpenTurn}
         onOpenSession={onOpenSession}
+        onOpenResearch={onOpenResearch}
       />
     </div>
   );

@@ -114,6 +114,38 @@ class TraceTurn(BaseModel):
     llm_calls: list[LlmCallRecordSummary] = Field(default_factory=list)
 
 
+class ResearchSignalHit(BaseModel):
+    signal_id: str
+    source: str
+    title: str
+    url: str | None = None
+    excerpt: str | None = None
+    query: str | None = None  # atomic Tavily query that produced the hit
+
+
+class ResearchTurn(BaseModel):
+    """One graph turn's research gate + Tavily∪PG ingest (ADR 0009)."""
+
+    turn_id: uuid.UUID
+    created_at: datetime | None = None
+    research_rule_pass: bool | None = None
+    semantic_route: str | None = None
+    need_facts: bool | None = None
+    ambiguous: bool | None = None
+    ask_clarify: bool | None = None
+    entity_surface: str | None = None
+    search_query: str | None = None
+    search_queries: list[str] = Field(default_factory=list)
+    signals: list[ResearchSignalHit] = Field(default_factory=list)
+    source_signal_ids: list[str] = Field(default_factory=list)
+    ran_research_ingest: bool = False
+
+
+class SessionResearch(BaseModel):
+    session_id: uuid.UUID
+    turns: list[ResearchTurn] = Field(default_factory=list)
+
+
 class SessionTrace(BaseModel):
     id: uuid.UUID
     mode: str

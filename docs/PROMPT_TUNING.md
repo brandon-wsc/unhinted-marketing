@@ -3,7 +3,7 @@
 How to use the admin LLM records, node steps, and Session Trace to fine-tune graph prompts. Product contracts stay in [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) / [ADR 0007](./adr/0007-admin-trace-viewer.md); this doc is the **operator workflow**.
 
 **Entry:** sign in as `platform_level ≥ 6` → UserMenu → **Admin** → SPA `/admin` (API is `/api/admin/*`)  
-**Tabs:** LLM calls · Node steps · Session Trace
+**Tabs:** LLM calls · Node steps · Research · Session Trace
 
 ---
 
@@ -13,9 +13,20 @@ How to use the admin LLM records, node steps, and Session Trace to fine-tune gra
 |-----|---------|
 | **LLM calls** | What did the model *see* and *return*? (`system_prompt`, `user_prompt`, `response_text`, tokens, latency, `parse_ok`, `fallback_used`) |
 | **Node steps** | Which graph nodes ran in a turn, in what order? (`seq`, `mode_in`/`mode_out`, `intent_out`, capped `output`) |
+| **Research** | ADR 0009 gate + ingest: `semantic_route`, `search_queries`, Tavily∪PG `research_signals` (per turn) |
 | **Session Trace** | What did the *user* experience? Messages, draft revisions, signal grounding, turns grouped by `turn_id` |
 
 Join key: **`turn_id`** (one graph `ainvoke` / resume). LLM rows and node steps for the same turn share it. Session-level join: **`session_id`**.
+
+### Research tab — what “good” looks like
+
+Paste `session_id` (or jump from LLM detail / Session Trace):
+
+- **semantic_route** / **rule_pass** — gate decision before `query_generator`
+- **search_queries** — should be short English/keyword atomic queries, **not** spoken Cantonese and **not** mixed pastes like `usagi 兔糧`
+- **Signals** — Tavily∪PG hits with `source`, title, url; `metrics.query` shows which atomic query produced the hit
+
+If queries still look like entity_surface verbatim, check `query_generator` LLM (`parse_ok` / fallback) and the gloss path in `fast_rules`.
 
 ---
 
