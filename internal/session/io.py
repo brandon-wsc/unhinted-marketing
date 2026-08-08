@@ -22,9 +22,28 @@ class IntentRoute(BaseModel):
 
 
 class QueryGenOut(BaseModel):
-    search_query: str = Field(min_length=1, max_length=200)
+    """Atomic web queries — prefer search_queries; search_query kept for single-query compat."""
+
+    search_query: str = Field(default="", max_length=200)
+    search_queries: list[str] = Field(default_factory=list, max_length=3)
     topic: Literal["general", "news", "finance"] = "news"
     time_range: Literal["day", "week", "month", "year"] | None = "week"
+
+    def atomic_queries(self) -> list[str]:
+        qs = [q.strip() for q in self.search_queries if isinstance(q, str) and q.strip()]
+        if not qs and self.search_query.strip():
+            qs = [self.search_query.strip()]
+        # Dedupe, cap length
+        out: list[str] = []
+        seen: set[str] = set()
+        for q in qs[:3]:
+            q = q[:200]
+            key = q.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(q)
+        return out
 
 
 class TrendRank(BaseModel):

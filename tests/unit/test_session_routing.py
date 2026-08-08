@@ -66,9 +66,10 @@ def test_route_after_intent_research_gate() -> None:
         "research": {"need_facts": True, "ambiguous": False, "ask_clarify": False},
     }
     assert route_after_intent(state) == "query_generator"
+    # Ambiguity must NOT block research — search best-effort first.
     assert (
         route_after_intent({**state, "research": {"need_facts": True, "ambiguous": True}})
-        == "chat"
+        == "query_generator"
     )
 
 
@@ -82,13 +83,19 @@ def test_should_research() -> None:
         _should_research(
             {
                 "research_rule_pass": True,
-                "research": {"need_facts": True},
+                "research": {"need_facts": True, "ambiguous": True, "ask_clarify": True},
             }
         )
         is True
     )
     assert (
         _should_research({"research_rule_pass": False, "research": {"need_facts": True}})
+        is False
+    )
+    assert (
+        _should_research(
+            {"research_rule_pass": True, "research": {"need_facts": False}}
+        )
         is False
     )
 

@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     # Tavily web search ingest (ADR 0009) — session research upserts into raw_news_events
     tavily_api_key: str | None = None
 
+    # Semantic research gate (ADR 0009) — FastEmbed local ONNX via semantic-router
+    semantic_router_enabled: bool = True
+    # FastEmbed registry has no multilingual-e5-small; default MiniLM multilingual small.
+    # e5-large works but ~2GB — set explicitly if desired.
+    semantic_router_model: str = (
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
+    semantic_router_score_threshold: float = 0.5
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

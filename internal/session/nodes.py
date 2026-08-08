@@ -213,18 +213,27 @@ def _heuristic_research() -> dict[str, Any]:
 
 
 def _should_research(state: SessionState) -> bool:
+    """Research is not blocked by ambiguity — search best-effort; clarify only gates act."""
     if not state.get("research_rule_pass", False):
         return False
     research = state.get("research") or {}
-    if research.get("ask_clarify") or research.get("ambiguous"):
-        return False
     return bool(research.get("need_facts"))
 
 
 @agent_progress("fast_rule_checker")
 async def fast_rule_checker(state: SessionState) -> dict[str, Any]:
     text = _last_user_text(state)
-    return {"research_rule_pass": research_rule_pass(text)}
+    from internal.session.fast_rules import research_pass_for_route
+    from internal.session.semantic_gate import classify_semantic_route
+
+    route = classify_semantic_route(text)
+    return {
+        "research_rule_pass": research_pass_for_route(route, text),
+        "research": {
+            **(state.get("research") or {}),
+            "semantic_route": route,
+        },
+    }
 
 
 @agent_progress("route_intent")
@@ -252,6 +261,9 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
     )
     if not rule_pass:
         research = {**research, "need_facts": False}
+    prior = state.get("research") or {}
+    if prior.get("semantic_route") and "semantic_route" not in research:
+        research = {**research, "semantic_route": prior["semantic_route"]}
     mode = state.get("mode", MODE_CHAT)
     if intent == "revise" and mode != MODE_PREVIEW:
         intent = "start" if _heuristic_intent(state) == "start" else "chat"
@@ -274,15 +286,21 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
 async def query_generator(state: SessionState) -> dict[str, Any]:
     user = _last_user_text(state)
     research = state.get("research") or {}
+    entity = str(research.get("entity_surface") or "").strip()
+
+    # Cheap path only when the *user* line is already keyword-like.
+    # Colloquial user text always goes through LLM (entity_surface is a hint only).
     normalized = normalize_search_query(user)
     if normalized:
         return {
             "search_query": normalized,
+            "research": {**research, "search_queries": [normalized]},
         }
 
     payload = {
         "last_user_message": user,
         "research": research,
+        "entity_surface": entity,
         "company": (state.get("company_context") or {}).get("name"),
     }
     parsed = await _parse_llm_json(
@@ -291,58 +309,92 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
         json.dumps(payload, ensure_ascii=False),
         QueryGenOut,
     )
-    if parsed and parsed.search_query.strip():
-        return {
-            "search_query": parsed.search_query.strip()[:200],
-            "research": {
-                **research,
-                "tavily_topic": parsed.topic,
-                "tavily_time_range": parsed.time_range,
-            },
-        }
-    # Fallback: truncated user text + HK bias
-    fallback = normalize_search_query(user[:60]) or f"{user[:80]} Hong Kong".strip()
-    return {"search_query": fallback[:200]}
+    if parsed:
+        queries = parsed.atomic_queries()
+        if queries:
+            return {
+                "search_query": queries[0],
+                "research": {
+                    **research,
+                    "search_queries": queries,
+                    "tavily_topic": parsed.topic,
+                    "tavily_time_range": parsed.time_range,
+                },
+            }
+    # Fallback: prefer entity keywords over raw spoken clause
+    seed = entity or user
+    fallback = normalize_search_query(seed) or (
+        f"{entity} Hong Kong".strip() if entity else f"{user[:40]} Hong Kong".strip()
+    )
+    # If seed still has colloquial markers, strip common ones lightly
+    if normalize_search_query(fallback) is None and entity:
+        fallback = f"{entity} Hong Kong".strip()
+    return {
+        "search_query": fallback[:200],
+        "research": {**research, "search_queries": [fallback[:200]]},
+    }
 
 
 @agent_progress("research_ingest")
 async def research_ingest(state: SessionState) -> dict[str, Any]:
-    """PG ∪ Tavily: always load PG; always attempt Tavily upsert when query set."""
+    """PG ∪ Tavily: always load PG; run each atomic search_query via Tavily upsert."""
     db = get_db()
-    query = (state.get("search_query") or "").strip()
     research = dict(state.get("research") or {})
+    queries = [
+        q.strip()
+        for q in (research.get("search_queries") or [])
+        if isinstance(q, str) and q.strip()
+    ]
+    primary = (state.get("search_query") or "").strip()
+    if primary and primary not in queries:
+        queries.insert(0, primary)
+    queries = queries[:3]
+
     topic = str(research.get("tavily_topic") or "news")
     time_range = research.get("tavily_time_range") or "week"
     if time_range not in ("day", "week", "month", "year"):
         time_range = "week"
+    topic_s = topic if topic in ("general", "news", "finance") else "news"
 
     tavily_items: list[dict[str, Any]] = []
-    if query:
-        tavily_items = await search_tavily(
+    seen_ids: set[str] = set()
+    for query in queries:
+        batch = await search_tavily(
             query,
             max_results=5,
-            topic=topic if topic in ("general", "news", "finance") else "news",
+            topic=topic_s,
             time_range=time_range,
         )
-        for item in tavily_items:
-            try:
-                await upsert_signal(
-                    db,
-                    signal_id=item["signal_id"],
-                    source=item["source"],
-                    title=item["title"],
-                    url=item.get("url"),
-                    excerpt=item.get("excerpt"),
-                    metrics=item.get("metrics") or {},
-                )
-            except Exception:
-                logger.exception("failed to upsert Tavily signal %s", item.get("signal_id"))
-        if tavily_items:
-            try:
-                await db.commit()
-            except Exception:
-                logger.exception("commit after Tavily upsert failed")
-                await db.rollback()
+        for item in batch:
+            sid = item.get("signal_id")
+            if not sid or sid in seen_ids:
+                continue
+            seen_ids.add(sid)
+            # Annotate which atomic query produced the hit
+            metrics = dict(item.get("metrics") or {})
+            metrics["query"] = query[:200]
+            item = {**item, "metrics": metrics}
+            tavily_items.append(item)
+
+    for item in tavily_items:
+        try:
+            await upsert_signal(
+                db,
+                signal_id=item["signal_id"],
+                source=item["source"],
+                title=item["title"],
+                url=item.get("url"),
+                excerpt=item.get("excerpt"),
+                metrics=item.get("metrics") or {},
+            )
+        except Exception:
+            logger.exception("failed to upsert Tavily signal %s", item.get("signal_id"))
+    if tavily_items:
+        try:
+            await db.commit()
+        except Exception:
+            logger.exception("commit after Tavily upsert failed")
+            await db.rollback()
 
     pg_signals = await list_top_signals(db, limit=20, region="HK")
     pg_rows = _signals_payload(pg_signals)
@@ -372,12 +424,15 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
 
     ctx = dict(state.get("company_context") or {})
     ctx["research_signals"] = merged[:20]
-    if query:
-        ctx["search_query"] = query
+    if queries:
+        ctx["search_query"] = queries[0]
+        ctx["search_queries"] = queries
     return {
         "research_signals": merged[:20],
+        "search_query": queries[0] if queries else primary,
         "company_context": ctx,
         "source_signal_ids": [r["signal_id"] for r in merged[:8]],
+        "research": {**research, "search_queries": queries},
     }
 
 
