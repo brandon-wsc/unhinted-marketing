@@ -542,9 +542,9 @@ function AgentActionList({ actions }: { actions: AgentActionRecord[] }) {
             key={action.id}
             className="flex items-start gap-2 text-xs leading-snug text-muted-foreground"
           >
-            <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+            <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center text-voice">
               {action.status === "running" ? (
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-voice" />
               ) : (
                 <CheckIcon />
               )}

@@ -38,9 +38,7 @@ export function RecommendedQuestions({ questions, loading, isStale, disabled, on
               className="w-full rounded-xl border border-border bg-card px-4 py-3 text-left text-sm leading-relaxed transition hover:border-ring hover:bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="block">{q.text}</span>
-              {q.rationale && (
-                <span className="mt-1 block text-xs text-muted-foreground">{q.rationale}</span>
-              )}
+              {q.rationale && <span className="mt-1 block text-xs text-voice">{q.rationale}</span>}
             </button>
           </li>
         ))}
