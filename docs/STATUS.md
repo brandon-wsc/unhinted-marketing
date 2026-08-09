@@ -129,6 +129,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Theme is manual light/dark only** — no system mode; single `UserMenu` module renders a dropdown on desktop and the whole menu as a dialog on mobile
 - Composer send/stop are ghost icon buttons (akar send mark; lucide square stop)
 - Focus rings standardized to 1px solid `ring` across input / textarea / select / badge / scroll-area
+- App header spreads full width (logo hard-left, user menu hard-right) — no centered `max-w-5xl` column
 
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
