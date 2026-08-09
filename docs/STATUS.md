@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-08  
+> **Last updated:** 2026-08-09  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK 小編 + `roast_level` ([VOICE.md](./VOICE.md)) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -116,6 +116,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Session shell layout** — `split` vs `paged` from **container width vs content min-widths** (`session-layout.ts`: history + chat [+ preview]), not viewport `lg` / device names; measured via `useContainerWidth` on the chat shell
 - **Agent rule** — [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc)
 - **Composed helpers** — `FormField`, `IconButton` in `web/src/components/`; menus/confirm via `DropdownMenu` / `AlertDialog`
+
+**Decision (2026-08-09) — Design-in-repo = docs + tokens (no design-tool dep):**
+
+- Visual intent lives under [`docs/design/`](./design/) — [BRIEF](./design/BRIEF.md) (personality + open direction), [TOKENS](./design/TOKENS.md) (mirrors `index.css`), [SCREENS](./design/SCREENS.md) (as-shipped inventory)
+- Runtime paint remains `web/src/index.css` `@theme`; change brief/tokens first, then CSS
+- Style direction **not locked** — working proposal **A 茶餐廳夜檔**; product name stays Unhinted (“unhinged” = craft attitude / VOICE, not chrome rename)
+- External design apps (Penpot/Figma/…) optional later — not required for this SSOT
 
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
@@ -272,7 +279,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
 | `/admin` | Platform admin (level ≥ 6) — LLM calls / node steps / session trace |
 
-**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
+**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Visual brief + token inventory in [`docs/design/`](./design/). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
 
 **UX features:**
 
@@ -321,6 +328,8 @@ unhinted-marketing/
     ├── GETTING_STARTED.md
     ├── TESTING.md            # path-tiered coverage gates
     ├── STATUS.md             # this file
+    ├── VOICE.md              # HK social craft
+    ├── design/               # visual brief + tokens + screen inventory
     ├── adr/                  # Architecture Decision Records
     ├── contracts/            # JSON Schema mirrors (generated)
     └── openapi.json          # FastAPI OpenAPI (generated)
