@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { UserMenuDropdown } from "@/components/user-menu-dropdown";
+import { UserMenu } from "@/components/user-menu";
 
 const { changeLanguage, setMode, logout, navigate } = vi.hoisted(() => ({
   changeLanguage: vi.fn(),
@@ -47,13 +47,22 @@ vi.mock("@/context/auth-context", () => ({
 vi.mock("@/context/theme-context", () => ({
   useTheme: () => ({
     mode: "light",
-    resolved: "light",
     setMode,
   }),
 }));
 
-describe("UserMenuDropdown", () => {
+function mockMobileViewport(matches: boolean) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches,
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+}
+
+describe("UserMenu (desktop dropdown)", () => {
   beforeEach(() => {
+    mockMobileViewport(false);
     changeLanguage.mockClear();
     setMode.mockClear();
     logout.mockClear();
@@ -63,7 +72,7 @@ describe("UserMenuDropdown", () => {
 
   it("opens and closes the menu", async () => {
     const user = userEvent.setup();
-    render(<UserMenuDropdown />);
+    render(<UserMenu />);
 
     const trigger = screen.getByRole("button", { name: /Ada/i });
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -75,19 +84,19 @@ describe("UserMenuDropdown", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("calls setMode when a theme option is selected", async () => {
+  it("toggles dark mode via the theme switch", async () => {
     const user = userEvent.setup();
-    render(<UserMenuDropdown />);
+    render(<UserMenu />);
 
     await user.click(screen.getByRole("button", { name: /Ada/i }));
-    await user.click(screen.getByRole("menuitemradio", { name: "theme.dark" }));
+    await user.click(screen.getByRole("switch", { name: "theme.label" }));
 
     expect(setMode).toHaveBeenCalledWith("dark");
   });
 
   it("calls changeLanguage when a locale is selected", async () => {
     const user = userEvent.setup();
-    render(<UserMenuDropdown />);
+    render(<UserMenu />);
 
     await user.click(screen.getByRole("button", { name: /Ada/i }));
     await user.click(screen.getByRole("menuitemradio", { name: "繁體中文（香港）" }));
@@ -97,7 +106,7 @@ describe("UserMenuDropdown", () => {
 
   it("hides the admin entry for members", async () => {
     const user = userEvent.setup();
-    render(<UserMenuDropdown />);
+    render(<UserMenu />);
 
     await user.click(screen.getByRole("button", { name: /Ada/i }));
 
@@ -107,11 +116,54 @@ describe("UserMenuDropdown", () => {
   it("navigates to /admin from the admin entry for admins", async () => {
     mockUser.platform_level = 9;
     const user = userEvent.setup();
-    render(<UserMenuDropdown />);
+    render(<UserMenu />);
 
     await user.click(screen.getByRole("button", { name: /Ada/i }));
     await user.click(screen.getByRole("menuitem", { name: "admin.menuEntry" }));
 
     expect(navigate).toHaveBeenCalledWith("/admin");
+  });
+});
+
+describe("UserMenu (mobile dialog)", () => {
+  beforeEach(() => {
+    mockMobileViewport(true);
+    changeLanguage.mockClear();
+    setMode.mockClear();
+    logout.mockClear();
+    navigate.mockClear();
+    mockUser.platform_level = 3;
+  });
+
+  it("opens the whole menu as a dialog and closes via the X icon", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(screen.getByRole("button", { name: /Ada/i }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "theme.label" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "header.menu.close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("toggles dark mode via the theme switch", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(screen.getByRole("button", { name: /Ada/i }));
+    await user.click(screen.getByRole("switch", { name: "theme.label" }));
+
+    expect(setMode).toHaveBeenCalledWith("dark");
+  });
+
+  it("calls changeLanguage when a locale row is selected", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(screen.getByRole("button", { name: /Ada/i }));
+    await user.click(screen.getByRole("button", { name: "繁體中文（香港）" }));
+
+    expect(changeLanguage).toHaveBeenCalledWith("zh-HK");
   });
 });

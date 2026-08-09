@@ -1,7 +1,7 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-08  
-> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK 小編 + `roast_level` ([VOICE.md](./VOICE.md)) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
+> **Last updated:** 2026-08-09  
+> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
 This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). For architecture and phase plans, see ROADMAP.
@@ -16,8 +16,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Auth DB tables + Alembic | ✅ Done |
 | React login / register / dashboard shell | ✅ Done |
 | i18n (zh-HK, English JSON keys) | ✅ Done |
-| Dark / light / system theme | ✅ Done |
-| App header (logo + settings dropdown) | ✅ Done |
+| Dark / light theme (manual switch, no system mode) | ✅ Done |
+| App header (logo + user menu — dropdown on desktop, dialog on mobile) | ✅ Done |
 | HK hot search ingestion | ✅ Done (Google Trends HK only) |
 | Recommended questions cache + API | ✅ Done |
 | OKF knowledge scaffold | ➖ Removed — knowledge in PostgreSQL only |
@@ -44,7 +44,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-08-04) — Default HK social craft + roast_level:** → [VOICE.md](./VOICE.md)
 
-- **Default craft** — 港式小編 (IKEA feel × Duolingo short/sharp): 貼地 · 有鉤 · 有畫面 · 短 · 有邊界
+- **Default craft** — HK editor voice (IKEA feel × Duolingo short/sharp): 貼地 · 有鉤 · 有畫面 · 短 · 有邊界
 - **Tunable** — `entities.profile.roast_level` 0–3 (missing → 1); injected as `company_context.voice` in `load_context`
 - **Prompts** — `BRAINSTORM` / `EXECUTOR_POST` / `EDIT_COPY` / `REVIEWER` share craft block + few-shots; chat stays assistant voice
 
@@ -116,6 +116,20 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Session shell layout** — `split` vs `paged` from **container width vs content min-widths** (`session-layout.ts`: history + chat [+ preview]), not viewport `lg` / device names; measured via `useContainerWidth` on the chat shell
 - **Agent rule** — [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc)
 - **Composed helpers** — `FormField`, `IconButton` in `web/src/components/`; menus/confirm via `DropdownMenu` / `AlertDialog`
+
+**Decision (2026-08-09) — Design-in-repo docs first (harness desk proposed, CSS unchanged):**
+
+- Positioning + token proposal under [`docs/design/`](./design/) — reliable shell harnesses unhinged craft; see [BRIEF](./design/BRIEF.md) / [TOKENS](./design/TOKENS.md)
+- No Liquid Glass / neon shell; structure stays shadcn
+
+**Decision (2026-08-10) — Harness desk applied to runtime + chrome refresh:**
+
+- `web/src/index.css` carries the harness desk tokens (IBM Plex Sans / Noto Sans HK, ink primary, voice accent); Inter + indigo removed
+- Voice accent (`text-voice` / `bg-voice`) only on editor-voice surfaces — agent action trail, recommended-question hints
+- **Theme is manual light/dark only** — no system mode; single `UserMenu` module renders a dropdown on desktop and the whole menu as a dialog on mobile
+- Composer send/stop are ghost icon buttons (akar send mark; lucide square stop)
+- Focus rings standardized to 1px solid `ring` across input / textarea / select / badge / scroll-area
+- App header spreads full width (logo hard-left, user menu hard-right) — no centered `max-w-5xl` column
 
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
@@ -272,13 +286,13 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
 | `/admin` | Platform admin (level ≥ 6) — LLM calls / node steps / session trace |
 
-**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
+**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; harness-desk values from [`docs/design/`](./design/) **applied**; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`, `UserMenu`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
 
 **UX features:**
 
-- **Header:** Logo + brand name (top-left); user menu dropdown (top-right) with language, theme, logout
+- **Header:** Logo + brand name (top-left); user menu (top-right) with language, theme switch, logout — dropdown on desktop, dialog on mobile
 - **i18n:** `react-i18next`, locale `zh-HK`, keys in English in `web/src/i18n/locales/zh-HK.json` — extensible via `SUPPORTED_LOCALES`
-- **Theme:** Light / dark / system, persisted in `localStorage`
+- **Theme:** Light / dark manual switch (no system mode), persisted in `localStorage`
 - **Form memory:** Last user email / display name / org name from `localStorage` (not fake placeholders)
 - **Auth:** Access token in memory; refresh via cookie; auto-refresh on app load
 - **Phase 3 (shipped):** Chat workspace at `/` — `useSession` REST-first + SSE; Streamdown + `@streamdown/cjk`; live `message.delta`; Agent Mode UI (`agent.progress` trail persisted on user-message `metadata.agent_actions`; brief / `draft.awaiting_image_ok` interrupt; snapshot `interrupted` rehydrates Generate-image CTA); landing recommended-question cards; IG Preview + Confirm; Gemini-style history; **content-based shell** (`split` vs `paged` from pane min-widths, not viewport `lg`); paged Chat primary with history icon + Preview via ready banner / **上一頁**; `llm.failed` inline error + Retry; shell fits `h-dvh` with per-pane scroll; no `useChat`

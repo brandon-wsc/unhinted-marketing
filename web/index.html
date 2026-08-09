@@ -6,21 +6,15 @@
     <title>Unhinted Marketing</title>
     <script>
       (() => {
-        var mode = localStorage.getItem("unhinted-theme");
-        var resolved =
-          mode === "light" || mode === "dark"
-            ? mode
-            : window.matchMedia("(prefers-color-scheme: dark)").matches
-              ? "dark"
-              : "light";
-        document.documentElement.dataset.theme = resolved;
-        document.documentElement.classList.toggle("dark", resolved === "dark");
+        var mode = localStorage.getItem("unhinted-theme") === "dark" ? "dark" : "light";
+        document.documentElement.dataset.theme = mode;
+        document.documentElement.classList.toggle("dark", mode === "dark");
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+HK:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
   </head>

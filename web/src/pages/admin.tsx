@@ -60,7 +60,7 @@ export function AdminPage() {
           <p className="mt-1 text-sm text-muted-foreground">{t("admin.forbidden.body")}</p>
           <Link
             to="/"
-            className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+            className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
           >
             {t("admin.forbidden.back")}
           </Link>

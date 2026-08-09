@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { AppLogo } from "@/components/app-logo";
-import { UserMenuDropdown } from "@/components/user-menu-dropdown";
+import { UserMenu } from "@/components/user-menu";
 
 type AppHeaderProps = {
   className?: string;
@@ -11,9 +11,9 @@ export function AppHeader({ className = "" }: AppHeaderProps) {
     <header
       className={`z-40 shrink-0 border-b border-border bg-card/80 backdrop-blur ${className}`}
     >
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+      <div className="flex items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <AppLogo />
-        <UserMenuDropdown />
+        <UserMenu />
       </div>
     </header>
   );
