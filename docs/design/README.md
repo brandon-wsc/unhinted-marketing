@@ -5,7 +5,8 @@
 
 | Doc | Job |
 |-----|-----|
-| [BRIEF.md](./BRIEF.md) | Positioning + shell vs 小編 |
+| [PROMPT.md](./PROMPT.md) | **Copy-paste** design agent system prompt |
+| [BRIEF.md](./BRIEF.md) | Visual brief (short) |
 | [TOKENS.md](./TOKENS.md) | As-shipped vs **proposed** harness desk tokens |
 
 **Voice / copy craft:** [VOICE.md](../VOICE.md) — captions, not chrome.

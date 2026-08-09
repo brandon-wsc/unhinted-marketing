@@ -119,7 +119,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-08-09) — Design-in-repo docs first (harness desk proposed, CSS unchanged):**
 
-- Positioning + token proposal under [`docs/design/`](./design/) — reliable shell harnesses unhinged craft; see [BRIEF](./design/BRIEF.md) / [TOKENS](./design/TOKENS.md)
+- Positioning + token proposal under [`docs/design/`](./design/) — agent prompt [PROMPT](./design/PROMPT.md); brief [BRIEF](./design/BRIEF.md) / tokens [TOKENS](./design/TOKENS.md)
 - **Runtime still** Inter + indigo in `web/src/index.css` until an explicit token apply pass
 - No Liquid Glass / neon shell; structure stays shadcn
 
