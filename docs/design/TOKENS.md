@@ -61,7 +61,7 @@ Load via `web/index.html` Google Fonts when applying.
 | `--color-destructive` | `#dc2626` | *(same)* | Danger |
 | `--color-destructive-foreground` | `#991b1b` | `#fca5a5` | Danger text |
 | `--color-destructive-soft` | `rgb(220 38 38 / 0.1)` | slightly stronger | Soft danger |
-| `--color-voice` | `#c45c00` | `#f0a060` | 小編 / action pulse (not shell fill) |
+| `--color-voice` | `#c45c00` | `#f0a060` | Craft voice / action pulse (not shell fill) |
 | `--color-voice-foreground` | `#ffffff` | `#111113` | On-voice |
 
 Logo mark fill when applying: `#111113`.

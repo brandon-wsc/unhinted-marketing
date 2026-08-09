@@ -14,14 +14,14 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 | Shipped vs held + decisions | [`docs/STATUS.md`](docs/STATUS.md) | Progress checklists |
 | Locked decisions (ADR) | [`docs/adr/`](docs/adr/) | Prefer ADR over chat memory |
 | Admin prompt tuning (ops) | [`docs/PROMPT_TUNING.md`](docs/PROMPT_TUNING.md) | How to use LLM records / node steps / Session Trace; retention explained |
-| HK social craft (draft voice) | [`docs/VOICE.md`](docs/VOICE.md) | Default 小編 craft + company `roast_level`; prompts in `internal/session/prompts.py` |
+| HK social craft (draft voice) | [`docs/VOICE.md`](docs/VOICE.md) | Default editor-voice craft + company `roast_level`; prompts in `internal/session/prompts.py` |
 | HTTP + Pydantic API shapes | [`schemas/`](schemas/) · FastAPI OpenAPI | Export: `python -m scripts.export_contracts` |
 | Canonical draft + SSE catalog | [`schemas/contracts.py`](schemas/contracts.py) · [`docs/contracts/`](docs/contracts/) | JSON Schema mirrors |
 | External tools | [`schemas/tools.py`](schemas/tools.py) | `query_market_trends`, `publish_social_post` |
 | DB schema history | [`migrations/`](migrations/) | Alembic hex revisions — see `.cursor/rules` |
 | Test policy | [`docs/TESTING.md`](docs/TESTING.md) | Path-tiered gates; LLM nodes mocked in CI |
 | Frontend UI system | [`web/src/components/ui/`](web/src/components/ui/) · [`web/src/index.css`](web/src/index.css) | shadcn primitives + semantic tokens; layers in [`.cursor/rules/web-ui-system.mdc`](.cursor/rules/web-ui-system.mdc) |
-| Visual design (docs + tokens) | [`docs/design/`](docs/design/) | Brief + token inventory; proposed harness desk — CSS apply later |
+| Visual design (docs + tokens + Penpot) | [`docs/design/`](docs/design/) · [`design/penpot/`](design/penpot/) | Brief + token inventory + Core `.penpot`; proposed harness desk — CSS apply later |
 | Cursor execution rules | [`.cursor/rules/`](.cursor/rules/) | Scoped (e.g. commits, Alembic, web UI); not a second product SSOT |
 
 **Runtime state:** REST (e.g. `POST /api/sessions/{id}/messages`) is the client source of truth. SSE is an enhancement layer (live deltas / progress) that merges with dedupe — see [ADR 0002](docs/adr/0002-rest-source-of-truth-sse-enhancement.md). Public HTTP routes live under `/api` ([ADR 0006](docs/adr/0006-api-path-prefix-and-spa-proxy.md)); SPA document routes (`/admin`, …) are separate.
