@@ -15,6 +15,7 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 | Locked decisions (ADR) | [`docs/adr/`](docs/adr/) | Prefer ADR over chat memory |
 | Admin prompt tuning (ops) | [`docs/PROMPT_TUNING.md`](docs/PROMPT_TUNING.md) | How to use LLM records / node steps / Session Trace; retention explained |
 | HK social craft (draft voice) | [`docs/VOICE.md`](docs/VOICE.md) | Default editor-voice craft + company `roast_level`; prompts in `internal/session/prompts.py` |
+| Enterprise knowledge | [`docs/knowledge/README.md`](docs/knowledge/README.md) | MODEL / SESSION / COLLECT — planes, session contract, ingest (COLLECT TBD) |
 | HTTP + Pydantic API shapes | [`schemas/`](schemas/) · FastAPI OpenAPI | Export: `python -m scripts.export_contracts` |
 | Canonical draft + SSE catalog | [`schemas/contracts.py`](schemas/contracts.py) · [`docs/contracts/`](docs/contracts/) | JSON Schema mirrors |
 | External tools | [`schemas/tools.py`](schemas/tools.py) | `query_market_trends`, `publish_social_post` |
