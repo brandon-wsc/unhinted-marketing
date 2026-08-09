@@ -1,7 +1,7 @@
 # Design tokens
 
-> **Runtime today:** [`web/src/index.css`](../../web/src/index.css) (still Inter + indigo).  
-> **This doc:** inventory as-shipped + **proposed** harness desk set — apply only after explicit code pass.
+> **Runtime today:** [`web/src/index.css`](../../web/src/index.css) — **harness desk applied** (IBM Plex Sans / Noto Sans HK, ink primary, voice accent).  
+> **This doc:** inventory as-shipped (historical) + harness desk set now live in CSS.
 
 ---
 
@@ -39,9 +39,9 @@ Logo fill today: `#6366F1` (`web/public/logo.svg`).
 
 ---
 
-## Proposed — harness desk (not applied)
+## Harness desk (applied 2026-08)
 
-Leave Inter + SaaS indigo behind when implementing:
+Inter + SaaS indigo are gone; live values:
 
 ### Typography
 

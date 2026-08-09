@@ -1,6 +1,6 @@
 # Design (in-repo)
 
-> **Format:** docs + tokens inventory + Penpot Core file. **Runtime not changed yet** — paint still [`web/src/index.css`](../../web/src/index.css) as-shipped.  
+> **Format:** docs + tokens inventory + Penpot Core file. **Runtime applied** — [`web/src/index.css`](../../web/src/index.css) carries the harness desk tokens.  
 > **Primitives:** [`.cursor/rules/web-ui-system.mdc`](../../.cursor/rules/web-ui-system.mdc)
 
 | Doc / file | Job |
