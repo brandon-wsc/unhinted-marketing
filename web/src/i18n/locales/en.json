@@ -15,7 +15,8 @@
     "menu": {
       "guest": "Guest",
       "language": "Language",
-      "theme": "Theme"
+      "theme": "Theme",
+      "close": "Close"
     }
   },
   "auth": {
@@ -316,8 +317,7 @@
   "theme": {
     "label": "Theme",
     "light": "Light mode",
-    "dark": "Dark mode",
-    "system": "System"
+    "dark": "Dark mode"
   },
   "errors": {
     "loginFailed": "Sign in failed",

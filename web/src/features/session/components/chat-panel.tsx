@@ -1,7 +1,9 @@
 import { cjk } from "@streamdown/cjk";
+import { Square } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
+import { SendIcon } from "@/components/icons/send-icon";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/auth-context";
@@ -444,15 +446,26 @@ export function ChatPanel() {
             <Button
               type="button"
               variant="ghost"
+              size="icon"
               disabled={stopping}
               onClick={() => void onStopTurn()}
-              className="shrink-0"
+              className="shrink-0 rounded-full text-foreground"
+              title={stopping ? t("chat.stopping") : t("chat.stop")}
+              aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
             >
-              {stopping ? t("chat.stopping") : t("chat.stop")}
+              <Square className="size-3.5" fill="currentColor" stroke="none" />
             </Button>
           ) : (
-            <Button type="submit" disabled={!input.trim()} className="shrink-0">
-              {t("chat.send")}
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon"
+              disabled={!input.trim()}
+              className="shrink-0 rounded-full text-foreground"
+              title={t("chat.send")}
+              aria-label={t("chat.send")}
+            >
+              <SendIcon className="size-[18px]" />
             </Button>
           )}
         </form>

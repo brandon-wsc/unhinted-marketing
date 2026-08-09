@@ -15,7 +15,8 @@
     "menu": {
       "guest": "訪客",
       "language": "語言",
-      "theme": "主題"
+      "theme": "主題",
+      "close": "關閉"
     }
   },
   "auth": {
@@ -316,8 +317,7 @@
   "theme": {
     "label": "主題",
     "light": "淺色模式",
-    "dark": "深色模式",
-    "system": "跟隨系統"
+    "dark": "深色模式"
   },
   "errors": {
     "loginFailed": "登入失敗",

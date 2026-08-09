@@ -6,15 +6,9 @@
     <title>Unhinted Marketing</title>
     <script>
       (() => {
-        var mode = localStorage.getItem("unhinted-theme");
-        var resolved =
-          mode === "light" || mode === "dark"
-            ? mode
-            : window.matchMedia("(prefers-color-scheme: dark)").matches
-              ? "dark"
-              : "light";
-        document.documentElement.dataset.theme = resolved;
-        document.documentElement.classList.toggle("dark", resolved === "dark");
+        var mode = localStorage.getItem("unhinted-theme") === "dark" ? "dark" : "light";
+        document.documentElement.dataset.theme = mode;
+        document.documentElement.classList.toggle("dark", mode === "dark");
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
