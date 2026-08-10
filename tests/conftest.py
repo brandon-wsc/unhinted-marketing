@@ -12,3 +12,4 @@ def _disable_llm_record_persistence(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "node_trace_enabled", False)
     # Avoid FastEmbed model download in unit/CI; opt in per-test if needed.
     monkeypatch.setattr(settings, "semantic_router_enabled", False)
+    monkeypatch.setattr(settings, "product_embeddings_enabled", False)

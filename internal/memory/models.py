@@ -12,8 +12,11 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from internal.memory.embeddings import EMBEDDING_DIM
 
 
 class Base(DeclarativeBase):
@@ -327,6 +330,7 @@ class Product(Base):
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     search_document: Mapped[str] = mapped_column(Text, nullable=False, default="")
     profile: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

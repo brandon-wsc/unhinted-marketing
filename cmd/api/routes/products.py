@@ -16,6 +16,7 @@ from internal.auth.org import (
 )
 from internal.memory.database import get_db
 from internal.memory.models import User
+from internal.memory.embeddings import embed_texts
 from internal.memory.product_import import parse_product_upload
 from internal.memory.repos import (
     archive_product,
@@ -126,7 +127,9 @@ async def import_company_products(
 
     imported = 0
     updated = 0
-    for row in parsed:
+    docs = [row["search_document"] for row in parsed]
+    embeddings = embed_texts(docs)
+    for row, emb in zip(parsed, embeddings, strict=True):
         _, created = await upsert_product_row(
             db,
             company_id=company_id,
@@ -136,6 +139,8 @@ async def import_company_products(
             name=row["name"],
             search_document=row["search_document"],
             profile=row["profile"],
+            embedding=emb,
+            embed=False,
         )
         if created:
             imported += 1

@@ -19,6 +19,7 @@ from internal.memory.models import (
     SessionMessage,
     ToolReceipt,
 )
+from internal.memory.embeddings import embed_texts
 from internal.memory.product_import import build_search_document
 
 
@@ -539,9 +540,19 @@ async def upsert_product_row(
     name: str,
     search_document: str,
     profile: dict,
+    embedding: list[float] | None = None,
+    embed: bool = True,
 ) -> tuple[Product, bool]:
-    """Upsert by SKU. Returns (row, created). Reactivates archived rows."""
+    """Upsert by SKU. Returns (row, created). Reactivates archived rows.
+
+    When ``embedding`` is omitted and ``embed`` is True, embeds ``search_document``
+    inline (COLLECT K4 re-embed on upsert).
+    """
     from sqlalchemy.orm.attributes import flag_modified
+
+    if embedding is None and embed:
+        vecs = embed_texts([search_document])
+        embedding = vecs[0] if vecs else None
 
     stmt = select(Product).where(
         Product.company_id == company_id,
@@ -559,6 +570,8 @@ async def upsert_product_row(
         existing.search_document = search_document
         existing.profile = profile
         existing.status = "active"
+        if embed or embedding is not None:
+            existing.embedding = embedding
         flag_modified(existing, "profile")
         await db.flush()
         return existing, False
@@ -571,6 +584,7 @@ async def upsert_product_row(
         name=name,
         search_document=search_document,
         profile=profile,
+        embedding=embedding,
         status="active",
     )
     db.add(row)

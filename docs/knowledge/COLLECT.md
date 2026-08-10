@@ -161,7 +161,7 @@ Used by `product_matcher` ([SESSION.md](./SESSION.md)). Merges **Org × Old** an
 7. **Primary:** top-1 if score ≥ threshold **and** margin vs top-2; else **`product_clarify`**.
 8. **Related:** neighbors from **org** catalog only, top-2 — empty OK.
 
-MVP (K3): Tier A + B; org+user union with org-wins dedupe. K4 adds vector + tune §7.
+MVP (K3): Tier A + B; org+user union with org-wins dedupe. **K4:** Tier C FastEmbed vectors + RRF-style merge (`max(lex, vec, scaled RRF)`); always `company_id` in SQL before score.
 
 ### Repo contract (planned)
 
@@ -194,19 +194,21 @@ Locked decisions → future [ADR 0010](../adr/) when implemented.
 
 ---
 
-## 7. RAG tuning (K4 — TBD details)
+## 7. RAG tuning (K4)
 
-Applies **only** to user-owned `search_document` corpus (not market signals).
+Applies **only** to product `search_document` corpus (not market signals).
 
-| Topic | Planned default |
-|-------|-----------------|
-| Embedding model | Same family as semantic gate — FastEmbed multilingual MiniLM ([`semantic_gate.py`](../../internal/session/semantic_gate.py)) |
-| Chunking | **One product row = one chunk** unless long description → split |
-| Query text | `product_surface` + atomic `search_queries` — not full chat dump |
-| Thresholds | Cosine min, trgm min, top1−top2 margin — tune with labeled eval set |
-| Re-embed | Async job on import upsert / row patch |
+| Topic | Default |
+|-------|---------|
+| Embedding model | Same family as semantic gate — FastEmbed multilingual MiniLM (`PRODUCT_EMBEDDING_MODEL` or `SEMANTIC_ROUTER_MODEL`) |
+| Dim | **384** (`products.embedding vector(384)` — Alembic `12d5c92e3f74`) |
+| Chunking | **One product row = one chunk** |
+| Query text | Joined `product_surface` / matcher queries — not full chat dump |
+| Thresholds | Lexical primary floor 0.55 + margin 0.12; vector cosine min **0.42** |
+| Re-embed | Inline on import upsert / manual create (`embed_texts`) |
+| Disable | `PRODUCT_EMBEDDINGS_ENABLED=false` → lexical-only |
 
-Eval set: ~20 user utterances × ~10 SKUs per company; regression in CI optional.
+Eval set: ~20 user utterances × ~10 SKUs per company; live FastEmbed regression optional (CI mocks / disables embedder).
 
 ---
 
@@ -282,7 +284,7 @@ Do not implement until approve flow is agreed and ADR 0011 is accepted.
 |-------|---------------------|
 | **K3** | §4 org import + storage; §5 retrieve (org only MVP OK) |
 | **K3b** | User personal lib + org-wins dedupe in §5 |
-| **K4** | §7 vector tier + cross-tenant tests |
+| **K4** | §7 vector tier + cross-tenant tests | ✅ |
 | **K5** | Import UI ([UI.md](./UI.md)); §8 manual exemplar + offer upload |
 | **K6** | **Held** — §9 promote + Approvals UI → org replace |
 

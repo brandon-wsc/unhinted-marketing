@@ -152,3 +152,67 @@ async def test_outsider_cannot_list_products(client: AsyncClient) -> None:
         headers=auth_header(other["access_token"]),
     )
     assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_product_retrieve_cross_tenant_isolation(
+    client: AsyncClient, db_session
+) -> None:
+    """K4 gate: search as company A never returns company B product ids."""
+    from internal.memory.product_retrieve import search_products_for_member
+
+    a = await register_user(
+        client,
+        email=f"a-{uuid.uuid4().hex[:8]}@example.com",
+        organization_name="Co A",
+    )
+    b = await register_user(
+        client,
+        email=f"b-{uuid.uuid4().hex[:8]}@example.com",
+        organization_name="Co B",
+    )
+    company_a = uuid.UUID(a["user"]["organizations"][0]["id"])
+    company_b = uuid.UUID(b["user"]["organizations"][0]["id"])
+    user_a = uuid.UUID(a["user"]["id"])
+    user_b = uuid.UUID(b["user"]["id"])
+
+    await client.post(
+        f"/api/companies/{company_b}/products/import?scope=org",
+        headers=auth_header(b["access_token"]),
+        files={
+            "file": (
+                "b.csv",
+                b"name,sku\nSecret Blend,SEC-B-99\n",
+                "text/csv",
+            )
+        },
+    )
+    await client.post(
+        f"/api/companies/{company_a}/products/import?scope=org",
+        headers=auth_header(a["access_token"]),
+        files={
+            "file": (
+                "a.csv",
+                b"name,sku\nOat Latte,DRK-OL-12\n",
+                "text/csv",
+            )
+        },
+    )
+
+    hits_a = await search_products_for_member(
+        db_session,
+        company_id=company_a,
+        user_id=user_a,
+        queries=["SEC-B-99", "Secret Blend"],
+    )
+    assert hits_a == []
+
+    hits_b = await search_products_for_member(
+        db_session,
+        company_id=company_b,
+        user_id=user_b,
+        queries=["SEC-B-99"],
+    )
+    assert len(hits_b) == 1
+    assert hits_b[0].product.sku == "SEC-B-99"
+    assert hits_b[0].product.company_id == company_b

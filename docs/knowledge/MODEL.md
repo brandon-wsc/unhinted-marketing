@@ -142,7 +142,7 @@ Extract + search flow detail: [SESSION.md](./SESSION.md). User import + retrieve
 | `entities` (`topic`) | ✅ | Promoted topics |
 | `entities` (`product`) | ⬜ | Optional per-company catalog |
 | `edges` | ✅ | Graph links |
-| pgvector | ⬜ infra ready | Signals / products (COLLECT TBD) |
+| pgvector | ✅ products.embedding (K4) | Signals similarity still later |
 
 No second vector DB. No repo markdown bundle for tenant KB.
 

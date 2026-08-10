@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     )
     semantic_router_score_threshold: float = 0.5
 
+    # Product catalog embeddings (COLLECT K4) — same FastEmbed family as semantic gate
+    product_embeddings_enabled: bool = True
+    # Empty → reuse semantic_router_model
+    product_embedding_model: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
