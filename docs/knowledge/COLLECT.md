@@ -211,14 +211,17 @@ Eval set: ~20 user utterances × ~10 SKUs per company; regression in CI optional
 
 ## 8. Other user-owned channels (K5 — outline)
 
+**UI surfaces (locked):** [UI.md](./UI.md) — UserMenu → Company settings (Voice / Products tabs Org|Mine / Approvals).
+
 ### Voice settings
 
 - Persist on `entities.profile` for `entity_type=company`.
-- Fields: `roast_level`, `forbidden_phrases`, `tone_notes` — see [MODEL.md § Brand voice](./MODEL.md#brand-voice-voice_pack).
+- Fields: `roast_level`, `forbidden_phrases`, `tone_notes`, `locale` — see [MODEL.md § Brand voice](./MODEL.md#brand-voice-voice_pack).
+- Shell form: [UI.md § Voice](./UI.md#voice-k1).
 
 ### Exemplar captions
 
-- Source: user picks approved `preview_drafts` → promote to profile or exemplar table.
+- Source: user picks approved `preview_drafts` → promote to profile or exemplar table (Confirm-adjacent, not chat auto-write).
 - Cap: ≤3 captions × ≤150 chars into `voice_pack`.
 
 ### Offer snippets (optional, K5)
@@ -226,6 +229,7 @@ Eval set: ~20 user utterances × ~10 SKUs per company; regression in CI optional
 - User upload / admin paste → `offer_snippets`: `snippet_id`, `company_id`, `raw_excerpt`, `source`.
 - Same tenant rules as products; retrieve when no SKU match but internal promo text exists.
 - **Chat paste → persist to org KB:** held to **K6** (promote + admin approve — §9).
+- No dedicated MVP page until needed — Products / Voice first.
 
 ---
 
@@ -278,8 +282,8 @@ Do not implement until approve flow is agreed and ADR 0011 is accepted.
 | **K3** | §4 org import + storage; §5 retrieve (org only MVP OK) |
 | **K3b** | User personal lib + org-wins dedupe in §5 |
 | **K4** | §7 vector tier + cross-tenant tests |
-| **K5** | Import UI; §8 manual exemplar + offer upload |
-| **K6** | **Held** — §9 promote + admin approve → org replace |
+| **K5** | Import UI ([UI.md](./UI.md)); §8 manual exemplar + offer upload |
+| **K6** | **Held** — §9 promote + Approvals UI → org replace |
 
 ---
 

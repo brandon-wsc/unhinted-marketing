@@ -17,9 +17,10 @@
 | Login · Register | Orderly centered auth card; exactly ONE corner craft signal (voice ✳ + “Reliable tools, unleashed copy”) |
 | Session — split | Desktop 1440: `empty` (landing + recommended questions) and `preview` (chat + action trail + interrupt card; preview pane with IG mock, revision/dirty badges, Confirm gate with serious copy); composer send/stop are icon buttons |
 | Session — paged | Mobile 390: `record` (history), `chat` (trail + preview-ready banner), `preview` (IG mock + Confirm gate) |
-| Dialogs | Edit copy (caption / hashtags / CTA → one revision), Edit image (media slots, format toggle, prompt fields, upload, delete / save plan / generate), UserMenu — desktop dropdown / mobile dialog (theme = light/dark switch, no system mode) |
+| Dialogs | Edit copy … UserMenu — desktop dropdown / mobile dialog (theme = light/dark switch, no system mode); **Company settings** menu item above Admin |
+| Company settings | Desktop 1440: shell page from UserMenu — sidebar **Voice / Products / Approvals**; Products has **Org \| Mine** tabs. Frames: Voice form (roast / locale / forbidden / tone), Products Org (import + table), Products Mine (cover badge), Approvals empty (K6 held). Spec: [knowledge/UI.md](../knowledge/UI.md). |
 
-Admin console intentionally not designed in Penpot — temporary ops surface.
+Admin console intentionally not designed in Penpot — temporary ops surface. Tenant KB CRUD is **Company settings**, not `/admin`.
 
 **Voice / copy craft:** [VOICE.md](../VOICE.md) — captions, not chrome.
 

@@ -96,6 +96,19 @@ function UserMenuBody({ surface, close }: { surface: Surface; close: () => void 
       <Sep />
       <MenuLabelText surface={surface}>{t("header.menu.theme")}</MenuLabelText>
       <ThemeSwitchRow />
+      {user && (
+        <>
+          <Sep />
+          <Item
+            onSelect={() => {
+              close();
+              navigate("/settings");
+            }}
+          >
+            {t("settings.menuEntry")}
+          </Item>
+        </>
+      )}
       {admin && (
         <>
           <Sep />

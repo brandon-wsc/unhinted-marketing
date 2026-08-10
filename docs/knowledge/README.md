@@ -13,7 +13,8 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 |-----|---------|----------|
 | [MODEL.md](./MODEL.md) | Knowledge planes: signals, voice, audience, pain, optional product catalog | Product / backend design |
 | [SESSION.md](./SESSION.md) | SessionState contract, graph placement, node payloads, grounding | Graph / node implementers |
-| [COLLECT.md](./COLLECT.md) | Human-provided knowledge: org/user libraries, cover rules, import, retrieve |
+| [COLLECT.md](./COLLECT.md) | Human-provided knowledge: org/user libraries, cover rules, import, retrieve | Ops / backend |
+| [UI.md](./UI.md) | Company settings IA: Voice / Products (Org\|Mine) / Approvals — what UI collects | Product / frontend |
 
 **Not in this folder**
 
@@ -41,11 +42,11 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 
 | Phase | Scope | Doc |
 |-------|-------|-----|
-| **K0** | This folder + links | README / MODEL / SESSION |
-| **K1** | `voice_pack`, `audience_catalog`, slim LLM payloads | SESSION |
+| **K0** | This folder + links | README / MODEL / SESSION / COLLECT / UI |
+| **K1** | `voice_pack`, `audience_catalog`, slim LLM payloads + Voice settings UI | SESSION + UI |
 | **K2** | `ranked_signals` top-level (out of fat `company_context`) | SESSION |
-| **K3** | Optional catalog + `product_matcher` + clarify gate | MODEL + SESSION + COLLECT |
-| **K3b** | User product lib + org-wins retrieve | COLLECT |
+| **K3** | Optional catalog + `product_matcher` + Products Org tab | MODEL + SESSION + COLLECT + UI |
+| **K3b** | User product lib + org-wins retrieve + Products Mine tab | COLLECT + UI |
 | **K4** | pgvector hybrid retrieve + cross-tenant tests | COLLECT |
 | **K5** | Import UI; manual exemplar promote (settings / admin — not chat→KB) | COLLECT |
 | **K6** | **Held** — promote to org + **admin approve** (user covers org only after approve) | COLLECT + ADR |

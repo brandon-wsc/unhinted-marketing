@@ -12,12 +12,14 @@ from internal.memory.models import (
     OrganizationMember,
     PreviewDraft,
     PreviewImage,
+    Product,
     RawNewsEvent,
     RecommendedQuestions,
     Session,
     SessionMessage,
     ToolReceipt,
 )
+from internal.memory.product_import import build_search_document
 
 
 def url_hash(value: str) -> str:
@@ -133,6 +135,31 @@ async def user_has_org_access(
         )
     )
     return row is not None
+
+
+async def get_org_membership(
+    db: AsyncSession, user_id: uuid.UUID, company_id: uuid.UUID
+) -> OrganizationMember | None:
+    return await db.scalar(
+        select(OrganizationMember).where(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization_id == company_id,
+        )
+    )
+
+
+async def update_company_profile(
+    db: AsyncSession, company: Entity, *, patch: dict
+) -> Entity:
+    """Shallow-merge keys into company.profile JSONB (preserves unrelated keys)."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    profile = dict(company.profile or {})
+    profile.update(patch)
+    company.profile = profile
+    flag_modified(company, "profile")
+    await db.flush()
+    return company
 
 
 async def save_recommended_questions(
@@ -453,3 +480,131 @@ async def create_tool_receipt(
     db.add(row)
     await db.flush()
     return row
+
+
+async def list_products(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    owner_scope: str,
+    user_id: uuid.UUID | None = None,
+    status: str | None = "active",
+) -> list[Product]:
+    stmt = select(Product).where(
+        Product.company_id == company_id,
+        Product.owner_scope == owner_scope,
+    )
+    if owner_scope == "user":
+        if user_id is None:
+            return []
+        stmt = stmt.where(Product.user_id == user_id)
+    if status is not None:
+        stmt = stmt.where(Product.status == status)
+    stmt = stmt.order_by(Product.name.asc(), Product.sku.asc())
+    result = await db.scalars(stmt)
+    return list(result.all())
+
+
+async def list_org_skus(
+    db: AsyncSession, *, company_id: uuid.UUID, status: str = "active"
+) -> set[str]:
+    rows = await db.scalars(
+        select(Product.sku).where(
+            Product.company_id == company_id,
+            Product.owner_scope == "org",
+            Product.status == status,
+        )
+    )
+    return set(rows.all())
+
+
+async def get_product(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    product_id: uuid.UUID,
+) -> Product | None:
+    return await db.scalar(
+        select(Product).where(Product.id == product_id, Product.company_id == company_id)
+    )
+
+
+async def upsert_product_row(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    owner_scope: str,
+    user_id: uuid.UUID | None,
+    sku: str,
+    name: str,
+    search_document: str,
+    profile: dict,
+) -> tuple[Product, bool]:
+    """Upsert by SKU. Returns (row, created). Reactivates archived rows."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    stmt = select(Product).where(
+        Product.company_id == company_id,
+        Product.owner_scope == owner_scope,
+        Product.sku == sku,
+    )
+    if owner_scope == "user":
+        stmt = stmt.where(Product.user_id == user_id)
+    else:
+        stmt = stmt.where(Product.user_id.is_(None))
+
+    existing = await db.scalar(stmt)
+    if existing:
+        existing.name = name
+        existing.search_document = search_document
+        existing.profile = profile
+        existing.status = "active"
+        flag_modified(existing, "profile")
+        await db.flush()
+        return existing, False
+
+    row = Product(
+        company_id=company_id,
+        owner_scope=owner_scope,
+        user_id=user_id if owner_scope == "user" else None,
+        sku=sku,
+        name=name,
+        search_document=search_document,
+        profile=profile,
+        status="active",
+    )
+    db.add(row)
+    await db.flush()
+    return row, True
+
+
+async def archive_product(db: AsyncSession, product: Product) -> Product:
+    product.status = "archived"
+    await db.flush()
+    return product
+
+
+async def create_manual_product(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    owner_scope: str,
+    user_id: uuid.UUID | None,
+    sku: str,
+    name: str,
+    notes: str = "",
+) -> tuple[Product, bool]:
+    profile: dict[str, str] = {"name": name, "sku": sku}
+    if notes:
+        profile["notes"] = notes
+    search_document = build_search_document(profile, sku=sku, name=name)
+    return await upsert_product_row(
+        db,
+        company_id=company_id,
+        owner_scope=owner_scope,
+        user_id=user_id,
+        sku=sku,
+        name=name,
+        search_document=search_document,
+        profile=profile,
+    )
