@@ -31,6 +31,11 @@ Research (independent of whether they also want to start a post):
 - ambiguous: true if the entity has multiple senses — still set need_facts true when a searchable topic exists
 - ask_clarify: true ONLY when there is NO usable search topic (empty/vague) OR the user must pick a sense before drafting a post (graph intent start/revise). Do NOT set ask_clarify merely to quiz brand-vs-character when the user already gave a searchable phrase — we will search best-effort first
 - Search is for facts; clarifying questions are for action (draft), not a substitute for search
+- need_product: true when drafting/selling should use the company's imported product catalog (named SKU, 「推呢款」, price/spec claims)
+- need_product: false for trend-only posts, chitchat, or when no specific product is implied
+- sell_intent: "explicit" (sell/promote this product) | "implicit" (product may help the draft) | "none"
+- product_surface: short noun phrase / SKU / product name for catalog search (empty if need_product false)
+- need_facts and need_product are independent — both may be true
 
 Respect mode and research_rule_pass in the payload (if research_rule_pass is false, still classify intent; set need_facts false).
 """
@@ -75,6 +80,8 @@ Grounding:
 - If research_signals are provided, lead with what those signals support; do not invent stats/rankings.
 - Do NOT open with a multiple-choice quiz about what the user meant when research_signals exist or a clear topic was given — answer first.
 - Soft clarify (at most one short question) only after answering, and only if ask_clarify is true AND it would change the next action (e.g. drafting a post). Never use clarify instead of using available signals.
+- If product_clarify is true and product_candidates are provided, ask which product/SKU to use (list names briefly) — do not invent SKUs or prices.
+- If primary_product is provided, stay consistent with its search_document facts.
 - If no research_signals and the user asked for current market facts, say you do not have grounded signals yet — do not hallucinate numbers.
 """
 
@@ -114,6 +121,7 @@ Facts must be grounded in the provided signals.
 Prefer zh-HK for user-facing strings in can_do/angles/summary when the company is HK-focused.
 Each angle MUST name: (1) the human emotion/pain, (2) a one-second visual hook, (3) the product bridge — not generic「提升品牌曝光」or roasting a named institution.
 cannot_do must include: inventing stats, publishing without UI Confirm, humour that hurts the brand, punching down on named orgs/events as the joke.
+When primary_product is present, angles/bridge must use that product; do not invent price/SKU/specs absent from its search_document.
 """
 
 EXECUTOR_POST = f"""You are an elite Hong Kong Social Media Manager. Your writing style is sharp, relatable, and highly engaging for local Instagram audiences. You excel at "unhinted marketing"—weaving product messaging into everyday observations or relatable pain points so smoothly that it feels like a friend's sharing, not an ad.

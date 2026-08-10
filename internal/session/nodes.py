@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import secrets
 import uuid
 from collections.abc import Awaitable, Callable
@@ -26,6 +27,11 @@ from internal.llm.router import (
 )
 from internal.media.storage import media_object_key, persist_generated_image
 from internal.memory.knowledge_seed import ensure_default_personas
+from internal.memory.product_retrieve import (
+    hit_to_payload,
+    pick_primary,
+    search_products_for_member,
+)
 from internal.memory.repos import (
     get_company,
     get_signals_by_ids,
@@ -596,6 +602,9 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
                 "roast_level": pack.get("roast_level"),
                 "locale": pack.get("locale"),
             },
+            "product_clarify": bool(state.get("product_clarify")),
+            "product_candidates": (state.get("product_candidates") or [])[:3],
+            "primary_product": state.get("primary_product"),
         },
         ensure_ascii=False,
     )
@@ -675,6 +684,98 @@ async def chat(state: SessionState) -> dict[str, Any]:
     return out
 
 
+def _product_queries(state: SessionState) -> list[str]:
+    research = state.get("research") or {}
+    queries: list[str] = []
+    surface = str(research.get("product_surface") or "").strip()
+    if surface:
+        queries.append(surface)
+    entity = str(research.get("entity_surface") or "").strip()
+    if entity and entity not in queries:
+        queries.append(entity)
+    user = _last_user_text(state).strip()
+    if user and user not in queries:
+        queries.append(user[:200])
+    return queries
+
+
+def _should_match_product(state: SessionState) -> bool:
+    research = state.get("research") or {}
+    if research.get("need_product"):
+        return True
+    sell = str(research.get("sell_intent") or "none")
+    if sell in ("explicit", "implicit"):
+        return True
+    # Heuristic: start path with a concrete product_surface
+    if (state.get("intent") or "") == "start" and str(research.get("product_surface") or "").strip():
+        return True
+    return False
+
+
+@agent_progress("product_matcher")
+async def product_matcher(state: SessionState) -> dict[str, Any]:
+    """SQL catalog match — no LLM. Org covers user on SKU clash."""
+    empty = {
+        "primary_product": None,
+        "related_products": [],
+        "product_clarify": False,
+        "product_context_ids": [],
+        "product_candidates": [],
+    }
+    if not _should_match_product(state):
+        return empty
+
+    company_id = state.get("company_id")
+    user_id = state.get("user_id")
+    if not company_id or not user_id:
+        return empty
+
+    queries = _product_queries(state)
+    if not queries:
+        return empty
+
+    db = get_db()
+    hits = await search_products_for_member(
+        db,
+        company_id=uuid.UUID(company_id),
+        user_id=uuid.UUID(user_id),
+        queries=queries,
+        limit=5,
+    )
+    if not hits:
+        return empty
+
+    primary, clarify = pick_primary(hits)
+    candidates = [hit_to_payload(h) for h in hits[:3]]
+    if clarify or primary is None:
+        return {
+            "primary_product": None,
+            "related_products": [],
+            "product_clarify": True,
+            "product_context_ids": [],
+            "product_candidates": candidates,
+        }
+
+    primary_payload = hit_to_payload(primary)
+    related: list[dict[str, Any]] = []
+    for hit in hits[1:]:
+        if hit.product.owner_scope != "org":
+            continue
+        if hit.product.sku == primary.product.sku:
+            continue
+        related.append(hit_to_payload(hit))
+        if len(related) >= 2:
+            break
+
+    return {
+        "primary_product": primary_payload,
+        "related_products": related,
+        "product_clarify": False,
+        "product_context_ids": [primary_payload["product_id"]],
+        "product_candidates": [],
+    }
+
+
 @agent_progress("brainstormer")
 async def brainstormer(state: SessionState) -> dict[str, Any]:
     catalog = _audience_catalog(state)
@@ -686,6 +787,8 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
         "user_request": _last_user_text(state),
         "signals": signals,
         "source_signal_ids": state.get("source_signal_ids") or [],
+        "primary_product": state.get("primary_product"),
+        "related_products": (state.get("related_products") or [])[:2],
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["brainstormer"] or ModelTier.MEDIUM,
@@ -721,6 +824,8 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "signals": signals,
         "allowed_signal_ids": signal_ids,
         "user_request": _last_user_text(state),
+        "primary_product": state.get("primary_product"),
+        "related_products": (state.get("related_products") or [])[:2],
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["executor_post"] or ModelTier.MEDIUM,
@@ -765,6 +870,12 @@ async def grounding_check(state: SessionState) -> dict[str, Any]:
         # Allow empty only if there are truly no signals in the system.
         signals = await list_top_signals(db, limit=1, region="HK")
         if not signals:
+            product_ok, product_feedback = _product_claim_ok(state)
+            if not product_ok:
+                return {
+                    "grounding_ok": False,
+                    "reviewer_feedback": product_feedback,
+                }
             return {
                 "grounding_ok": True,
                 "reviewer_feedback": "No HK signals in DB — draft is template-only",
@@ -785,7 +896,36 @@ async def grounding_check(state: SessionState) -> dict[str, Any]:
             "grounding_ok": False,
             "reviewer_feedback": f"Missing or invalid source_signal_ids: {missing}",
         }
+    product_ok, product_feedback = _product_claim_ok(state)
+    if not product_ok:
+        return {
+            "source_signal_ids": kept,
+            "grounding_ok": False,
+            "reviewer_feedback": product_feedback,
+        }
     return {"source_signal_ids": kept, "grounding_ok": True, "reviewer_feedback": ""}
+
+
+def _product_claim_ok(state: SessionState) -> tuple[bool, str]:
+    """If primary_product is set, numeric claims in caption must appear in search_document."""
+    primary = state.get("primary_product")
+    if not isinstance(primary, dict) or not primary.get("product_id"):
+        return True, ""
+    caption = str((state.get("draft") or {}).get("caption") or "")
+    doc = str(primary.get("search_document") or "")
+    if not caption:
+        return True, ""
+    claimed = set(re.findall(r"\d+(?:\.\d+)?", caption))
+    if not claimed:
+        return True, ""
+    grounded = set(re.findall(r"\d+(?:\.\d+)?", doc))
+    invented = sorted(claimed - grounded)
+    if invented:
+        return (
+            False,
+            f"Caption has numbers not in primary product row: {invented}",
+        )
+    return True, ""
 
 
 @agent_progress("reviewer")
@@ -804,6 +944,7 @@ async def reviewer(state: SessionState) -> dict[str, Any]:
         "brief": state.get("brief") or {},
         "company": _slim_company(state),
         "voice_pack": _voice_pack(state),
+        "primary_product": state.get("primary_product"),
         "source_signal_ids": state.get("source_signal_ids") or [],
         "grounding_ok": state.get("grounding_ok", True),
         "mode": state.get("mode"),
@@ -1044,6 +1185,12 @@ def route_after_intent(state: SessionState) -> str:
     if intent == "confirm_intent":
         return "ack_confirm"
     return "chat"
+
+
+def route_after_product_matcher(state: SessionState) -> str:
+    if state.get("product_clarify"):
+        return "chat"
+    return "brainstormer"
 
 
 def route_after_research(state: SessionState) -> str:

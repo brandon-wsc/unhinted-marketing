@@ -13,6 +13,10 @@ class ResearchFlags(BaseModel):
     ask_clarify: bool = False
     entity_surface: str = ""
     rationale: str = ""
+    # Product catalog path (COLLECT / SESSION)
+    need_product: bool = False
+    sell_intent: Literal["explicit", "implicit", "none"] = "none"
+    product_surface: str = ""
 
 
 class IntentRoute(BaseModel):

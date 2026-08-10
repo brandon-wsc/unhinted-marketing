@@ -1,6 +1,6 @@
 # Enterprise Knowledge
 
-> **Status:** K0 artifact · **K1–K2 session packs shipped** (`voice_pack` / `audience_catalog` / top-level `ranked_signals`) · Products settings shipped; session `product_matcher` not yet  
+> **Status:** K0–K3b largely shipped (settings + slim session packs + `product_matcher`) · K4–K5 next · K6 held (org system)  
 > **Boundary:** PostgreSQL only — no parallel KB, no chat free-browse ([AGENTS.md](../../AGENTS.md))
 
 Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consume it, and (later) **how** users collect/import it.
@@ -45,8 +45,8 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 | **K0** | This folder + links | README / MODEL / SESSION / COLLECT / UI |
 | **K1** | `voice_pack`, `audience_catalog`, slim LLM payloads + Voice settings UI | ✅ SESSION + UI |
 | **K2** | `ranked_signals` top-level (out of fat `company_context`) | ✅ SESSION |
-| **K3** | Optional catalog + `product_matcher` + Products Org tab | MODEL + SESSION + COLLECT + UI |
-| **K3b** | User product lib + org-wins retrieve + Products Mine tab | COLLECT + UI |
+| **K3** | Optional catalog + `product_matcher` + Products Org tab | ✅ MODEL + SESSION + COLLECT + UI |
+| **K3b** | User product lib + org-wins retrieve + Products Mine tab | ✅ COLLECT + UI |
 | **K4** | pgvector hybrid retrieve + cross-tenant tests | COLLECT |
 | **K5** | Import UI; manual exemplar promote (settings / admin — not chat→KB) | COLLECT |
 | **K6** | **Held** — promote to org + **admin approve** (user covers org only after approve) | COLLECT + ADR |

@@ -138,9 +138,10 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Voice** — `GET/PATCH /api/companies/{id}/voice`; owner/admin edit; persists `roast_level` / locale / forbidden / tone into `entities.profile`
 - **Products** — Alembic `1f96a702125c` `products` table; CSV/xlsx import + Mine Add row (optional notes); org covers user on SKU clash for retrieve
 - **UI** — UserMenu → Company settings (`/settings`); tabs Voice · Products (Org | Mine); **Approvals held / nav hidden** until K6
-- **Next (held):** K4 embeddings, K5 exemplars, K6 promote-to-org Approvals, session `product_matcher`
+- **Next (held):** K4 embeddings, K5 exemplars; **K6** promote-to-org Approvals after org-system cleanup
 - **K1 slim (2026-08-10):** `load_context` → top-level `voice_pack` + `audience_catalog`; LLM nodes get identity-only `company` (no raw `profile` / `personas[]`)
 - **K2 (2026-08-10):** `trend_searcher` → top-level `ranked_signals` + `trend_notes` (no longer nested under `company_context`)
+- **product_matcher (2026-08-10):** SQL Tier A/B retrieve, org-wins SKU cover; `product_clarify` → chat; primary product into brainstormer / executor / grounding
 
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
@@ -403,7 +404,7 @@ See `.env.example`. Local `.env` is gitignored.
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
 2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + MinIO (`S3_*`) when configured; formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page; FB/Threads preview skins. LLM call **records** + admin Trace viewer landed ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md), [ADR 0007](./adr/0007-admin-trace-viewer.md)) — ops guide: [PROMPT_TUNING.md](./PROMPT_TUNING.md). Next: retention/purge policy. `/api` prefix shipped ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)).
-4. **Knowledge (next):** Company settings Voice + Products catalog shipped; **K1–K2** slim session packs shipped (`voice_pack` / `audience_catalog` / top-level `ranked_signals`) ([docs/knowledge/](./knowledge/)). Held: K4 embeddings, K5 exemplars, K6 Approvals UI, session `product_matcher` wiring.
+4. **Knowledge (next):** Settings + K1–K2 packs + **`product_matcher`** shipped ([docs/knowledge/](./knowledge/)). Next: K4 embeddings, K5 exemplars. **K6 Approvals held** until org-system cleanup.
 5. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; ~~persist LLM call records ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md))~~; ~~`/api` path prefix ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md))~~; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks; live LLM eval harness later.
 
 ---

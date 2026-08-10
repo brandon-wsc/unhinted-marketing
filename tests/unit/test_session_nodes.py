@@ -590,3 +590,77 @@ async def test_mock_llm_payload_is_valid_json(
     monkeypatch.setattr(N, "complete_json", fake_complete_json)
     await N.route_intent(_base_state())
     assert seen
+
+
+@pytest.mark.asyncio
+async def test_product_matcher_skips_when_not_needed(no_llm: None, mock_db) -> None:
+    with session_db(mock_db):
+        out = await N.product_matcher(
+            _base_state(
+                intent="start",
+                user_id="22222222-2222-2222-2222-222222222222",
+                research={"need_product": False, "sell_intent": "none"},
+            )
+        )
+    assert out["primary_product"] is None
+    assert out["product_clarify"] is False
+
+
+@pytest.mark.asyncio
+async def test_product_matcher_sets_primary(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    from types import SimpleNamespace
+    from uuid import UUID
+
+    from internal.memory.product_retrieve import ProductHit
+
+    row = SimpleNamespace(
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        sku="DRK-OL-12",
+        name="燕麥拿鐵",
+        search_document="燕麥拿鐵 | DRK-OL-12 | 48",
+        owner_scope="org",
+        profile={},
+    )
+    hit = ProductHit(product=row, score=1.0, match_kind="exact_sku")
+    monkeypatch.setattr(N, "search_products_for_member", AsyncMock(return_value=[hit]))
+    with session_db(mock_db):
+        out = await N.product_matcher(
+            _base_state(
+                intent="start",
+                user_id="22222222-2222-2222-2222-222222222222",
+                research={
+                    "need_product": True,
+                    "sell_intent": "explicit",
+                    "product_surface": "DRK-OL-12",
+                },
+            )
+        )
+    assert out["product_clarify"] is False
+    assert out["primary_product"]["sku"] == "DRK-OL-12"
+    assert out["product_context_ids"] == ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]
+
+
+@pytest.mark.asyncio
+async def test_grounding_rejects_invented_product_price(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    monkeypatch.setattr(
+        N,
+        "get_signals_by_ids",
+        AsyncMock(return_value=[fake_signal("sig_a")]),
+    )
+    with session_db(mock_db):
+        out = await N.grounding_check(
+            _base_state(
+                source_signal_ids=["sig_a"],
+                draft={"caption": "只需 $999 入手燕麥拿鐵"},
+                primary_product={
+                    "product_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    "search_document": "燕麥拿鐵 | DRK-OL-12 | 48",
+                },
+            )
+        )
+    assert out["grounding_ok"] is False
+    assert "999" in out["reviewer_feedback"]

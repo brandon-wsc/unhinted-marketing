@@ -62,6 +62,7 @@ def build_session_graph(*, checkpointer: Any | None = None):
     g.add_node("research_ingest", N.research_ingest)
     g.add_node("load_context", N.load_context)
     g.add_node("trend_searcher", _with_llm_record_context("trend_searcher", N.trend_searcher))
+    g.add_node("product_matcher", N.product_matcher)
     g.add_node("brainstormer", _with_llm_record_context("brainstormer", N.brainstormer))
     g.add_node("executor_post", _with_llm_record_context("executor_post", N.executor_post))
     g.add_node("grounding_check", N.grounding_check)
@@ -109,7 +110,15 @@ def build_session_graph(*, checkpointer: Any | None = None):
     g.add_edge("ack_confirm", END)
 
     g.add_edge("load_context", "trend_searcher")
-    g.add_edge("trend_searcher", "brainstormer")
+    g.add_edge("trend_searcher", "product_matcher")
+    g.add_conditional_edges(
+        "product_matcher",
+        N.route_after_product_matcher,
+        {
+            "brainstormer": "brainstormer",
+            "chat": "chat",
+        },
+    )
     g.add_edge("brainstormer", "executor_post")
     g.add_edge("executor_post", "grounding_check")
     g.add_edge("grounding_check", "reviewer")

@@ -175,6 +175,11 @@ def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str,
         "active_persona": state.get("active_persona"),
         "ranked_signals": state.get("ranked_signals") or [],
         "trend_notes": state.get("trend_notes") or "",
+        "primary_product": state.get("primary_product"),
+        "related_products": state.get("related_products") or [],
+        "product_clarify": bool(state.get("product_clarify")),
+        "product_context_ids": state.get("product_context_ids") or [],
+        "product_candidates": state.get("product_candidates") or [],
         "grounding_ok": state.get("grounding_ok", True),
     }
 
@@ -352,6 +357,11 @@ async def _persist_after_invoke(
         "active_persona": values.get("active_persona"),
         "ranked_signals": values.get("ranked_signals") or [],
         "trend_notes": values.get("trend_notes") or "",
+        "primary_product": values.get("primary_product"),
+        "related_products": values.get("related_products") or [],
+        "product_clarify": bool(values.get("product_clarify")),
+        "product_context_ids": values.get("product_context_ids") or [],
+        "product_candidates": values.get("product_candidates") or [],
         "grounding_ok": values.get("grounding_ok", True),
         "error": values.get("error"),
         # UI hydrate: interrupt_before executor_image_plan

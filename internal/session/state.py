@@ -50,6 +50,12 @@ class SessionState(TypedDict, total=False):
     # K2 — signals live outside company_context
     ranked_signals: NotRequired[list[dict[str, Any]]]
     trend_notes: NotRequired[str]
+    # Product catalog match (session)
+    primary_product: NotRequired[dict[str, Any] | None]
+    related_products: NotRequired[list[dict[str, Any]]]
+    product_clarify: NotRequired[bool]
+    product_context_ids: NotRequired[list[str]]
+    product_candidates: NotRequired[list[dict[str, Any]]]
     error: NotRequired[str]
     # Visual format for executor_image_plan (default single). Set via resume-image body or revise.
     image_format: NotRequired[Literal["single", "comic_4panel"]]
