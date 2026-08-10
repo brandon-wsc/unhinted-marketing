@@ -31,7 +31,7 @@ def attach_pgvector(eng: AsyncEngine) -> None:
             dbapi_connection.run_async(register_vector)
         except Exception:
             # Extension may be missing on fresh DBs before migrate; retrieve falls back.
-            pass
+            return
 
 
 attach_pgvector(engine)

@@ -73,7 +73,7 @@ ignore = [
 "internal/perception/**" = ["BLE001"]
 "internal/session/service.py" = ["BLE001", "RUF005"]
 "internal/session/semantic_gate.py" = ["BLE001"]
-"internal/memory/database.py" = ["BLE001"]
+"internal/memory/database.py" = ["BLE001", "S110"]
 "internal/memory/embeddings.py" = ["BLE001"]
 "cmd/api/routes/sessions.py" = ["BLE001"]
 

@@ -707,9 +707,9 @@ def _should_match_product(state: SessionState) -> bool:
     if sell in ("explicit", "implicit"):
         return True
     # Heuristic: start path with a concrete product_surface
-    if (state.get("intent") or "") == "start" and str(research.get("product_surface") or "").strip():
-        return True
-    return False
+    return (state.get("intent") or "") == "start" and bool(
+        str(research.get("product_surface") or "").strip()
+    )
 
 
 @agent_progress("product_matcher")

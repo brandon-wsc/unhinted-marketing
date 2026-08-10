@@ -164,7 +164,7 @@ def _lexical_hits(rows: list[Product], cleaned: list[str]) -> list[ProductHit]:
             qn = _norm(q)
             if not qn:
                 continue
-            if qn == sku_l or qn == name_l:
+            if qn in (sku_l, name_l):
                 best = max(best, 1.0)
                 kind = "exact_sku"
                 continue

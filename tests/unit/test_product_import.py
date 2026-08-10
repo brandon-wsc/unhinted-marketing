@@ -4,7 +4,7 @@ from internal.memory.product_import import parse_csv_bytes, parse_product_upload
 
 
 def test_parse_csv_flexible_headers() -> None:
-    raw = "Name,SKU,Price\nOat Latte,DRK-OL-12,48\n,,\n".encode()
+    raw = b"Name,SKU,Price\nOat Latte,DRK-OL-12,48\n,,\n"
     rows, errors = parse_csv_bytes(raw)
     assert len(rows) == 1
     assert rows[0]["sku"] == "DRK-OL-12"
@@ -14,7 +14,7 @@ def test_parse_csv_flexible_headers() -> None:
 
 
 def test_parse_csv_name_as_sku_fallback() -> None:
-    raw = "product,description\nStaff pick,Only for friends\n".encode()
+    raw = b"product,description\nStaff pick,Only for friends\n"
     rows, errors = parse_csv_bytes(raw)
     assert errors == []
     assert rows[0]["sku"] == "Staff pick"

@@ -6,6 +6,7 @@ from sqlalchemy import delete, desc, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from internal.memory.embeddings import embed_texts
 from internal.memory.models import (
     Edge,
     Entity,
@@ -19,7 +20,6 @@ from internal.memory.models import (
     SessionMessage,
     ToolReceipt,
 )
-from internal.memory.embeddings import embed_texts
 from internal.memory.product_import import build_search_document
 
 

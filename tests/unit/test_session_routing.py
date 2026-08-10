@@ -8,7 +8,6 @@ from internal.session.nodes import (
     bump_review_attempt,
     route_after_intent,
     route_after_product_matcher,
-    route_after_research,
     route_after_reviewer,
 )
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW

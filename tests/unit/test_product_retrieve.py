@@ -100,10 +100,10 @@ def test_cosine_similarity_identical() -> None:
 
 def test_member_scope_sql_binds_company_id() -> None:
     """COLLECT §6 — company_id is always in the SQL predicate (no global top-K)."""
+    from sqlalchemy import select
     from sqlalchemy.dialects import postgresql
 
     from internal.memory.models import Product
-    from sqlalchemy import select
 
     cid = UUID("11111111-1111-1111-1111-111111111111")
     uid = UUID("22222222-2222-2222-2222-222222222222")

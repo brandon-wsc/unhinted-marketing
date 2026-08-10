@@ -15,8 +15,8 @@ from internal.auth.org import (
     require_company_settings_editor,
 )
 from internal.memory.database import get_db
-from internal.memory.models import User
 from internal.memory.embeddings import embed_texts
+from internal.memory.models import User
 from internal.memory.product_import import parse_product_upload
 from internal.memory.repos import (
     archive_product,
