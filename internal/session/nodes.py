@@ -83,14 +83,15 @@ def _last_user_text(state: SessionState) -> str:
 
 
 def _slim_company(state: SessionState) -> dict[str, Any]:
-    """Identity-only company slice for LLM payloads (K1)."""
+    """Identity-only company slice for LLM payloads (K1/K2)."""
     ctx = state.get("company_context") or {}
     out: dict[str, Any] = {}
     for key in ("company_id", "name", "slug"):
         if ctx.get(key) is not None:
             out[key] = ctx[key]
-    if ctx.get("trend_notes"):
-        out["trend_notes"] = ctx["trend_notes"]
+    notes = state.get("trend_notes") or ctx.get("trend_notes")
+    if notes:
+        out["trend_notes"] = notes
     return out
 
 
@@ -103,6 +104,10 @@ def _audience_catalog(state: SessionState) -> list[dict[str, Any]]:
 
 
 def _ranked_signals(state: SessionState) -> list[dict[str, Any]]:
+    """Prefer top-level K2 field; fall back to legacy company_context copy."""
+    top = state.get("ranked_signals")
+    if top is not None:
+        return list(top)
     ctx = state.get("company_context") or {}
     return list(ctx.get("ranked_signals") or [])
 
@@ -478,12 +483,6 @@ async def load_context(state: SessionState) -> dict[str, Any]:
     personas = await list_personas(db)
     catalog = audience_catalog_from_entities(personas)
 
-    # Keep ranked_signals / trend_notes across turns (still on company_context until K2).
-    prev = state.get("company_context") or {}
-    for key in ("ranked_signals", "trend_notes"):
-        if key in prev:
-            slim[key] = prev[key]
-
     return {
         "mode": MODE_AGENT,
         "company_context": slim,
@@ -495,15 +494,14 @@ async def load_context(state: SessionState) -> dict[str, Any]:
 @agent_progress("trend_searcher")
 async def trend_searcher(state: SessionState) -> dict[str, Any]:
     db = get_db()
-    ctx = dict(state.get("company_context") or {})
+    company = _slim_company(state)
     # Prefer PG∪Tavily merge from research_ingest when present (ADR 0009).
-    prior = list(state.get("research_signals") or ctx.get("research_signals") or [])
+    prior = list(state.get("research_signals") or [])
     if prior:
         signals_payload = prior[:20]
-        # Still load ORM rows only if we need LLM re-rank with DB objects — use payload ids.
         ranked_ids = [s["signal_id"] for s in signals_payload if s.get("signal_id")][:8]
         payload = {
-            "company": ctx,
+            "company": company,
             "user_request": _last_user_text(state),
             "signals": signals_payload,
         }
@@ -521,18 +519,20 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
             [s for s in signals_payload if s.get("signal_id") in order],
             key=lambda s: order[str(s["signal_id"])],
         )
-        ctx["ranked_signals"] = ranked
+        out: dict[str, Any] = {
+            "source_signal_ids": ranked_ids,
+            "ranked_signals": ranked,
+        }
         if parsed and parsed.notes:
-            ctx["trend_notes"] = parsed.notes
-        return {"source_signal_ids": ranked_ids, "company_context": ctx}
+            out["trend_notes"] = parsed.notes
+        return out
 
     signals = await list_top_signals(db, limit=20, region="HK")
     if not signals:
-        ctx["ranked_signals"] = []
-        return {"source_signal_ids": [], "company_context": ctx}
+        return {"source_signal_ids": [], "ranked_signals": [], "trend_notes": ""}
 
     payload = {
-        "company": ctx,
+        "company": company,
         "user_request": _last_user_text(state),
         "signals": _signals_payload(signals),
     }
@@ -553,10 +553,13 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
         [s for s in signals if s.signal_id in order],
         key=lambda s: order[s.signal_id],
     )
-    ctx["ranked_signals"] = _signals_payload(ranked)
+    out = {
+        "source_signal_ids": ranked_ids,
+        "ranked_signals": _signals_payload(ranked),
+    }
     if parsed and parsed.notes:
-        ctx["trend_notes"] = parsed.notes
-    return {"source_signal_ids": ranked_ids, "company_context": ctx}
+        out["trend_notes"] = parsed.notes
+    return out
 
 
 # Batch streamed pieces so a long reply cannot overflow the per-subscriber

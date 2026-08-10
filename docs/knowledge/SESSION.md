@@ -31,6 +31,7 @@ If `product_clarify` is true after matcher → short-circuit to **chat** (ask wh
 | `voice_pack` | `load_context` | chat†, brainstormer, executor_post, edit_copy, reviewer |
 | `audience_catalog` | `load_context` | trend_searcher†, brainstormer |
 | `ranked_signals` | `trend_searcher` | brainstormer, executor_post, edit_copy |
+| `trend_notes` | `trend_searcher` | optional via slim company LLM slice |
 | `primary_product` | `product_matcher` | brainstormer, executor_post, reviewer, grounding_check |
 | `related_products` | `product_matcher` | brainstormer (optional) |
 | `product_clarify` | `product_matcher` | route → chat |
@@ -48,11 +49,11 @@ Identity only — do not pass full `profile` or `personas[]` to LLM payloads:
 {
   "company_id": "uuid",
   "name": "Acme HK",
-  "slug": "acme-hk",
-  "trend_notes": "optional from trend_searcher"
+  "slug": "acme-hk"
 }
 ```
 
+`trend_notes` (from `trend_searcher`) and `ranked_signals` are **top-level** SessionState fields (K2), not nested under `company_context`.
 ### `research` (ADR 0009 — shipped today)
 
 Side channel on `route_intent` output (`ResearchFlags` in `internal/session/io.py`). Controls **open-web / market** ingest — not product catalog (K3).
@@ -173,7 +174,7 @@ Draft schema (planned): `product_context_ids` on `DraftOut` / `EditOut`; persist
 
 ## Current code (shipped baseline)
 
-Today `load_context` emits top-level `voice_pack` + `audience_catalog` and identity-only `company_context` (K1). `ranked_signals` still rides on `company_context` until K2.
+Today `load_context` emits top-level `voice_pack` + `audience_catalog` and identity-only `company_context` (K1). `trend_searcher` writes top-level `ranked_signals` + `trend_notes` (K2).
 
 ---
 

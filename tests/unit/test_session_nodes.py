@@ -271,7 +271,10 @@ async def test_trend_searcher_empty_signals(no_llm: None, mock_db) -> None:
     with session_db(mock_db):
         out = await N.trend_searcher(_base_state(company_context={"name": "Acme"}))
     assert out["source_signal_ids"] == []
-    assert out["company_context"]["ranked_signals"] == []
+    assert out["ranked_signals"] == []
+    assert "company_context" not in out or "ranked_signals" not in (
+        out.get("company_context") or {}
+    )
 
 
 @pytest.mark.asyncio
@@ -295,8 +298,8 @@ async def test_trend_searcher_ranks_with_mock_llm(
         out = await N.trend_searcher(_base_state(company_context={"name": "Acme"}))
 
     assert out["source_signal_ids"] == ["sig_c", "sig_a"]
-    assert out["company_context"]["trend_notes"] == "prefer c"
-    ranked_ids = [s["signal_id"] for s in out["company_context"]["ranked_signals"]]
+    assert out["trend_notes"] == "prefer c"
+    ranked_ids = [s["signal_id"] for s in out["ranked_signals"]]
     assert ranked_ids == ["sig_c", "sig_a"]
 
 
@@ -319,7 +322,8 @@ async def test_brainstormer_mock_llm_matches_brief_contract(
     monkeypatch.setattr(N, "complete_json", fake_complete_json)
     out = await N.brainstormer(
         _base_state(
-            company_context={"ranked_signals": [{"signal_id": "sig_a", "title": "奶茶"}]},
+            company_context={"name": "Acme"},
+            ranked_signals=[{"signal_id": "sig_a", "title": "奶茶"}],
             audience_catalog=[
                 {"slug": "hk_youth", "label": "Youth", "hook": "short"},
             ],
@@ -350,7 +354,8 @@ async def test_executor_post_filters_citations(
     out = await N.executor_post(
         _base_state(
             source_signal_ids=["sig_a", "sig_b"],
-            company_context={"name": "Acme", "ranked_signals": []},
+            company_context={"name": "Acme"},
+            ranked_signals=[],
             brief={"summary": "x"},
         )
     )

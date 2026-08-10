@@ -47,6 +47,9 @@ class SessionState(TypedDict, total=False):
     voice_pack: NotRequired[dict[str, Any]]
     audience_catalog: NotRequired[list[dict[str, Any]]]
     active_persona: NotRequired[dict[str, Any] | None]
+    # K2 — signals live outside company_context
+    ranked_signals: NotRequired[list[dict[str, Any]]]
+    trend_notes: NotRequired[str]
     error: NotRequired[str]
     # Visual format for executor_image_plan (default single). Set via resume-image body or revise.
     image_format: NotRequired[Literal["single", "comic_4panel"]]
