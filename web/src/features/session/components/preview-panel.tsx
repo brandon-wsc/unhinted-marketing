@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/auth-context";
+import { apiPromoteVoiceExemplar } from "@/features/company-settings/api";
 import { EditCopyDialog } from "@/features/session/components/edit-copy-dialog";
 import { EditImageDialog } from "@/features/session/components/edit-image-dialog";
 import {
@@ -17,6 +19,8 @@ type Props = {
   confirmReceipt: ConfirmSessionResponse | null;
   draftSaving: boolean;
   confirming: boolean;
+  companyId?: string;
+  canPromoteExemplar?: boolean;
   onApply: (copy: DraftCopy) => Promise<unknown>;
   onConfirm: (copy: DraftCopy) => Promise<unknown>;
   onSavePlan: (
@@ -38,6 +42,8 @@ export function PreviewPanel({
   confirmReceipt,
   draftSaving,
   confirming,
+  companyId,
+  canPromoteExemplar = false,
   onApply,
   onConfirm,
   onSavePlan,
@@ -49,9 +55,13 @@ export function PreviewPanel({
   onBack,
 }: Props) {
   const { t } = useTranslation();
+  const { accessToken } = useAuth();
   const [local, setLocal] = useState<DraftCopy>(() => toEditableCopy(draft));
   const [editImageOpen, setEditImageOpen] = useState(false);
   const [editCopyOpen, setEditCopyOpen] = useState(false);
+  const [promoting, setPromoting] = useState(false);
+  const [promoteFlash, setPromoteFlash] = useState<"ok" | "dup" | "err" | null>(null);
+  const [promoteError, setPromoteError] = useState<string | null>(null);
 
   // Server wins on SSE / AI revise — reset local dirty state.
   useEffect(() => {
@@ -72,8 +82,13 @@ export function PreviewPanel({
   }, [confirmed]);
 
   const dirty = !draftEquals(local, draft.copy);
-  const busy = draftSaving || confirming;
+  const busy = draftSaving || confirming || promoting;
   const canConfirm = !!draft.approval_token && !confirmed && local.caption.trim().length > 0;
+  const showPromote =
+    canPromoteExemplar &&
+    !!companyId &&
+    (confirmReceipt || confirmed) &&
+    local.caption.trim().length > 0;
   const previewUrls = useMemo(() => {
     const fromMedia = [...(draft.media ?? [])]
       .sort((a, b) => a.seq - b.seq)
@@ -96,6 +111,23 @@ export function PreviewPanel({
   async function handleSaveCopy(copy: DraftCopy) {
     setLocal(copy);
     await onApply(copy);
+  }
+
+  async function handlePromoteExemplar() {
+    if (!showPromote || !companyId || promoting) return;
+    setPromoting(true);
+    setPromoteFlash(null);
+    setPromoteError(null);
+    try {
+      const res = await apiPromoteVoiceExemplar(accessToken, companyId, local.caption);
+      setPromoteFlash(res.added ? "ok" : "dup");
+      window.setTimeout(() => setPromoteFlash(null), 3000);
+    } catch (err) {
+      setPromoteFlash("err");
+      setPromoteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPromoting(false);
+    }
   }
 
   return (
@@ -152,13 +184,39 @@ export function PreviewPanel({
 
       <div className="shrink-0 border-t border-border bg-card px-4 py-3">
         {confirmReceipt || confirmed ? (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm">
-            <p className="font-medium">{t("preview.confirmDone")}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {t("preview.confirmReceipt", {
-                status: confirmReceipt?.status ?? "confirmed",
-              })}
-            </p>
+          <div className="space-y-2">
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm">
+              <p className="font-medium">{t("preview.confirmDone")}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("preview.confirmReceipt", {
+                  status: confirmReceipt?.status ?? "confirmed",
+                })}
+              </p>
+            </div>
+            {showPromote && (
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={promoting}
+                  onClick={() => void handlePromoteExemplar()}
+                >
+                  {promoting ? t("preview.exemplar.working") : t("preview.exemplar.save")}
+                </Button>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {t("preview.exemplar.hint")}
+                </p>
+                {promoteFlash === "ok" && (
+                  <p className="text-xs text-foreground">{t("preview.exemplar.saved")}</p>
+                )}
+                {promoteFlash === "dup" && (
+                  <p className="text-xs text-muted-foreground">{t("preview.exemplar.already")}</p>
+                )}
+                {promoteFlash === "err" && (
+                  <p className="text-xs text-destructive">{promoteError}</p>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-end gap-2">

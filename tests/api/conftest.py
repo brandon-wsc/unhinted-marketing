@@ -32,6 +32,7 @@ TRUNCATE_TABLES = (
     "recommended_questions",
     "edges",
     "raw_news_events",
+    "products",
     "refresh_tokens",
     "organization_members",
     "entities",
@@ -70,7 +71,10 @@ def migrated_database(test_database_url: str) -> str:
 @pytest_asyncio.fixture
 async def engine(migrated_database: str):
     # Function-scoped: session-scoped async engines break across pytest-asyncio loops.
+    from internal.memory.database import attach_pgvector
+
     eng = create_async_engine(migrated_database, echo=False, pool_pre_ping=True)
+    attach_pgvector(eng)
     yield eng
     await eng.dispose()
 

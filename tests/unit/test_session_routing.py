@@ -7,7 +7,7 @@ from internal.session.nodes import (
     _wants_image_change,
     bump_review_attempt,
     route_after_intent,
-    route_after_research,
+    route_after_product_matcher,
     route_after_reviewer,
 )
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW
@@ -73,9 +73,10 @@ def test_route_after_intent_research_gate() -> None:
     )
 
 
-def test_route_after_research() -> None:
-    assert route_after_research({"intent": "start"}) == "load_context"
-    assert route_after_research({"intent": "chat"}) == "chat"
+def test_route_after_product_matcher() -> None:
+    assert route_after_product_matcher({}) == "brainstormer"
+    assert route_after_product_matcher({"product_clarify": False}) == "brainstormer"
+    assert route_after_product_matcher({"product_clarify": True}) == "chat"
 
 
 def test_should_research() -> None:

@@ -9,7 +9,10 @@
     "password": "Password",
     "showPassword": "Show password",
     "hidePassword": "Hide password",
-    "notAvailable": "—"
+    "notAvailable": "—",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…"
   },
   "header": {
     "menu": {
@@ -149,6 +152,13 @@
     "confirmDone": "Confirmed",
     "confirmReceipt": "Receipt status: {{status}}",
     "confirmHint": "Saying so in chat does not publish. Confirm uses the saved revision (dirty edits are saved first).",
+    "exemplar": {
+      "save": "Save caption as voice example",
+      "working": "Saving…",
+      "hint": "Keeps up to 3 company examples for future drafts. Does not publish again.",
+      "saved": "Saved to company voice examples.",
+      "already": "Already in your voice examples."
+    },
     "fields": {
       "caption": "Caption",
       "hashtags": "Hashtags",
@@ -199,6 +209,107 @@
       "addFailed": "Failed to add an image. Please try again.",
       "removeFailed": "Failed to remove the image. Please try again.",
       "uploadFailed": "Failed to upload the image. Please try again."
+    }
+  },
+  "settings": {
+    "menuEntry": "Company settings",
+    "title": "Company settings",
+    "navLabel": "Company",
+    "nav": {
+      "voice": "Voice",
+      "products": "Products",
+      "approvals": "Approvals"
+    },
+    "noCompany": {
+      "title": "No company yet",
+      "body": "A company workspace is created when you register.",
+      "back": "Back to home"
+    },
+    "voice": {
+      "title": "Voice",
+      "subtitle": "Set how your brand sounds in drafts — tone and words to avoid.",
+      "readOnly": "You can view these settings. Ask a company admin if you need changes.",
+      "saved": "Saved.",
+      "roast": {
+        "label": "Tone strength",
+        "hint": "Higher is sharper and more playful. Default works for most posts.",
+        "levels": {
+          "0": "0 Soft",
+          "1": "1 Default",
+          "2": "2 Sharp",
+          "3": "3 Bold"
+        }
+      },
+      "locale": {
+        "label": "Locale",
+        "hint": "Main writing locale for drafts, e.g. zh-HK."
+      },
+      "forbidden": {
+        "label": "Words to avoid",
+        "hint": "Up to 15 phrases, separated by commas. Drafts will try to skip them."
+      },
+      "tone": {
+        "label": "Tone notes",
+        "hint": "Optional. A few short lines about the feel you want."
+      },
+      "exemplars": {
+        "label": "Example captions",
+        "hint": "Up to 3 short captions drafts can learn from. You can also save one after Confirm.",
+        "slot": "Example {{n}}",
+        "chars": "{{used}} / {{max}}"
+      }
+    },
+    "products": {
+      "title": "Products",
+      "subtitleOrg": "Your company catalog — drafts prefer these details when talking about products.",
+      "subtitleMine": "Your personal product list. If a code already exists in the company catalog, the company version is used.",
+      "tabs": {
+        "org": "Company",
+        "mine": "Mine"
+      },
+      "import": "Import CSV / Excel",
+      "importHint": "Rows with the same product code update existing ones.",
+      "addRow": "Add row",
+      "activeCount": "{{count}} active",
+      "empty": "No products yet. Import a file or add a row to start.",
+      "archive": "Archive",
+      "statusActive": "Active",
+      "coveredByCompany": "Covered by company",
+      "personalOnly": "Personal only",
+      "readOnlyOrg": "You can view the company catalog. Ask a company admin to make changes.",
+      "coverTitle": "When both lists have the same product",
+      "coverBody": "Drafts use the company version. Your personal copy stays for you until you ask to update the company list.",
+      "columns": {
+        "name": "Name",
+        "note": "Note",
+        "status": "Status",
+        "action": "Action"
+      },
+      "detail": {
+        "title": "Product details",
+        "fieldCount": "{{count}} columns",
+        "empty": "No extra columns on this row.",
+        "close": "Close"
+      },
+      "fields": {
+        "name": "Name",
+        "sku": "Product code",
+        "notes": "Notes",
+        "notesHint": "Optional. Selling points, ingredients, or anything drafts should know."
+      },
+      "stats": {
+        "imported": "Added",
+        "updated": "Updated",
+        "skipped": "Skipped",
+        "errors": "Issues"
+      }
+    },
+    "approvals": {
+      "title": "Approvals",
+      "subtitle": "When someone wants to add personal product details to the company list, you’ll review it here.",
+      "emptyTitle": "Nothing waiting for review",
+      "emptyBody": "When a teammate asks to add a product to the company catalog, you’ll see the changes here to approve or decline.",
+      "emptyBadge": "Coming soon"
     }
   },
   "admin": {
@@ -316,8 +427,8 @@
   },
   "theme": {
     "label": "Theme",
-    "light": "Light mode",
-    "dark": "Dark mode"
+    "light": "Light",
+    "dark": "Dark"
   },
   "errors": {
     "loginFailed": "Sign in failed",

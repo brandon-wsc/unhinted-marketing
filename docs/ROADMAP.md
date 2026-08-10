@@ -327,7 +327,7 @@ unhinted-marketing/
 
 ## Knowledge (PostgreSQL)
 
-All curated marketing knowledge lives in PostgreSQL — no markdown bundle in repo.
+All curated marketing knowledge lives in PostgreSQL — no markdown bundle in repo. **Design SSOT:** [knowledge/README.md](./knowledge/README.md) (MODEL · SESSION · COLLECT).
 
 | Store | Contents |
 |-------|----------|

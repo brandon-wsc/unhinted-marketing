@@ -6,20 +6,21 @@
 | Doc / file | Job |
 |------------|-----|
 | [BRIEF.md](./BRIEF.md) | Positioning + shell vs craft voice |
-| [TOKENS.md](./TOKENS.md) | As-shipped vs **proposed** harness desk tokens |
+| [TOKENS.md](./TOKENS.md) | Live harness desk tokens + `muted` vs `accent` wash rules |
 | [`design/penpot/`](../../design/penpot/) | **Penpot Core** visual SSOT for proposed shell — CSS apply still separate |
 
 ### Penpot page inventory (2026-08 redesign)
 
 | Page | Contents |
 |------|----------|
-| Library | Token swatches (light + dark, renamed `token (mode)`), type scale (IBM Plex Sans / Noto Sans HK), component set: buttons, badges, inputs, question cards, agent action trail (voice accent), chat bubbles, tabs, icon buttons (akar send / stop), theme switch |
+| Library | Token swatches (light + dark, renamed `token (mode)`), type scale (IBM Plex Sans / Noto Sans HK), component set: buttons, badges, inputs, question cards, agent action trail (voice accent), chat bubbles, tabs, icon buttons (akar send / stop), theme switch. **Accent = hover wash**; muted is solid gray — see [TOKENS.md](./TOKENS.md). |
 | Login · Register | Orderly centered auth card; exactly ONE corner craft signal (voice ✳ + “Reliable tools, unleashed copy”) |
 | Session — split | Desktop 1440: `empty` (landing + recommended questions) and `preview` (chat + action trail + interrupt card; preview pane with IG mock, revision/dirty badges, Confirm gate with serious copy); composer send/stop are icon buttons |
 | Session — paged | Mobile 390: `record` (history), `chat` (trail + preview-ready banner), `preview` (IG mock + Confirm gate) |
-| Dialogs | Edit copy (caption / hashtags / CTA → one revision), Edit image (media slots, format toggle, prompt fields, upload, delete / save plan / generate), UserMenu — desktop dropdown / mobile dialog (theme = light/dark switch, no system mode) |
+| Dialogs | Edit copy … UserMenu — desktop dropdown / mobile dialog (theme = light/dark switch, no system mode); **Company settings** menu item above Admin |
+| Company settings | Desktop 1440: shell page from UserMenu — sidebar **Voice / Products** (Approvals held/hidden until K6); Products **Org \| Mine**. Frames: Voice form; Products import + table (row click → profile columns dialog); Mine cover badge. Spec: [knowledge/UI.md](../knowledge/UI.md). |
 
-Admin console intentionally not designed in Penpot — temporary ops surface.
+Admin console intentionally not designed in Penpot — temporary ops surface. Tenant KB CRUD is **Company settings**, not `/admin`.
 
 **Voice / copy craft:** [VOICE.md](../VOICE.md) — captions, not chrome.
 

@@ -42,7 +42,20 @@ class SessionState(TypedDict, total=False):
     approval_token: str | None
     need_image: bool
     grounding_ok: NotRequired[bool]
+    # K1 knowledge packs — identity-only company_context; voice/audience compressed
     company_context: NotRequired[dict[str, Any]]
+    voice_pack: NotRequired[dict[str, Any]]
+    audience_catalog: NotRequired[list[dict[str, Any]]]
+    active_persona: NotRequired[dict[str, Any] | None]
+    # K2 — signals live outside company_context
+    ranked_signals: NotRequired[list[dict[str, Any]]]
+    trend_notes: NotRequired[str]
+    # Product catalog match (session)
+    primary_product: NotRequired[dict[str, Any] | None]
+    related_products: NotRequired[list[dict[str, Any]]]
+    product_clarify: NotRequired[bool]
+    product_context_ids: NotRequired[list[str]]
+    product_candidates: NotRequired[list[dict[str, Any]]]
     error: NotRequired[str]
     # Visual format for executor_image_plan (default single). Set via resume-image body or revise.
     image_format: NotRequired[Literal["single", "comic_4panel"]]

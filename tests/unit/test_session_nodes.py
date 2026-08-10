@@ -257,9 +257,13 @@ async def test_load_context_sets_agent_mode(no_llm: None, mock_db) -> None:
         out = await N.load_context(_base_state())
     assert out["mode"] == MODE_AGENT
     assert "company_context" in out
-    assert out["company_context"]["personas"] == []
-    assert out["company_context"]["voice"]["roast_level"] == 1
-    assert out["company_context"]["voice"]["craft"] == "hk_social_editor"
+    assert "profile" not in out["company_context"]
+    assert "personas" not in out["company_context"]
+    assert "voice" not in out["company_context"]
+    assert out["voice_pack"]["roast_level"] == 1
+    assert out["voice_pack"]["craft"] == "hk_social_editor"
+    assert out["voice_pack"]["locale"] == "zh-HK"
+    assert out["audience_catalog"] == []
 
 
 @pytest.mark.asyncio
@@ -267,7 +271,10 @@ async def test_trend_searcher_empty_signals(no_llm: None, mock_db) -> None:
     with session_db(mock_db):
         out = await N.trend_searcher(_base_state(company_context={"name": "Acme"}))
     assert out["source_signal_ids"] == []
-    assert out["company_context"]["ranked_signals"] == []
+    assert out["ranked_signals"] == []
+    assert "company_context" not in out or "ranked_signals" not in (
+        out.get("company_context") or {}
+    )
 
 
 @pytest.mark.asyncio
@@ -291,8 +298,8 @@ async def test_trend_searcher_ranks_with_mock_llm(
         out = await N.trend_searcher(_base_state(company_context={"name": "Acme"}))
 
     assert out["source_signal_ids"] == ["sig_c", "sig_a"]
-    assert out["company_context"]["trend_notes"] == "prefer c"
-    ranked_ids = [s["signal_id"] for s in out["company_context"]["ranked_signals"]]
+    assert out["trend_notes"] == "prefer c"
+    ranked_ids = [s["signal_id"] for s in out["ranked_signals"]]
     assert ranked_ids == ["sig_c", "sig_a"]
 
 
@@ -315,13 +322,18 @@ async def test_brainstormer_mock_llm_matches_brief_contract(
     monkeypatch.setattr(N, "complete_json", fake_complete_json)
     out = await N.brainstormer(
         _base_state(
-            company_context={"ranked_signals": [{"signal_id": "sig_a", "title": "奶茶"}]},
+            company_context={"name": "Acme"},
+            ranked_signals=[{"signal_id": "sig_a", "title": "奶茶"}],
+            audience_catalog=[
+                {"slug": "hk_youth", "label": "Youth", "hook": "short"},
+            ],
             source_signal_ids=["sig_a"],
         )
     )
     parsed = SessionBriefData.model_validate(out["brief"])
     assert parsed.summary == "grounded brief"
     assert out["mode"] == MODE_AGENT
+    assert out["active_persona"]["slug"] == "hk_youth"
 
 
 @pytest.mark.asyncio
@@ -342,7 +354,8 @@ async def test_executor_post_filters_citations(
     out = await N.executor_post(
         _base_state(
             source_signal_ids=["sig_a", "sig_b"],
-            company_context={"name": "Acme", "ranked_signals": []},
+            company_context={"name": "Acme"},
+            ranked_signals=[],
             brief={"summary": "x"},
         )
     )
@@ -577,3 +590,77 @@ async def test_mock_llm_payload_is_valid_json(
     monkeypatch.setattr(N, "complete_json", fake_complete_json)
     await N.route_intent(_base_state())
     assert seen
+
+
+@pytest.mark.asyncio
+async def test_product_matcher_skips_when_not_needed(no_llm: None, mock_db) -> None:
+    with session_db(mock_db):
+        out = await N.product_matcher(
+            _base_state(
+                intent="start",
+                user_id="22222222-2222-2222-2222-222222222222",
+                research={"need_product": False, "sell_intent": "none"},
+            )
+        )
+    assert out["primary_product"] is None
+    assert out["product_clarify"] is False
+
+
+@pytest.mark.asyncio
+async def test_product_matcher_sets_primary(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    from types import SimpleNamespace
+    from uuid import UUID
+
+    from internal.memory.product_retrieve import ProductHit
+
+    row = SimpleNamespace(
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        sku="DRK-OL-12",
+        name="燕麥拿鐵",
+        search_document="燕麥拿鐵 | DRK-OL-12 | 48",
+        owner_scope="org",
+        profile={},
+    )
+    hit = ProductHit(product=row, score=1.0, match_kind="exact_sku")
+    monkeypatch.setattr(N, "search_products_for_member", AsyncMock(return_value=[hit]))
+    with session_db(mock_db):
+        out = await N.product_matcher(
+            _base_state(
+                intent="start",
+                user_id="22222222-2222-2222-2222-222222222222",
+                research={
+                    "need_product": True,
+                    "sell_intent": "explicit",
+                    "product_surface": "DRK-OL-12",
+                },
+            )
+        )
+    assert out["product_clarify"] is False
+    assert out["primary_product"]["sku"] == "DRK-OL-12"
+    assert out["product_context_ids"] == ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]
+
+
+@pytest.mark.asyncio
+async def test_grounding_rejects_invented_product_price(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    monkeypatch.setattr(
+        N,
+        "get_signals_by_ids",
+        AsyncMock(return_value=[fake_signal("sig_a")]),
+    )
+    with session_db(mock_db):
+        out = await N.grounding_check(
+            _base_state(
+                source_signal_ids=["sig_a"],
+                draft={"caption": "只需 $999 入手燕麥拿鐵"},
+                primary_product={
+                    "product_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    "search_document": "燕麥拿鐵 | DRK-OL-12 | 48",
+                },
+            )
+        )
+    assert out["grounding_ok"] is False
+    assert "999" in out["reviewer_feedback"]

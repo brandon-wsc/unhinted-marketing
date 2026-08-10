@@ -113,6 +113,16 @@ describe("UserMenu (desktop dropdown)", () => {
     expect(screen.queryByRole("menuitem", { name: "admin.menuEntry" })).not.toBeInTheDocument();
   });
 
+  it("navigates to /settings from company settings", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(screen.getByRole("button", { name: /Ada/i }));
+    await user.click(screen.getByRole("menuitem", { name: "settings.menuEntry" }));
+
+    expect(navigate).toHaveBeenCalledWith("/settings");
+  });
+
   it("navigates to /admin from the admin entry for admins", async () => {
     mockUser.platform_level = 9;
     const user = userEvent.setup();

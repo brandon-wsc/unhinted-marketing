@@ -9,7 +9,10 @@
     "password": "密碼",
     "showPassword": "顯示密碼",
     "hidePassword": "隱藏密碼",
-    "notAvailable": "—"
+    "notAvailable": "—",
+    "cancel": "取消",
+    "save": "儲存",
+    "saving": "儲存中…"
   },
   "header": {
     "menu": {
@@ -149,6 +152,13 @@
     "confirmDone": "已確認",
     "confirmReceipt": "回執狀態：{{status}}",
     "confirmHint": "對話入面講「可以出」唔會發佈。確認會用已儲存嘅修訂（有未儲存改動會先自動儲存）。",
+    "exemplar": {
+      "save": "將文案存做語氣範例",
+      "working": "儲存緊…",
+      "hint": "公司最多保留 3 條範例，畀之後出稿參考。唔會再發佈一次。",
+      "saved": "已存入公司語氣範例。",
+      "already": "呢條已經喺語氣範例入面。"
+    },
     "fields": {
       "caption": "文案",
       "hashtags": "Hashtags",
@@ -199,6 +209,107 @@
       "addFailed": "加圖失敗，請再試一次",
       "removeFailed": "刪除圖像失敗，請再試一次",
       "uploadFailed": "上載圖像失敗，請再試一次"
+    }
+  },
+  "settings": {
+    "menuEntry": "公司設定",
+    "title": "公司設定",
+    "navLabel": "公司",
+    "nav": {
+      "voice": "語氣",
+      "products": "產品",
+      "approvals": "審批"
+    },
+    "noCompany": {
+      "title": "未有公司",
+      "body": "註冊帳戶時會自動建立公司 workspace。",
+      "back": "返回主頁"
+    },
+    "voice": {
+      "title": "語氣",
+      "subtitle": "設定品牌出稿嘅語氣同忌諱字，之後草稿會跟呢度走。",
+      "readOnly": "你可以睇到呢頁設定；要改動請搵公司負責人。",
+      "saved": "已儲存。",
+      "roast": {
+        "label": "語氣力度",
+        "hint": "愈高愈抽水、愈有梗；平常用預設就得。",
+        "levels": {
+          "0": "0 溫和",
+          "1": "1 預設",
+          "2": "2 銳利",
+          "3": "3 大膽"
+        }
+      },
+      "locale": {
+        "label": "語言地區",
+        "hint": "草稿主要用邊種地區寫法，例如 zh-HK。"
+      },
+      "forbidden": {
+        "label": "唔好用嘅字眼",
+        "hint": "最多 15 個，用逗號分隔。草稿會盡量避開。"
+      },
+      "tone": {
+        "label": "語氣備註",
+        "hint": "可選。用短句子講清楚你想要嘅感覺就得。"
+      },
+      "exemplars": {
+        "label": "範例文案",
+        "hint": "最多 3 條短文案，出稿時可以跟節奏。確認之後都可以再存。",
+        "slot": "範例 {{n}}",
+        "chars": "{{used}} / {{max}}"
+      }
+    },
+    "products": {
+      "title": "產品",
+      "subtitleOrg": "公司產品清單，團隊出稿時會優先用呢度嘅資料。",
+      "subtitleMine": "你自己嘅產品清單。如果同公司有同一個編號，會用公司嗰份。",
+      "tabs": {
+        "org": "公司",
+        "mine": "我的"
+      },
+      "import": "上載 CSV / Excel",
+      "importHint": "同一個產品編號會更新現有資料。",
+      "addRow": "新增一項",
+      "activeCount": "{{count}} 項",
+      "empty": "暫時未有產品。上載檔案或新增一項開始。",
+      "archive": "封存",
+      "statusActive": "使用中",
+      "coveredByCompany": "公司已有相同編號",
+      "personalOnly": "只喺你嘅清單",
+      "readOnlyOrg": "你可以睇到公司產品；要改動請搵公司負責人。",
+      "coverTitle": "兩個清單都有同一個產品時",
+      "coverBody": "出稿會用公司嗰份。你自己嘅版本仍然留住；之後可以申請更新公司清單。",
+      "columns": {
+        "name": "名稱",
+        "note": "備註",
+        "status": "狀態",
+        "action": "操作"
+      },
+      "detail": {
+        "title": "產品詳情",
+        "fieldCount": "{{count}} 個欄位",
+        "empty": "呢行未有額外欄位。",
+        "close": "關閉"
+      },
+      "fields": {
+        "name": "名稱",
+        "sku": "產品編號",
+        "notes": "內容／備註",
+        "notesHint": "選填。賣點、成分或其他草稿應該知嘅資料。"
+      },
+      "stats": {
+        "imported": "新增",
+        "updated": "更新",
+        "skipped": "略過",
+        "errors": "問題"
+      }
+    },
+    "approvals": {
+      "title": "審批",
+      "subtitle": "有人想將個人產品資料加入公司清單時，會喺度審批。",
+      "emptyTitle": "暫時未有待審批項目",
+      "emptyBody": "有成員申請加入公司產品清單時，會喺度顯示變更內容，供你批准或拒絕。",
+      "emptyBadge": "即將推出"
     }
   },
   "admin": {
@@ -316,8 +427,8 @@
   },
   "theme": {
     "label": "主題",
-    "light": "淺色模式",
-    "dark": "深色模式"
+    "light": "Light",
+    "dark": "Dark"
   },
   "errors": {
     "loginFailed": "登入失敗",

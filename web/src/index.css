@@ -15,7 +15,8 @@
   }
 }
 
-/* Harness desk tokens — SSOT: docs/design/TOKENS.md */
+/* Harness desk tokens — SSOT: docs/design/TOKENS.md
+   muted = solid mid-gray (not a wash); accent/secondary = 6% soft fill for hover. */
 @theme {
   --font-sans: "IBM Plex Sans", "Noto Sans HK", ui-sans-serif, system-ui, sans-serif;
   --color-primary: #111113;

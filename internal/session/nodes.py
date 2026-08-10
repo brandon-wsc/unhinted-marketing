@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import secrets
 import uuid
 from collections.abc import Awaitable, Callable
@@ -26,6 +27,11 @@ from internal.llm.router import (
 )
 from internal.media.storage import media_object_key, persist_generated_image
 from internal.memory.knowledge_seed import ensure_default_personas
+from internal.memory.product_retrieve import (
+    hit_to_payload,
+    pick_primary,
+    search_products_for_member,
+)
 from internal.memory.repos import (
     get_company,
     get_signals_by_ids,
@@ -62,7 +68,11 @@ from internal.session.io import (
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW, SessionState
 from internal.session.tiers import NODE_MODEL_TIERS
 from internal.session.trace import record_node_step
-from internal.session.voice import voice_context
+from internal.session.voice import (
+    audience_catalog_from_entities,
+    pick_active_persona,
+    voice_pack,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +86,36 @@ def _last_user_text(state: SessionState) -> str:
         if m.get("role") == "user":
             return str(m.get("content") or "")
     return ""
+
+
+def _slim_company(state: SessionState) -> dict[str, Any]:
+    """Identity-only company slice for LLM payloads (K1/K2)."""
+    ctx = state.get("company_context") or {}
+    out: dict[str, Any] = {}
+    for key in ("company_id", "name", "slug"):
+        if ctx.get(key) is not None:
+            out[key] = ctx[key]
+    notes = state.get("trend_notes") or ctx.get("trend_notes")
+    if notes:
+        out["trend_notes"] = notes
+    return out
+
+
+def _voice_pack(state: SessionState) -> dict[str, Any]:
+    return dict(state.get("voice_pack") or voice_pack(None))
+
+
+def _audience_catalog(state: SessionState) -> list[dict[str, Any]]:
+    return list(state.get("audience_catalog") or [])
+
+
+def _ranked_signals(state: SessionState) -> list[dict[str, Any]]:
+    """Prefer top-level K2 field; fall back to legacy company_context copy."""
+    top = state.get("ranked_signals")
+    if top is not None:
+        return list(top)
+    ctx = state.get("company_context") or {}
+    return list(ctx.get("ranked_signals") or [])
 
 
 def _append_assistant(state: SessionState, content: str) -> list[dict[str, Any]]:
@@ -306,7 +346,7 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
         "last_user_message": user,
         "research": research,
         "entity_surface": entity,
-        "company": (state.get("company_context") or {}).get("name"),
+        "company": _slim_company(state).get("name"),
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["query_generator"] or ModelTier.CHEAP,
@@ -421,15 +461,9 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
         seen.add(sid)
         merged.append(row)
 
-    ctx = dict(state.get("company_context") or {})
-    ctx["research_signals"] = merged[:20]
-    if queries:
-        ctx["search_query"] = queries[0]
-        ctx["search_queries"] = queries
     return {
         "research_signals": merged[:20],
         "search_query": queries[0] if queries else primary,
-        "company_context": ctx,
         "source_signal_ids": [r["signal_id"] for r in merged[:8]],
         "research": {**research, "search_queries": queries},
     }
@@ -439,54 +473,41 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
 async def load_context(state: SessionState) -> dict[str, Any]:
     db = get_db()
     company_id = state.get("company_id")
-    company_payload: dict[str, Any] = {
-        "company_id": company_id,
-        "voice": voice_context(None),
-    }
+    slim: dict[str, Any] = {"company_id": company_id} if company_id else {}
+    pack = voice_pack(None)
     if company_id:
         company = await get_company(db, uuid.UUID(company_id))
         if company:
-            profile = company.profile or {}
-            company_payload = {
+            slim = {
                 "company_id": str(company.id),
                 "name": company.name,
                 "slug": company.slug,
-                "profile": profile,
-                "voice": voice_context(profile),
             }
+            pack = voice_pack(company.profile)
+
     await ensure_default_personas(db)
     personas = await list_personas(db)
-    persona_rows = [
-        {"slug": p.slug, "name": p.name, "profile": p.profile or {}} for p in personas
-    ]
-    prev = state.get("company_context") or {}
-    ctx = {**company_payload, "personas": persona_rows}
-    if state.get("research_signals"):
-        ctx["research_signals"] = state["research_signals"]
-    elif prev.get("research_signals"):
-        ctx["research_signals"] = prev["research_signals"]
-    if state.get("search_query"):
-        ctx["search_query"] = state["search_query"]
-    elif prev.get("search_query"):
-        ctx["search_query"] = prev["search_query"]
+    catalog = audience_catalog_from_entities(personas)
+
     return {
         "mode": MODE_AGENT,
-        "company_context": ctx,
+        "company_context": slim,
+        "voice_pack": pack,
+        "audience_catalog": catalog,
     }
 
 
 @agent_progress("trend_searcher")
 async def trend_searcher(state: SessionState) -> dict[str, Any]:
     db = get_db()
-    ctx = dict(state.get("company_context") or {})
+    company = _slim_company(state)
     # Prefer PG∪Tavily merge from research_ingest when present (ADR 0009).
-    prior = list(state.get("research_signals") or ctx.get("research_signals") or [])
+    prior = list(state.get("research_signals") or [])
     if prior:
         signals_payload = prior[:20]
-        # Still load ORM rows only if we need LLM re-rank with DB objects — use payload ids.
         ranked_ids = [s["signal_id"] for s in signals_payload if s.get("signal_id")][:8]
         payload = {
-            "company": ctx,
+            "company": company,
             "user_request": _last_user_text(state),
             "signals": signals_payload,
         }
@@ -504,18 +525,20 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
             [s for s in signals_payload if s.get("signal_id") in order],
             key=lambda s: order[str(s["signal_id"])],
         )
-        ctx["ranked_signals"] = ranked
+        out: dict[str, Any] = {
+            "source_signal_ids": ranked_ids,
+            "ranked_signals": ranked,
+        }
         if parsed and parsed.notes:
-            ctx["trend_notes"] = parsed.notes
-        return {"source_signal_ids": ranked_ids, "company_context": ctx}
+            out["trend_notes"] = parsed.notes
+        return out
 
     signals = await list_top_signals(db, limit=20, region="HK")
     if not signals:
-        ctx["ranked_signals"] = []
-        return {"source_signal_ids": [], "company_context": ctx}
+        return {"source_signal_ids": [], "ranked_signals": [], "trend_notes": ""}
 
     payload = {
-        "company": ctx,
+        "company": company,
         "user_request": _last_user_text(state),
         "signals": _signals_payload(signals),
     }
@@ -536,10 +559,13 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
         [s for s in signals if s.signal_id in order],
         key=lambda s: order[s.signal_id],
     )
-    ctx["ranked_signals"] = _signals_payload(ranked)
+    out = {
+        "source_signal_ids": ranked_ids,
+        "ranked_signals": _signals_payload(ranked),
+    }
     if parsed and parsed.notes:
-        ctx["trend_notes"] = parsed.notes
-    return {"source_signal_ids": ranked_ids, "company_context": ctx}
+        out["trend_notes"] = parsed.notes
+    return out
 
 
 # Batch streamed pieces so a long reply cannot overflow the per-subscriber
@@ -564,6 +590,7 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
     """Stream the chat reply, publishing message.delta events live per turn."""
     history = (state.get("messages") or [])[-8:]
     research = state.get("research") or {}
+    pack = _voice_pack(state)
     payload = json.dumps(
         {
             "history": history,
@@ -571,6 +598,13 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
             "ask_clarify": bool(research.get("ask_clarify") or research.get("ambiguous")),
             "entity_surface": research.get("entity_surface") or "",
             "research_signals": (state.get("research_signals") or [])[:8],
+            "voice_pack": {
+                "roast_level": pack.get("roast_level"),
+                "locale": pack.get("locale"),
+            },
+            "product_clarify": bool(state.get("product_clarify")),
+            "product_candidates": (state.get("product_candidates") or [])[:3],
+            "primary_product": state.get("primary_product"),
         },
         ensure_ascii=False,
     )
@@ -606,6 +640,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
             try:
                 history = (state.get("messages") or [])[-8:]
                 research = state.get("research") or {}
+                pack = _voice_pack(state)
                 reply = await complete_text(
                     tier=NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP,
                     system=prompts.CHAT,
@@ -618,6 +653,10 @@ async def chat(state: SessionState) -> dict[str, Any]:
                             ),
                             "entity_surface": research.get("entity_surface") or "",
                             "research_signals": (state.get("research_signals") or [])[:8],
+                            "voice_pack": {
+                                "roast_level": pack.get("roast_level"),
+                                "locale": pack.get("locale"),
+                            },
                         },
                         ensure_ascii=False,
                     ),
@@ -645,14 +684,111 @@ async def chat(state: SessionState) -> dict[str, Any]:
     return out
 
 
+def _product_queries(state: SessionState) -> list[str]:
+    research = state.get("research") or {}
+    queries: list[str] = []
+    surface = str(research.get("product_surface") or "").strip()
+    if surface:
+        queries.append(surface)
+    entity = str(research.get("entity_surface") or "").strip()
+    if entity and entity not in queries:
+        queries.append(entity)
+    user = _last_user_text(state).strip()
+    if user and user not in queries:
+        queries.append(user[:200])
+    return queries
+
+
+def _should_match_product(state: SessionState) -> bool:
+    research = state.get("research") or {}
+    if research.get("need_product"):
+        return True
+    sell = str(research.get("sell_intent") or "none")
+    if sell in ("explicit", "implicit"):
+        return True
+    # Heuristic: start path with a concrete product_surface
+    return (state.get("intent") or "") == "start" and bool(
+        str(research.get("product_surface") or "").strip()
+    )
+
+
+@agent_progress("product_matcher")
+async def product_matcher(state: SessionState) -> dict[str, Any]:
+    """SQL catalog match — no LLM. Org covers user on SKU clash."""
+    empty = {
+        "primary_product": None,
+        "related_products": [],
+        "product_clarify": False,
+        "product_context_ids": [],
+        "product_candidates": [],
+    }
+    if not _should_match_product(state):
+        return empty
+
+    company_id = state.get("company_id")
+    user_id = state.get("user_id")
+    if not company_id or not user_id:
+        return empty
+
+    queries = _product_queries(state)
+    if not queries:
+        return empty
+
+    db = get_db()
+    hits = await search_products_for_member(
+        db,
+        company_id=uuid.UUID(company_id),
+        user_id=uuid.UUID(user_id),
+        queries=queries,
+        limit=5,
+    )
+    if not hits:
+        return empty
+
+    primary, clarify = pick_primary(hits)
+    candidates = [hit_to_payload(h) for h in hits[:3]]
+    if clarify or primary is None:
+        return {
+            "primary_product": None,
+            "related_products": [],
+            "product_clarify": True,
+            "product_context_ids": [],
+            "product_candidates": candidates,
+        }
+
+    primary_payload = hit_to_payload(primary)
+    related: list[dict[str, Any]] = []
+    for hit in hits[1:]:
+        if hit.product.owner_scope != "org":
+            continue
+        if hit.product.sku == primary.product.sku:
+            continue
+        related.append(hit_to_payload(hit))
+        if len(related) >= 2:
+            break
+
+    return {
+        "primary_product": primary_payload,
+        "related_products": related,
+        "product_clarify": False,
+        "product_context_ids": [primary_payload["product_id"]],
+        "product_candidates": [],
+    }
+
+
 @agent_progress("brainstormer")
 async def brainstormer(state: SessionState) -> dict[str, Any]:
-    ctx = state.get("company_context") or {}
+    catalog = _audience_catalog(state)
+    signals = _ranked_signals(state)[:8]
     payload = {
-        "company": ctx,
+        "company": _slim_company(state),
+        "voice_pack": _voice_pack(state),
+        "audience_catalog": catalog,
         "user_request": _last_user_text(state),
-        "signals": ctx.get("ranked_signals") or [],
+        "signals": signals,
         "source_signal_ids": state.get("source_signal_ids") or [],
+        "primary_product": state.get("primary_product"),
+        "related_products": (state.get("related_products") or [])[:2],
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["brainstormer"] or ModelTier.MEDIUM,
@@ -663,29 +799,33 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
     if parsed:
         brief = parsed.model_dump()
     else:
-        titles = [s.get("title") for s in (ctx.get("ranked_signals") or [])[:3] if s.get("title")]
+        titles = [s.get("title") for s in signals[:3] if s.get("title")]
         topic = titles[0] if titles else "香港熱話"
-        personas = ctx.get("personas") or []
         brief = {
             "can_do": [f"圍繞「{topic}」寫一則社交貼文", "加入品牌語氣同 CTA"],
             "cannot_do": ["未按 Confirm 前唔可以真正發佈", "唔好捏造未有 signal 支撐嘅數據"],
             "angles": [f"用「{topic}」連結品牌價值", "短片/靜態圖配合熱搜節奏"],
-            "persona": personas[0].get("slug") if personas else None,
+            "persona": catalog[0].get("slug") if catalog else None,
             "summary": f"基於近期 HK signals，建議做一則同「{topic}」相關嘅 grounded post。",
         }
-    return {"mode": MODE_AGENT, "brief": brief}
+    active = pick_active_persona(catalog, brief.get("persona"))
+    return {"mode": MODE_AGENT, "brief": brief, "active_persona": active}
 
 
 @agent_progress("executor_post")
 async def executor_post(state: SessionState) -> dict[str, Any]:
-    ctx = state.get("company_context") or {}
     signal_ids = list(state.get("source_signal_ids") or [])
+    signals = _ranked_signals(state)[:8]
     payload = {
-        "company": ctx,
+        "company": _slim_company(state),
+        "voice_pack": _voice_pack(state),
+        "active_persona": state.get("active_persona"),
         "brief": state.get("brief") or {},
-        "signals": ctx.get("ranked_signals") or [],
+        "signals": signals,
         "allowed_signal_ids": signal_ids,
         "user_request": _last_user_text(state),
+        "primary_product": state.get("primary_product"),
+        "related_products": (state.get("related_products") or [])[:2],
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["executor_post"] or ModelTier.MEDIUM,
@@ -702,9 +842,8 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
             "cta": parsed.cta or "了解更多",
         }
     else:
-        ranked = ctx.get("ranked_signals") or []
-        title = ranked[0].get("title") if ranked else "香港熱話"
-        company_name = ctx.get("name") or "我哋"
+        title = signals[0].get("title") if signals else "香港熱話"
+        company_name = _slim_company(state).get("name") or "我哋"
         draft = {
             "caption": (
                 f"最近成日聽到「{title}」？"
@@ -731,6 +870,12 @@ async def grounding_check(state: SessionState) -> dict[str, Any]:
         # Allow empty only if there are truly no signals in the system.
         signals = await list_top_signals(db, limit=1, region="HK")
         if not signals:
+            product_ok, product_feedback = _product_claim_ok(state)
+            if not product_ok:
+                return {
+                    "grounding_ok": False,
+                    "reviewer_feedback": product_feedback,
+                }
             return {
                 "grounding_ok": True,
                 "reviewer_feedback": "No HK signals in DB — draft is template-only",
@@ -751,7 +896,36 @@ async def grounding_check(state: SessionState) -> dict[str, Any]:
             "grounding_ok": False,
             "reviewer_feedback": f"Missing or invalid source_signal_ids: {missing}",
         }
+    product_ok, product_feedback = _product_claim_ok(state)
+    if not product_ok:
+        return {
+            "source_signal_ids": kept,
+            "grounding_ok": False,
+            "reviewer_feedback": product_feedback,
+        }
     return {"source_signal_ids": kept, "grounding_ok": True, "reviewer_feedback": ""}
+
+
+def _product_claim_ok(state: SessionState) -> tuple[bool, str]:
+    """If primary_product is set, numeric claims in caption must appear in search_document."""
+    primary = state.get("primary_product")
+    if not isinstance(primary, dict) or not primary.get("product_id"):
+        return True, ""
+    caption = str((state.get("draft") or {}).get("caption") or "")
+    doc = str(primary.get("search_document") or "")
+    if not caption:
+        return True, ""
+    claimed = set(re.findall(r"\d+(?:\.\d+)?", caption))
+    if not claimed:
+        return True, ""
+    grounded = set(re.findall(r"\d+(?:\.\d+)?", doc))
+    invented = sorted(claimed - grounded)
+    if invented:
+        return (
+            False,
+            f"Caption has numbers not in primary product row: {invented}",
+        )
+    return True, ""
 
 
 @agent_progress("reviewer")
@@ -768,7 +942,9 @@ async def reviewer(state: SessionState) -> dict[str, Any]:
     payload = {
         "draft": state.get("draft") or {},
         "brief": state.get("brief") or {},
-        "company": state.get("company_context") or {},
+        "company": _slim_company(state),
+        "voice_pack": _voice_pack(state),
+        "primary_product": state.get("primary_product"),
         "source_signal_ids": state.get("source_signal_ids") or [],
         "grounding_ok": state.get("grounding_ok", True),
         "mode": state.get("mode"),
@@ -805,7 +981,8 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
         "draft": state.get("draft") or {},
         "user_feedback": user,
         "reviewer_feedback": feedback,
-        "signals": (state.get("company_context") or {}).get("ranked_signals") or [],
+        "voice_pack": _voice_pack(state),
+        "signals": _ranked_signals(state)[:8],
         "allowed_signal_ids": signal_ids,
     }
     parsed = await _parse_llm_json(
@@ -857,7 +1034,12 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
     payload = {
         "draft": state.get("draft") or {},
         "brief": state.get("brief") or {},
-        "company": state.get("company_context") or {},
+        "company": _slim_company(state),
+        "voice_pack": {
+            k: v
+            for k, v in _voice_pack(state).items()
+            if k in ("roast_level", "locale")
+        },
         "image_format": fmt,
     }
     parsed = await _parse_llm_json(
@@ -873,7 +1055,7 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
             plan["panels"] = []
         return {"image_plan": plan, "image_format": plan["format"]}
 
-    company = (state.get("company_context") or {}).get("name") or "brand"
+    company = _slim_company(state).get("name") or "brand"
     caption = ((state.get("draft") or {}).get("caption") or "")[:120]
     if fmt == "comic_4panel":
         plan = {
@@ -937,7 +1119,7 @@ async def executor_image_gen(state: SessionState) -> dict[str, Any]:
     plan = state.get("image_plan") or {}
     prompt = compose_generation_prompt(plan)
     if not prompt:
-        company = (state.get("company_context") or {}).get("name") or "brand"
+        company = _slim_company(state).get("name") or "brand"
         prompt = f"Clean modern social media image for {company}, Hong Kong urban mood"
 
     # Size is provider-specific; LiteLLM drop_params handles unsupported keys.
@@ -1003,6 +1185,12 @@ def route_after_intent(state: SessionState) -> str:
     if intent == "confirm_intent":
         return "ack_confirm"
     return "chat"
+
+
+def route_after_product_matcher(state: SessionState) -> str:
+    if state.get("product_clarify"):
+        return "chat"
+    return "brainstormer"
 
 
 def route_after_research(state: SessionState) -> str:
