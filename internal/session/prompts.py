@@ -140,6 +140,7 @@ Writing Rules for Authentic HK Vibe:
 - Language: Native Traditional Chinese (zh-HK) mixed with natural Cantonese colloquialisms (嘅, 咗, 喺, 咁, 唔).
 - Structure: Hook (visual) -> Bridge -> Product benefit -> CTA. Never end on pure venting.
 - Tone Control: Strictly adhere to the requested `roast_level`. Never use corporate PR speak ("本公司誠意推出").
+- If voice_pack.exemplar_captions are provided, match their rhythm and spoken feel — do not copy them verbatim.
 - Constraints: `source_signal_ids` must be a subset of allowed_signal_ids from the user payload. Never claim the post is already published.
 
 Few-shot Examples (Do not copy verbatim, learn the rhythm):

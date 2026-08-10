@@ -152,6 +152,13 @@
     "confirmDone": "已確認",
     "confirmReceipt": "回執狀態：{{status}}",
     "confirmHint": "對話入面講「可以出」唔會發佈。確認會用已儲存嘅修訂（有未儲存改動會先自動儲存）。",
+    "exemplar": {
+      "save": "將文案存做語氣範例",
+      "working": "儲存緊…",
+      "hint": "公司最多保留 3 條範例，畀之後出稿參考。唔會再發佈一次。",
+      "saved": "已存入公司語氣範例。",
+      "already": "呢條已經喺語氣範例入面。"
+    },
     "fields": {
       "caption": "文案",
       "hashtags": "Hashtags",
@@ -244,6 +251,12 @@
       "tone": {
         "label": "語氣備註",
         "hint": "可選。用短句子講清楚你想要嘅感覺就得。"
+      },
+      "exemplars": {
+        "label": "範例文案",
+        "hint": "最多 3 條短文案，出稿時可以跟節奏。確認之後都可以再存。",
+        "slot": "範例 {{n}}",
+        "chars": "{{used}} / {{max}}"
       }
     },
     "products": {

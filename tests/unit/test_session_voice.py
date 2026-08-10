@@ -56,6 +56,17 @@ def test_roast_level_from_profile() -> None:
     assert roast_level_from_profile({"roast_level": 3}) == 3
 
 
+def test_prepend_exemplar_caption_caps_and_dedupes() -> None:
+    from internal.session.voice import prepend_exemplar_caption
+
+    first = prepend_exemplar_caption([], "  hello world  ")
+    assert first == ["hello world"]
+    again = prepend_exemplar_caption(first, "hello world")
+    assert again == ["hello world"]
+    third = prepend_exemplar_caption(["a", "b", "c"], "new one")
+    assert third == ["new one", "a", "b"]
+
+
 def test_audience_catalog_from_entities() -> None:
     personas = [
         SimpleNamespace(

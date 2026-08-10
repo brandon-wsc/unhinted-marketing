@@ -28,6 +28,7 @@ async def test_get_voice_defaults_for_owner(client: AsyncClient) -> None:
     assert body["locale"] == "zh-HK"
     assert body["forbidden_phrases"] == []
     assert body["tone_notes"] == ""
+    assert body["exemplar_captions"] == []
     assert body["can_edit"] is True
 
 
@@ -47,6 +48,7 @@ async def test_patch_voice_persists_and_round_trips(
             "locale": "zh-HK",
             "forbidden_phrases": ["免費保證", "史上最強", ""],
             "tone_notes": "貼地、短、有畫面",
+            "exemplar_captions": ["辦公室冷氣凍到要著羽絨", "a" * 200, ""],
         },
     )
     assert res.status_code == 200, res.text
@@ -54,12 +56,14 @@ async def test_patch_voice_persists_and_round_trips(
     assert body["roast_level"] == 2
     assert body["forbidden_phrases"] == ["免費保證", "史上最強"]
     assert body["tone_notes"] == "貼地、短、有畫面"
+    assert body["exemplar_captions"] == ["辦公室冷氣凍到要著羽絨", "a" * 150]
     assert body["can_edit"] is True
 
     company = await get_company(db_session, uuid.UUID(company_id))
     assert company is not None
     assert company.profile["roast_level"] == 2
     assert company.profile["forbidden_phrases"] == ["免費保證", "史上最強"]
+    assert company.profile["exemplar_captions"] == ["辦公室冷氣凍到要著羽絨", "a" * 150]
 
     again = await client.get(f"/api/companies/{company_id}/voice", headers=headers)
     assert again.status_code == 200
@@ -116,9 +120,53 @@ async def test_member_can_read_but_not_patch(
             "locale": "zh-HK",
             "forbidden_phrases": [],
             "tone_notes": "nope",
+            "exemplar_captions": [],
         },
     )
     assert patch_res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_promote_exemplar_prepends_and_caps(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    data = await register_user(client)
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(data["access_token"])
+
+    await client.patch(
+        f"/api/companies/{company_id}/voice",
+        headers=headers,
+        json={
+            "roast_level": 1,
+            "locale": "zh-HK",
+            "forbidden_phrases": [],
+            "tone_notes": "",
+            "exemplar_captions": ["old-1", "old-2", "old-3"],
+        },
+    )
+
+    res = await client.post(
+        f"/api/companies/{company_id}/voice/exemplars",
+        headers=headers,
+        json={"caption": "  brand new caption  "},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["added"] is True
+    assert body["exemplar_captions"] == ["brand new caption", "old-1", "old-2"]
+
+    company = await get_company(db_session, uuid.UUID(company_id))
+    assert company is not None
+    assert company.profile["exemplar_captions"][0] == "brand new caption"
+
+    again = await client.post(
+        f"/api/companies/{company_id}/voice/exemplars",
+        headers=headers,
+        json={"caption": "brand new caption"},
+    )
+    assert again.status_code == 200
+    assert again.json()["added"] is False
 
 
 @pytest.mark.asyncio

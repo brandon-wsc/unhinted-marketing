@@ -1,6 +1,6 @@
 # Knowledge collect UI
 
-> **Status:** Locked for K1–K5 shell · **Penpot drawn** · Voice **shipped** · Products **shipped** (K3/K3b import + list + archive) · Approvals held  
+> **Status:** Locked for K1–K5 shell · **Penpot drawn** · Voice **shipped** (incl. exemplars) · Products **shipped** (K3/K3b import + list + archive) · Approvals held  
 > **Parent:** [README.md](./README.md) · **Data rules:** [COLLECT.md](./COLLECT.md) · **Shell vs craft:** [design/BRIEF.md](../design/BRIEF.md)
 
 Shell settings collect human-provided knowledge. Session craft does **not** silently write org catalog. `/admin` stays ops-only (LLM / Trace) — not tenant KB CRUD.
@@ -51,11 +51,11 @@ UserMenu
 
 | UI | Collects | Scope | Who | Phase |
 |----|----------|-------|-----|-------|
-| **Voice** | `roast_level` (0–3), `forbidden_phrases[]` (≤15), `tone_notes`, `locale` (default `zh-HK`) | Org × Old → `entities.profile` | owner/admin | **K1** |
+| **Voice** | `roast_level` (0–3), `forbidden_phrases[]` (≤15), `tone_notes`, `locale` (default `zh-HK`), `exemplar_captions` (≤3 × ≤150) | Org × Old → `entities.profile` | owner/admin | **K1 + K5** |
 | **Products → Org** | CSV/xlsx import → `sku` / `name` / `search_document` / `profile` JSONB; list + archive | Org × Old | owner/admin | **K3** |
 | **Products → Mine** | Same row shape; personal import / save | User × Old | any member | **K3b** |
 | Session chat | Spoken SKU/price (no form) | User × New | current user | shipped behavior; **not** PG catalog |
-| Confirm / draft promote | ≤3 captions × ≤150 chars → `exemplar_captions` | Org (manual) | owner/admin or promote | **K5** |
+| Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** |
 | **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6 held** |
 
 **Not collected in UI (MVP):** per-company persona CRUD, offer-snippet dedicated page, brand PDF upload, pain points, market signals, platform craft ([VOICE.md](../VOICE.md)).
@@ -104,7 +104,7 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 | **K1** | Company settings → Voice form |
 | **K3** | Products → Org tab (import + table) |
 | **K3b** | Products → Mine tab |
-| **K5** | Exemplar promote from Confirm / draft |
+| **K5** | Exemplar promote from Confirm / draft + Voice settings slots | ✅ |
 | **K6** | Approvals tab/page + Penpot when UX locked |
 
 ---

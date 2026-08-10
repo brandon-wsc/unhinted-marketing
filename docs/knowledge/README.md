@@ -1,6 +1,6 @@
 # Enterprise Knowledge
 
-> **Status:** K0–K4 largely shipped (settings + slim session packs + `product_matcher` + hybrid embeddings) · K5 next · K6 held (org system)  
+> **Status:** K0–K5 shipped (settings + slim packs + matcher + embeddings + exemplars) · K6 held (org system)  
 > **Boundary:** PostgreSQL only — no parallel KB, no chat free-browse ([AGENTS.md](../../AGENTS.md))
 
 Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consume it, and (later) **how** users collect/import it.
@@ -48,7 +48,7 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 | **K3** | Optional catalog + `product_matcher` + Products Org tab | ✅ MODEL + SESSION + COLLECT + UI |
 | **K3b** | User product lib + org-wins retrieve + Products Mine tab | ✅ COLLECT + UI |
 | **K4** | pgvector hybrid retrieve + cross-tenant tests | ✅ COLLECT |
-| **K5** | Import UI; manual exemplar promote (settings / admin — not chat→KB) | COLLECT |
+| **K5** | Exemplar captions (Voice settings + Confirm promote) | ✅ COLLECT + UI |
 | **K6** | **Held** — promote to org + **admin approve** (user covers org only after approve) | COLLECT + ADR |
 
 ADR **0010** (future): lock product retrieve + `company_id` filter once K3–K4 land.  

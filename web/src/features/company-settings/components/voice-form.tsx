@@ -14,10 +14,18 @@ import {
 import { cn } from "@/lib/utils";
 
 const ROAST_LEVELS = [0, 1, 2, 3] as const;
+const MAX_EXEMPLARS = 3;
+const MAX_EXEMPLAR_CHARS = 150;
 
 type VoiceFormProps = {
   companyId: string;
 };
+
+function padExemplars(raw: string[] | undefined): string[] {
+  const cleaned = (raw ?? []).map((c) => c.slice(0, MAX_EXEMPLAR_CHARS));
+  while (cleaned.length < MAX_EXEMPLARS) cleaned.push("");
+  return cleaned.slice(0, MAX_EXEMPLARS);
+}
 
 export function VoiceForm({ companyId }: VoiceFormProps) {
   const { t } = useTranslation();
@@ -31,6 +39,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
   const [locale, setLocale] = useState("zh-HK");
   const [forbiddenText, setForbiddenText] = useState("");
   const [toneNotes, setToneNotes] = useState("");
+  const [exemplars, setExemplars] = useState<string[]>(() => padExemplars([]));
   const [baseline, setBaseline] = useState<CompanyVoiceSettings | null>(null);
 
   useEffect(() => {
@@ -41,10 +50,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
       try {
         const data = await apiGetCompanyVoice(accessToken, companyId);
         if (cancelled) return;
-        setRoastLevel(data.roast_level);
-        setLocale(data.locale);
-        setForbiddenText(data.forbidden_phrases.join(", "));
-        setToneNotes(data.tone_notes);
+        applySettings(data);
         setBaseline(data);
         setCanEdit(data.can_edit);
       } catch (err) {
@@ -63,6 +69,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
     setLocale(data.locale);
     setForbiddenText(data.forbidden_phrases.join(", "));
     setToneNotes(data.tone_notes);
+    setExemplars(padExemplars(data.exemplar_captions));
   }
 
   function parsePhrases(raw: string): string[] {
@@ -71,6 +78,19 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
       .map((p) => p.trim())
       .filter(Boolean)
       .slice(0, 15);
+  }
+
+  function parseExemplars(rows: string[]): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const cap = row.trim().slice(0, MAX_EXEMPLAR_CHARS);
+      if (!cap || seen.has(cap)) continue;
+      seen.add(cap);
+      out.push(cap);
+      if (out.length >= MAX_EXEMPLARS) break;
+    }
+    return out;
   }
 
   async function onSave() {
@@ -84,6 +104,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
         locale: locale.trim() || "zh-HK",
         forbidden_phrases: parsePhrases(forbiddenText),
         tone_notes: toneNotes.trim(),
+        exemplar_captions: parseExemplars(exemplars),
       });
       applySettings(updated);
       setBaseline(updated);
@@ -188,6 +209,44 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
           />
           <p className="text-xs text-muted-foreground">{t("settings.voice.tone.hint")}</p>
         </FormField>
+
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium leading-none">
+              {t("settings.voice.exemplars.label")}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("settings.voice.exemplars.hint")}
+            </p>
+          </div>
+          {exemplars.map((caption, index) => (
+            <FormField
+              key={`exemplar-${index}`}
+              id={`voice-exemplar-${index}`}
+              label={t("settings.voice.exemplars.slot", { n: index + 1 })}
+            >
+              <Textarea
+                id={`voice-exemplar-${index}`}
+                value={caption}
+                disabled={!canEdit || saving}
+                maxLength={MAX_EXEMPLAR_CHARS}
+                onChange={(e) => {
+                  const next = [...exemplars];
+                  next[index] = e.target.value.slice(0, MAX_EXEMPLAR_CHARS);
+                  setExemplars(next);
+                }}
+                rows={3}
+                className="min-h-20"
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("settings.voice.exemplars.chars", {
+                  used: caption.trim().length,
+                  max: MAX_EXEMPLAR_CHARS,
+                })}
+              </p>
+            </FormField>
+          ))}
+        </div>
 
         {canEdit && (
           <div className="flex justify-end gap-2 pt-2">

@@ -15,6 +15,7 @@ class CompanyVoiceSettings(BaseModel):
     locale: str
     forbidden_phrases: list[str] = Field(default_factory=list)
     tone_notes: str = ""
+    exemplar_captions: list[str] = Field(default_factory=list)
     can_edit: bool = False
 
 
@@ -23,6 +24,7 @@ class CompanyVoiceUpdate(BaseModel):
     locale: str = Field(min_length=2, max_length=32)
     forbidden_phrases: list[str] = Field(default_factory=list, max_length=15)
     tone_notes: str = Field(default="", max_length=2000)
+    exemplar_captions: list[str] = Field(default_factory=list, max_length=3)
 
     @field_validator("locale")
     @classmethod
@@ -48,6 +50,41 @@ class CompanyVoiceUpdate(BaseModel):
     @classmethod
     def strip_notes(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("exemplar_captions")
+    @classmethod
+    def clean_exemplars(cls, value: list[str]) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            cap = raw.strip()[:150]
+            if not cap or cap in seen:
+                continue
+            seen.add(cap)
+            out.append(cap)
+            if len(out) >= 3:
+                break
+        return out
+
+
+class ExemplarPromoteRequest(BaseModel):
+    """Promote a confirmed draft caption into company voice exemplars (K5)."""
+
+    caption: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("caption")
+    @classmethod
+    def strip_caption(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("caption is required")
+        return cleaned
+
+
+class ExemplarPromoteResponse(BaseModel):
+    company_id: uuid.UUID
+    exemplar_captions: list[str]
+    added: bool
 
 
 class ProductItem(BaseModel):

@@ -152,6 +152,13 @@
     "confirmDone": "Confirmed",
     "confirmReceipt": "Receipt status: {{status}}",
     "confirmHint": "Saying so in chat does not publish. Confirm uses the saved revision (dirty edits are saved first).",
+    "exemplar": {
+      "save": "Save caption as voice example",
+      "working": "Saving…",
+      "hint": "Keeps up to 3 company examples for future drafts. Does not publish again.",
+      "saved": "Saved to company voice examples.",
+      "already": "Already in your voice examples."
+    },
     "fields": {
       "caption": "Caption",
       "hashtags": "Hashtags",
@@ -244,6 +251,12 @@
       "tone": {
         "label": "Tone notes",
         "hint": "Optional. A few short lines about the feel you want."
+      },
+      "exemplars": {
+        "label": "Example captions",
+        "hint": "Up to 3 short captions drafts can learn from. You can also save one after Confirm.",
+        "slot": "Example {{n}}",
+        "chars": "{{used}} / {{max}}"
       }
     },
     "products": {

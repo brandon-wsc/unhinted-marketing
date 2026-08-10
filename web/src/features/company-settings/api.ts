@@ -8,6 +8,7 @@ export type CompanyVoiceSettings = {
   locale: string;
   forbidden_phrases: string[];
   tone_notes: string;
+  exemplar_captions: string[];
   can_edit: boolean;
 };
 
@@ -16,6 +17,13 @@ export type CompanyVoiceUpdate = {
   locale: string;
   forbidden_phrases: string[];
   tone_notes: string;
+  exemplar_captions: string[];
+};
+
+export type ExemplarPromoteResponse = {
+  company_id: string;
+  exemplar_captions: string[];
+  added: boolean;
 };
 
 export type ProductScope = "org" | "user";
@@ -64,6 +72,24 @@ export async function apiPatchCompanyVoice(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiPromoteVoiceExemplar(
+  accessToken: string | null,
+  companyId: string,
+  caption: string,
+): Promise<ExemplarPromoteResponse> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/voice/exemplars`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caption }),
+    },
+  );
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }

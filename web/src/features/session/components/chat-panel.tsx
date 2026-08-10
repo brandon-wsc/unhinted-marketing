@@ -32,6 +32,8 @@ export function ChatPanel() {
   const { user } = useAuth();
   const { showError } = useToast();
   const companyId = user?.organizations[0]?.id;
+  const canPromoteExemplar =
+    user?.organizations[0]?.role === "owner" || user?.organizations[0]?.role === "admin";
   const {
     session,
     messages,
@@ -480,6 +482,8 @@ export function ChatPanel() {
       confirmReceipt={confirmReceipt}
       draftSaving={draftSaving}
       confirming={confirming}
+      companyId={companyId}
+      canPromoteExemplar={canPromoteExemplar}
       onApply={onApplyDraft}
       onConfirm={onConfirmDraft}
       onSavePlan={onSavePlan}

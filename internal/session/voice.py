@@ -34,6 +34,34 @@ def roast_level_from_profile(profile: dict[str, Any] | None) -> int:
     return normalize_roast_level(profile.get("roast_level"))
 
 
+def normalize_exemplar_captions(raw: Any) -> list[str]:
+    """≤3 captions × ≤150 chars; drop empties; preserve order."""
+    if not isinstance(raw, list):
+        return []
+    caps: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        cap = item.strip()[:MAX_EXEMPLAR_CHARS]
+        if not cap or cap in seen:
+            continue
+        seen.add(cap)
+        caps.append(cap)
+        if len(caps) >= MAX_EXEMPLAR_CAPTIONS:
+            break
+    return caps
+
+
+def prepend_exemplar_caption(existing: list[str] | Any, caption: str) -> list[str]:
+    """Promote a draft caption to the front of the exemplar list (K5)."""
+    base = normalize_exemplar_captions(existing)
+    cap = caption.strip()[:MAX_EXEMPLAR_CHARS] if isinstance(caption, str) else ""
+    if not cap:
+        return base
+    return normalize_exemplar_captions([cap, *base])
+
+
 def voice_pack(profile: dict[str, Any] | None) -> dict[str, Any]:
     """Compressed brand voice for LLM payloads (MODEL voice_pack)."""
     profile = dict(profile or {})
@@ -61,16 +89,9 @@ def voice_pack(profile: dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(tone, str) and tone.strip():
         out["tone_notes"] = tone.strip()
 
-    exemplars = profile.get("exemplar_captions") or []
-    if isinstance(exemplars, list):
-        caps: list[str] = []
-        for item in exemplars:
-            if isinstance(item, str) and item.strip():
-                caps.append(item.strip()[:MAX_EXEMPLAR_CHARS])
-            if len(caps) >= MAX_EXEMPLAR_CAPTIONS:
-                break
-        if caps:
-            out["exemplar_captions"] = caps
+    caps = normalize_exemplar_captions(profile.get("exemplar_captions"))
+    if caps:
+        out["exemplar_captions"] = caps
 
     return out
 

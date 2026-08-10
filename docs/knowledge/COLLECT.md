@@ -224,8 +224,9 @@ Eval set: ~20 user utterances × ~10 SKUs per company; live FastEmbed regression
 
 ### Exemplar captions
 
-- Source: user picks approved `preview_drafts` → promote to profile or exemplar table (Confirm-adjacent, not chat auto-write).
-- Cap: ≤3 captions × ≤150 chars into `voice_pack`.
+- Source: Voice settings (manual ≤3) **or** Confirm → **Save caption as voice example** (`POST /api/companies/{id}/voice/exemplars`).
+- Cap: ≤3 captions × ≤150 chars into `entities.profile.exemplar_captions` → `voice_pack`.
+- Not chat auto-write; owner/admin only.
 
 ### Offer snippets (optional, K5)
 
@@ -285,7 +286,7 @@ Do not implement until approve flow is agreed and ADR 0011 is accepted.
 | **K3** | §4 org import + storage; §5 retrieve (org only MVP OK) |
 | **K3b** | User personal lib + org-wins dedupe in §5 |
 | **K4** | §7 vector tier + cross-tenant tests | ✅ |
-| **K5** | Import UI ([UI.md](./UI.md)); §8 manual exemplar + offer upload |
+| **K5** | Import UI ([UI.md](./UI.md)); §8 manual exemplar + offer upload | ✅ exemplars (offer snippets optional / deferred) |
 | **K6** | **Held** — §9 promote + Approvals UI → org replace |
 
 ---
