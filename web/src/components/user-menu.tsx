@@ -42,7 +42,11 @@ export function UserMenu() {
 
   const triggerLabel = user?.display_name ?? t("header.menu.guest");
   const trigger = (
-    <Button type="button" variant="outline" className="gap-2 px-3 font-medium">
+    <Button
+      type="button"
+      variant="ghost"
+      className="gap-2 px-3 font-medium data-[state=open]:bg-accent"
+    >
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
         {user ? user.display_name.charAt(0).toUpperCase() : "?"}
       </span>
