@@ -43,3 +43,27 @@ def test_rows_from_dicts_empty() -> None:
     rows, errors = rows_from_dicts([])
     assert rows == []
     assert errors
+
+
+def test_too_many_columns_rejects_file() -> None:
+    from internal.memory.product_import import MAX_IMPORT_COLUMNS
+
+    headers = [f"col{i}" for i in range(MAX_IMPORT_COLUMNS + 1)]
+    raw = (",".join(headers) + "\n" + ",".join(["x"] * len(headers)) + "\n").encode()
+    rows, errors = parse_csv_bytes(raw)
+    assert rows == []
+    assert errors
+    assert "Too many columns" in errors[0]
+    assert str(MAX_IMPORT_COLUMNS) in errors[0]
+
+
+def test_fifty_columns_still_ok() -> None:
+    from internal.memory.product_import import MAX_IMPORT_COLUMNS
+
+    headers = ["name", "sku"] + [f"extra{i}" for i in range(MAX_IMPORT_COLUMNS - 2)]
+    assert len(headers) == MAX_IMPORT_COLUMNS
+    raw = (",".join(headers) + "\nrow,SKU-1," + ",".join(["v"] * (MAX_IMPORT_COLUMNS - 2)) + "\n").encode()
+    rows, errors = parse_csv_bytes(raw)
+    assert errors == []
+    assert len(rows) == 1
+    assert rows[0]["sku"] == "SKU-1"

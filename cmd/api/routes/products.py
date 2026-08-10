@@ -46,6 +46,15 @@ def _parse_scope(raw: str) -> Literal["org", "user"]:
     raise HTTPException(status_code=400, detail="scope must be org or user")
 
 
+def _profile_strings(profile: dict | None) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key, value in (profile or {}).items():
+        if value is None:
+            continue
+        out[str(key)] = value if isinstance(value, str) else str(value)
+    return out
+
+
 def _to_item(row, *, covered: bool = False) -> ProductItem:
     return ProductItem(
         id=row.id,
@@ -54,6 +63,7 @@ def _to_item(row, *, covered: bool = False) -> ProductItem:
         status=row.status,
         owner_scope=row.owner_scope,
         covered_by_company=covered,
+        profile=_profile_strings(row.profile),
         updated_at=row.updated_at,
     )
 

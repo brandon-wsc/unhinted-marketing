@@ -27,6 +27,7 @@ export type ProductItem = {
   status: string;
   owner_scope: ProductScope;
   covered_by_company: boolean;
+  profile: Record<string, string>;
   updated_at: string;
 };
 

@@ -102,6 +102,7 @@ Planned row shape: `owner_scope: org | user`, `user_id` nullable, unique `(compa
 ### Column policy
 
 - **No required column names** — flexible headers.
+- **Hard limit: 50 columns** — more than that → reject whole file (400) with a clear message; do not silently truncate. Column picker / mapping comes later.
 - Each row → one catalog row:
   - **`profile` JSONB** — original column → value map (preserves user shape).
   - **`search_document`** — concatenation for SQL + embedding, e.g.  

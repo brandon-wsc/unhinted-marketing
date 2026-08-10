@@ -272,6 +272,12 @@
         "status": "Status",
         "action": "Action"
       },
+      "detail": {
+        "title": "Product details",
+        "fieldCount": "{{count}} columns",
+        "empty": "No extra columns on this row.",
+        "close": "Close"
+      },
       "fields": {
         "name": "Name",
         "sku": "Product code",

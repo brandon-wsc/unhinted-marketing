@@ -57,6 +57,7 @@ class ProductItem(BaseModel):
     status: str
     owner_scope: Literal["org", "user"]
     covered_by_company: bool = False
+    profile: dict[str, str] = Field(default_factory=dict)
     updated_at: datetime
 
 

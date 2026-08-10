@@ -34,6 +34,10 @@ async def test_import_list_archive_org_products(client: AsyncClient) -> None:
     items = listed.json()["items"]
     assert len(items) == 2
     assert listed.json()["can_edit"] is True
+    by_sku = {i["sku"]: i for i in items}
+    assert by_sku["DRK-OL-12"]["name"] == "Oat Latte"
+    assert by_sku["DRK-OL-12"]["profile"]["sku"] == "DRK-OL-12"
+    assert by_sku["DRK-OL-12"]["profile"]["name"] == "Oat Latte"
 
     # Re-import updates
     csv_body2 = "name,sku\nOat Latte Updated,DRK-OL-12\n"
@@ -128,6 +132,7 @@ async def test_create_product_persists_notes(
         },
     )
     assert res.status_code == 201, res.text
+    assert res.json()["profile"]["notes"] == "Limited autumn blend"
     product_id = uuid.UUID(res.json()["id"])
 
     row = (

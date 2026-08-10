@@ -74,10 +74,10 @@ UserMenu
 
 | Tab | Content |
 |-----|---------|
-| **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name with `sku` subtitle, status, actions) · archive. Upsert **replace by SKU** — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
-| **Mine** | Same pattern for personal library. Org covers user on SKU clash at retrieve — UI may show badge “covered by company” when org has same SKU. |
+| **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name + `sku`, status, actions) · **row click → dialog** listing all `profile` columns (scroll if many) · archive. Upsert **replace by SKU** — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
+| **Mine** | Same pattern for personal library (+ optional notes on Add row). Org covers user on SKU clash at retrieve — badge “covered by company” when org has same SKU. |
 
-Flexible headers: no required column names; store raw row in `profile` ([COLLECT §4](./COLLECT.md#4-product-import-k3)).
+Flexible headers: no required column names; store raw row in `profile`. **Import hard limit: 50 columns** — reject whole file ([COLLECT §4](./COLLECT.md#4-product-import-k3)). No content column in the table (unknown CSV shapes).
 
 ### Approvals (K6 — hidden)
 
@@ -90,8 +90,9 @@ Flexible headers: no required column names; store raw row in `profile` ([COLLECT
 ## Design system notes
 
 - Reuse existing shell primitives ([`web/src/components/ui/`](../../web/src/components/ui/)) — tabs, table, input, textarea, button, dialog.
+- Table row hover/selected → `bg-accent` (not `muted`) — [TOKENS.md](../design/TOKENS.md) `muted` vs `accent`.
 - Voice accent (`text-voice`) only if showing craft exemplars preview; settings chrome stays neutral primary.
-- Penpot: add **Company settings** pages (Voice / Products tabs / Approvals empty) under [design/penpot](../../design/penpot/) after this doc; CSS follows tokens already in `web/src/index.css`.
+- Penpot: **Company settings** drawn under [design/penpot](../../design/penpot/); CSS follows tokens in `web/src/index.css`.
 - **UI copy:** user-facing only (what the person sees/does). Avoid internal jargon in subtitles (no “K6”, “owner/admin”, “upsert”, “Zero LLM”).
 
 ---

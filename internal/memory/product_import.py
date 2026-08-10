@@ -9,6 +9,28 @@ from typing import Any
 
 SKU_KEYS = ("sku", "product_sku", "product_code", "code", "id", "貨號", "編號", "sku編號")
 NAME_KEYS = ("name", "product_name", "product", "title", "名稱", "產品", "產品名稱")
+MAX_IMPORT_COLUMNS = 50
+
+
+def _usable_headers(headers: list[Any]) -> list[str]:
+    out: list[str] = []
+    for h in headers:
+        if h is None:
+            continue
+        text = str(h).strip()
+        if text:
+            out.append(text)
+    return out
+
+
+def _column_limit_error(headers: list[Any]) -> str | None:
+    count = len(_usable_headers(headers))
+    if count <= MAX_IMPORT_COLUMNS:
+        return None
+    return (
+        f"Too many columns ({count}; max {MAX_IMPORT_COLUMNS}). "
+        "Remove unused columns and keep product code, name, and selling details."
+    )
 
 
 def _norm_header(raw: str) -> str:
@@ -49,6 +71,10 @@ def rows_from_dicts(raw_rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]
         return [], ["File has no data rows"]
 
     headers = list(raw_rows[0].keys())
+    limit_err = _column_limit_error(headers)
+    if limit_err:
+        return [], [limit_err]
+
     sku_col = _pick_key(headers, SKU_KEYS)
     name_col = _pick_key(headers, NAME_KEYS)
 
@@ -97,6 +123,9 @@ def parse_csv_bytes(data: bytes) -> tuple[list[dict[str, Any]], list[str]]:
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames:
         return [], ["CSV has no header row"]
+    limit_err = _column_limit_error(list(reader.fieldnames))
+    if limit_err:
+        return [], [limit_err]
     raw_rows = [dict(row) for row in reader]
     return rows_from_dicts(raw_rows)
 
@@ -119,6 +148,9 @@ def parse_xlsx_bytes(data: bytes) -> tuple[list[dict[str, Any]], list[str]]:
     headers = [_cell_str(h) or f"col_{i}" for i, h in enumerate(header_row)]
     if not any(headers):
         return [], ["Excel has no header row"]
+    limit_err = _column_limit_error(headers)
+    if limit_err:
+        return [], [limit_err]
 
     raw_rows: list[dict[str, Any]] = []
     for values in rows_iter:

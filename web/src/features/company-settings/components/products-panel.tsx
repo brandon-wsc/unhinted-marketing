@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -55,6 +56,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
   const [canEdit, setCanEdit] = useState(false);
   const [importResult, setImportResult] = useState<ProductImportResponse | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [detail, setDetail] = useState<ProductItem | null>(null);
   const [newName, setNewName] = useState("");
   const [newSku, setNewSku] = useState("");
   const [newNotes, setNewNotes] = useState("");
@@ -276,7 +278,11 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                 </TableHeader>
                 <TableBody>
                   {items.map((item) => (
-                    <TableRow key={item.id}>
+                    <TableRow
+                      key={item.id}
+                      className="cursor-pointer"
+                      onClick={() => setDetail(item)}
+                    >
                       <TableCell>
                         <div className="font-medium">{item.name}</div>
                         <div className="text-xs text-muted-foreground">{item.sku}</div>
@@ -304,7 +310,10 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                             variant="outline"
                             size="sm"
                             disabled={busy}
-                            onClick={() => void onArchive(item.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void onArchive(item.id);
+                            }}
                           >
                             {t("settings.products.archive")}
                           </Button>
@@ -329,6 +338,43 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={detail != null} onOpenChange={(open) => !open && setDetail(null)}>
+        <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{detail?.name ?? t("settings.products.detail.title")}</DialogTitle>
+            <DialogDescription>
+              {detail
+                ? `${detail.sku} · ${t("settings.products.detail.fieldCount", {
+                    count: Object.keys(detail.profile).length,
+                  })}`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto py-4">
+            {detail && Object.keys(detail.profile).length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("settings.products.detail.empty")}</p>
+            ) : (
+              <dl className="space-y-3">
+                {detail &&
+                  Object.entries(detail.profile).map(([key, value]) => (
+                    <div key={key} className="grid gap-1 border-b border-border pb-3 last:border-0">
+                      <dt className="text-xs font-medium text-muted-foreground break-all">{key}</dt>
+                      <dd className="text-sm whitespace-pre-wrap break-words text-foreground">
+                        {value || "—"}
+                      </dd>
+                    </div>
+                  ))}
+              </dl>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDetail(null)}>
+              {t("settings.products.detail.close")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={addOpen}
