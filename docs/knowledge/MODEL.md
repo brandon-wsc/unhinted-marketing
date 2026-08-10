@@ -1,10 +1,10 @@
 # Knowledge model
 
-> **Parent:** [README.md](./README.md) · **Runtime usage:** [SESSION.md](./SESSION.md) · **Ingest (TBD):** [COLLECT.md](./COLLECT.md)
+> **Parent:** [README.md](./README.md) · **Runtime usage:** [SESSION.md](./SESSION.md) · **Collect:** [COLLECT.md](./COLLECT.md)
 
 What knowledge exists, how big it is, and whether it is **compressed** (always in session) or **retrieved** (on demand).
 
-Hard boundary: **PostgreSQL only** — signals, entities, edges, future product rows. External web facts enter via ingest ([ADR 0009](../adr/0009-research-gate-and-tavily-ingest.md)), not live browse from chat.
+Hard boundary: **PostgreSQL only** — signals, entities, edges, `products`. External web facts enter via ingest ([ADR 0009](../adr/0009-research-gate-and-tavily-ingest.md)), not live browse from chat.
 
 Platform craft (Hook → Bridge → CTA; see [VOICE.md](../VOICE.md) §0) lives in [VOICE.md](../VOICE.md) + `internal/session/prompts.py` — **not** duplicated per company.
 
@@ -81,11 +81,12 @@ If the user **has not** imported products, the graph skips catalog retrieve and 
 
 If they **have** imported user-owned catalog (CSV/Excel — [COLLECT.md](./COLLECT.md)):
 
-### Storage (planned)
+### Storage (shipped — dedicated `products` table)
 
-- Rows scoped by **`company_id`** (not global slug alone — see open questions in README phase K3).
+- Rows scoped by **`company_id`** + `owner_scope` (`org` \| `user`); Alembic `1f96a702125c` + embedding `12d5c92e3f74`.
 - **`search_document`** — one text blob for SQL + embedding (name, sku, aliases, description, raw columns).
 - **`profile` JSONB** — original import row; **no required schema**; best-effort extract only.
+- **`embedding`** — `vector(384)` nullable; re-embed on upsert when embeddings enabled.
 
 ### Runtime roles
 
@@ -140,7 +141,8 @@ Extract + search flow detail: [SESSION.md](./SESSION.md). User import + retrieve
 | `entities` (`company`) | ✅ | Org; `profile` JSONB |
 | `entities` (`persona`) | ✅ | Default audiences |
 | `entities` (`topic`) | ✅ | Promoted topics |
-| `entities` (`product`) | ⬜ | Optional per-company catalog |
+| `products` | ✅ | Org / user catalog (`owner_scope`, SKU, `search_document`, `profile`, `embedding`) |
+| `entities` (`product`) | ❌ unused | Chose dedicated `products` table instead |
 | `edges` | ✅ | Graph links |
 | pgvector | ✅ products.embedding (K4) | Signals similarity still later |
 
@@ -148,9 +150,8 @@ No second vector DB. No repo markdown bundle for tenant KB.
 
 ---
 
-## Open questions (before K3)
+## Open questions (remaining)
 
-1. Product row: dedicated table vs `entities` + `(company_id, sku)` unique?
-2. Exemplar source: profile JSON vs promote from `preview_drafts`?
-3. Persona scope: global seed vs per-company for MVP?
-4. Preview persist: `product_context_ids` column vs inside `copy` JSON?
+1. Offer snippets storage shape (deferred).
+2. Preview persist: `product_context_ids` column vs inside `copy` JSON? (session state has ids today; draft schema TBD)
+3. K6 approve UX (held — see COLLECT §9).

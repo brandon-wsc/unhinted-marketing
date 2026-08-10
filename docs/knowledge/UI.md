@@ -19,12 +19,12 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 
 | Frame | Contents |
 |-------|----------|
-| `Company settings · Voice` | Sidebar Voice active · roast 0–3 · locale · forbidden phrases · tone notes · Save |
+| `Company settings · Voice` | Sidebar Voice active · roast 0–3 · locale · forbidden · tone · **exemplar slots** · Save |
 | `Company settings · Products · Org` | Org tab · Import CSV/Excel · import stats · table + Archive |
 | `Company settings · Products · Mine` | Mine tab · Import + Add row · `covered by company` badge · cover rule note |
 | `Company settings · Approvals` | Empty state · K6 held badge |
 
-Entry: UserMenu → **Company settings** (desktop + mobile, above Admin). Penpot frames are desktop 1440 only; **mobile 390 layout TBD** when settings pages are implemented.
+Entry: UserMenu → **Company settings** (desktop + mobile, above Admin). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell).
 
 ---
 
@@ -32,8 +32,8 @@ Entry: UserMenu → **Company settings** (desktop + mobile, above Admin). Penpot
 
 ```text
 UserMenu
-  └─ Company settings          ← shell page (SPA route TBD, not /admin)
-        ├─ Voice               ← K1
+  └─ Company settings          ← SPA `/settings`
+        ├─ Voice               ← K1 + K5 exemplars
         ├─ Products            ← K3 / K3b  (tabs: Org | Mine)
         └─ Approvals           ← K6 held — **hidden from UI until promote ships**
 ```
@@ -64,11 +64,12 @@ UserMenu
 
 ## Screen contracts (minimal)
 
-### Voice (K1)
+### Voice (K1 + K5)
 
-- Controls only — no cards for decoration; one purpose: brand knobs.
+- Controls only — no cards for decoration; one purpose: brand knobs + optional exemplars.
 - Persist on company `entities.profile`; compress to `voice_pack` in `load_context` ([MODEL.md](./MODEL.md#brand-voice-voice_pack)).
-- Member (non-admin): read-only or hide edit — policy TBD at implement time (default: owner/admin edit).
+- Member (non-admin): **read-only** (`can_edit=false`); owner/admin edit + Confirm promote.
+- Exemplars: ≤3 × ≤150 chars in Voice form; or Confirm → **Save caption as voice example**.
 
 ### Products (K3 / K3b)
 
@@ -101,9 +102,9 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 
 | Phase | UI deliverable |
 |-------|----------------|
-| **K1** | Company settings → Voice form |
-| **K3** | Products → Org tab (import + table) |
-| **K3b** | Products → Mine tab |
+| **K1** | Company settings → Voice form | ✅ |
+| **K3** | Products → Org tab (import + table) | ✅ |
+| **K3b** | Products → Mine tab | ✅ |
 | **K5** | Exemplar promote from Confirm / draft + Voice settings slots | ✅ |
 | **K6** | Approvals tab/page + Penpot when UX locked |
 

@@ -2,7 +2,7 @@
 
 > **Parent:** [README.md](./README.md) · **What knowledge is:** [MODEL.md](./MODEL.md)
 
-How LangGraph **loads**, **slices**, and **grounds** knowledge per turn. Planned contract — not all fields implemented yet.
+How LangGraph **loads**, **slices**, and **grounds** knowledge per turn. K1–K5 session packs + `product_matcher` shipped; see [Current code](#current-code-shipped-baseline).
 
 ---
 
@@ -11,7 +11,7 @@ How LangGraph **loads**, **slices**, and **grounds** knowledge per turn. Planned
 ```
 load_context          → voice_pack, audience_catalog, slim company_context
 trend_searcher        → ranked_signals, source_signal_ids
-product_matcher (new) → primary_product, related_products[], product_clarify?
+product_matcher       → primary_product, related_products[], product_clarify?
 brainstormer          → brief (incl. pain_points), active_persona
 executor_post         → draft, refine product_context_ids
 grounding_check       → source_signal_ids + product claims vs retrieved rows
@@ -24,7 +24,7 @@ If `product_clarify` is true after matcher → short-circuit to **chat** (ask wh
 
 ---
 
-## SessionState fields (planned)
+## SessionState fields (shipped)
 
 | Field | Producer | Consumers |
 |-------|----------|-----------|
@@ -36,6 +36,7 @@ If `product_clarify` is true after matcher → short-circuit to **chat** (ask wh
 | `related_products` | `product_matcher` | brainstormer (optional) |
 | `product_clarify` | `product_matcher` | route → chat |
 | `product_context_ids` | matcher → executor/edit | grounding_check, reviewer, preview persist |
+| `product_candidates` | `product_matcher` | chat (clarify) |
 | `active_persona` | `brainstormer` | executor_post, reviewer, image_plan† |
 | `source_signal_ids` | research_ingest, trend_searcher, executor, edit | grounding_check, reviewer |
 
@@ -80,9 +81,9 @@ Example (market-only turn — no catalog):
 }
 ```
 
-### `research` — planned K3 (product catalog)
+### `research` — product catalog (shipped with K3 matcher)
 
-**Not in code yet.** Extend the same `research` object when [COLLECT](./COLLECT.md) catalog exists:
+Same `research` object / `ResearchFlags` — catalog path is independent of market facts:
 
 | Field | Meaning |
 |-------|---------|

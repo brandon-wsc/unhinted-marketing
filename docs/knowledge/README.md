@@ -51,7 +51,7 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 | **K5** | Exemplar captions (Voice settings + Confirm promote) | ✅ COLLECT + UI |
 | **K6** | **Held** — promote to org + **admin approve** (user covers org only after approve) | COLLECT + ADR |
 
-ADR **0010** (future): lock product retrieve + `company_id` filter once K3–K4 land.  
+ADR **0010** (future): lock product retrieve + `company_id` filter formally (behavior already shipped in K3–K4).  
 ADR **0011** (future, after K6 UX): knowledge commit without LLM — mirror [ADR 0003](../adr/0003-confirm-without-llm.md).
 
 ### Held: promote to org (K6)

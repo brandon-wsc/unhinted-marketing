@@ -1,6 +1,6 @@
 # Collect — human-provided knowledge (org + user)
 
-> **Status:** K3 artifact (spec) · **Not implemented** in API/workers yet  
+> **Status:** K3–K5 shipped (products import/retrieve + embeddings + exemplars) · K6 held · Offer snippets deferred  
 > **Parent:** [README.md](./README.md) · **Runtime:** [SESSION.md](./SESSION.md)
 
 **Scope:** **Human-provided** knowledge (import, paste, settings) that **open web cannot replace** — stored at **organization** and/or **user** scope ([§2](#2-ownership-org--user-new--old)). Not the same as “owned by one login only.”
@@ -97,7 +97,7 @@ Planned row shape: `owner_scope: org | user`, `user_id` nullable, unique `(compa
 ### Formats
 
 - **CSV** (UTF-8, with or without BOM)
-- **Excel** (`.xlsx`) — library TBD (e.g. openpyxl)
+- **Excel** (`.xlsx`) — `openpyxl`
 
 ### Column policy
 
@@ -115,20 +115,21 @@ Planned row shape: `owner_scope: org | user`, `user_id` nullable, unique `(compa
 - Uniqueness: **`(company_id, sku)`** for org rows; **`(company_id, user_id, sku)`** for user rows.
 - **Upsert** on re-import; **`status`**: `active` | `archived`; retrieve only `active`.
 
-### API (planned)
+### API (shipped)
 
-- `POST /api/companies/{company_id}/products/import` — org catalog; owner/admin (or policy TBD).
+- `POST /api/companies/{company_id}/products/import` — org catalog; owner/admin (`scope=org` default).
 - `POST /api/companies/{company_id}/products/import?scope=user` — user personal library; any member.
-- Response: `{ imported, updated, skipped, errors[] }`.
+- Also: `GET …/products`, `POST …/products` (manual add), `POST …/products/{id}/archive`.
+- Response (import): `{ imported, updated, skipped, errors[] }`.
 
 ### Errors
 
 - Bad rows: **skip + report** (partial success); do not fail entire batch silently.
 - Empty file → 400 with clear message.
 
-### Storage (planned)
+### Storage (shipped)
 
-Dedicated `products` table **or** `entities` type `product` — **TBD** (see §10). Minimum columns:
+Dedicated **`products`** table (not `entities` type `product`). Columns:
 
 | Column | Purpose |
 |--------|---------|
@@ -136,10 +137,10 @@ Dedicated `products` table **or** `entities` type `product` — **TBD** (see §1
 | `company_id` | Tenant key |
 | `owner_scope` | `org` \| `user` |
 | `user_id` | NULL (org) or owner (user) |
-| `search_document` | Text for ILIKE / trgm / embed |
+| `search_document` | Text for lexical / embed |
 | `profile` | Raw import row JSONB |
-| `sku` / `name` | Denormalized for exact SQL (optional) |
-| `embedding` | vector, K4 |
+| `sku` / `name` | Denormalized for exact match |
+| `embedding` | `vector(384)`, K4 |
 | `status` | `active` \| `archived` |
 
 **No required fields inside `profile`** — grounding compares caption text to **retrieved row content**, not form validation.
@@ -163,7 +164,7 @@ Used by `product_matcher` ([SESSION.md](./SESSION.md)). Merges **Org × Old** an
 
 MVP (K3): Tier A + B; org+user union with org-wins dedupe. **K4:** Tier C FastEmbed vectors + RRF-style merge (`max(lex, vec, scaled RRF)`); always `company_id` in SQL before score.
 
-### Repo contract (planned)
+### Repo contract (shipped)
 
 ```python
 async def search_products_for_member(
@@ -171,7 +172,7 @@ async def search_products_for_member(
 ) -> list[ProductHit]: ...
 ```
 
-**Never** search without `company_id`. User scope requires `user_id`. No cross-company rows.
+Implemented in `internal/memory/product_retrieve.py`. **Never** search without `company_id`. User scope requires `user_id`. No cross-company rows.
 
 ---
 
@@ -270,12 +271,13 @@ Do not implement until approve flow is agreed and ADR 0011 is accepted.
 
 ## 10. Open questions
 
-1. **`products` table vs `entities` type `product`?**
-2. Import **merge** vs **replace-all** for same company? (Default: **replace by SKU**.)
-3. CSV column mapping: fixed template only for K3, or UI from day one?
-4. Offer snippets: separate table or same store as products with `kind` discriminator?
-5. Embedding: inline on import vs background worker queue?
-6. **K6:** Proposal UI, diff for product patch, reject / “session only”, proposal TTL?
+**Decided (K3–K5):** dedicated `products` table (not `entities` type `product`); upsert **replace by SKU**; embedding **inline** on import/create; exemplars on `entities.profile.exemplar_captions` + Confirm promote.
+
+Still open:
+
+1. CSV column mapping UI (vs flexible headers only)?
+2. Offer snippets: separate table vs `kind` on products?
+3. **K6:** Proposal UI, diff for product patch, reject / “session only”, proposal TTL?
 
 ---
 
@@ -283,8 +285,8 @@ Do not implement until approve flow is agreed and ADR 0011 is accepted.
 
 | Phase | COLLECT deliverable |
 |-------|---------------------|
-| **K3** | §4 org import + storage; §5 retrieve (org only MVP OK) |
-| **K3b** | User personal lib + org-wins dedupe in §5 |
+| **K3** | §4 org import + storage; §5 retrieve (org only MVP OK) | ✅ |
+| **K3b** | User personal lib + org-wins dedupe in §5 | ✅ |
 | **K4** | §7 vector tier + cross-tenant tests | ✅ |
 | **K5** | Import UI ([UI.md](./UI.md)); §8 manual exemplar + offer upload | ✅ exemplars (offer snippets optional / deferred) |
 | **K6** | **Held** — §9 promote + Approvals UI → org replace |
