@@ -257,9 +257,13 @@ async def test_load_context_sets_agent_mode(no_llm: None, mock_db) -> None:
         out = await N.load_context(_base_state())
     assert out["mode"] == MODE_AGENT
     assert "company_context" in out
-    assert out["company_context"]["personas"] == []
-    assert out["company_context"]["voice"]["roast_level"] == 1
-    assert out["company_context"]["voice"]["craft"] == "hk_social_editor"
+    assert "profile" not in out["company_context"]
+    assert "personas" not in out["company_context"]
+    assert "voice" not in out["company_context"]
+    assert out["voice_pack"]["roast_level"] == 1
+    assert out["voice_pack"]["craft"] == "hk_social_editor"
+    assert out["voice_pack"]["locale"] == "zh-HK"
+    assert out["audience_catalog"] == []
 
 
 @pytest.mark.asyncio
@@ -316,12 +320,16 @@ async def test_brainstormer_mock_llm_matches_brief_contract(
     out = await N.brainstormer(
         _base_state(
             company_context={"ranked_signals": [{"signal_id": "sig_a", "title": "奶茶"}]},
+            audience_catalog=[
+                {"slug": "hk_youth", "label": "Youth", "hook": "short"},
+            ],
             source_signal_ids=["sig_a"],
         )
     )
     parsed = SessionBriefData.model_validate(out["brief"])
     assert parsed.summary == "grounded brief"
     assert out["mode"] == MODE_AGENT
+    assert out["active_persona"]["slug"] == "hk_youth"
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 # Enterprise Knowledge
 
-> **Status:** K0 artifact · **Not yet implemented** in graph nodes  
+> **Status:** K0 artifact · **K1 slim payloads shipped** (`voice_pack` / `audience_catalog`) · Products settings shipped; session `product_matcher` not yet  
 > **Boundary:** PostgreSQL only — no parallel KB, no chat free-browse ([AGENTS.md](../../AGENTS.md))
 
 Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consume it, and (later) **how** users collect/import it.
@@ -43,7 +43,7 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 | Phase | Scope | Doc |
 |-------|-------|-----|
 | **K0** | This folder + links | README / MODEL / SESSION / COLLECT / UI |
-| **K1** | `voice_pack`, `audience_catalog`, slim LLM payloads + Voice settings UI | SESSION + UI |
+| **K1** | `voice_pack`, `audience_catalog`, slim LLM payloads + Voice settings UI | ✅ SESSION + UI |
 | **K2** | `ranked_signals` top-level (out of fat `company_context`) | SESSION |
 | **K3** | Optional catalog + `product_matcher` + Products Org tab | MODEL + SESSION + COLLECT + UI |
 | **K3b** | User product lib + org-wins retrieve + Products Mine tab | COLLECT + UI |

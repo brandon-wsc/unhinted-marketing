@@ -170,6 +170,9 @@ def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str,
         "approval_token": state.get("approval_token"),
         "need_image": state.get("need_image", False),
         "company_context": state.get("company_context") or {},
+        "voice_pack": state.get("voice_pack") or {},
+        "audience_catalog": state.get("audience_catalog") or [],
+        "active_persona": state.get("active_persona"),
         "grounding_ok": state.get("grounding_ok", True),
     }
 
@@ -342,6 +345,9 @@ async def _persist_after_invoke(
         "approval_token": values.get("approval_token"),
         "need_image": values.get("need_image", False),
         "company_context": values.get("company_context") or {},
+        "voice_pack": values.get("voice_pack") or {},
+        "audience_catalog": values.get("audience_catalog") or [],
+        "active_persona": values.get("active_persona"),
         "grounding_ok": values.get("grounding_ok", True),
         "error": values.get("error"),
         # UI hydrate: interrupt_before executor_image_plan

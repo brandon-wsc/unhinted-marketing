@@ -173,7 +173,7 @@ Draft schema (planned): `product_context_ids` on `DraftOut` / `EditOut`; persist
 
 ## Current code (shipped baseline)
 
-Today `load_context` still passes fat `company_context` (full profile + personas) into brainstormer/executor — see `internal/session/nodes.py`. K1/K2 refactors align runtime with this doc.
+Today `load_context` emits top-level `voice_pack` + `audience_catalog` and identity-only `company_context` (K1). `ranked_signals` still rides on `company_context` until K2.
 
 ---
 

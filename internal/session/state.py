@@ -42,7 +42,11 @@ class SessionState(TypedDict, total=False):
     approval_token: str | None
     need_image: bool
     grounding_ok: NotRequired[bool]
+    # K1 knowledge packs — identity-only company_context; voice/audience compressed
     company_context: NotRequired[dict[str, Any]]
+    voice_pack: NotRequired[dict[str, Any]]
+    audience_catalog: NotRequired[list[dict[str, Any]]]
+    active_persona: NotRequired[dict[str, Any] | None]
     error: NotRequired[str]
     # Visual format for executor_image_plan (default single). Set via resume-image body or revise.
     image_format: NotRequired[Literal["single", "comic_4panel"]]

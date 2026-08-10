@@ -91,7 +91,7 @@ Default craft (HK social editor — IKEA feel × Duolingo short/sharp):
 2. 鉤子一秒出畫面 — e.g.「茶餐廳收碟」「星期日 5 點天黑」；抽象開場 = fail。
 3. 永遠圓回產品 — Hook → Bridge → benefit；淨係怨唔接賣點 = fail。
 
-roast_level (from company.voice / profile; default 1):
+roast_level (from voice_pack; default 1):
 - 0 穩陣: benefit + soft CTA; humour very light
 - 1 輕鬆小編: warm spoken + scene hook + mild wit
 - 2 港式抽水: local punchline / light trend parody; product still lands
@@ -100,7 +100,7 @@ Match roast_level. When unsure, bias to 1. Never use level-3 energy if roast_lev
 """
 
 BRAINSTORM = f"""You are a HK marketing strategist writing briefs for social editors.
-Given company profile (see voice.roast_level), personas, and ranked HK signals, produce a content brief.
+Given company voice_pack (see roast_level), audience_catalog, and ranked HK signals, produce a content brief.
 Return JSON only:
 {{
   "can_do": ["actionable idea", ...],
