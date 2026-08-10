@@ -513,7 +513,8 @@ describe("useSession", () => {
       await result.current.sendMessage("park me");
     });
     expect(result.current.awaitingImageOk).toBe(true);
-    expect(result.current.composerLocked).toBe(true);
+    // Parked image-OK keeps the composer editable — only a running turn locks it.
+    expect(result.current.composerLocked).toBe(false);
 
     await act(async () => {
       await result.current.resumeImage();
@@ -849,7 +850,8 @@ describe("useSession", () => {
     });
 
     expect(result.current.awaitingImageOk).toBe(true);
-    expect(result.current.composerLocked).toBe(true);
+    // Parked image-OK no longer locks the composer — Send stays available.
+    expect(result.current.composerLocked).toBe(false);
     expect(result.current.sending).toBe(false);
   });
 

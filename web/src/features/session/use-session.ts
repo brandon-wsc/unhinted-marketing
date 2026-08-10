@@ -657,11 +657,69 @@ export function useSession(companyId: string | undefined) {
       });
   }, [companyId, accessToken, openSession, refreshHistory, startNewChat]);
 
+  const stopTurn = useCallback(async () => {
+    if (!accessToken || !sessionId || stopping) return;
+    if (!sending && !awaitingImageOk) return;
+    setStopping(true);
+    // Invalidate in-flight send/resume before abort so late resolves are dropped.
+    turnEpochRef.current += 1;
+    suppressLiveTurnEventsRef.current = true;
+    sendAbortRef.current?.abort();
+    try {
+      const stopped = await apiStopSessionTurn(accessToken, sessionId);
+      const stillParked = stopped.awaiting_image_ok === true;
+      // Reload transcript after discard (user message / draft may be gone).
+      const hydrated = await apiGetSessionMessages(accessToken, sessionId);
+      messagesRef.current = hydrated.messages;
+      setMessages(hydrated.messages);
+      setMode(hydrated.session.mode);
+      setSession(hydrated.session);
+      const lastUser = [...hydrated.messages].reverse().find((m) => m.role === "user");
+      const parked = stillParked || hydrated.awaiting_image_ok === true;
+      setAwaitingImageOk(parked);
+      setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
+      // Restore BriefCard from sessions.state (Stop must not wipe a surviving brief).
+      const parsedBrief = parseBrief(hydrated.brief);
+      setBrief(parsedBrief);
+      setBriefAfterMessageId(parsedBrief && lastUser ? lastUser.id : null);
+      if (!parked) {
+        turnAnchorRef.current = null;
+      }
+      setStreamingText(null);
+      setAgentProgress(null);
+      const actions = agentActionsFromMessages(hydrated.messages);
+      setAgentActions(actions);
+      if (hydrated.session.mode === "PREVIEW") {
+        setPreviewAfterMessageId(previewAnchorFromActions(actions, hydrated.messages));
+      } else {
+        setPreviewAfterMessageId(null);
+      }
+      finishRunningActions();
+      void refreshHistory();
+    } finally {
+      setStopping(false);
+      setSending(false);
+    }
+  }, [
+    accessToken,
+    sessionId,
+    stopping,
+    sending,
+    awaitingImageOk,
+    finishRunningActions,
+    refreshHistory,
+  ]);
+
   const sendMessage = useCallback(
     async (content: string) => {
       const text = content.trim();
-      if (!text || !accessToken || !companyId || sending || stopping || awaitingImageOk) {
+      if (!text || !accessToken || !companyId || sending || stopping) {
         return;
+      }
+      // Backend rejects sends while parked (409) — discard the parked image
+      // turn first (Stop semantics), then continue as a normal message.
+      if (awaitingImageOk) {
+        await stopTurn();
       }
       setSending(true);
       setStreamingText(null);
@@ -792,6 +850,7 @@ export function useSession(companyId: string | undefined) {
       stopping,
       awaitingImageOk,
       session,
+      stopTurn,
       applyTurnEvent,
       ensureOutcomeActions,
       finishRunningActions,
@@ -878,59 +937,6 @@ export function useSession(companyId: string | undefined) {
     },
     [accessToken, sessionId, sending, stopping, awaitingImageOk, applyTurnResponse, refreshHistory],
   );
-
-  const stopTurn = useCallback(async () => {
-    if (!accessToken || !sessionId || stopping) return;
-    if (!sending && !awaitingImageOk) return;
-    setStopping(true);
-    // Invalidate in-flight send/resume before abort so late resolves are dropped.
-    turnEpochRef.current += 1;
-    suppressLiveTurnEventsRef.current = true;
-    sendAbortRef.current?.abort();
-    try {
-      const stopped = await apiStopSessionTurn(accessToken, sessionId);
-      const stillParked = stopped.awaiting_image_ok === true;
-      // Reload transcript after discard (user message / draft may be gone).
-      const hydrated = await apiGetSessionMessages(accessToken, sessionId);
-      messagesRef.current = hydrated.messages;
-      setMessages(hydrated.messages);
-      setMode(hydrated.session.mode);
-      setSession(hydrated.session);
-      const lastUser = [...hydrated.messages].reverse().find((m) => m.role === "user");
-      const parked = stillParked || hydrated.awaiting_image_ok === true;
-      setAwaitingImageOk(parked);
-      setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
-      // Restore BriefCard from sessions.state (Stop must not wipe a surviving brief).
-      const parsedBrief = parseBrief(hydrated.brief);
-      setBrief(parsedBrief);
-      setBriefAfterMessageId(parsedBrief && lastUser ? lastUser.id : null);
-      if (!parked) {
-        turnAnchorRef.current = null;
-      }
-      setStreamingText(null);
-      setAgentProgress(null);
-      const actions = agentActionsFromMessages(hydrated.messages);
-      setAgentActions(actions);
-      if (hydrated.session.mode === "PREVIEW") {
-        setPreviewAfterMessageId(previewAnchorFromActions(actions, hydrated.messages));
-      } else {
-        setPreviewAfterMessageId(null);
-      }
-      finishRunningActions();
-      void refreshHistory();
-    } finally {
-      setStopping(false);
-      setSending(false);
-    }
-  }, [
-    accessToken,
-    sessionId,
-    stopping,
-    sending,
-    awaitingImageOk,
-    finishRunningActions,
-    refreshHistory,
-  ]);
 
   const applyMediaMutation = useCallback((res: PreviewMediaMutationResponse) => {
     const next: PreviewDraft = {
@@ -1079,7 +1085,9 @@ export function useSession(companyId: string | undefined) {
     mode,
     sending,
     stopping,
-    composerLocked: sending || stopping || awaitingImageOk,
+    // Parked image-OK (awaitingImageOk) must not lock the composer — user can keep
+    // chatting; the InterruptCard owns the resume CTA. Stop only shows mid-turn.
+    composerLocked: sending || stopping,
     sseConnected,
     streamingText,
     agentProgress,
