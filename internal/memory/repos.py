@@ -11,6 +11,7 @@ from internal.memory.models import (
     Edge,
     Entity,
     OrganizationMember,
+    OrgInvite,
     PreviewDraft,
     PreviewImage,
     Product,
@@ -19,6 +20,7 @@ from internal.memory.models import (
     Session,
     SessionMessage,
     ToolReceipt,
+    User,
 )
 from internal.memory.product_import import build_search_document
 
@@ -147,6 +149,44 @@ async def get_org_membership(
             OrganizationMember.organization_id == company_id,
         )
     )
+
+
+async def list_org_members(
+    db: AsyncSession, company_id: uuid.UUID
+) -> list[tuple[OrganizationMember, User]]:
+    result = await db.execute(
+        select(OrganizationMember, User)
+        .join(User, OrganizationMember.user_id == User.id)
+        .where(OrganizationMember.organization_id == company_id)
+        .order_by(OrganizationMember.created_at)
+    )
+    return list(result.all())
+
+
+async def update_company_name(db: AsyncSession, company: Entity, name: str) -> Entity:
+    company.name = name.strip()
+    await db.flush()
+    return company
+
+
+async def update_org_member_role(
+    db: AsyncSession, membership: OrganizationMember, role: str
+) -> OrganizationMember:
+    membership.role = role
+    await db.flush()
+    return membership
+
+
+async def delete_org_member(db: AsyncSession, membership: OrganizationMember) -> None:
+    await db.delete(membership)
+    await db.flush()
+
+
+async def user_has_any_org(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    row = await db.scalar(
+        select(OrganizationMember.id).where(OrganizationMember.user_id == user_id)
+    )
+    return row is not None
 
 
 async def update_company_profile(

@@ -33,6 +33,7 @@ TRUNCATE_TABLES = (
     "edges",
     "raw_news_events",
     "products",
+    "org_invites",
     "refresh_tokens",
     "organization_members",
     "entities",

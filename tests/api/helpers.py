@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.memory import repos
-from internal.memory.models import Session
+from internal.memory.models import OrganizationMember, Session
 from internal.session.state import MODE_PREVIEW
 
 
@@ -34,6 +35,30 @@ async def register_user(
     res = await client.post("/api/auth/register", json=payload)
     assert res.status_code == 201, res.text
     return res.json()
+
+
+async def join_org(
+    db_session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    company_id: uuid.UUID,
+    role: str = "member",
+) -> OrganizationMember:
+    """Move a registered user into a company (MVP one-org: drops their default org membership)."""
+    existing = await db_session.scalar(
+        select(OrganizationMember).where(OrganizationMember.user_id == user_id)
+    )
+    if existing:
+        await db_session.delete(existing)
+    membership = OrganizationMember(
+        user_id=user_id,
+        organization_id=company_id,
+        role=role,
+    )
+    db_session.add(membership)
+    await db_session.commit()
+    await db_session.refresh(membership)
+    return membership
 
 
 async def seed_preview_session(

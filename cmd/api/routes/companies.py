@@ -5,18 +5,28 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
 from internal.auth.org import (
     COMPANY_SETTINGS_EDITOR_ROLES,
+    MANAGEABLE_MEMBER_ROLES,
     require_company_access,
     require_company_settings_editor,
 )
 from internal.memory.database import get_db
-from internal.memory.models import User
-from internal.memory.repos import get_company, get_org_membership, update_company_profile
+from internal.memory.models import OrganizationMember, User
+from internal.memory.repos import (
+    delete_org_member,
+    get_company,
+    get_org_membership,
+    list_org_members,
+    update_company_name,
+    update_company_profile,
+    update_org_member_role,
+    user_has_org_access,
+)
 from internal.session.voice import (
     normalize_exemplar_captions,
     normalize_roast_level,
@@ -24,6 +34,11 @@ from internal.session.voice import (
     roast_level_from_profile,
 )
 from schemas.company import (
+    CompanyMember,
+    CompanyMemberListResponse,
+    CompanyMemberRoleUpdate,
+    CompanySummary,
+    CompanyUpdate,
     CompanyVoiceSettings,
     CompanyVoiceUpdate,
     ExemplarPromoteRequest,
@@ -60,6 +75,109 @@ def _voice_from_company(
         exemplar_captions=normalize_exemplar_captions(profile.get("exemplar_captions")),
         can_edit=can_edit,
     )
+
+
+def _member_item(membership: OrganizationMember, user: User) -> CompanyMember:
+    return CompanyMember(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        role=membership.role,
+        joined_at=membership.created_at,
+    )
+
+
+@router.patch("/{company_id}", response_model=CompanySummary)
+async def patch_company(
+    body: CompanyUpdate,
+    company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CompanySummary:
+    company = await get_company(db, company_id)
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
+    await update_company_name(db, company, body.name)
+    await db.commit()
+    await db.refresh(company)
+    return CompanySummary(id=company.id, name=company.name, slug=company.slug)
+
+
+@router.get("/{company_id}/members", response_model=CompanyMemberListResponse)
+async def list_company_members(
+    company_id: Annotated[uuid.UUID, Depends(require_company_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CompanyMemberListResponse:
+    rows = await list_org_members(db, company_id)
+    return CompanyMemberListResponse(
+        company_id=company_id,
+        items=[_member_item(m, u) for m, u in rows],
+    )
+
+
+@router.patch("/{company_id}/members/{user_id}", response_model=CompanyMember)
+async def patch_company_member_role(
+    body: CompanyMemberRoleUpdate,
+    company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
+    user_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CompanyMember:
+    target = await get_org_membership(db, user_id, company_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+    if target.role == "owner":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot change the owner's role",
+        )
+    if body.role not in MANAGEABLE_MEMBER_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Role must be admin or member",
+        )
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+
+    await update_org_member_role(db, target, body.role)
+    await db.commit()
+    await db.refresh(target)
+    return _member_item(target, user)
+
+
+@router.delete("/{company_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_company_member(
+    company_id: uuid.UUID,
+    user_id: uuid.UUID,
+    actor: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    if not await user_has_org_access(db, actor.id, company_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    target = await get_org_membership(db, user_id, company_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+
+    is_self = actor.id == user_id
+    if is_self:
+        if target.role == "owner":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The company owner cannot leave until ownership is transferred",
+            )
+    else:
+        actor_membership = await get_org_membership(db, actor.id, company_id)
+        if not actor_membership or actor_membership.role not in COMPANY_SETTINGS_EDITOR_ROLES:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if target.role == "owner":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot remove the company owner",
+            )
+
+    await delete_org_member(db, target)
+    await db.commit()
 
 
 @router.get("/{company_id}/voice", response_model=CompanyVoiceSettings)

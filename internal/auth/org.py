@@ -12,6 +12,10 @@ from internal.memory.repos import get_company, get_org_membership, user_has_org_
 # Tenant roles that may change shared company settings (voice, org catalog).
 COMPANY_SETTINGS_EDITOR_ROLES = frozenset({"owner", "admin"})
 
+# ADR 0010 — sole owner per org; invites / PATCH may only assign these roles.
+INVITABLE_MEMBER_ROLES = frozenset({"admin", "member"})
+MANAGEABLE_MEMBER_ROLES = frozenset({"admin", "member"})
+
 
 async def require_company_access(
     company_id: uuid.UUID,

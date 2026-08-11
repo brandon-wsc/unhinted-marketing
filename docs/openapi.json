@@ -263,6 +263,643 @@
         }
       }
     },
+    "/api/companies/{company_id}": {
+      "patch": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Patch Company",
+        "operationId": "patch_company_api_companies__company_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanySummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/members": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "List Company Members",
+        "operationId": "list_company_members_api_companies__company_id__members_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyMemberListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/members/{user_id}": {
+      "patch": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Patch Company Member Role",
+        "operationId": "patch_company_member_role_api_companies__company_id__members__user_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyMemberRoleUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyMember"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Remove Company Member",
+        "operationId": "remove_company_member_api_companies__company_id__members__user_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/voice": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Get Company Voice",
+        "operationId": "get_company_voice_api_companies__company_id__voice_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyVoiceSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Patch Company Voice",
+        "operationId": "patch_company_voice_api_companies__company_id__voice_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyVoiceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyVoiceSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/voice/exemplars": {
+      "post": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Promote Voice Exemplar",
+        "description": "Manual promote from Confirm / draft — not chat auto-write (COLLECT K5).",
+        "operationId": "promote_voice_exemplar_api_companies__company_id__voice_exemplars_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExemplarPromoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExemplarPromoteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/products": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "List Company Products",
+        "operationId": "list_company_products_api_companies__company_id__products_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "org",
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Create Company Product",
+        "description": "Manual add — personal library by default (Mine tab).",
+        "operationId": "create_company_product_api_companies__company_id__products_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "user",
+              "title": "Scope"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/products/import": {
+      "post": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Import Company Products",
+        "operationId": "import_company_products_api_companies__company_id__products_import_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "org",
+              "title": "Scope"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_company_products_api_companies__company_id__products_import_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/products/{product_id}/archive": {
+      "post": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Archive Company Product",
+        "operationId": "archive_company_product_api_companies__company_id__products__product_id__archive_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions": {
       "get": {
         "tags": [
@@ -1716,6 +2353,55 @@
         }
       }
     },
+    "/api/admin/sessions/{session_id}/research": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Session Research",
+        "description": "Aggregate ADR 0009 research gate + Tavily∪PG ingest from node-step outputs.",
+        "operationId": "get_session_research_api_admin_sessions__session_id__research_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResearch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -1775,6 +2461,20 @@
         "type": "object",
         "title": "AddSessionImageRequest"
       },
+      "Body_import_company_products_api_companies__company_id__products_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_company_products_api_companies__company_id__products_import_post"
+      },
       "Body_post_session_image_upload_api_sessions__session_id__media__image_id__upload_post": {
         "properties": {
           "file": {
@@ -1788,6 +2488,219 @@
           "file"
         ],
         "title": "Body_post_session_image_upload_api_sessions__session_id__media__image_id__upload_post"
+      },
+      "CompanyMember": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "title": "Role"
+          },
+          "joined_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Joined At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "email",
+          "display_name",
+          "role",
+          "joined_at"
+        ],
+        "title": "CompanyMember"
+      },
+      "CompanyMemberListResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyMember"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "items"
+        ],
+        "title": "CompanyMemberListResponse"
+      },
+      "CompanyMemberRoleUpdate": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "member"
+            ],
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "CompanyMemberRoleUpdate"
+      },
+      "CompanySummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug"
+        ],
+        "title": "CompanySummary"
+      },
+      "CompanyUpdate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CompanyUpdate"
+      },
+      "CompanyVoiceSettings": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "roast_level": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Roast Level"
+          },
+          "locale": {
+            "type": "string",
+            "title": "Locale"
+          },
+          "forbidden_phrases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Forbidden Phrases"
+          },
+          "tone_notes": {
+            "type": "string",
+            "title": "Tone Notes",
+            "default": ""
+          },
+          "exemplar_captions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Exemplar Captions"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "roast_level",
+          "locale"
+        ],
+        "title": "CompanyVoiceSettings"
+      },
+      "CompanyVoiceUpdate": {
+        "properties": {
+          "roast_level": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Roast Level"
+          },
+          "locale": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 2,
+            "title": "Locale"
+          },
+          "forbidden_phrases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 15,
+            "title": "Forbidden Phrases"
+          },
+          "tone_notes": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Tone Notes",
+            "default": ""
+          },
+          "exemplar_captions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Exemplar Captions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "roast_level",
+          "locale"
+        ],
+        "title": "CompanyVoiceUpdate"
       },
       "ConfirmSessionRequest": {
         "properties": {
@@ -1897,6 +2810,49 @@
         "type": "object",
         "title": "DraftCopy",
         "description": "Shared post copy across preview skins (ADR 0001)."
+      },
+      "ExemplarPromoteRequest": {
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Caption"
+          }
+        },
+        "type": "object",
+        "required": [
+          "caption"
+        ],
+        "title": "ExemplarPromoteRequest",
+        "description": "Promote a confirmed draft caption into company voice exemplars (K5)."
+      },
+      "ExemplarPromoteResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "exemplar_captions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Exemplar Captions"
+          },
+          "added": {
+            "type": "boolean",
+            "title": "Added"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "exemplar_captions",
+          "added"
+        ],
+        "title": "ExemplarPromoteResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2852,6 +3808,156 @@
         "title": "PreviewMediaMutationResponse",
         "description": "Shared shape after plan edit / regen / add (new draft revision)."
       },
+      "ProductCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "sku": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Sku"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Notes",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "sku"
+        ],
+        "title": "ProductCreateRequest"
+      },
+      "ProductImportResponse": {
+        "properties": {
+          "imported": {
+            "type": "integer",
+            "title": "Imported"
+          },
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "imported",
+          "updated",
+          "skipped"
+        ],
+        "title": "ProductImportResponse"
+      },
+      "ProductItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "sku": {
+            "type": "string",
+            "title": "Sku"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "owner_scope": {
+            "type": "string",
+            "enum": [
+              "org",
+              "user"
+            ],
+            "title": "Owner Scope"
+          },
+          "covered_by_company": {
+            "type": "boolean",
+            "title": "Covered By Company",
+            "default": false
+          },
+          "profile": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Profile"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "sku",
+          "name",
+          "status",
+          "owner_scope",
+          "updated_at"
+        ],
+        "title": "ProductItem"
+      },
+      "ProductListResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "org",
+              "user"
+            ],
+            "title": "Scope"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "scope",
+          "items"
+        ],
+        "title": "ProductListResponse"
+      },
       "RecommendedQuestionItem": {
         "properties": {
           "id": {
@@ -2985,6 +4091,192 @@
           "display_name"
         ],
         "title": "RegisterRequest"
+      },
+      "ResearchSignalHit": {
+        "properties": {
+          "signal_id": {
+            "type": "string",
+            "title": "Signal Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          }
+        },
+        "type": "object",
+        "required": [
+          "signal_id",
+          "source",
+          "title"
+        ],
+        "title": "ResearchSignalHit"
+      },
+      "ResearchTurn": {
+        "properties": {
+          "turn_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Turn Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "research_rule_pass": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Rule Pass"
+          },
+          "semantic_route": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Route"
+          },
+          "need_facts": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need Facts"
+          },
+          "ambiguous": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambiguous"
+          },
+          "ask_clarify": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ask Clarify"
+          },
+          "entity_surface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Surface"
+          },
+          "search_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Query"
+          },
+          "search_queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Search Queries"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchSignalHit"
+            },
+            "type": "array",
+            "title": "Signals"
+          },
+          "source_signal_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Signal Ids"
+          },
+          "ran_research_ingest": {
+            "type": "boolean",
+            "title": "Ran Research Ingest",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "turn_id"
+        ],
+        "title": "ResearchTurn",
+        "description": "One graph turn's research gate + Tavily∪PG ingest (ADR 0009)."
       },
       "ResumeImageRequest": {
         "properties": {
@@ -3244,6 +4536,27 @@
           "messages"
         ],
         "title": "SessionMessagesResponse"
+      },
+      "SessionResearch": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchTurn"
+            },
+            "type": "array",
+            "title": "Turns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "title": "SessionResearch"
       },
       "SessionResponse": {
         "properties": {
