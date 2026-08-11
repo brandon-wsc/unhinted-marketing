@@ -145,6 +145,15 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **K4 (2026-08-10):** `products.embedding` (pgvector 384) + FastEmbed hybrid retrieve; cross-tenant retrieve test
 - **K5 (2026-08-10):** `exemplar_captions` on Voice settings + Confirm promote (`POST …/voice/exemplars`); into `voice_pack`
 
+**Decision (2026-08-11) — Org membership, invites, shared-asset scope:** → [ADR 0010](./adr/0010-org-membership-invites-and-shared-assets.md)
+
+- **Members API** — list / change role (`admin` ↔ `member` only) / remove (+ self-leave); **exactly one owner**; sole-owner demote/remove → 409; `PATCH /api/companies/{id}` rename only
+- **Invites** — `org_invites`; single-use hashed token, 7-day expiry, email-normalized + bound; pending unique per org+email; response always carries `invite_url`; unregistered invitees register/login with that email then accept
+- **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; `WEB_BASE_URL` required for link building; `internal/notify/` seam
+- **MVP one user ↔ one org** — invite accept 409s if already in an org; no switcher
+- **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (revisit with K6)
+- **Unblocks K6** promote-to-org Approvals (ADR 0011 later)
+
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
 ---
