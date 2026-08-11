@@ -61,6 +61,27 @@ async def join_org(
     return membership
 
 
+async def strip_org_membership(
+    db_session: AsyncSession,
+    user_id: uuid.UUID,
+) -> None:
+    """Remove a user's org membership (tests: invite accept without 409)."""
+    membership = await db_session.scalar(
+        select(OrganizationMember).where(OrganizationMember.user_id == user_id)
+    )
+    if membership:
+        await db_session.delete(membership)
+        await db_session.commit()
+
+
+def invite_token_from_url(invite_url: str) -> str:
+    """Extract raw token from `{base}/invite/{token}` invite links."""
+    marker = "/invite/"
+    if marker not in invite_url:
+        raise ValueError(f"unexpected invite_url shape: {invite_url}")
+    return invite_url.split(marker, 1)[1].split("?", 1)[0].strip()
+
+
 async def seed_preview_session(
     db_session: AsyncSession,
     *,
