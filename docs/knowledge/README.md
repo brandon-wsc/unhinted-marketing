@@ -21,7 +21,9 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 | Topic | Authority |
 |-------|-----------|
 | HK social craft (trend hooks, zh-HK) | [VOICE.md](../VOICE.md) |
-| Locked retrieve/tenant decisions (when shipped) | Future [ADR 0010](../adr/) |
+| Locked retrieve/tenant decisions (optional formal ADR) | Future [ADR 0012](../adr/) if needed — behavior shipped K3–K4 |
+| K6 promote / Approvals (commit without LLM) | Future [ADR 0011](../adr/) |
+| Org membership + invites | [ADR 0010](../adr/0010-org-membership-invites-and-shared-assets.md) |
 | Shipped vs held checklist | [STATUS.md](../STATUS.md) |
 | Architecture overview | [ROADMAP § Knowledge](../ROADMAP.md#knowledge-postgresql) |
 | Market research ingest | [ADR 0009](../adr/0009-research-gate-and-tavily-ingest.md) |
@@ -51,14 +53,15 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 | **K5** | Exemplar captions (Voice settings + Confirm promote) | ✅ COLLECT + UI |
 | **K6** | **Held** — promote to org + **admin approve** (user covers org only after approve) | COLLECT + ADR |
 
-ADR **0010** (future): lock product retrieve + `company_id` filter formally (behavior already shipped in K3–K4).  
-ADR **0011** (future, after K6 UX): knowledge commit without LLM — mirror [ADR 0003](../adr/0003-confirm-without-llm.md).
+ADR **0010** (accepted): org membership, invites, shared-asset scope — [0010](../adr/0010-org-membership-invites-and-shared-assets.md).  
+ADR **0011** (future, after K6 UX): knowledge commit without LLM — mirror [ADR 0003](../adr/0003-confirm-without-llm.md).  
+ADR **0012** (optional): formal product retrieve + `company_id` filter (behavior already shipped in K3–K4).  
 
 ### Held: promote to org (K6)
 
 **Not in K0–K5.** **User × New** (chat scratch) is instant for drafting; **Org × Old** changes require import or K6 **promote + owner/admin approve**. Org **directly covers** user on SKU clash at retrieve time.
 
-**Prerequisite order:** K3–K4 retrieve works → K5 manual import/UI → **design K6 approve UX** → ADR 0011 + code.
+**Prerequisite order:** K3–K4 retrieve works → K5 manual import/UI → **org system (ADR 0010)** → **design K6 approve UX** → ADR 0011 + code.
 
 ---
 

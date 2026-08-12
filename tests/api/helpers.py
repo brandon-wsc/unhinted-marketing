@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.memory import repos
-from internal.memory.models import Session
+from internal.memory.models import OrganizationMember, Session
 from internal.session.state import MODE_PREVIEW
 
 
@@ -34,6 +35,51 @@ async def register_user(
     res = await client.post("/api/auth/register", json=payload)
     assert res.status_code == 201, res.text
     return res.json()
+
+
+async def join_org(
+    db_session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    company_id: uuid.UUID,
+    role: str = "member",
+) -> OrganizationMember:
+    """Move a registered user into a company (MVP one-org: drops their default org membership)."""
+    existing = await db_session.scalar(
+        select(OrganizationMember).where(OrganizationMember.user_id == user_id)
+    )
+    if existing:
+        await db_session.delete(existing)
+    membership = OrganizationMember(
+        user_id=user_id,
+        organization_id=company_id,
+        role=role,
+    )
+    db_session.add(membership)
+    await db_session.commit()
+    await db_session.refresh(membership)
+    return membership
+
+
+async def strip_org_membership(
+    db_session: AsyncSession,
+    user_id: uuid.UUID,
+) -> None:
+    """Remove a user's org membership (tests: invite accept without 409)."""
+    membership = await db_session.scalar(
+        select(OrganizationMember).where(OrganizationMember.user_id == user_id)
+    )
+    if membership:
+        await db_session.delete(membership)
+        await db_session.commit()
+
+
+def invite_token_from_url(invite_url: str) -> str:
+    """Extract raw token from `{base}/invite/{token}` invite links."""
+    marker = "/invite/"
+    if marker not in invite_url:
+        raise ValueError(f"unexpected invite_url shape: {invite_url}")
+    return invite_url.split(marker, 1)[1].split("?", 1)[0].strip()
 
 
 async def seed_preview_session(

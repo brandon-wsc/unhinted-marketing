@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+import uuid
 from collections import defaultdict, deque
 
 from fastapi import HTTPException, Request, status
@@ -71,6 +72,24 @@ def enforce_auth_rate_limit(request: Request, *, bucket: str) -> None:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many auth requests — try again later",
             headers={"Retry-After": str(settings.auth_rate_limit_window_seconds)},
+        )
+
+
+def enforce_invite_rate_limit(*, user_id: uuid.UUID) -> None:
+    """Raise 429 when an owner/admin creates too many invites in the window."""
+    if not settings.invite_rate_limit_enabled:
+        return
+    key = f"invite_create:{user_id}"
+    ok = _auth_limiter.allow(
+        key,
+        max_requests=settings.invite_rate_limit_max,
+        window_seconds=float(settings.invite_rate_limit_window_seconds),
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many invites — try again later",
+            headers={"Retry-After": str(settings.invite_rate_limit_window_seconds)},
         )
 
 

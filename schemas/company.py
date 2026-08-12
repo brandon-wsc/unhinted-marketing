@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class CompanyVoiceSettings(BaseModel):
@@ -85,6 +85,67 @@ class ExemplarPromoteResponse(BaseModel):
     company_id: uuid.UUID
     exemplar_captions: list[str]
     added: bool
+
+
+class CompanySummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+
+
+class CompanyUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("name is required")
+        return cleaned
+
+
+class CompanyMember(BaseModel):
+    user_id: uuid.UUID
+    email: EmailStr
+    display_name: str
+    role: Literal["owner", "admin", "member"]
+    joined_at: datetime
+
+
+class CompanyMemberListResponse(BaseModel):
+    company_id: uuid.UUID
+    items: list[CompanyMember]
+
+
+class CompanyMemberRoleUpdate(BaseModel):
+    role: Literal["admin", "member"]
+
+
+class OrgInviteCreate(BaseModel):
+    email: EmailStr
+    role: Literal["admin", "member"] = "member"
+
+
+class OrgInviteItem(BaseModel):
+    id: uuid.UUID
+    email: EmailStr
+    role: Literal["admin", "member"]
+    invite_url: str | None = None
+    expires_at: datetime
+    accepted_at: datetime | None = None
+    revoked_at: datetime | None = None
+    created_at: datetime
+
+
+class OrgInviteListResponse(BaseModel):
+    company_id: uuid.UUID
+    items: list[OrgInviteItem]
+
+
+class OrgInviteAcceptResponse(BaseModel):
+    company_id: uuid.UUID
+    role: Literal["admin", "member"]
 
 
 class ProductItem(BaseModel):

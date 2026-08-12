@@ -191,7 +191,7 @@ User-owned data **must not leak across companies**.
 
 **Anti-patterns:** global vector top-K then filter; trusting prompt for tenant; shared slug namespace across orgs.
 
-Locked decisions → future [ADR 0010](../adr/) when implemented.
+Locked decisions → [ADR 0010](../adr/0010-org-membership-invites-and-shared-assets.md) (org/invites); product retrieve tenant filter behavior shipped in K3–K4 (optional formal ADR 0012 later).
 
 ---
 

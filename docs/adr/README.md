@@ -13,6 +13,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0007](./0007-admin-trace-viewer.md) | Admin Trace viewer (node-steps + session) | Accepted |
 | [0008](./0008-preview-images-append-only.md) | Append-only preview images + draft `media_ids` | Accepted |
 | [0009](./0009-research-gate-and-tavily-ingest.md) | Unified intent + research gate; Tavily∪PG ingest | Accepted |
+| [0010](./0010-org-membership-invites-and-shared-assets.md) | Org membership, invite links, shared-asset scope | Accepted |
 
 ## Format
 

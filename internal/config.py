@@ -23,6 +23,21 @@ class Settings(BaseSettings):
     auth_rate_limit_max: int = 30
     auth_rate_limit_window_seconds: int = 60
 
+    # Org invite create rate limit (per inviting user; Redis later)
+    invite_rate_limit_enabled: bool = True
+    invite_rate_limit_max: int = 20
+    invite_rate_limit_window_seconds: int = 60
+
+    # Invite links + optional email delivery (on-prem: link mode default)
+    web_base_url: str = "http://localhost:5173"
+    email_backend: str = "link"  # link | smtp | console
+    email_from: str = "noreply@localhost"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_tls: bool = True
+
     # LLM (BYOK via env; org keys in DB deferred to Phase 4)
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None

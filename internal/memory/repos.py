@@ -11,6 +11,7 @@ from internal.memory.models import (
     Edge,
     Entity,
     OrganizationMember,
+    OrgInvite,
     PreviewDraft,
     PreviewImage,
     Product,
@@ -19,6 +20,7 @@ from internal.memory.models import (
     Session,
     SessionMessage,
     ToolReceipt,
+    User,
 )
 from internal.memory.product_import import build_search_document
 
@@ -147,6 +149,128 @@ async def get_org_membership(
             OrganizationMember.organization_id == company_id,
         )
     )
+
+
+async def list_org_members(
+    db: AsyncSession, company_id: uuid.UUID
+) -> list[tuple[OrganizationMember, User]]:
+    result = await db.execute(
+        select(OrganizationMember, User)
+        .join(User, OrganizationMember.user_id == User.id)
+        .where(OrganizationMember.organization_id == company_id)
+        .order_by(OrganizationMember.created_at)
+    )
+    return list(result.all())
+
+
+async def update_company_name(db: AsyncSession, company: Entity, name: str) -> Entity:
+    company.name = name.strip()
+    await db.flush()
+    return company
+
+
+async def update_org_member_role(
+    db: AsyncSession, membership: OrganizationMember, role: str
+) -> OrganizationMember:
+    membership.role = role
+    await db.flush()
+    return membership
+
+
+async def delete_org_member(db: AsyncSession, membership: OrganizationMember) -> None:
+    await db.delete(membership)
+    await db.flush()
+
+
+async def user_has_any_org(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    row = await db.scalar(
+        select(OrganizationMember.id).where(OrganizationMember.user_id == user_id)
+    )
+    return row is not None
+
+
+async def create_org_member(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    company_id: uuid.UUID,
+    role: str,
+) -> OrganizationMember:
+    membership = OrganizationMember(
+        user_id=user_id,
+        organization_id=company_id,
+        role=role,
+    )
+    db.add(membership)
+    await db.flush()
+    return membership
+
+
+async def create_org_invite(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    email: str,
+    role: str,
+    token_hash: str,
+    invited_by: uuid.UUID,
+    expires_at: datetime,
+) -> OrgInvite:
+    invite = OrgInvite(
+        organization_id=organization_id,
+        email=email,
+        role=role,
+        token_hash=token_hash,
+        invited_by=invited_by,
+        expires_at=expires_at,
+    )
+    db.add(invite)
+    await db.flush()
+    return invite
+
+
+async def list_pending_org_invites(
+    db: AsyncSession, company_id: uuid.UUID
+) -> list[OrgInvite]:
+    result = await db.scalars(
+        select(OrgInvite)
+        .where(
+            OrgInvite.organization_id == company_id,
+            OrgInvite.accepted_at.is_(None),
+            OrgInvite.revoked_at.is_(None),
+        )
+        .order_by(OrgInvite.created_at.desc())
+    )
+    return list(result.all())
+
+
+async def get_org_invite(
+    db: AsyncSession, company_id: uuid.UUID, invite_id: uuid.UUID
+) -> OrgInvite | None:
+    return await db.scalar(
+        select(OrgInvite).where(
+            OrgInvite.id == invite_id,
+            OrgInvite.organization_id == company_id,
+        )
+    )
+
+
+async def get_org_invite_by_token_hash(
+    db: AsyncSession, token_hash: str
+) -> OrgInvite | None:
+    return await db.scalar(select(OrgInvite).where(OrgInvite.token_hash == token_hash))
+
+
+async def revoke_org_invite(db: AsyncSession, invite: OrgInvite) -> OrgInvite:
+    invite.revoked_at = datetime.now(UTC)
+    await db.flush()
+    return invite
+
+
+async def accept_org_invite(db: AsyncSession, invite: OrgInvite) -> OrgInvite:
+    invite.accepted_at = datetime.now(UTC)
+    await db.flush()
+    return invite
 
 
 async def update_company_profile(
