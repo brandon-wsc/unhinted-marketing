@@ -99,12 +99,19 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Platform privilege** — numeric `users.platform_level` ladder 0–10 with named rungs + gaps (`MEMBER`=3 default, `ADMIN`=6 read-only records, `SUPERADMIN`=9 full); threshold checks via `require_platform_level`; tenant `organization_members.role` stays separate
 - **Bootstrap** — CLI only: `python -m cmd.worker set-platform-role --email … --level superadmin`
 - **LLM call records** — every provider call (10 session LLM nodes + `question_generator` worker) persisted to `llm_call_records` with prompts, response, tokens, latency, status, `parse_ok` / `fallback_used`; instrumented at the `internal/llm/router.py` choke point; correlation via contextvars; toggle `LLM_RECORD_ENABLED` (default on)
-- **Admin surface** — `GET /api/admin/llm-calls` (+ `/{id}`), `GET /api/admin/node-steps` (+ `/{id}`), `GET /api/admin/sessions/{id}/trace`, `GET /api/admin/sessions/{id}/research` gated by `require_platform_level(ADMIN)`; web `/admin` (UserMenu, level ≥ 6) with tabs: LLM calls | Node steps | Research | Session Trace ([ADR 0007](./adr/0007-admin-trace-viewer.md))
+- **Platform ops surface** — `GET /api/admin/llm-calls` (+ `/{id}`), `GET /api/admin/node-steps` (+ `/{id}`), `GET /api/admin/sessions/{id}/trace`, `GET /api/admin/sessions/{id}/research` gated by `require_platform_level(ADMIN)`; web **System** at `/system` (UserMenu, level ≥ 6) with tabs: LLM calls | Node steps | Research | Session Trace ([ADR 0007](./adr/0007-admin-trace-viewer.md)). **API path stays `/api/admin/*`** (platform namespace, not tenant admin); SPA `/admin` redirects to `/system` — see decision 2026-08-13 below.
 
 **Decision (2026-08-03) — API `/api` prefix vs SPA proxy collision:** → [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)
 
 - Same-origin vite proxy + top-level API paths (`/admin`, `/sessions`, …) was a **latent namespace footgun**; became user-visible when SPA `/admin` shared a prefix with the API (refresh → FastAPI `{"detail":"Not Found"}`)
-- **Executed 2026-08-04:** all public HTTP routes under `/api/…`; vite single proxy `/api` → API; SPA `/admin` refresh serves the React app (API is `/api/admin/*`)
+- **Executed 2026-08-04:** all public HTTP routes under `/api/…`; vite single proxy `/api` → API; SPA document routes (`/`, `/login`, `/system`, …) no longer collide with API prefixes
+
+**Decision (2026-08-13) — SPA “System” vs API `/api/admin/*` (intentional split):**
+
+- **User-facing** — UserMenu **System** → SPA `/system` (platform ops: LLM trace, research). Legacy `/admin` → redirect `/system` (preserve query).
+- **HTTP API** — **unchanged** `/api/admin/*`; `admin` here means **platform-level** routes ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)), **not** company `organization_members.role` admin/owner.
+- **Tenant admin** — Company settings (`/settings`): voice, products, members — separate namespace entirely.
+- **Not renaming API to `/api/system`** in this slice — avoids breaking churn; UI label and API path may differ (documented; optional `/api/platform/*` migration later).
 
 **Decision (2026-08-03) — Admin Trace viewer:** → [ADR 0007](./adr/0007-admin-trace-viewer.md)
 
@@ -228,8 +235,8 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Manual draft API `POST …/draft` | ✅ | No LLM; bump revision + `approval_token`; caption-only reuses `media_ids` ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
 | Preview media APIs | ✅ | `GET/POST …/media`, `PATCH …/media/{id}/plan`, `POST …/media/{id}/regen`, `POST …/media/{id}/remove`, `POST …/media/{id}/upload` — append-only image rows + new draft |
 | Chat history hydrate + list | ✅ | `GET /api/sessions`, `GET …/messages`, `PATCH/DELETE …/{id}` (`title`/`pinned`); localStorage last session; desktop Gemini-style sidebar; mobile Record page (history icon → full list; **上一頁** back to Chat) |
-| LLM call records + admin page | ✅ | [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — `llm_call_records` + platform levels + recorder; `/api/admin/llm-calls` API + web `/admin` |
-| API `/api` path prefix | ✅ | [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md) — hard cut; SPA `/admin` refresh no longer collides |
+| LLM call records + System page | ✅ | [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — `llm_call_records` + platform levels; `/api/admin/llm-calls` API + web `/system` |
+| API `/api` path prefix | ✅ | [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md) — hard cut; SPA `/system` (legacy `/admin` redirect) |
 | Admin Trace viewer (node-steps + session) | ✅ | [ADR 0007](./adr/0007-admin-trace-viewer.md) — `session_node_steps` + `turn_id`; admin tabs Node steps / Session Trace |
 | Meta Graph API hot search | ⏸ | Next after core UI |
 | BYOK settings page | ⏸ | After core UI |
@@ -309,7 +316,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/register` | Sign up + default workspace |
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
 | `/settings` | Company settings — Voice + Products (Org \| Mine); Approvals held |
-| `/admin` | Platform admin (level ≥ 6) — LLM calls / node steps / session trace |
+| `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace; `/admin` redirects here |
 
 **UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; harness-desk values from [`docs/design/`](./design/) **applied**; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`, `UserMenu`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
 
@@ -330,7 +337,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 cd web && pnpm install && pnpm run dev
 ```
 
-App: http://localhost:5173/login (Vite proxies `/api` → `:8000`; SPA owns `/`, `/login`, `/admin`, …)
+App: http://localhost:5173/login (Vite proxies `/api` → `:8000`; SPA owns `/`, `/login`, `/system`, …)
 
 ---
 

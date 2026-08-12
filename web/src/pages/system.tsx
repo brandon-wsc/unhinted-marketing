@@ -10,14 +10,14 @@ import { ResearchPanel } from "@/features/admin/components/research-panel";
 import { SessionTracePanel } from "@/features/admin/components/session-trace";
 import { isAdmin } from "@/lib/platform-level";
 
-type AdminTab = "llm" | "steps" | "trace" | "research";
+type SystemTab = "llm" | "steps" | "trace" | "research";
 
-function parseTab(raw: string | null): AdminTab {
+function parseTab(raw: string | null): SystemTab {
   if (raw === "steps" || raw === "trace" || raw === "research") return raw;
   return "llm";
 }
 
-export function AdminPage() {
+export function SystemPage() {
   const { t } = useTranslation();
   const { user, loading } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -26,7 +26,7 @@ export function AdminPage() {
   const sessionId = params.get("session") ?? "";
 
   const setTab = useMemo(
-    () => (next: AdminTab, extras?: { turn?: string; session?: string }) => {
+    () => (next: SystemTab, extras?: { turn?: string; session?: string }) => {
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", next);
       if (extras?.turn !== undefined) {
@@ -56,13 +56,13 @@ export function AdminPage() {
     return (
       <AppShell mainClassName="flex items-center justify-center overflow-y-auto">
         <div className="text-center">
-          <h1 className="text-lg font-semibold text-foreground">{t("admin.forbidden.title")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("admin.forbidden.body")}</p>
+          <h1 className="text-lg font-semibold text-foreground">{t("system.forbidden.title")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("system.forbidden.body")}</p>
           <Link
             to="/"
             className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
           >
-            {t("admin.forbidden.back")}
+            {t("system.forbidden.back")}
           </Link>
         </div>
       </AppShell>
@@ -72,7 +72,7 @@ export function AdminPage() {
   return (
     <AppShell mainClassName="overflow-y-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <h1 className="mb-4 text-lg font-semibold text-foreground">{t("admin.title")}</h1>
+        <h1 className="mb-4 text-lg font-semibold text-foreground">{t("system.title")}</h1>
         <Tabs value={tab} onValueChange={(value) => setTab(parseTab(value))}>
           <TabsList>
             <TabsTrigger value="llm">{t("admin.tabs.llm")}</TabsTrigger>

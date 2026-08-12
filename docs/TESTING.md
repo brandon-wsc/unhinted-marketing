@@ -68,6 +68,7 @@ Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — runs on 
 | `backend-unit` | `pytest tests/unit` + utils cov ≥85%; session nodes mock-LLM cov ≥70% |
 | `backend-api` | `pgvector/pgvector:pg18` service + `pytest tests/api` + routes cov ≥70% |
 | `frontend` | `pnpm install --frozen-lockfile` → `pnpm run lint` (Biome) → `pnpm run test:coverage` → `pnpm run build` |
+| `contracts` | `python -m scripts.export_contracts` then `git diff --exit-code` on `docs/openapi.json` + `docs/contracts/` |
 
 **Do not** require whole-repo 80%. Local equivalents:
 

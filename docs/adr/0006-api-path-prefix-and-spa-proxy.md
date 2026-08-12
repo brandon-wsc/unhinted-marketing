@@ -86,3 +86,9 @@ Hard cut (no dual-mount):
 - Web: `API_BASE = "/api"`; vite proxy is a single `"/api"` → `:8000` rule
 - SPA document route `/admin` kept; refresh now serves the React app (API is `/api/admin/*`)
 - Contracts re-exported; API tests updated
+
+## Update (2026-08-13) — SPA route `/system` (API unchanged)
+
+- UserMenu label **System**; SPA document route `/system` replaces `/admin` for platform ops UI ([STATUS](./STATUS.md) decision 2026-08-13).
+- **HTTP API remains** `/api/admin/*` — platform-level namespace per ADR 0005, not tenant `organization_members.role`.
+- Legacy SPA `/admin` redirects to `/system` (query preserved). No `/api/system` alias in this slice.

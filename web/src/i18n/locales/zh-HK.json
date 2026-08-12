@@ -312,9 +312,16 @@
       "emptyBadge": "即將推出"
     }
   },
+  "system": {
+    "menuEntry": "系統",
+    "title": "系統",
+    "forbidden": {
+      "title": "冇權限",
+      "body": "系統工具需要較高嘅平台權限。",
+      "back": "返回主頁"
+    }
+  },
   "admin": {
-    "menuEntry": "Admin 後台",
-    "title": "Admin 後台",
     "llmCalls": "LLM 呼叫紀錄",
     "empty": "暫時未有紀錄 — 觸發 LLM call 之後會喺呢度出現",
     "nodeStepsEmpty": "暫時未有 node steps — 跑完一個 session turn 之後會喺呢度出現",
@@ -327,11 +334,6 @@
       "steps": "Node steps",
       "research": "Research",
       "trace": "Session Trace"
-    },
-    "forbidden": {
-      "title": "冇權限",
-      "body": "呢一頁只限 admin 用戶。",
-      "back": "返回主頁"
     },
     "filters": {
       "node": "節點",

@@ -3,7 +3,7 @@
 > **Status:** Locked for K1–K5 shell · **Penpot drawn** · Voice **shipped** (incl. exemplars) · Products **shipped** (K3/K3b import + list + archive) · Approvals held  
 > **Parent:** [README.md](./README.md) · **Data rules:** [COLLECT.md](./COLLECT.md) · **Shell vs craft:** [design/BRIEF.md](../design/BRIEF.md)
 
-Shell settings collect human-provided knowledge. Session craft does **not** silently write org catalog. `/admin` stays ops-only (LLM / Trace) — not tenant KB CRUD.
+Shell settings collect human-provided knowledge. Session craft does **not** silently write org catalog. `/system` is platform ops (LLM / Trace) — not tenant KB CRUD; `/admin` redirects there.
 
 ---
 
@@ -24,7 +24,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 | `Company settings · Products · Mine` | Mine tab · Import + Add row · `covered by company` badge · cover rule note |
 | `Company settings · Approvals` | Empty state · K6 held badge |
 
-Entry: UserMenu → **Company settings** (desktop + mobile, above Admin). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell).
+Entry: UserMenu → **Company settings** (desktop + mobile, above System). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell).
 
 ---
 
@@ -43,7 +43,7 @@ UserMenu
 | Company settings | Persist voice + catalogs + approve | **Shell** — serious, scannable |
 | Session chat | Turn-local product facts only | **Craft** — User × New scratch; no org upsert |
 | Confirm / draft action | Manual exemplar pick (K5) | **Shell** gate-adjacent — short accurate copy |
-| `/admin` | Platform ops | Out of scope for COLLECT UI |
+| `/system` | Platform ops | Out of scope for COLLECT UI (`/admin` → redirect) |
 
 ---
 
