@@ -312,9 +312,16 @@
       "emptyBadge": "Coming soon"
     }
   },
+  "system": {
+    "menuEntry": "System",
+    "title": "System",
+    "forbidden": {
+      "title": "No access",
+      "body": "System tools require elevated platform access.",
+      "back": "Back to home"
+    }
+  },
   "admin": {
-    "menuEntry": "Admin",
-    "title": "Admin",
     "llmCalls": "LLM call records",
     "empty": "No records yet — they appear after an LLM call runs",
     "nodeStepsEmpty": "No node steps yet — they appear after a session turn runs",
@@ -327,11 +334,6 @@
       "steps": "Node steps",
       "research": "Research",
       "trace": "Session Trace"
-    },
-    "forbidden": {
-      "title": "No access",
-      "body": "This page is for admin users only.",
-      "back": "Back to home"
     },
     "filters": {
       "node": "Node",

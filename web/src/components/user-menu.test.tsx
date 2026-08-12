@@ -104,13 +104,13 @@ describe("UserMenu (desktop dropdown)", () => {
     expect(changeLanguage).toHaveBeenCalledWith("zh-HK");
   });
 
-  it("hides the admin entry for members", async () => {
+  it("hides the system entry for members", async () => {
     const user = userEvent.setup();
     render(<UserMenu />);
 
     await user.click(screen.getByRole("button", { name: /Ada/i }));
 
-    expect(screen.queryByRole("menuitem", { name: "admin.menuEntry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "system.menuEntry" })).not.toBeInTheDocument();
   });
 
   it("navigates to /settings from company settings", async () => {
@@ -123,15 +123,15 @@ describe("UserMenu (desktop dropdown)", () => {
     expect(navigate).toHaveBeenCalledWith("/settings");
   });
 
-  it("navigates to /admin from the admin entry for admins", async () => {
+  it("navigates to /system from the system entry for platform operators", async () => {
     mockUser.platform_level = 9;
     const user = userEvent.setup();
     render(<UserMenu />);
 
     await user.click(screen.getByRole("button", { name: /Ada/i }));
-    await user.click(screen.getByRole("menuitem", { name: "admin.menuEntry" }));
+    await user.click(screen.getByRole("menuitem", { name: "system.menuEntry" }));
 
-    expect(navigate).toHaveBeenCalledWith("/admin");
+    expect(navigate).toHaveBeenCalledWith("/system");
   });
 });
 

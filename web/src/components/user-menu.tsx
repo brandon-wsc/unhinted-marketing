@@ -119,10 +119,10 @@ function UserMenuBody({ surface, close }: { surface: Surface; close: () => void 
           <Item
             onSelect={() => {
               close();
-              navigate("/admin");
+              navigate("/system");
             }}
           >
-            {t("admin.menuEntry")}
+            {t("system.menuEntry")}
           </Item>
         </>
       )}
