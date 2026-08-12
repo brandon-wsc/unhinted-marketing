@@ -5,28 +5,42 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
+from internal.auth.invites import (
+    build_invite_url,
+    generate_invite_token,
+    hash_invite_token,
+    invite_expires_at,
+    normalize_invite_email,
+)
 from internal.auth.org import (
     COMPANY_SETTINGS_EDITOR_ROLES,
     MANAGEABLE_MEMBER_ROLES,
     require_company_access,
     require_company_settings_editor,
 )
+from internal.auth.rate_limit import enforce_invite_rate_limit
 from internal.memory.database import get_db
-from internal.memory.models import OrganizationMember, User
+from internal.memory.models import OrganizationMember, OrgInvite, User
 from internal.memory.repos import (
+    create_org_invite,
     delete_org_member,
     get_company,
+    get_org_invite,
     get_org_membership,
     list_org_members,
+    list_pending_org_invites,
+    revoke_org_invite,
     update_company_name,
     update_company_profile,
     update_org_member_role,
     user_has_org_access,
 )
+from internal.notify import send_invite_email
 from internal.session.voice import (
     normalize_exemplar_captions,
     normalize_roast_level,
@@ -43,6 +57,9 @@ from schemas.company import (
     CompanyVoiceUpdate,
     ExemplarPromoteRequest,
     ExemplarPromoteResponse,
+    OrgInviteCreate,
+    OrgInviteItem,
+    OrgInviteListResponse,
 )
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -177,6 +194,88 @@ async def remove_company_member(
             )
 
     await delete_org_member(db, target)
+    await db.commit(    )
+
+
+def _invite_item(invite: OrgInvite, *, invite_url: str | None = None) -> OrgInviteItem:
+    return OrgInviteItem(
+        id=invite.id,
+        email=invite.email,
+        role=invite.role,
+        invite_url=invite_url,
+        expires_at=invite.expires_at,
+        accepted_at=invite.accepted_at,
+        revoked_at=invite.revoked_at,
+        created_at=invite.created_at,
+    )
+
+
+@router.post("/{company_id}/invites", response_model=OrgInviteItem, status_code=status.HTTP_201_CREATED)
+async def create_company_invite(
+    body: OrgInviteCreate,
+    background_tasks: BackgroundTasks,
+    company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OrgInviteItem:
+    enforce_invite_rate_limit(user_id=user.id)
+    company = await get_company(db, company_id)
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
+
+    email = normalize_invite_email(str(body.email))
+    raw_token = generate_invite_token()
+    invite_url = build_invite_url(raw_token)
+    try:
+        invite = await create_org_invite(
+            db,
+            organization_id=company_id,
+            email=email,
+            role=body.role,
+            token_hash=hash_invite_token(raw_token),
+            invited_by=user.id,
+            expires_at=invite_expires_at(),
+        )
+        await db.commit()
+        await db.refresh(invite)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A pending invite already exists for this email",
+        ) from None
+
+    background_tasks.add_task(
+        send_invite_email,
+        to_email=email,
+        invite_url=invite_url,
+        organization_name=company.name,
+    )
+    return _invite_item(invite, invite_url=invite_url)
+
+
+@router.get("/{company_id}/invites", response_model=OrgInviteListResponse)
+async def list_company_invites(
+    company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OrgInviteListResponse:
+    invites = await list_pending_org_invites(db, company_id)
+    return OrgInviteListResponse(
+        company_id=company_id,
+        items=[_invite_item(invite) for invite in invites],
+    )
+
+
+@router.delete("/{company_id}/invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_company_invite(
+    invite_id: uuid.UUID,
+    company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    invite = await get_org_invite(db, company_id, invite_id)
+    if not invite or invite.accepted_at or invite.revoked_at:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
+    await revoke_org_invite(db, invite)
     await db.commit()
 
 

@@ -122,6 +122,32 @@ class CompanyMemberRoleUpdate(BaseModel):
     role: Literal["admin", "member"]
 
 
+class OrgInviteCreate(BaseModel):
+    email: EmailStr
+    role: Literal["admin", "member"] = "member"
+
+
+class OrgInviteItem(BaseModel):
+    id: uuid.UUID
+    email: EmailStr
+    role: Literal["admin", "member"]
+    invite_url: str | None = None
+    expires_at: datetime
+    accepted_at: datetime | None = None
+    revoked_at: datetime | None = None
+    created_at: datetime
+
+
+class OrgInviteListResponse(BaseModel):
+    company_id: uuid.UUID
+    items: list[OrgInviteItem]
+
+
+class OrgInviteAcceptResponse(BaseModel):
+    company_id: uuid.UUID
+    role: Literal["admin", "member"]
+
+
 class ProductItem(BaseModel):
     id: uuid.UUID
     sku: str
