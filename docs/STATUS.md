@@ -144,7 +144,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - Spec: [`docs/knowledge/`](./knowledge/) (MODEL / SESSION / COLLECT / UI); cover rules locked in COLLECT §2
 - **Voice** — `GET/PATCH /api/companies/{id}/voice`; owner/admin edit; persists `roast_level` / locale / forbidden / tone into `entities.profile`
 - **Products** — Alembic `1f96a702125c` `products` table; CSV/xlsx import + Mine Add row (optional notes); org covers user on SKU clash for retrieve
-- **UI** — UserMenu → Company settings (`/settings`); tabs Voice · Products (Org | Mine); **Approvals held / nav hidden** until K6
+- **UI** — UserMenu → Company settings (`/settings`); tabs Voice · Products (Org | Mine) · **Members** (slice 4 in progress); **Approvals held / nav hidden** until K6
 - **Next (held):** **K6** promote-to-org Approvals after org-system cleanup
 - **K1 slim (2026-08-10):** `load_context` → top-level `voice_pack` + `audience_catalog`; LLM nodes get identity-only `company` (no raw `profile` / `personas[]`)
 - **K2 (2026-08-10):** `trend_searcher` → top-level `ranked_signals` + `trend_notes` (no longer nested under `company_context`)
@@ -156,6 +156,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 - **Members API** — ✅ `GET/PATCH/DELETE …/members`, `PATCH /api/companies/{id}` rename; sole-owner rules enforced
 - **Invites API** — ✅ `POST/GET/DELETE …/invites`, `POST /api/invites/{token}/accept`; `internal/notify/` (`link` / `smtp` / `console`); invite create rate-limited
+- **Team UI (slice 4+5)** — **in progress** on `feat/web-org-team-settings`: spec [UI.md](./knowledge/UI.md) — Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept; session isolation tests
 - **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; `WEB_BASE_URL` required for link building; `internal/notify/` seam
 - **MVP one user ↔ one org** — invite accept 409s if already in an org; no switcher
 - **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (revisit with K6)
@@ -315,7 +316,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/login` | Email/password login |
 | `/register` | Sign up + default workspace |
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
-| `/settings` | Company settings — Voice + Products (Org \| Mine); Approvals held |
+| `/settings` | Company settings — Voice · Products (Org \| Mine) · Members (shipping); Approvals held |
 | `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace; `/admin` redirects here |
 
 **UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; harness-desk values from [`docs/design/`](./design/) **applied**; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`, `UserMenu`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
