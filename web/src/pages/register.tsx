@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
 import { FormField } from "@/components/form-field";
 import { PasswordBox } from "@/components/password-box";
@@ -9,12 +9,16 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { mapApiError } from "@/lib/map-api-error";
+import { safeInternalPath } from "@/lib/safe-internal-path";
 
 export function RegisterPage() {
   const { t } = useTranslation();
   const { register, user, loading } = useAuth();
   const { showError } = useToast();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const nextPath = safeInternalPath(params.get("next")) ?? "/";
+  const loginHref = nextPath === "/" ? "/login" : `/login?next=${encodeURIComponent(nextPath)}`;
   const [displayName, setDisplayName] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [email, setEmail] = useState("");
@@ -22,7 +26,7 @@ export function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to={nextPath} replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -45,7 +49,7 @@ export function RegisterPage() {
         display_name: displayName,
         organization_name: organizationName || undefined,
       });
-      navigate("/", { replace: true });
+      navigate(nextPath, { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : t("errors.registrationFailed");
       showError(mapApiError(message, t));
@@ -61,7 +65,7 @@ export function RegisterPage() {
       footer={
         <>
           {t("auth.register.hasAccount")}{" "}
-          <Link to="/login" className="text-primary hover:underline">
+          <Link to={loginHref} className="text-primary hover:underline">
             {t("auth.register.loginLink")}
           </Link>
         </>

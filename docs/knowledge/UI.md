@@ -9,7 +9,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 
 ## Locked decisions (2026-08-10)
 
-1. **Entry:** UserMenu → **Company settings** (no separate dashboard nav).
+1. **Entry:** UserMenu → **公司設定** (`/settings`; no separate dashboard nav). English locale: Company settings.
 2. **Products:** one Products page with two tabs — **Org** | **Mine**.
 3. **Docs first**, then Penpot Company settings pages, then code. **Penpot:** page `Company settings` in *Unhinted — Harness Desk (Core)* (2026-08-10).
 
@@ -31,11 +31,11 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 | `Company settings · Voice` | Sidebar Voice active · roast 0–3 · locale · forbidden · tone · **exemplar slots** · Save |
 | `Company settings · Products · Org` | Org tab · Import CSV/Excel · import stats · table + Archive |
 | `Company settings · Products · Mine` | Mine tab · Import + Add row · `covered by company` badge · cover rule note |
-| `Company settings · Members` | **To draw** — company name · member table · invite form · copy-link · pending invites |
-| `Invite accept` | **To draw** — logged-out CTA · logged-in accept · error states |
-| `Company settings · Approvals` | Empty state · K6 held badge |
+| `Company settings · Members` | ✅ Drawn — editor (idle invite form) + **invite-sent** card + member read-only; sidebar Voice / Products / Members (Approvals hidden) |
+| `Invite accept` | ✅ Drawn — A logged out · B ready · C email mismatch · D invalid · **E already in org (409)** |
+| `Company settings · Approvals` | Empty state · K6 held badge — **not** in shipped sidebar |
 
-Entry: UserMenu → **Company settings** (desktop + mobile, above **System** when platform level ≥ 6). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell).
+Entry: UserMenu → **公司設定** (desktop dropdown + mobile dialog; above **系統** when platform level ≥ 6). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell). UserMenu copy is zh-HK; only **登出** is destructive red.
 
 ---
 
@@ -43,14 +43,16 @@ Entry: UserMenu → **Company settings** (desktop + mobile, above **System** whe
 
 ```text
 UserMenu
-  ├─ Company settings          ← SPA `/settings`
+  ├─ 語言 / 外觀               ← chrome only (not routes)
+  ├─ 公司設定                  ← SPA `/settings`  (en: Company settings)
   │     ├─ Voice               ← K1 + K5 exemplars
   │     ├─ Products            ← K3 / K3b  (tabs: Org | Mine)
   │     ├─ Members             ← org team (slice 4)
   │     └─ Approvals           ← K6 held — **hidden from UI until promote ships**
-  └─ System                    ← SPA `/system` (platform ops; API `/api/admin/*`)
+  ├─ 系統                      ← SPA `/system` (platform ops; API `/api/admin/*`; en: System)
+  └─ 登出                      ← destructive
 
-/invite/:token                 ← invite accept (slice 4; auth required)
+/invite/:token                 ← invite accept page (public); POST accept requires auth
 ```
 
 | Surface | Job | Shell / craft |
@@ -109,14 +111,14 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 
 ### Members (org team — slice 4)
 
-**Route:** `/settings?tab=members` · sidebar label **Members** (zh: 團隊 / 成員 — pick one in i18n pass).
+**Route:** `/settings?tab=members` · sidebar label **Members** (i18n `settings.nav.members`; zh-HK **成員** — same English-nav pattern as Voice / Products).
 
 **Layout (top → bottom):**
 
 1. **Company name** — single field + Save; owner/admin edit; members read-only. `PATCH /api/companies/{id}` `{ name }`.
 2. **Member roster** — table: display name, email, role badge, joined date. `GET …/members`. All members can view.
 3. **Manage row** (owner/admin only) — role `Select`: `admin` | `member` only; **Remove** with confirm. Owner row never demotable/removable from UI (API 409). Members cannot manage others.
-4. **Invite** (owner/admin only) — email + role (`admin` | `member`) + **Send invite** → on success show **copy link** (`invite_url`) + short hint (WhatsApp / paste to colleague). No in-app email required (`EMAIL_BACKEND=link`).
+4. **Invite** (owner/admin only) — email + role (`admin` | `member`) + **Send invite**. Idle: form only. On success: show **copy link** (`invite_url`) + short hint (WhatsApp / paste to colleague) — do not show the URL before send. Reject emails already on the roster (409). No in-app email required (`EMAIL_BACKEND=link`).
 5. **Pending invites** (owner/admin only) — table: email, role, expires; **Revoke** → `DELETE …/invites/{id}`.
 
 **Permissions helper:** `canManageTeam = role ∈ { owner, admin }` from `user.organizations[0]` (future: API `can_manage` on members list).
@@ -125,7 +127,7 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 
 ### Invite accept (slice 4)
 
-**Route:** `/invite/:token` · **not** under `/settings`.
+**Route:** `/invite/:token` · **not** under `/settings`. The page is public (logged-out CTA is a real state). **Accept** (`POST`) requires a session; login/register return via `?next=`.
 
 | Auth state | UI |
 |------------|-----|
@@ -157,8 +159,8 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 | **K3** | Products → Org tab (import + table) | ✅ |
 | **K3b** | Products → Mine tab | ✅ |
 | **K5** | Exemplar promote from Confirm / draft + Voice settings slots | ✅ |
-| **Org team** | Members tab + invite accept page + login `next` | slice 4 (this branch) |
-| **Session isolation** | Cross-member session API tests; audit routes | slice 5 (same branch) |
+| **Org team** | Members tab + invite accept page + login `next` | ✅ |
+| **Session isolation** | Cross-member session API tests; routes stay `user_id`-scoped | ✅ CI `backend-api` |
 | **K6** | Approvals tab/page + Penpot when UX locked | separate branch |
 
 ---

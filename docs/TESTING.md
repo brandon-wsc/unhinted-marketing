@@ -37,7 +37,7 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 
 1. `GET /api/health`
 2. Auth: register → login → me → refresh → logout (+ duplicate email, bad password, missing Bearer)
-3. Sessions CRUD + ownership `403`
+3. Sessions CRUD + ownership `403` + **teammate isolation** (same org, different `user_id` — `tests/api/test_session_isolation.py`)
 4. Confirm stub: invalid `approval_token` → 400; idempotency replay
 5. Signals / questions: auth required
 6. Org invites: create → list → revoke → accept; email bind; bootstrap replace (ADR 0013); 409 only for a real team (`tests/api/test_company_invites.py`)

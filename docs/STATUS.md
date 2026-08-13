@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-10  
+> **Last updated:** 2026-08-14  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products catalog (K1/K3/K3b; Approvals held) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -21,7 +21,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | HK hot search ingestion | ✅ Done (Google Trends HK only) |
 | Recommended questions cache + API | ✅ Done |
 | OKF knowledge scaffold | ➖ Removed — knowledge in PostgreSQL only |
-| Company settings (Voice + Products) | ✅ K1 / K3 / K3b — `/settings`; Approvals nav hidden until K6 |
+| Company settings (Voice + Products + Members) | ✅ K1 / K3 / K3b / org team — `/settings`; Approvals nav hidden until K6 |
 | LangGraph session / preview / confirm API | ✅ Soft-complete — enough for Phase 3 UI |
 | Chat UI shell (`useSession` + Streamdown) | ✅ Done |
 | Chat token stream (`message.delta`) | ✅ Done — live deltas via SSE, batched in node |
@@ -144,7 +144,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - Spec: [`docs/knowledge/`](./knowledge/) (MODEL / SESSION / COLLECT / UI); cover rules locked in COLLECT §2
 - **Voice** — `GET/PATCH /api/companies/{id}/voice`; owner/admin edit; persists `roast_level` / locale / forbidden / tone into `entities.profile`
 - **Products** — Alembic `1f96a702125c` `products` table; CSV/xlsx import + Mine Add row (optional notes); org covers user on SKU clash for retrieve
-- **UI** — UserMenu → Company settings (`/settings`); tabs Voice · Products (Org | Mine) · **Members** (slice 4 in progress); **Approvals held / nav hidden** until K6
+- **UI** — UserMenu → Company settings (`/settings`); tabs Voice · Products (Org | Mine) · **Members**; **Approvals held / nav hidden** until K6
 - **Next (held):** **K6** promote-to-org Approvals after org-system cleanup
 - **K1 slim (2026-08-10):** `load_context` → top-level `voice_pack` + `audience_catalog`; LLM nodes get identity-only `company` (no raw `profile` / `personas[]`)
 - **K2 (2026-08-10):** `trend_searcher` → top-level `ranked_signals` + `trend_notes` (no longer nested under `company_context`)
@@ -156,9 +156,9 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 - **Members API** — ✅ `GET/PATCH/DELETE …/members`, `PATCH /api/companies/{id}` rename; sole-owner rules enforced
 - **Invites API** — ✅ `POST/GET/DELETE …/invites`, `POST /api/invites/{token}/accept`; `internal/notify/` (`link` / `smtp` / `console`); invite create rate-limited
-- **Team UI (slice 4+5)** — **in progress** on `feat/web-org-team-settings`: spec [UI.md](./knowledge/UI.md) — Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); session isolation tests
+- **Team UI** — ✅ Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); teammate session isolation in `tests/api/test_session_isolation.py` (CI `backend-api`)
 - **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; `WEB_BASE_URL` required for link building; `internal/notify/` seam
-- **MVP one user ↔ one org** — invite accept 409s if already in an org; no switcher
+- **MVP one user ↔ one org** — invite accept **409** if already in a real team; **bootstrap solo-org is replaced** ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); no switcher
 - **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (revisit with K6)
 - **Unblocks K6** promote-to-org Approvals (ADR 0011 later)
 
@@ -316,7 +316,8 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/login` | Email/password login |
 | `/register` | Sign up + default workspace |
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
-| `/settings` | Company settings — Voice · Products (Org \| Mine) · Members (shipping); Approvals held |
+| `/settings` | Company settings — Voice · Products (Org \| Mine) · Members; Approvals held |
+| `/invite/:token` | Invite accept (public page; POST accept requires auth) |
 | `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace; `/admin` redirects here |
 
 **UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; harness-desk values from [`docs/design/`](./design/) **applied**; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`, `UserMenu`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
