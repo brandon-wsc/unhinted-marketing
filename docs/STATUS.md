@@ -156,7 +156,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 - **Members API** — ✅ `GET/PATCH/DELETE …/members`, `PATCH /api/companies/{id}` rename; sole-owner rules enforced
 - **Invites API** — ✅ `POST/GET/DELETE …/invites`, `POST /api/invites/{token}/accept`; `internal/notify/` (`link` / `smtp` / `console`); invite create rate-limited
-- **Team UI (slice 4+5)** — **in progress** on `feat/web-org-team-settings`: spec [UI.md](./knowledge/UI.md) — Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept; session isolation tests
+- **Team UI (slice 4+5)** — **in progress** on `feat/web-org-team-settings`: spec [UI.md](./knowledge/UI.md) — Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); session isolation tests
 - **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; `WEB_BASE_URL` required for link building; `internal/notify/` seam
 - **MVP one user ↔ one org** — invite accept 409s if already in an org; no switcher
 - **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (revisit with K6)

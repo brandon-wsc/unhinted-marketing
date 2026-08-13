@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-11
 - **Supersedes:** — (unblocks K6 promote-to-org Approvals, held in STATUS since 2026-08-10)
+- **Amended by:** [ADR 0013](./0013-invite-accept-replaces-bootstrap-org.md) (§4: bootstrap solo-org replace on accept)
 
 ## Context
 
@@ -58,7 +59,7 @@ This mirrors GitLab/Gitea-style self-hosted practice: the deployer points the ap
 
 ### 4. MVP: one user ↔ one org
 
-A user may belong to **at most one org**. Invite accept → 409 if the user already has a membership. The frontend's `user.organizations[0]` assumption (`company-settings.tsx`, session pages) is therefore valid for MVP — **no org switcher**. Multi-org is a later ADR if needed.
+A user may belong to **at most one org**. Invite accept → 409 if the user already has a membership — **except** the register-bootstrap solo org, which accept replaces ([ADR 0013](./0013-invite-accept-replaces-bootstrap-org.md)). The frontend's `user.organizations[0]` assumption (`company-settings.tsx`, session pages) is therefore valid for MVP — **no org switcher**. Multi-org is a later ADR if needed.
 
 ### 5. Shared-asset scope: products + voice only
 

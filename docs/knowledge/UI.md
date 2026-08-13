@@ -19,7 +19,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 2. **Security** — UI hides management controls for plain members; **API is SSOT** (`require_company_settings_editor` → 403). No route-level split for MVP; optional `canManageTeam` helper mirrors Voice `can_edit`.
 3. **Invite link** — `{WEB_BASE_URL}/invite/{token}`; create response always includes `invite_url` for copy (WhatsApp / email optional via SMTP).
 4. **Invite accept** — dedicated SPA `/invite/:token`; not anonymous; user must **register or log in with the invited email**, then accept. Copy must **not** imply one-click join without an account.
-5. **Register + invite (MVP)** — Register still auto-creates a solo company today; **accept** gains a narrow exception: if the user is the **sole owner** of a **single-member** org (bootstrap from register), accept **replaces** that membership and joins the invited org. Any other existing membership → 409 (ADR 0010). Documented here; small backend amend in the same branch before invite page ships.
+5. **Register + invite (MVP)** — Register still auto-creates a solo company today; **accept** gains a narrow exception: if the user is the **sole owner** of a **single-member** org (bootstrap from register), accept **replaces** that membership and joins the invited org; the orphaned bootstrap org row is deleted. Any other existing membership → 409. Contract: [ADR 0013](../adr/0013-invite-accept-replaces-bootstrap-org.md) (amends ADR 0010 §4); backend amend ships in the same branch before the invite page.
 6. **Sessions** — teammates do **not** browse each other's chats (slice 5: audit `sessions` routes stay `user_id`-scoped; add API tests). Products + voice remain the only shared assets.
 
 ---
