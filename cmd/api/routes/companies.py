@@ -31,6 +31,7 @@ from internal.memory.repos import (
     delete_org_member,
     get_company,
     get_org_invite,
+    get_org_member_by_email,
     get_org_membership,
     list_org_members,
     list_pending_org_invites,
@@ -224,6 +225,11 @@ async def create_company_invite(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
 
     email = normalize_invite_email(str(body.email))
+    if await get_org_member_by_email(db, company_id, email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This email already belongs to a member of this company",
+        )
     raw_token = generate_invite_token()
     invite_url = build_invite_url(raw_token)
     try:

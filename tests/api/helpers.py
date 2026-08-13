@@ -65,7 +65,7 @@ async def strip_org_membership(
     db_session: AsyncSession,
     user_id: uuid.UUID,
 ) -> None:
-    """Remove a user's org membership (tests: invite accept without 409)."""
+    """Remove a user's org membership (tests: invite accept without a current org)."""
     membership = await db_session.scalar(
         select(OrganizationMember).where(OrganizationMember.user_id == user_id)
     )

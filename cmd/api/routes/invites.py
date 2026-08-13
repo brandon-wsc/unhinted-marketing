@@ -14,9 +14,9 @@ from internal.memory.database import get_db
 from internal.memory.models import User
 from internal.memory.repos import (
     accept_org_invite,
+    clear_bootstrap_solo_org,
     create_org_member,
     get_org_invite_by_token_hash,
-    user_has_any_org,
 )
 from schemas.company import OrgInviteAcceptResponse
 
@@ -39,7 +39,7 @@ async def accept_company_invite(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This invite was sent to a different email address",
         )
-    if await user_has_any_org(db, user.id):
+    if not await clear_bootstrap_solo_org(db, user.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already belong to an organization",

@@ -40,7 +40,7 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 3. Sessions CRUD + ownership `403`
 4. Confirm stub: invalid `approval_token` → 400; idempotency replay
 5. Signals / questions: auth required
-6. Org invites: create → list → revoke → accept; email bind + 409 when already in org (`tests/api/test_company_invites.py`)
+6. Org invites: create → list → revoke → accept; email bind; bootstrap replace (ADR 0013); 409 only for a real team (`tests/api/test_company_invites.py`)
 
 Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 
