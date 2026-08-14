@@ -77,5 +77,6 @@ Logo mark fill: `#111113`.
 | Surface | Token behavior |
 |---------|----------------|
 | `TableRow` | Soft accent hover (not muted) |
+| `SelectContent` | Popper below trigger; hairline `border-border` (not bare `border` / ink) |
 | Products list | Click row → detail dialog lists full `profile` columns; table stays name/sku/status only |
 | Import | Reject files with **> 50** columns (COLLECT); no silent truncate |

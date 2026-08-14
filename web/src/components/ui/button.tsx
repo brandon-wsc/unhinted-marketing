@@ -53,8 +53,14 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         aria-busy={loading || undefined}
       >
-        {loading && !asChild ? <Spinner /> : null}
-        {children}
+        {asChild ? (
+          children
+        ) : (
+          <>
+            {loading ? <Spinner /> : null}
+            {children}
+          </>
+        )}
       </Comp>
     );
   },

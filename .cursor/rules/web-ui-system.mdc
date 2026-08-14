@@ -30,6 +30,11 @@ alwaysApply: false
 3. Never re-export a second `Button` / `Input` / `Dialog` from feature or auth helpers
 4. Prefer composed helpers in `components/` for repeated stacks: `FormField`, `IconButton`
 
+## Select
+
+- `SelectContent` defaults to **`position="popper"`** (dropdown **below** the trigger). Do not revert to Radix `item-aligned` — that overlays options on the trigger like a native macOS menu.
+- Popper chrome: `border-border` (+ `dark:border-white/10`), same as `DropdownMenuContent`. Bare `border` inherits ink and reads too dark.
+
 ## Responsive
 
 - Prefer standard `sm` / `md` / `lg` for micro chrome only (no one-off `min-[…px]:`)
