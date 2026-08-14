@@ -3,15 +3,16 @@ import { useTranslation } from "react-i18next";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/app-header";
 import { useAuth } from "@/context/auth-context";
+import { ApprovalsPanel } from "@/features/company-settings/components/approvals-panel";
 import { MembersPanel } from "@/features/company-settings/components/members-panel";
 import { ProductsPanel } from "@/features/company-settings/components/products-panel";
 import { VoiceForm } from "@/features/company-settings/components/voice-form";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "voice" | "products" | "members";
+type SettingsTab = "voice" | "products" | "members" | "approvals";
 
 function parseTab(raw: string | null): SettingsTab {
-  if (raw === "products" || raw === "members") return raw;
+  if (raw === "products" || raw === "members" || raw === "approvals") return raw;
   return "voice";
 }
 
@@ -22,9 +23,6 @@ function parseScope(raw: string | null): "org" | "mine" {
 function canManageTeam(role: string | undefined): boolean {
   return role === "owner" || role === "admin";
 }
-
-/** Approvals (K6) stays out of nav until promote UX ships. */
-const NAV: SettingsTab[] = ["voice", "products", "members"];
 
 export function CompanySettingsPage() {
   const { t } = useTranslation();
@@ -76,6 +74,12 @@ export function CompanySettingsPage() {
     );
   }
 
+  const editor = canManageTeam(org?.role);
+  const nav: SettingsTab[] = editor
+    ? ["voice", "products", "members", "approvals"]
+    : ["voice", "products", "members"];
+  const activeTab = tab === "approvals" && !editor ? "voice" : tab;
+
   return (
     <AppShell mainClassName="overflow-y-auto">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:flex-row sm:gap-8 sm:px-6">
@@ -84,14 +88,14 @@ export function CompanySettingsPage() {
             {t("settings.navLabel")}
           </p>
           <nav className="flex gap-1 sm:flex-col" aria-label={t("settings.title")}>
-            {NAV.map((id) => (
+            {nav.map((id) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setTab(id)}
                 className={cn(
                   "rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
-                  tab === id
+                  activeTab === id
                     ? "bg-accent font-medium text-foreground"
                     : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                 )}
@@ -103,22 +107,23 @@ export function CompanySettingsPage() {
         </aside>
 
         <div className="min-w-0 flex-1">
-          {tab === "voice" && <VoiceForm companyId={companyId} />}
-          {tab === "products" && (
+          {activeTab === "voice" && <VoiceForm companyId={companyId} />}
+          {activeTab === "products" && (
             <ProductsPanel
               companyId={companyId}
               scope={scope}
               onScopeChange={(next) => setTab("products", next)}
             />
           )}
-          {tab === "members" && (
+          {activeTab === "members" && (
             <MembersPanel
               companyId={companyId}
               companyName={org?.name ?? ""}
-              canManageTeam={canManageTeam(org?.role)}
+              canManageTeam={editor}
               onCompanyRenamed={refreshAccessToken}
             />
           )}
+          {activeTab === "approvals" && <ApprovalsPanel companyId={companyId} />}
         </div>
       </div>
     </AppShell>

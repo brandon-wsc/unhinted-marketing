@@ -315,6 +315,9 @@
       "activeCount": "{{count}} 項",
       "empty": "暫時未有產品。上載檔案或新增一項開始。",
       "archive": "封存",
+      "propose": "申請加入公司清單",
+      "pendingReview": "審批中",
+      "alreadyPending": "呢個產品編號已有待審批申請",
       "statusActive": "使用中",
       "coveredByCompany": "公司已有相同編號",
       "personalOnly": "只喺你嘅清單",
@@ -348,10 +351,19 @@
     },
     "approvals": {
       "title": "審批",
-      "subtitle": "有人想將個人產品資料加入公司清單時，會喺度審批。",
+      "subtitle": "審批成員想加入公司清單嘅個人產品資料。",
       "emptyTitle": "暫時未有待審批項目",
-      "emptyBody": "有成員申請加入公司產品清單時，會喺度顯示變更內容，供你批准或拒絕。",
-      "emptyBadge": "即將推出"
+      "emptyBody": "有成員申請加入公司產品清單時，變更會喺度顯示。",
+      "proposedBy": "由 {{email}} 提出",
+      "newSku": "新增",
+      "replace": "取代",
+      "approve": "批准",
+      "reject": "拒絕",
+      "columns": {
+        "field": "欄位",
+        "current": "公司",
+        "proposed": "申請"
+      }
     }
   },
   "system": {

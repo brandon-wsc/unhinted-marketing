@@ -25,6 +25,7 @@ from internal.memory.repos import (
     get_product,
     list_org_skus,
     list_products,
+    pending_proposal_ids_for_skus,
     upsert_product_row,
 )
 from schemas.company import (
@@ -56,7 +57,9 @@ def _profile_strings(profile: dict | None) -> dict[str, str]:
     return out
 
 
-def _to_item(row, *, covered: bool = False) -> ProductItem:
+def _to_item(
+    row, *, covered: bool = False, pending_proposal_id=None
+) -> ProductItem:
     return ProductItem(
         id=row.id,
         sku=row.sku,
@@ -64,6 +67,7 @@ def _to_item(row, *, covered: bool = False) -> ProductItem:
         status=row.status,
         owner_scope=row.owner_scope,
         covered_by_company=covered,
+        pending_proposal_id=pending_proposal_id,
         profile=_profile_strings(row.profile),
         updated_at=row.updated_at,
     )
@@ -88,7 +92,13 @@ async def list_company_products(
             db, company_id=company_id, owner_scope="user", user_id=user.id
         )
         org_skus = await list_org_skus(db, company_id=company_id)
-        items = [_to_item(r, covered=r.sku in org_skus) for r in rows]
+        pending = await pending_proposal_ids_for_skus(
+            db, company_id=company_id, skus=[r.sku for r in rows]
+        )
+        items = [
+            _to_item(r, covered=r.sku in org_skus, pending_proposal_id=pending.get(r.sku))
+            for r in rows
+        ]
 
     return ProductListResponse(
         company_id=company_id,

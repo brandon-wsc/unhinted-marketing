@@ -29,10 +29,12 @@ import {
   apiCreateProduct,
   apiImportProducts,
   apiListProducts,
+  apiProposeProduct,
   type ProductImportResponse,
   type ProductItem,
   type ProductScope,
 } from "@/features/company-settings/api";
+import { mapApiError } from "@/lib/map-api-error";
 
 type ProductsPanelProps = {
   companyId: string;
@@ -110,6 +112,19 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function onPropose(productId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiProposeProduct(accessToken, companyId, productId);
+      await refresh();
+    } catch (err) {
+      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -304,22 +319,45 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                         <Badge variant="outline">{t("settings.products.statusActive")}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {canEdit ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={busy}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void onArchive(item.id);
-                            }}
-                          >
-                            {t("settings.products.archive")}
-                          </Button>
-                        ) : (
-                          <span className="text-muted-foreground">{t("common.notAvailable")}</span>
-                        )}
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {scope === "mine" && item.pending_proposal_id ? (
+                            <Badge variant="secondary">
+                              {t("settings.products.pendingReview")}
+                            </Badge>
+                          ) : null}
+                          {scope === "mine" && canEdit && !item.pending_proposal_id ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={busy}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void onPropose(item.id);
+                              }}
+                            >
+                              {t("settings.products.propose")}
+                            </Button>
+                          ) : null}
+                          {canEdit ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={busy}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void onArchive(item.id);
+                              }}
+                            >
+                              {t("settings.products.archive")}
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              {t("common.notAvailable")}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

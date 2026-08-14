@@ -15,6 +15,7 @@ from internal.memory.models import (
     PreviewDraft,
     PreviewImage,
     Product,
+    ProductProposal,
     RawNewsEvent,
     RecommendedQuestions,
     Session,
@@ -808,3 +809,103 @@ async def create_manual_product(
         search_document=search_document,
         profile=profile,
     )
+
+
+async def get_org_product_by_sku(
+    db: AsyncSession, *, company_id: uuid.UUID, sku: str
+) -> Product | None:
+    return await db.scalar(
+        select(Product).where(
+            Product.company_id == company_id,
+            Product.owner_scope == "org",
+            Product.sku == sku,
+            Product.status == "active",
+        )
+    )
+
+
+async def get_pending_proposal_by_sku(
+    db: AsyncSession, *, company_id: uuid.UUID, sku: str
+) -> ProductProposal | None:
+    return await db.scalar(
+        select(ProductProposal).where(
+            ProductProposal.company_id == company_id,
+            ProductProposal.sku == sku,
+            ProductProposal.status == "pending",
+        )
+    )
+
+
+async def pending_proposal_ids_for_skus(
+    db: AsyncSession, *, company_id: uuid.UUID, skus: list[str]
+) -> dict[str, uuid.UUID]:
+    if not skus:
+        return {}
+    rows = await db.execute(
+        select(ProductProposal.sku, ProductProposal.id).where(
+            ProductProposal.company_id == company_id,
+            ProductProposal.status == "pending",
+            ProductProposal.sku.in_(skus),
+        )
+    )
+    return {sku: pid for sku, pid in rows.all()}
+
+
+async def create_product_proposal(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    source_product: Product,
+    proposed_by: uuid.UUID,
+) -> ProductProposal:
+    row = ProductProposal(
+        company_id=company_id,
+        source_product_id=source_product.id,
+        proposed_by=proposed_by,
+        sku=source_product.sku,
+        name=source_product.name,
+        profile=dict(source_product.profile or {}),
+        status="pending",
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def get_product_proposal(
+    db: AsyncSession, *, company_id: uuid.UUID, proposal_id: uuid.UUID
+) -> ProductProposal | None:
+    return await db.scalar(
+        select(ProductProposal).where(
+            ProductProposal.id == proposal_id,
+            ProductProposal.company_id == company_id,
+        )
+    )
+
+
+async def list_product_proposals(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    status: str | None = "pending",
+) -> list[ProductProposal]:
+    stmt = select(ProductProposal).where(ProductProposal.company_id == company_id)
+    if status is not None:
+        stmt = stmt.where(ProductProposal.status == status)
+    stmt = stmt.order_by(ProductProposal.created_at.desc())
+    result = await db.scalars(stmt)
+    return list(result.all())
+
+
+async def mark_proposal_reviewed(
+    db: AsyncSession,
+    proposal: ProductProposal,
+    *,
+    status: str,
+    reviewed_by: uuid.UUID,
+) -> ProductProposal:
+    proposal.status = status
+    proposal.reviewed_by = reviewed_by
+    proposal.reviewed_at = datetime.now(UTC)
+    await db.flush()
+    return proposal

@@ -1,6 +1,6 @@
 # Knowledge collect UI
 
-> **Status:** Locked for K1–K5 shell · **Penpot drawn** · Voice **shipped** (incl. exemplars) · Products **shipped** (K3/K3b import + list + archive) · Approvals held  
+> **Status:** Locked for K1–K6 shell · **Penpot drawn** · Voice **shipped** (incl. exemplars) · Products **shipped** (K3/K3b import + list + archive + propose) · Approvals **shipped**  
 > **Parent:** [README.md](./README.md) · **Data rules:** [COLLECT.md](./COLLECT.md) · **Shell vs craft:** [design/BRIEF.md](../design/BRIEF.md)
 
 Shell settings collect human-provided knowledge. Session craft does **not** silently write org catalog. **System** (`/system`) is platform ops (LLM / Trace) — not tenant KB CRUD; `/admin` redirects there.
@@ -33,7 +33,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 | `Company settings · Products · Mine` | Mine tab · Import + Add row · `covered by company` badge · cover rule note |
 | `Company settings · Members` | ✅ Drawn — editor (idle invite form) + **invite-sent** card + member read-only; sidebar Voice / Products / Members (Approvals hidden) |
 | `Invite accept` | ✅ Drawn — A logged out · B ready · C email mismatch · D invalid · **E already in org (409)** |
-| `Company settings · Approvals` | Empty state · K6 held badge — **not** in shipped sidebar |
+| `Company settings · Approvals` | Pending proposals · field diff · Approve / Decline — owner/admin |
 
 Entry: UserMenu → **公司設定** (desktop dropdown + mobile dialog; above **系統** when platform level ≥ 6). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell). UserMenu copy is zh-HK; only **登出** is destructive red.
 
@@ -48,7 +48,7 @@ UserMenu
   │     ├─ Voice               ← K1 + K5 exemplars
   │     ├─ Products            ← K3 / K3b  (tabs: Org | Mine)
   │     ├─ Members             ← org team (slice 4)
-  │     └─ Approvals           ← K6 held — **hidden from UI until promote ships**
+  │     └─ Approvals           ← K6 — owner/admin queue
   ├─ 系統                      ← SPA `/system` (platform ops; API `/api/admin/*`; en: System)
   └─ 登出                      ← destructive
 
@@ -79,7 +79,7 @@ UserMenu
 | **Invite accept** | `POST /api/invites/{token}/accept` | Join org | authed user, email must match invite | **slice 4** |
 | Session chat | Spoken SKU/price (no form) | User × New | current user | shipped; **private** per user |
 | Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** ✅ |
-| **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6 held** |
+| **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6** ✅ |
 
 **Not collected in UI (MVP):** per-company persona CRUD, offer-snippet dedicated page, brand PDF upload, pain points, market signals, platform craft ([VOICE.md](../VOICE.md)).
 
@@ -99,15 +99,15 @@ UserMenu
 | Tab | Content |
 |-----|---------|
 | **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name + `sku`, status, actions) · **row click → dialog** listing all `profile` columns (scroll if many) · archive. Upsert **replace by SKU** — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
-| **Mine** | Same pattern for personal library (+ optional notes on Add row). Org covers user on SKU clash at retrieve — badge “covered by company” when org has same SKU. |
+| **Mine** | Same pattern for personal library (+ optional notes on Add row). Org covers user on SKU clash at retrieve — badge “covered by company” when org has same SKU. **Propose** → Approvals queue ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)). |
 
 Flexible headers: no required column names; store raw row in `profile`. **Import hard limit: 50 columns** — reject whole file ([COLLECT §4](./COLLECT.md#4-product-import-k3)). No content column in the table (unknown CSV shapes).
 
-### Approvals (K6 — hidden)
+### Approvals (K6)
 
-- List pending promote proposals; show diff vs org row; Approve / Reject HTTP, zero LLM.
-- **UI:** nav entry + page **hidden** until K6 UX is ready (`approvals-panel.tsx` kept for later).
-- Until K6: do not implement silent chat→org writes.
+- List pending Mine→org proposals; show field diff vs current org row; **Approve** / **Decline** HTTP, zero LLM ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)).
+- **UI:** `/settings?tab=approvals` in sidebar for owner/admin only. Members propose from Products → Mine.
+- Chat still must not write org catalog.
 
 ### Members (org team — slice 4)
 
@@ -164,7 +164,7 @@ Actions sit **bottom-right** of the AuthLayout card (dialog confirm/cancel): out
 | **K5** | Exemplar promote from Confirm / draft + Voice settings slots | ✅ |
 | **Org team** | Members tab + invite accept page + login `next` | ✅ |
 | **Session isolation** | Cross-member session API tests; routes stay `user_id`-scoped | ✅ CI `backend-api` |
-| **K6** | Approvals tab/page + Penpot when UX locked | separate branch |
+| **K6** | Approvals tab + Mine propose + HTTP approve/reject | ✅ |
 
 ---
 

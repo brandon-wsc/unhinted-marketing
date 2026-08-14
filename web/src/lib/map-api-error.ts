@@ -10,6 +10,7 @@ const API_ERROR_KEYS: Record<string, string> = {
   "Invalid refresh token": "errors.invalidRefreshToken",
   "This email already belongs to a member of this company": "settings.members.invite.alreadyMember",
   "A pending invite already exists for this email": "settings.members.invite.alreadyPending",
+  "A pending proposal already exists for this product code": "settings.products.alreadyPending",
 };
 
 export function mapApiError(message: string, t: TFunction): string {

@@ -160,6 +160,7 @@ class ProductItem(BaseModel):
     status: str
     owner_scope: Literal["org", "user"]
     covered_by_company: bool = False
+    pending_proposal_id: uuid.UUID | None = None
     profile: dict[str, str] = Field(default_factory=dict)
     updated_at: datetime
 
@@ -195,3 +196,32 @@ class ProductCreateRequest(BaseModel):
     @classmethod
     def strip_notes(cls, value: str) -> str:
         return value.strip()
+
+
+class ProductProposalFieldDiff(BaseModel):
+    key: str
+    current: str | None = None
+    proposed: str | None = None
+    change: Literal["added", "changed", "removed", "same"]
+
+
+class ProductProposalItem(BaseModel):
+    id: uuid.UUID
+    company_id: uuid.UUID
+    sku: str
+    name: str
+    status: Literal["pending", "approved", "rejected"]
+    proposed_by: uuid.UUID | None = None
+    proposed_by_email: str | None = None
+    source_product_id: uuid.UUID | None = None
+    profile: dict[str, str] = Field(default_factory=dict)
+    current_name: str | None = None
+    current_profile: dict[str, str] = Field(default_factory=dict)
+    fields: list[ProductProposalFieldDiff] = Field(default_factory=list)
+    created_at: datetime
+    reviewed_at: datetime | None = None
+
+
+class ProductProposalListResponse(BaseModel):
+    company_id: uuid.UUID
+    items: list[ProductProposalItem]

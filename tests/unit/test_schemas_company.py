@@ -16,6 +16,9 @@ from schemas.company import (
     ProductImportResponse,
     ProductItem,
     ProductListResponse,
+    ProductProposalFieldDiff,
+    ProductProposalItem,
+    ProductProposalListResponse,
 )
 
 
@@ -99,6 +102,26 @@ def test_product_list_and_import_shapes() -> None:
     assert listed.items[0].sku == "SKU-1"
     imp = ProductImportResponse(imported=1, updated=0, skipped=0, errors=[])
     assert imp.imported == 1
+
+
+def test_product_proposal_item_shape() -> None:
+    pid = uuid.uuid4()
+    cid = uuid.uuid4()
+    item = ProductProposalItem(
+        id=pid,
+        company_id=cid,
+        sku="SKU-1",
+        name="Oat",
+        status="pending",
+        profile={"name": "Oat"},
+        fields=[
+            ProductProposalFieldDiff(key="name", current=None, proposed="Oat", change="added"),
+        ],
+        created_at=datetime.now(UTC),
+    )
+    listed = ProductProposalListResponse(company_id=cid, items=[item])
+    assert listed.items[0].id == pid
+    assert listed.items[0].fields[0].change == "added"
 
 
 def test_invite_create_normalizes_emailstr() -> None:

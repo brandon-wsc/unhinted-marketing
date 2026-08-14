@@ -1,6 +1,6 @@
 # Enterprise Knowledge
 
-> **Status:** K0–K5 shipped (settings + slim packs + matcher + embeddings + exemplars) · K6 held (org system)  
+> **Status:** K0–K6 shipped (settings + slim packs + matcher + embeddings + exemplars + Approvals)  
 > **Boundary:** PostgreSQL only — no parallel KB, no chat free-browse ([AGENTS.md](../../AGENTS.md))
 
 Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consume it, and (later) **how** users collect/import it.
@@ -22,7 +22,7 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 |-------|-----------|
 | HK social craft (trend hooks, zh-HK) | [VOICE.md](../VOICE.md) |
 | Locked retrieve/tenant decisions (optional formal ADR) | Future [ADR 0012](../adr/) if needed — behavior shipped K3–K4 |
-| K6 promote / Approvals (commit without LLM) | Future [ADR 0011](../adr/) |
+| K6 promote / Approvals (commit without LLM) | [ADR 0011](../adr/0011-knowledge-commit-without-llm.md) |
 | Org membership + invites | [ADR 0010](../adr/0010-org-membership-invites-and-shared-assets.md) |
 | Shipped vs held checklist | [STATUS.md](../STATUS.md) |
 | Architecture overview | [ROADMAP § Knowledge](../ROADMAP.md#knowledge-postgresql) |
@@ -51,17 +51,13 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 | **K3b** | User product lib + org-wins retrieve + Products Mine tab | ✅ COLLECT + UI |
 | **K4** | pgvector hybrid retrieve + cross-tenant tests | ✅ COLLECT |
 | **K5** | Exemplar captions (Voice settings + Confirm promote) | ✅ COLLECT + UI |
-| **K6** | **Held** — promote to org + **admin approve** (user covers org only after approve) | COLLECT + ADR |
+| **K6** | Promote Mine → org + owner/admin approve | ✅ COLLECT + ADR 0011 + UI |
 
 ADR **0010** (accepted): org membership, invites, shared-asset scope — [0010](../adr/0010-org-membership-invites-and-shared-assets.md).  
-ADR **0011** (future, after K6 UX): knowledge commit without LLM — mirror [ADR 0003](../adr/0003-confirm-without-llm.md).  
+ADR **0011** (accepted): knowledge commit without LLM — [0011](../adr/0011-knowledge-commit-without-llm.md) (mirrors [ADR 0003](../adr/0003-confirm-without-llm.md)).  
 ADR **0012** (optional): formal product retrieve + `company_id` filter (behavior already shipped in K3–K4).  
 
-### Held: promote to org (K6)
-
-**Not in K0–K5.** **User × New** (chat scratch) is instant for drafting; **Org × Old** changes require import or K6 **promote + owner/admin approve**. Org **directly covers** user on SKU clash at retrieve time.
-
-**Prerequisite order:** K3–K4 retrieve works → K5 manual import/UI → **org system (ADR 0010)** → **design K6 approve UX** → ADR 0011 + code.
+Chat scratch (User × New) still does not persist to org KB. Org import still bypasses the queue.
 
 ---
 

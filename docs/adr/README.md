@@ -14,6 +14,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0008](./0008-preview-images-append-only.md) | Append-only preview images + draft `media_ids` | Accepted |
 | [0009](./0009-research-gate-and-tavily-ingest.md) | Unified intent + research gate; Tavily∪PG ingest | Accepted |
 | [0010](./0010-org-membership-invites-and-shared-assets.md) | Org membership, invite links, shared-asset scope | Accepted (§4 amended by 0013) |
+| [0011](./0011-knowledge-commit-without-llm.md) | Knowledge commit without LLM (K6 Approvals) | Accepted |
 | [0013](./0013-invite-accept-replaces-bootstrap-org.md) | Invite accept replaces bootstrap solo org | Accepted |
 
 ## Format
