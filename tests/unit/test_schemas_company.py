@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from schemas.company import (
     CompanyVoiceUpdate,
     ExemplarPromoteRequest,
+    OrgInviteCreate,
     ProductCreateRequest,
     ProductImportResponse,
     ProductItem,
@@ -98,3 +99,14 @@ def test_product_list_and_import_shapes() -> None:
     assert listed.items[0].sku == "SKU-1"
     imp = ProductImportResponse(imported=1, updated=0, skipped=0, errors=[])
     assert imp.imported == 1
+
+
+def test_invite_create_normalizes_emailstr() -> None:
+    body = OrgInviteCreate(email="  User@Example.COM  ", role="member")
+    assert body.email == "user@example.com"
+
+
+@pytest.mark.parametrize("raw", ["d", "d@", "@a", "a@a", "a@b@c", "not-an-email", "user@localhost"])
+def test_invite_create_rejects_invalid_email(raw: str) -> None:
+    with pytest.raises(ValidationError):
+        OrgInviteCreate(email=raw)

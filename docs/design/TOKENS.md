@@ -26,6 +26,9 @@ Loaded via `web/index.html` Google Fonts.
 | `--color-destructive` | `#dc2626` | *(same)* | Danger |
 | `--color-destructive-foreground` | `#991b1b` | `#fca5a5` | Danger text |
 | `--color-destructive-soft` | `rgb(220 38 38 / 0.1)` | `rgb(220 38 38 / 0.12)` | Soft danger |
+| `--color-success` | `#16a34a` | *(same)* | Success |
+| `--color-success-foreground` | `#166534` | `#86efac` | Success text |
+| `--color-success-soft` | `rgb(22 163 74 / 0.1)` | `rgb(22 163 74 / 0.12)` | Soft success |
 | `--color-voice` | `#c45c00` | `#f0a060` | Craft voice / action pulse (not shell fill) |
 | `--color-voice-foreground` | `#ffffff` | `#111113` | On-voice |
 
@@ -52,6 +55,7 @@ Logo mark fill: `#111113`.
 
 - Shell chrome → `primary`, surfaces, `muted-foreground`.
 - Action trail / spitball / temp loading → `voice` (+ icons); do not recolor the whole app.
+- Confirmations → `success` (`Alert variant="success"`, `text-success`). Errors → `destructive`. Do not paint primary buttons green.
 - Prefer semantic utilities (`bg-card`, `text-muted-foreground`, `hover:bg-accent`) — no parallel palette in JSX.
 
 ### `muted` vs `accent` (important)
@@ -73,5 +77,6 @@ Logo mark fill: `#111113`.
 | Surface | Token behavior |
 |---------|----------------|
 | `TableRow` | Soft accent hover (not muted) |
+| `SelectContent` | Popper below trigger; hairline `border-border` (not bare `border` / ink) |
 | Products list | Click row → detail dialog lists full `profile` columns; table stays name/sku/status only |
 | Import | Reject files with **> 50** columns (COLLECT); no silent truncate |

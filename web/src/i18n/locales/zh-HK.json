@@ -218,12 +218,54 @@
     "nav": {
       "voice": "語氣",
       "products": "產品",
+      "members": "成員",
       "approvals": "審批"
     },
     "noCompany": {
       "title": "未有公司",
       "body": "註冊帳戶時會自動建立公司 workspace。",
       "back": "返回主頁"
+    },
+    "members": {
+      "title": "成員",
+      "subtitleEditor": "團隊名單、邀請連結同公司名稱。",
+      "subtitleMember": "團隊名單同公司名稱。",
+      "readOnly": "只有管理員可以邀請成員或變更角色。",
+      "saved": "已儲存。",
+      "companyName": "公司名稱",
+      "roster": "成員",
+      "remove": "移除",
+      "removeTitle": "移除成員",
+      "removeBody": "確定將{{name}}移出公司？對方會即時失去呢間公司嘅存取權。",
+      "roles": {
+        "owner": "Owner",
+        "admin": "Admin",
+        "member": "Member"
+      },
+      "columns": {
+        "name": "姓名",
+        "email": "電郵",
+        "role": "角色",
+        "joined": "加入日期",
+        "actions": "操作"
+      },
+      "invite": {
+        "title": "邀請同事",
+        "hint": "發送連結俾同事；對方要用受邀電郵註冊或登入後才可加入。",
+        "send": "發送邀請",
+        "sending": "發送中…",
+        "copy": "複製連結",
+        "copied": "已複製",
+        "pasteHint": "可貼去 WhatsApp 或 Slack",
+        "invalidEmail": "請輸入有效電郵",
+        "alreadyMember": "呢個電郵已經係成員",
+        "alreadyPending": "呢個電郵已有待處理邀請"
+      },
+      "pending": {
+        "title": "待處理邀請",
+        "expires": "到期",
+        "revoke": "撤銷"
+      }
     },
     "voice": {
       "title": "語氣",
@@ -431,6 +473,25 @@
     "label": "主題",
     "light": "Light",
     "dark": "Dark"
+  },
+  "invite": {
+    "loggedOutTitle": "你受邀加入團隊",
+    "loggedOutBody": "請用收到邀請嘅電郵地址登入或註冊，然後返回此頁完成加入。",
+    "login": "登入",
+    "register": "註冊新帳戶",
+    "once": "邀請連結只可使用一次",
+    "titleJoin": "加入團隊",
+    "loggedInBody": "你正以以下帳戶登入：",
+    "join": "加入公司",
+    "joining": "加入中…",
+    "home": "返回主頁",
+    "mismatchTitle": "電郵唔相符",
+    "mismatchBody": "此邀請係發去另一個電郵地址。請登出後用正確帳戶再試。",
+    "logoutRelogin": "登出並重新登入",
+    "conflictTitle": "你已屬於一間公司",
+    "conflictBody": "一個帳戶只能加入一間公司。請用主頁繼續，或聯絡管理員。",
+    "invalidTitle": "邀請已失效",
+    "invalidBody": "連結可能已過期、已被撤銷，或已使用過。請聯絡公司管理員重新發送。"
   },
   "errors": {
     "loginFailed": "登入失敗",

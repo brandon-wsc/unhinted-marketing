@@ -8,6 +8,8 @@ const API_ERROR_KEYS: Record<string, string> = {
   "Invalid email or password": "errors.invalidCredentials",
   "Account is disabled": "errors.accountDisabled",
   "Invalid refresh token": "errors.invalidRefreshToken",
+  "This email already belongs to a member of this company": "settings.members.invite.alreadyMember",
+  "A pending invite already exists for this email": "settings.members.invite.alreadyPending",
 };
 
 export function mapApiError(message: string, t: TFunction): string {

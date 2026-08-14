@@ -3,15 +3,24 @@
 > **Status:** Locked for K1–K5 shell · **Penpot drawn** · Voice **shipped** (incl. exemplars) · Products **shipped** (K3/K3b import + list + archive) · Approvals held  
 > **Parent:** [README.md](./README.md) · **Data rules:** [COLLECT.md](./COLLECT.md) · **Shell vs craft:** [design/BRIEF.md](../design/BRIEF.md)
 
-Shell settings collect human-provided knowledge. Session craft does **not** silently write org catalog. `/system` is platform ops (LLM / Trace) — not tenant KB CRUD; `/admin` redirects there.
+Shell settings collect human-provided knowledge. Session craft does **not** silently write org catalog. **System** (`/system`) is platform ops (LLM / Trace) — not tenant KB CRUD; `/admin` redirects there.
 
 ---
 
 ## Locked decisions (2026-08-10)
 
-1. **Entry:** UserMenu → **Company settings** (no separate dashboard nav).
+1. **Entry:** UserMenu → **公司設定** (`/settings`; no separate dashboard nav). English locale: Company settings.
 2. **Products:** one Products page with two tabs — **Org** | **Mine**.
 3. **Docs first**, then Penpot Company settings pages, then code. **Penpot:** page `Company settings` in *Unhinted — Harness Desk (Core)* (2026-08-10).
+
+**Locked decisions (2026-08-13) — Team + invite UI (slice 4; ships with session isolation audit slice 5 on same branch):**
+
+1. **One settings shell** — `/settings?tab=members` shares the Voice / Products page; **no** separate admin route for tenant team management (contrast: **System** = platform ops only).
+2. **Security** — UI hides management controls for plain members; **API is SSOT** (`require_company_settings_editor` → 403). No route-level split for MVP; optional `canManageTeam` helper mirrors Voice `can_edit`.
+3. **Invite link** — `{WEB_BASE_URL}/invite/{token}`; create response always includes `invite_url` for copy (WhatsApp / email optional via SMTP).
+4. **Invite accept** — dedicated SPA `/invite/:token`; not anonymous; user must **register or log in with the invited email**, then accept. Copy must **not** imply one-click join without an account.
+5. **Register + invite (MVP)** — Register still auto-creates a solo company today; **accept** gains a narrow exception: if the user is the **sole owner** of a **single-member** org (bootstrap from register), accept **replaces** that membership and joins the invited org; the orphaned bootstrap org row is deleted. Any other existing membership → 409. Contract: [ADR 0013](../adr/0013-invite-accept-replaces-bootstrap-org.md) (amends ADR 0010 §4); backend amend ships in the same branch before the invite page.
+6. **Sessions** — teammates do **not** browse each other's chats (slice 5: audit `sessions` routes stay `user_id`-scoped; add API tests). Products + voice remain the only shared assets.
 
 ---
 
@@ -22,9 +31,11 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 | `Company settings · Voice` | Sidebar Voice active · roast 0–3 · locale · forbidden · tone · **exemplar slots** · Save |
 | `Company settings · Products · Org` | Org tab · Import CSV/Excel · import stats · table + Archive |
 | `Company settings · Products · Mine` | Mine tab · Import + Add row · `covered by company` badge · cover rule note |
-| `Company settings · Approvals` | Empty state · K6 held badge |
+| `Company settings · Members` | ✅ Drawn — editor (idle invite form) + **invite-sent** card + member read-only; sidebar Voice / Products / Members (Approvals hidden) |
+| `Invite accept` | ✅ Drawn — A logged out · B ready · C email mismatch · D invalid · **E already in org (409)** |
+| `Company settings · Approvals` | Empty state · K6 held badge — **not** in shipped sidebar |
 
-Entry: UserMenu → **Company settings** (desktop + mobile, above System). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell).
+Entry: UserMenu → **公司設定** (desktop dropdown + mobile dialog; above **系統** when platform level ≥ 6). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell). UserMenu copy is zh-HK; only **登出** is destructive red.
 
 ---
 
@@ -32,30 +43,42 @@ Entry: UserMenu → **Company settings** (desktop + mobile, above System). Penpo
 
 ```text
 UserMenu
-  └─ Company settings          ← SPA `/settings`
-        ├─ Voice               ← K1 + K5 exemplars
-        ├─ Products            ← K3 / K3b  (tabs: Org | Mine)
-        └─ Approvals           ← K6 held — **hidden from UI until promote ships**
+  ├─ 語言 / 外觀               ← chrome only (not routes)
+  ├─ 公司設定                  ← SPA `/settings`  (en: Company settings)
+  │     ├─ Voice               ← K1 + K5 exemplars
+  │     ├─ Products            ← K3 / K3b  (tabs: Org | Mine)
+  │     ├─ Members             ← org team (slice 4)
+  │     └─ Approvals           ← K6 held — **hidden from UI until promote ships**
+  ├─ 系統                      ← SPA `/system` (platform ops; API `/api/admin/*`; en: System)
+  └─ 登出                      ← destructive
+
+/invite/:token                 ← invite accept page (public); POST accept requires auth
 ```
 
 | Surface | Job | Shell / craft |
 |---------|-----|----------------|
-| Company settings | Persist voice + catalogs + approve | **Shell** — serious, scannable |
+| Company settings | Persist voice + catalogs + team + approve | **Shell** — serious, scannable |
 | Session chat | Turn-local product facts only | **Craft** — User × New scratch; no org upsert |
 | Confirm / draft action | Manual exemplar pick (K5) | **Shell** gate-adjacent — short accurate copy |
-| `/system` | Platform ops | Out of scope for COLLECT UI (`/admin` → redirect) |
+| **System** | Platform ops (LLM trace, research) | Out of scope for COLLECT UI (`/admin` → redirect) |
+| **Invite accept** | Join org after auth | **Shell** — short, guided; links to login/register |
 
 ---
 
 ## UI → data map
 
-| UI | Collects | Scope | Who | Phase |
-|----|----------|-------|-----|-------|
-| **Voice** | `roast_level` (0–3), `forbidden_phrases[]` (≤15), `tone_notes`, `locale` (default `zh-HK`), `exemplar_captions` (≤3 × ≤150) | Org × Old → `entities.profile` | owner/admin | **K1 + K5** |
-| **Products → Org** | CSV/xlsx import → `sku` / `name` / `search_document` / `profile` JSONB; list + archive | Org × Old | owner/admin | **K3** |
-| **Products → Mine** | Same row shape; personal import / save | User × Old | any member | **K3b** |
-| Session chat | Spoken SKU/price (no form) | User × New | current user | shipped behavior; **not** PG catalog |
-| Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** |
+| UI | Collects / shows | Scope | Who | Phase |
+|----|------------------|-------|-----|-------|
+| **Voice** | `roast_level` (0–3), `forbidden_phrases[]` (≤15), `tone_notes`, `locale` (default `zh-HK`), `exemplar_captions` (≤3 × ≤150) | Org × Old → `entities.profile` | owner/admin edit; member read | **K1 + K5** ✅ |
+| **Products → Org** | CSV/xlsx import → `sku` / `name` / …; list + archive | Org × Old | owner/admin | **K3** ✅ |
+| **Products → Mine** | Personal import / save | User × Old | any member | **K3b** ✅ |
+| **Members → Company** | Company `name` (rename) | Org | owner/admin | **org UI slice 4** |
+| **Members → Roster** | `GET …/members` — display name, email, role, joined | Org | any member read | **slice 4** |
+| **Members → Manage** | role change (`admin` ↔ `member`), remove, self-leave | Org | owner/admin (not self-leave for owner) | **slice 4** |
+| **Members → Invite** | `POST …/invites` · copy `invite_url` · list/revoke pending | Org | owner/admin | **slice 4** |
+| **Invite accept** | `POST /api/invites/{token}/accept` | Join org | authed user, email must match invite | **slice 4** |
+| Session chat | Spoken SKU/price (no form) | User × New | current user | shipped; **private** per user |
+| Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** ✅ |
 | **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6 held** |
 
 **Not collected in UI (MVP):** per-company persona CRUD, offer-snippet dedicated page, brand PDF upload, pain points, market signals, platform craft ([VOICE.md](../VOICE.md)).
@@ -86,11 +109,44 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 - **UI:** nav entry + page **hidden** until K6 UX is ready (`approvals-panel.tsx` kept for later).
 - Until K6: do not implement silent chat→org writes.
 
+### Members (org team — slice 4)
+
+**Route:** `/settings?tab=members` · sidebar label **Members** (i18n `settings.nav.members`; zh-HK **成員** — same English-nav pattern as Voice / Products).
+
+**Layout (top → bottom):**
+
+1. **Company name** — single field + Save; owner/admin edit; members read-only. `PATCH /api/companies/{id}` `{ name }`.
+2. **Member roster** — table: display name, email, role badge, joined date. `GET …/members`. All members can view.
+3. **Manage row** (owner/admin only) — role `Select`: `admin` | `member` only; **Remove** with confirm. Owner row never demotable/removable from UI (API 409). Members cannot manage others.
+4. **Invite** (owner/admin only) — email + role (`admin` | `member`) + **Send invite**. Idle: form only. On success: show **copy link** (`invite_url`) + short hint (WhatsApp / paste to colleague) — do not show the URL before send. Reject emails already on the roster (409). No in-app email required (`EMAIL_BACKEND=link`).
+5. **Pending invites** (owner/admin only) — table: email, role, expires; **Revoke** → `DELETE …/invites/{id}`.
+
+**Permissions helper:** `canManageTeam = role ∈ { owner, admin }` from `user.organizations[0]` (future: API `can_manage` on members list).
+
+**Empty states:** sole owner alone → still show roster; pending invites empty → hide section or “No pending invites”.
+
+### Invite accept (slice 4)
+
+**Route:** `/invite/:token` · **not** under `/settings`. The page is public (logged-out CTA is a real state). **Accept** (`POST`) requires a session; login/register return via `?next=`.
+
+Actions sit **bottom-right** of the AuthLayout card (dialog confirm/cancel): outline/return **left**, primary/accept **right**. Not full-width stacked.
+
+| Auth state | UI |
+|------------|-----|
+| Logged out | Explain: use the **email address that received the invite**; footer → **Create account** (outline) · **Log in** (primary) with `?next=/invite/:token` (email not pre-filled — no public invite preview API). |
+| Logged in, accept OK | Footer: **Back to home** (outline, left) · **Join company** (primary, right) → `POST /api/invites/{token}/accept` → toast + redirect `/` (or `/settings?tab=members`). |
+| 403 email mismatch | “This invite was sent to a different email”; footer: **Back to home** (left) · **Log out and sign in again** (right). |
+| 409 already in org | “You already belong to a company” + **Back to home** (right-aligned outline; bootstrap replace handled server-side for sole-owner solo org — see locked decision above). |
+| 400 expired / revoked / used | Static error + contact your admin; **Back to home** right-aligned. |
+
+**Login / register:** honor `?next=` after success (preserve path + query). Register flow unchanged except redirect back to invite page.
+
 ---
 
 ## Design system notes
 
-- Reuse existing shell primitives ([`web/src/components/ui/`](../../web/src/components/ui/)) — tabs, table, input, textarea, button, dialog.
+- Reuse existing shell primitives ([`web/src/components/ui/`](../../web/src/components/ui/)) — tabs, table, input, textarea, button, dialog, **Select**.
+- **Select** — `SelectContent` is **`popper`** (list below trigger, not `item-aligned` overlay). Border is `border-border` (+ `dark:border-white/10`), same as dropdown menus.
 - Table row hover/selected → `bg-accent` (not `muted`) — [TOKENS.md](../design/TOKENS.md) `muted` vs `accent`.
 - Voice accent (`text-voice`) only if showing craft exemplars preview; settings chrome stays neutral primary.
 - Penpot: **Company settings** drawn under [design/penpot](../../design/penpot/); CSS follows tokens in `web/src/index.css`.
@@ -106,7 +162,9 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 | **K3** | Products → Org tab (import + table) | ✅ |
 | **K3b** | Products → Mine tab | ✅ |
 | **K5** | Exemplar promote from Confirm / draft + Voice settings slots | ✅ |
-| **K6** | Approvals tab/page + Penpot when UX locked |
+| **Org team** | Members tab + invite accept page + login `next` | ✅ |
+| **Session isolation** | Cross-member session API tests; routes stay `user_id`-scoped | ✅ CI `backend-api` |
+| **K6** | Approvals tab/page + Penpot when UX locked | separate branch |
 
 ---
 

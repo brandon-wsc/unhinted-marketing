@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
 import { FormField } from "@/components/form-field";
 import { PasswordBox } from "@/components/password-box";
@@ -10,17 +10,22 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
 import { mapApiError } from "@/lib/map-api-error";
 import { getRememberedUser, patchRememberedUser } from "@/lib/remembered-user";
+import { safeInternalPath } from "@/lib/safe-internal-path";
 
 export function LoginPage() {
   const { t } = useTranslation();
   const { login, user, loading } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const nextPath = safeInternalPath(params.get("next")) ?? "/";
+  const registerHref =
+    nextPath === "/" ? "/register" : `/register?next=${encodeURIComponent(nextPath)}`;
   const [email, setEmail] = useState(() => getRememberedUser()?.email ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to={nextPath} replace />;
 
   function onEmailChange(value: string) {
     setEmail(value);
@@ -33,7 +38,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      navigate("/", { replace: true });
+      navigate(nextPath, { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : t("errors.loginFailed");
       setError(mapApiError(message, t));
@@ -49,7 +54,7 @@ export function LoginPage() {
       footer={
         <>
           {t("auth.login.noAccount")}{" "}
-          <Link to="/register" className="text-primary hover:underline">
+          <Link to={registerHref} className="text-primary hover:underline">
             {t("auth.login.registerLink")}
           </Link>
         </>

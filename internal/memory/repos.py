@@ -2,7 +2,7 @@ import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, desc, select
+from sqlalchemy import delete, desc, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -163,6 +163,19 @@ async def list_org_members(
     return list(result.all())
 
 
+async def get_org_member_by_email(
+    db: AsyncSession, company_id: uuid.UUID, email: str
+) -> OrganizationMember | None:
+    return await db.scalar(
+        select(OrganizationMember)
+        .join(User, OrganizationMember.user_id == User.id)
+        .where(
+            OrganizationMember.organization_id == company_id,
+            func.lower(User.email) == email,
+        )
+    )
+
+
 async def update_company_name(db: AsyncSession, company: Entity, name: str) -> Entity:
     company.name = name.strip()
     await db.flush()
@@ -187,6 +200,55 @@ async def user_has_any_org(db: AsyncSession, user_id: uuid.UUID) -> bool:
         select(OrganizationMember.id).where(OrganizationMember.user_id == user_id)
     )
     return row is not None
+
+
+async def list_user_memberships(
+    db: AsyncSession, user_id: uuid.UUID
+) -> list[OrganizationMember]:
+    result = await db.scalars(
+        select(OrganizationMember).where(OrganizationMember.user_id == user_id)
+    )
+    return list(result.all())
+
+
+async def count_org_members(db: AsyncSession, company_id: uuid.UUID) -> int:
+    n = await db.scalar(
+        select(func.count())
+        .select_from(OrganizationMember)
+        .where(OrganizationMember.organization_id == company_id)
+    )
+    return int(n or 0)
+
+
+async def delete_company(db: AsyncSession, company: Entity) -> None:
+    await db.delete(company)
+    await db.flush()
+
+
+async def clear_bootstrap_solo_org(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    """ADR 0013: drop a register-bootstrap org so invite accept can proceed.
+
+    Returns True if the user has no membership, or their only membership was
+    sole owner of a single-member org (now deleted). Returns False if a real
+    team membership blocks accept (caller should 409).
+    """
+    memberships = await list_user_memberships(db, user_id)
+    if not memberships:
+        return True
+    if len(memberships) != 1:
+        return False
+    membership = memberships[0]
+    if membership.role != "owner":
+        return False
+    if await count_org_members(db, membership.organization_id) != 1:
+        return False
+    company = await get_company(db, membership.organization_id)
+    if company is None:
+        return False
+    await db.delete(membership)
+    await db.flush()
+    await delete_company(db, company)
+    return True
 
 
 async def create_org_member(

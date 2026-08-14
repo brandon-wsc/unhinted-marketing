@@ -148,7 +148,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
           </Alert>
         )}
         {savedFlash && (
-          <Alert>
+          <Alert variant="success">
             <AlertDescription>{t("settings.voice.saved")}</AlertDescription>
           </Alert>
         )}
@@ -253,8 +253,8 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
             <Button type="button" variant="outline" disabled={saving} onClick={onCancel}>
               {t("common.cancel")}
             </Button>
-            <Button type="button" disabled={saving} onClick={() => void onSave()}>
-              {saving ? t("common.saving") : t("common.save")}
+            <Button type="button" loading={saving} onClick={() => void onSave()}>
+              {t("common.save")}
             </Button>
           </div>
         )}

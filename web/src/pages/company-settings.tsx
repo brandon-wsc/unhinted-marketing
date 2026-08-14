@@ -3,14 +3,15 @@ import { useTranslation } from "react-i18next";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/app-header";
 import { useAuth } from "@/context/auth-context";
+import { MembersPanel } from "@/features/company-settings/components/members-panel";
 import { ProductsPanel } from "@/features/company-settings/components/products-panel";
 import { VoiceForm } from "@/features/company-settings/components/voice-form";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "voice" | "products";
+type SettingsTab = "voice" | "products" | "members";
 
 function parseTab(raw: string | null): SettingsTab {
-  if (raw === "products") return raw;
+  if (raw === "products" || raw === "members") return raw;
   return "voice";
 }
 
@@ -18,16 +19,21 @@ function parseScope(raw: string | null): "org" | "mine" {
   return raw === "mine" ? "mine" : "org";
 }
 
+function canManageTeam(role: string | undefined): boolean {
+  return role === "owner" || role === "admin";
+}
+
 /** Approvals (K6) stays out of nav until promote UX ships. */
-const NAV: SettingsTab[] = ["voice", "products"];
+const NAV: SettingsTab[] = ["voice", "products", "members"];
 
 export function CompanySettingsPage() {
   const { t } = useTranslation();
-  const { user, loading } = useAuth();
+  const { user, loading, refreshAccessToken } = useAuth();
   const [params, setParams] = useSearchParams();
   const tab = parseTab(params.get("tab"));
   const scope = parseScope(params.get("scope"));
-  const companyId = user?.organizations[0]?.id;
+  const org = user?.organizations[0];
+  const companyId = org?.id;
 
   const setTab = useMemo(
     () => (next: SettingsTab, nextScope?: "org" | "mine") => {
@@ -103,6 +109,14 @@ export function CompanySettingsPage() {
               companyId={companyId}
               scope={scope}
               onScopeChange={(next) => setTab("products", next)}
+            />
+          )}
+          {tab === "members" && (
+            <MembersPanel
+              companyId={companyId}
+              companyName={org?.name ?? ""}
+              canManageTeam={canManageTeam(org?.role)}
+              onCompanyRenamed={refreshAccessToken}
             />
           )}
         </div>

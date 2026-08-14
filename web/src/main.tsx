@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/context/theme-context";
 import { ToastProvider } from "@/context/toast-context";
 import { CompanySettingsPage } from "@/pages/company-settings";
 import { DashboardPage } from "@/pages/dashboard";
+import { InviteAcceptPage } from "@/pages/invite-accept";
 import { LegacyAdminRedirect } from "@/pages/legacy-admin-redirect";
 import { LoginPage } from "@/pages/login";
 import { RegisterPage } from "@/pages/register";
@@ -25,6 +26,7 @@ createRoot(document.getElementById("root")!).render(
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                <Route path="/invite/:token" element={<InviteAcceptPage />} />
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/settings" element={<CompanySettingsPage />} />
                 <Route path="/system" element={<SystemPage />} />

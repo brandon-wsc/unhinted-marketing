@@ -218,12 +218,54 @@
     "nav": {
       "voice": "Voice",
       "products": "Products",
+      "members": "Members",
       "approvals": "Approvals"
     },
     "noCompany": {
       "title": "No company yet",
       "body": "A company workspace is created when you register.",
       "back": "Back to home"
+    },
+    "members": {
+      "title": "Members",
+      "subtitleEditor": "Team roster, invites, and company name.",
+      "subtitleMember": "Team roster and company name.",
+      "readOnly": "Only admins can invite members or change roles.",
+      "saved": "Saved.",
+      "companyName": "Company name",
+      "roster": "Members",
+      "remove": "Remove",
+      "removeTitle": "Remove member",
+      "removeBody": "Remove {{name}} from this company? They will lose access immediately.",
+      "roles": {
+        "owner": "Owner",
+        "admin": "Admin",
+        "member": "Member"
+      },
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "joined": "Joined",
+        "actions": "Actions"
+      },
+      "invite": {
+        "title": "Invite a colleague",
+        "hint": "Send a link. They must register or log in with the invited email before joining.",
+        "send": "Send invite",
+        "sending": "Sending…",
+        "copy": "Copy link",
+        "copied": "Copied",
+        "pasteHint": "Paste into WhatsApp or Slack",
+        "invalidEmail": "Please enter a valid email",
+        "alreadyMember": "This email is already a member",
+        "alreadyPending": "A pending invite already exists for this email"
+      },
+      "pending": {
+        "title": "Pending invites",
+        "expires": "Expires",
+        "revoke": "Revoke"
+      }
     },
     "voice": {
       "title": "Voice",
@@ -431,6 +473,25 @@
     "label": "Theme",
     "light": "Light",
     "dark": "Dark"
+  },
+  "invite": {
+    "loggedOutTitle": "You're invited to join a team",
+    "loggedOutBody": "Log in or register with the email that received this invite, then return here to join.",
+    "login": "Log in",
+    "register": "Create an account",
+    "once": "Invite links can be used once",
+    "titleJoin": "Join team",
+    "loggedInBody": "You are signed in as:",
+    "join": "Join company",
+    "joining": "Joining…",
+    "home": "Back to home",
+    "mismatchTitle": "Email doesn't match",
+    "mismatchBody": "This invite was sent to a different email. Log out and try the invited account.",
+    "logoutRelogin": "Log out and sign in again",
+    "conflictTitle": "You already belong to a company",
+    "conflictBody": "One account can join one company. Continue from home, or contact an admin.",
+    "invalidTitle": "Invite is no longer valid",
+    "invalidBody": "This link may have expired, been revoked, or already been used. Ask an admin to send a new invite."
   },
   "errors": {
     "loginFailed": "Sign in failed",

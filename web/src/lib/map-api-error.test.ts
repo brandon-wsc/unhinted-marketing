@@ -15,6 +15,12 @@ describe("mapApiError", () => {
     );
     expect(mapApiError("Email already registered", t)).toBe("i18n:errors.emailAlreadyRegistered");
     expect(mapApiError("Invalid email or password", t)).toBe("i18n:errors.invalidCredentials");
+    expect(mapApiError("This email already belongs to a member of this company", t)).toBe(
+      "i18n:settings.members.invite.alreadyMember",
+    );
+    expect(mapApiError("A pending invite already exists for this email", t)).toBe(
+      "i18n:settings.members.invite.alreadyPending",
+    );
   });
 
   it("maps Request failed (N) to errors.requestFailed with status", () => {

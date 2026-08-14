@@ -13,7 +13,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from internal.memory.models import OrgInvite
+from internal.memory.models import Entity, OrgInvite
 from tests.api.helpers import (
     auth_header,
     invite_token_from_url,
@@ -74,6 +74,36 @@ async def test_create_invite_normalizes_email(client: AsyncClient) -> None:
         email=raw_email,
     )
     assert body["email"] == raw_email.lower()
+
+
+@pytest.mark.asyncio
+async def test_create_invite_rejects_invalid_email(client: AsyncClient) -> None:
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    headers = auth_header(owner["access_token"])
+
+    for raw in ("d", "d@", "a@a", "not-an-email"):
+        res = await client.post(
+            f"/api/companies/{company_id}/invites",
+            headers=headers,
+            json={"email": raw, "role": "member"},
+        )
+        assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
+async def test_create_invite_rejects_existing_member(client: AsyncClient) -> None:
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    owner_email = owner["user"]["email"]
+
+    res = await client.post(
+        f"/api/companies/{company_id}/invites",
+        headers=auth_header(owner["access_token"]),
+        json={"email": owner_email.upper(), "role": "member"},
+    )
+    assert res.status_code == 409, res.text
+    assert "already belongs to a member" in res.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -237,7 +267,7 @@ async def test_accept_invite_joins_org(
 
 
 @pytest.mark.asyncio
-async def test_accept_rejects_when_already_in_org(
+async def test_accept_replaces_bootstrap_solo_org(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
@@ -254,6 +284,52 @@ async def test_accept_rejects_when_already_in_org(
     token = invite_token_from_url(created["invite_url"])
 
     invitee = await register_user(client, email=invite_email)
+    bootstrap_id = uuid.UUID(invitee["user"]["organizations"][0]["id"])
+
+    accept_res = await client.post(
+        f"/api/invites/{token}/accept",
+        headers=auth_header(invitee["access_token"]),
+    )
+    assert accept_res.status_code == 200, accept_res.text
+    assert accept_res.json()["company_id"] == company_id
+
+    me = await client.get("/api/auth/me", headers=auth_header(invitee["access_token"]))
+    assert me.status_code == 200
+    orgs = me.json()["organizations"]
+    assert len(orgs) == 1
+    assert orgs[0]["id"] == company_id
+
+    db_session.expire_all()
+    leftover = await db_session.get(Entity, bootstrap_id)
+    assert leftover is None
+
+
+@pytest.mark.asyncio
+async def test_accept_rejects_when_already_in_real_team(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    owner_headers = auth_header(owner["access_token"])
+    invite_email = f"teammate-{uuid.uuid4().hex[:8]}@example.com"
+
+    created = await _create_invite(
+        client,
+        company_id=company_id,
+        headers=owner_headers,
+        email=invite_email,
+    )
+    token = invite_token_from_url(created["invite_url"])
+
+    invitee = await register_user(client, email=invite_email)
+    other = await register_user(client, email=f"other-{uuid.uuid4().hex[:8]}@example.com")
+    other_company = other["user"]["organizations"][0]["id"]
+    await join_org(
+        db_session,
+        user_id=uuid.UUID(invitee["user"]["id"]),
+        company_id=uuid.UUID(other_company),
+        role="member",
+    )
 
     accept_res = await client.post(
         f"/api/invites/{token}/accept",

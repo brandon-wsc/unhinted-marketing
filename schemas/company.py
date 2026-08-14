@@ -126,6 +126,11 @@ class OrgInviteCreate(BaseModel):
     email: EmailStr
     role: Literal["admin", "member"] = "member"
 
+    @field_validator("email")
+    @classmethod
+    def normalize_invite_email(cls, value: str) -> str:
+        return str(value).strip().lower()
+
 
 class OrgInviteItem(BaseModel):
     id: uuid.UUID
