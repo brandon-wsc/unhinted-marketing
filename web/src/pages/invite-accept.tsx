@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
@@ -8,6 +8,19 @@ import { useAuth } from "@/context/auth-context";
 import { ApiStatusError, apiAcceptInvite } from "@/features/company-settings/api";
 
 type InviteView = "ready" | "mismatch" | "conflict" | "invalid";
+
+function ActionRow({ children }: { children: ReactNode }) {
+  return <div className="flex justify-end gap-2">{children}</div>;
+}
+
+function ReturnHomeButton() {
+  const { t } = useTranslation();
+  return (
+    <Button asChild variant="outline">
+      <Link to="/">{t("invite.home")}</Link>
+    </Button>
+  );
+}
 
 export function InviteAcceptPage() {
   const { t } = useTranslation();
@@ -54,27 +67,28 @@ export function InviteAcceptPage() {
   if (!token) {
     return (
       <AuthLayout title={t("invite.invalidTitle")} subtitle={t("invite.invalidBody")}>
-        <Button asChild className="w-full">
-          <Link to="/">{t("invite.home")}</Link>
-        </Button>
+        <ActionRow>
+          <ReturnHomeButton />
+        </ActionRow>
       </AuthLayout>
     );
   }
 
   if (!user) {
     return (
-      <AuthLayout title={t("invite.loggedOutTitle")} subtitle={t("invite.loggedOutBody")}>
-        <div className="space-y-4">
-          <Button asChild className="w-full">
+      <AuthLayout
+        title={t("invite.loggedOutTitle")}
+        subtitle={t("invite.loggedOutBody")}
+        footer={t("invite.once")}
+      >
+        <ActionRow>
+          <Button asChild variant="outline">
+            <Link to={registerTo}>{t("invite.register")}</Link>
+          </Button>
+          <Button asChild>
             <Link to={loginTo}>{t("invite.login")}</Link>
           </Button>
-          <p className="text-center text-sm">
-            <Link to={registerTo} className="text-primary hover:underline">
-              {t("invite.register")}
-            </Link>
-          </p>
-        </div>
-        <p className="mt-4 text-center text-xs text-muted-foreground">{t("invite.once")}</p>
+        </ActionRow>
       </AuthLayout>
     );
   }
@@ -82,9 +96,12 @@ export function InviteAcceptPage() {
   if (view === "mismatch") {
     return (
       <AuthLayout title={t("invite.mismatchTitle")} subtitle={t("invite.mismatchBody")}>
-        <Button type="button" className="w-full" onClick={() => void onSwitchAccount()}>
-          {t("invite.logoutRelogin")}
-        </Button>
+        <ActionRow>
+          <ReturnHomeButton />
+          <Button type="button" onClick={() => void onSwitchAccount()}>
+            {t("invite.logoutRelogin")}
+          </Button>
+        </ActionRow>
       </AuthLayout>
     );
   }
@@ -92,9 +109,9 @@ export function InviteAcceptPage() {
   if (view === "conflict") {
     return (
       <AuthLayout title={t("invite.conflictTitle")} subtitle={t("invite.conflictBody")}>
-        <Button asChild className="w-full">
-          <Link to="/">{t("invite.home")}</Link>
-        </Button>
+        <ActionRow>
+          <ReturnHomeButton />
+        </ActionRow>
       </AuthLayout>
     );
   }
@@ -102,9 +119,9 @@ export function InviteAcceptPage() {
   if (view === "invalid") {
     return (
       <AuthLayout title={t("invite.invalidTitle")} subtitle={t("invite.invalidBody")}>
-        <Button asChild className="w-full">
-          <Link to="/">{t("invite.home")}</Link>
-        </Button>
+        <ActionRow>
+          <ReturnHomeButton />
+        </ActionRow>
       </AuthLayout>
     );
   }
@@ -113,19 +130,12 @@ export function InviteAcceptPage() {
     <AuthLayout title={t("invite.titleJoin")} subtitle={t("invite.loggedInBody")}>
       <div className="space-y-4">
         <Input value={user.email} readOnly className="bg-muted" />
-        <Button
-          type="button"
-          className="w-full"
-          disabled={submitting}
-          onClick={() => void onJoin()}
-        >
-          {submitting ? t("invite.joining") : t("invite.join")}
-        </Button>
-        <p className="text-center text-sm">
-          <Link to="/" className="text-primary hover:underline">
-            {t("invite.home")}
-          </Link>
-        </p>
+        <ActionRow>
+          <ReturnHomeButton />
+          <Button type="button" loading={submitting} onClick={() => void onJoin()}>
+            {submitting ? t("invite.joining") : t("invite.join")}
+          </Button>
+        </ActionRow>
       </div>
     </AuthLayout>
   );
