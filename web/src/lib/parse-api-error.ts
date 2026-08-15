@@ -65,11 +65,7 @@ export function parseSkuConflict(body: unknown): ProductSkuConflict | null {
   const suggested = record.suggested_sku;
   if (!existing || typeof existing !== "object" || typeof suggested !== "string") return null;
   const row = existing as Record<string, unknown>;
-  if (
-    typeof row.id !== "string" ||
-    typeof row.name !== "string" ||
-    typeof row.sku !== "string"
-  ) {
+  if (typeof row.id !== "string" || typeof row.name !== "string" || typeof row.sku !== "string") {
     return null;
   }
   return {

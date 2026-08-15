@@ -1,10 +1,10 @@
 import { fetchWithAuth } from "@/context/auth-context";
 import { API_BASE } from "@/lib/api-base";
 import {
+  type ProductSkuConflict,
   parseApiErrorBody,
   parseApiErrorResponse,
   parseSkuConflict,
-  type ProductSkuConflict,
 } from "@/lib/parse-api-error";
 
 export type CompanyVoiceSettings = {

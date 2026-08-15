@@ -43,10 +43,10 @@ import {
   apiListProducts,
   apiPatchProduct,
   apiProposeProduct,
-  ProductSkuConflictError,
   type ProductImportResponse,
   type ProductItem,
   type ProductScope,
+  ProductSkuConflictError,
 } from "@/features/company-settings/api";
 import { mapApiError } from "@/lib/map-api-error";
 import type { ProductSkuConflict } from "@/lib/parse-api-error";
@@ -87,8 +87,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
   const [newSku, setNewSku] = useState("");
   const [newNotes, setNewNotes] = useState("");
 
-  const extraFields =
-    editor?.kind === "edit" ? extraProfileEntries(editor.product.profile) : [];
+  const extraFields = editor?.kind === "edit" ? extraProfileEntries(editor.product.profile) : [];
   const formEditable = Boolean(canEdit && editor);
 
   function resetForm() {
@@ -410,9 +409,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                               {t("settings.products.coveredByCompany")}
                             </Badge>
                           ) : (
-                            <Badge variant="secondary">
-                              {t("settings.products.personalOnly")}
-                            </Badge>
+                            <Badge variant="secondary">{t("settings.products.personalOnly")}</Badge>
                           )}
                         </TableCell>
                       )}
