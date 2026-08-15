@@ -292,7 +292,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
             )}
 
             {!canEdit && scope === "org" && (
-              <Alert>
+              <Alert variant="info">
                 <AlertDescription>{t("settings.products.readOnlyOrg")}</AlertDescription>
               </Alert>
             )}

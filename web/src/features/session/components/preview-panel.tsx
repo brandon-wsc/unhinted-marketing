@@ -1,6 +1,9 @@
+import { ChevronLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { IconButton } from "@/components/icon-button";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import { apiPromoteVoiceExemplar } from "@/features/company-settings/api";
 import { EditCopyDialog } from "@/features/session/components/edit-copy-dialog";
@@ -139,23 +142,19 @@ export function PreviewPanel({
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           {paged && onBack && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
-              aria-label={t("chat.mobile.back")}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-                <path
-                  d="M10 3.5 5.5 8 10 12.5"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              {t("chat.mobile.back")}
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <IconButton
+                  type="button"
+                  className="size-8"
+                  onClick={onBack}
+                  aria-label={t("chat.mobile.back")}
+                >
+                  <ChevronLeft />
+                </IconButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t("chat.mobile.back")}</TooltipContent>
+            </Tooltip>
           )}
           <div className="min-w-0">
             <p className="text-sm font-semibold">{t("preview.title")}</p>

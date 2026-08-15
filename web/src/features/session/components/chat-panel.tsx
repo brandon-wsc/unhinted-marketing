@@ -1,5 +1,5 @@
 import { cjk } from "@streamdown/cjk";
-import { Square } from "lucide-react";
+import { Check, Square } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
@@ -563,7 +563,7 @@ function AgentActionList({ actions }: { actions: AgentActionRecord[] }) {
               {action.status === "running" ? (
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-voice" />
               ) : (
-                <CheckIcon />
+                <Check className="size-3.5" aria-hidden />
               )}
             </span>
             <span className="min-w-0">
@@ -579,20 +579,6 @@ function AgentActionList({ actions }: { actions: AgentActionRecord[] }) {
         );
       })}
     </ul>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M3.5 8.5 6.5 11.5 12.5 4.5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 

@@ -22,13 +22,16 @@ Loaded via `web/index.html` Google Fonts.
 |-------|-------|------|------|
 | `--color-primary` | `#111113` | `#ececef` | Ink desk actions |
 | `--color-primary-foreground` | `#fafafa` | `#111113` | On-primary |
-| `--color-ring` | `#111113` | `#ececef` | Focus (1px solid) |
-| `--color-destructive` | `#dc2626` | *(same)* | Danger |
-| `--color-destructive-foreground` | `#991b1b` | `#fca5a5` | Danger text |
-| `--color-destructive-soft` | `rgb(220 38 38 / 0.1)` | `rgb(220 38 38 / 0.12)` | Soft danger |
+| `--color-ring` | `#4f83ee` | *(same)* | Keyboard / field focus — same as `info` |
+| `--color-destructive` | `#ee3c37` | *(same)* | Danger |
+| `--color-destructive-foreground` | `#9a1d1b` | `#fca79c` | Danger text |
+| `--color-destructive-soft` | solid @ **10%** | solid @ **12%** | Soft danger |
 | `--color-success` | `#16a34a` | *(same)* | Success |
-| `--color-success-foreground` | `#166534` | `#86efac` | Success text |
-| `--color-success-soft` | `rgb(22 163 74 / 0.1)` | `rgb(22 163 74 / 0.12)` | Soft success |
+| `--color-success-foreground` | `#1d6531` | `#94d29f` | Success text |
+| `--color-success-soft` | solid @ **10%** | solid @ **12%** | Soft success |
+| `--color-info` | `#4f83ee` | *(same)* | Informational (not brand) |
+| `--color-info-foreground` | `#345290` | `#a0c0ff` | Info text |
+| `--color-info-soft` | solid @ **10%** | solid @ **12%** | Soft info |
 | `--color-voice` | `#c45c00` | `#f0a060` | Craft voice / action pulse (not shell fill) |
 | `--color-voice-foreground` | `#ffffff` | `#111113` | On-voice |
 
@@ -54,8 +57,19 @@ Logo mark fill: `#111113`.
 ## Usage rules
 
 - Shell chrome → `primary`, surfaces, `muted-foreground`.
+- Focus (`--color-ring`) → same OKLCH as `info`. Do not reuse ink/`primary` for field or keyboard rings — black-on-black (and light-on-light in dark) fails focus appearance. Resting field chrome stays `border-input`. Invalid stays `destructive`.
+
+Status solids (`success` / `destructive` / `info` / `ring`) are **OKLCH-aligned** in [`web/src/index.css`](../../web/src/index.css): shared `--status-l`, default `--status-c`, danger-only `--danger-c`, hue knobs. Hex below is resolved sRGB for Penpot / humans. Voice, primary, and surfaces stay out of this ramp.
+
+| Token | Hex | OKLCH |
+|-------|-----|--------|
+| `success` | `#16a34a` | `L 0.627 · C 0.170 · h 149` |
+| `destructive` | `#ee3c37` | `L 0.627 · C 0.215 · h 27` (`--danger-c`, not `--status-c`) |
+| `info` / `ring` | `#4f83ee` | `L 0.627 · C 0.170 · h 263` |
+
+Foreground / soft are the same hues at `--status-fg-l` (darker) and `--status-soft-a` (10% light / 12% dark). Dark info chroma is capped (`--status-fg-c: 0.096`) so blue stays in sRGB. Do not pick Tailwind blue-600 (`#2563eb`) — it is darker and as chromatic as old red-600.
 - Action trail / spitball / temp loading → `voice` (+ icons); do not recolor the whole app.
-- Confirmations → `success` (`Alert variant="success"`, `text-success`). Errors → `destructive`. Do not paint primary buttons green.
+- Confirmations → `success` (`Alert variant="success"`, `text-success`). Errors → `destructive`. Informational / privilege reminders → `info` (`Alert variant="info"`; status blue, not shell brand). Do not paint primary buttons green.
 - Prefer semantic utilities (`bg-card`, `text-muted-foreground`, `hover:bg-accent`) — no parallel palette in JSX.
 
 ### `muted` vs `accent` (important)
@@ -78,6 +92,7 @@ Logo mark fill: `#111113`.
 |---------|----------------|
 | `TableRow` | Soft accent hover (not muted) |
 | `SelectContent` | Popper below trigger; hairline `border-border` (not bare `border` / ink) |
+| `Card` | Hairline `border-border` (not bare `border` / ink) — auth card |
 | `Input` / `Textarea` | **`readOnly`:** keep `border-input`, `bg-accent` wash, `cursor-default` (textarea also `resize-none`). Copyable. **`disabled`:** `opacity-50` + not-allowed — use for true unavailable, not view-only. Do not paint read-only with `bg-muted`. |
 | Products list | Click row → detail dialog lists full `profile` columns; table stays name/sku/status only |
 | Import | Reject files with **> 50** columns (COLLECT); no silent truncate |
