@@ -6,6 +6,7 @@ import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
@@ -23,9 +24,12 @@ from internal.memory.repos import (
     create_manual_product,
     get_org_membership,
     get_product,
+    get_scoped_product_by_sku,
     list_org_skus,
     list_products,
+    next_unique_sku,
     pending_proposal_ids_for_skus,
+    update_manual_product,
     upsert_product_row,
 )
 from schemas.company import (
@@ -33,6 +37,8 @@ from schemas.company import (
     ProductImportResponse,
     ProductItem,
     ProductListResponse,
+    ProductSkuConflict,
+    ProductSkuRef,
 )
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -55,6 +61,31 @@ def _profile_strings(profile: dict | None) -> dict[str, str]:
             continue
         out[str(key)] = value if isinstance(value, str) else str(value)
     return out
+
+
+async def _raise_sku_conflict(
+    db: AsyncSession,
+    *,
+    existing,
+    preferred: str,
+    exclude_id: uuid.UUID | None = None,
+) -> None:
+    suggested = await next_unique_sku(
+        db,
+        company_id=existing.company_id,
+        owner_scope=existing.owner_scope,
+        user_id=existing.user_id,
+        preferred=preferred,
+        exclude_id=exclude_id,
+    )
+    payload = ProductSkuConflict(
+        existing=ProductSkuRef(id=existing.id, name=existing.name, sku=existing.sku),
+        suggested_sku=suggested,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=payload.model_dump(mode="json"),
+    )
 
 
 def _to_item(
@@ -183,19 +214,77 @@ async def create_company_product(
         await require_company_access(company_id, user, db)
         user_id = user.id
 
-    row, _ = await create_manual_product(
-        db,
-        company_id=company_id,
-        owner_scope=owner_scope,
-        user_id=user_id,
-        sku=body.sku,
-        name=body.name,
-        notes=body.notes,
-    )
+    try:
+        row, created = await create_manual_product(
+            db,
+            company_id=company_id,
+            owner_scope=owner_scope,
+            user_id=user_id,
+            sku=body.sku,
+            name=body.name,
+            notes=body.notes,
+        )
+    except IntegrityError:
+        await db.rollback()
+        existing = await get_scoped_product_by_sku(
+            db,
+            company_id=company_id,
+            owner_scope=owner_scope,
+            user_id=user_id,
+            sku=body.sku,
+        )
+        if existing:
+            await _raise_sku_conflict(db, existing=existing, preferred=body.sku)
+        raise
+    if not created:
+        await _raise_sku_conflict(db, existing=row, preferred=body.sku)
     await db.commit()
     await db.refresh(row)
     covered = False
     if owner_scope == "user":
+        org_skus = await list_org_skus(db, company_id=company_id)
+        covered = row.sku in org_skus
+    return _to_item(row, covered=covered)
+
+
+@router.patch("/{company_id}/products/{product_id}", response_model=ProductItem)
+async def patch_company_product(
+    product_id: uuid.UUID,
+    body: ProductCreateRequest,
+    company_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ProductItem:
+    await require_company_access(company_id, user, db)
+    row = await get_product(db, company_id=company_id, product_id=product_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if row.owner_scope == "org":
+        await require_company_settings_editor(company_id, user, db)
+    elif row.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    clash = await get_scoped_product_by_sku(
+        db,
+        company_id=company_id,
+        owner_scope=row.owner_scope,
+        user_id=row.user_id,
+        sku=body.sku,
+        exclude_id=row.id,
+    )
+    if clash:
+        await _raise_sku_conflict(
+            db, existing=clash, preferred=body.sku, exclude_id=row.id
+        )
+
+    row = await update_manual_product(
+        db, row, sku=body.sku, name=body.name, notes=body.notes
+    )
+    await db.commit()
+    await db.refresh(row)
+    covered = False
+    if row.owner_scope == "user":
         org_skus = await list_org_skus(db, company_id=company_id)
         covered = row.sku in org_skus
     return _to_item(row, covered=covered)

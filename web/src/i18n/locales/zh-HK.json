@@ -12,7 +12,8 @@
     "notAvailable": "—",
     "cancel": "取消",
     "save": "儲存",
-    "saving": "儲存中…"
+    "saving": "儲存中…",
+    "close": "關閉"
   },
   "header": {
     "menu": {
@@ -331,13 +332,25 @@
         "action": "操作"
       },
       "detail": {
-        "title": "產品詳情"
+        "title": "產品詳情",
+        "editTitle": "編輯產品"
       },
       "fields": {
         "name": "名稱",
         "sku": "產品編號",
         "notes": "內容／備註",
-        "notesHint": "選填。賣點、成分或其他草稿應該知嘅資料。"
+        "notesHint": "選填。賣點、成分或其他草稿應該知嘅資料。",
+        "skuExists": "清單已有呢個編號（{{name}}）。確認後先會更新嗰一行。",
+        "skuTaken": "呢個產品編號已經係「{{name}}」。要儲存呢一行，請改編號。",
+        "skuConflict": "呢個產品編號已經有另一項產品用緊。",
+        "nameExists": "另一項產品都用呢個名稱（{{sku}}）。只要產品編號唔同，仍然可以新增。"
+      },
+      "overwrite": {
+        "title": "呢個產品編號已有人用",
+        "body": "產品編號 {{sku}} 已經係「{{name}}」。可以覆蓋嗰行、返回自己改編號，或者用系統產生嘅新編號當新產品。",
+        "confirm": "更新",
+        "generate": "產生新編號",
+        "keepEditing": "返回修改"
       },
       "stats": {
         "imported": "新增",

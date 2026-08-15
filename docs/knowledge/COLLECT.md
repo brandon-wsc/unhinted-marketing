@@ -119,7 +119,7 @@ Planned row shape: `owner_scope: org | user`, `user_id` nullable, unique `(compa
 
 - `POST /api/companies/{company_id}/products/import` — org catalog; owner/admin (`scope=org` default).
 - `POST /api/companies/{company_id}/products/import?scope=user` — user personal library; any member.
-- Also: `GET …/products`, `POST …/products` (manual add), `POST …/products/{id}/archive`.
+- Also: `GET …/products`, `POST …/products` (manual add; **409** `sku_taken` + `suggested_sku` if the code exists — no silent upsert), `PATCH …/products/{id}` (edit name/SKU/notes; keeps other `profile` keys), `POST …/products/{id}/archive`.
 - Response (import): `{ imported, updated, skipped, errors[] }`.
 
 ### Errors

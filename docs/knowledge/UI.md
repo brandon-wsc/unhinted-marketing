@@ -98,8 +98,8 @@ UserMenu
 
 | Tab | Content |
 |-----|---------|
-| **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name + `sku`, status, actions) · **row click → dialog** listing all `profile` columns (scroll if many) · archive. Upsert **replace by SKU** — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
-| **Mine** | Same pattern for personal library (+ optional notes on Add row). Org covers user on SKU clash at retrieve — **Drafts use** column: Company vs Yours. **Propose** → Approvals queue ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)). |
+| **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name + `sku`, status, actions) · **row click → same form as Add row** (name / product code / notes; extra import columns read-only). Editors can save (`PATCH`). Upsert **replace by SKU** on import — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
+| **Mine** | Same form for personal library (Add row + row click to edit). Org covers user on SKU clash at retrieve — **Drafts use** column: Company vs Yours. **Propose** → Approvals queue ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)). |
 
 Flexible headers: no required column names; store raw row in `profile`. **Import hard limit: 50 columns** — reject whole file ([COLLECT §4](./COLLECT.md#4-product-import-k3)). No content column in the table (unknown CSV shapes).
 

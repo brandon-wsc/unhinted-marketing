@@ -12,7 +12,8 @@
     "notAvailable": "—",
     "cancel": "Cancel",
     "save": "Save",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "close": "Close"
   },
   "header": {
     "menu": {
@@ -331,13 +332,25 @@
         "action": "Action"
       },
       "detail": {
-        "title": "Product details"
+        "title": "Product details",
+        "editTitle": "Edit product"
       },
       "fields": {
         "name": "Name",
         "sku": "Product code",
         "notes": "Notes",
-        "notesHint": "Optional. Selling points, ingredients, or anything drafts should know."
+        "notesHint": "Optional. Selling points, ingredients, or anything drafts should know.",
+        "skuExists": "This code is already on the list as {{name}}. Saving will update that row after you confirm.",
+        "skuTaken": "This product code already belongs to {{name}}. Change the code to save this row.",
+        "skuConflict": "A product with this product code already exists.",
+        "nameExists": "Another product already uses this name ({{sku}}). A new row is still OK if the product code is different."
+      },
+      "overwrite": {
+        "title": "This product code is taken",
+        "body": "Product code {{sku}} already belongs to {{name}}. Update that row, stay and change the code, or use a generated code for a new row.",
+        "confirm": "Update",
+        "generate": "Generate code",
+        "keepEditing": "Keep editing"
       },
       "stats": {
         "imported": "Added",

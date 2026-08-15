@@ -198,6 +198,19 @@ class ProductCreateRequest(BaseModel):
         return value.strip()
 
 
+class ProductSkuRef(BaseModel):
+    id: uuid.UUID
+    name: str
+    sku: str
+
+
+class ProductSkuConflict(BaseModel):
+    code: Literal["sku_taken"] = "sku_taken"
+    message: str = "A product with this product code already exists"
+    existing: ProductSkuRef
+    suggested_sku: str
+
+
 class ProductProposalFieldDiff(BaseModel):
     key: str
     current: str | None = None

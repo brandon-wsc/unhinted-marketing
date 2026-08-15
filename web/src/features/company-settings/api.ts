@@ -1,6 +1,11 @@
 import { fetchWithAuth } from "@/context/auth-context";
 import { API_BASE } from "@/lib/api-base";
-import { parseApiErrorResponse } from "@/lib/parse-api-error";
+import {
+  parseApiErrorBody,
+  parseApiErrorResponse,
+  parseSkuConflict,
+  type ProductSkuConflict,
+} from "@/lib/parse-api-error";
 
 export type CompanyVoiceSettings = {
   company_id: string;
@@ -53,6 +58,22 @@ export type ProductImportResponse = {
   skipped: number;
   errors: string[];
 };
+
+export class ProductSkuConflictError extends Error {
+  readonly conflict: ProductSkuConflict;
+  constructor(conflict: ProductSkuConflict) {
+    super("A product with this product code already exists");
+    this.name = "ProductSkuConflictError";
+    this.conflict = conflict;
+  }
+}
+
+async function throwProductWriteError(res: Response): Promise<never> {
+  const body: unknown = await res.json().catch(() => null);
+  const conflict = parseSkuConflict(body);
+  if (conflict) throw new ProductSkuConflictError(conflict);
+  throw new Error(parseApiErrorBody(body ?? {}, res.status));
+}
 
 export async function apiGetCompanyVoice(
   accessToken: string | null,
@@ -140,7 +161,26 @@ export async function apiCreateProduct(
       body: JSON.stringify(input),
     },
   );
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  if (!res.ok) await throwProductWriteError(res);
+  return res.json();
+}
+
+export async function apiPatchProduct(
+  accessToken: string | null,
+  companyId: string,
+  productId: string,
+  input: { name: string; sku: string; notes?: string },
+): Promise<ProductItem> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/products/${productId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!res.ok) await throwProductWriteError(res);
   return res.json();
 }
 
