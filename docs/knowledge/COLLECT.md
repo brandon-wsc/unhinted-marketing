@@ -1,6 +1,6 @@
 # Collect — human-provided knowledge (org + user)
 
-> **Status:** K3–K5 shipped (products import/retrieve + embeddings + exemplars) · K6 held · Offer snippets deferred  
+> **Status:** K3–K6 shipped (products import/retrieve + embeddings + exemplars + Approvals) · Offer snippets deferred  
 > **Parent:** [README.md](./README.md) · **Runtime:** [SESSION.md](./SESSION.md)
 
 **Scope:** **Human-provided** knowledge (import, paste, settings) that **open web cannot replace** — stored at **organization** and/or **user** scope ([§2](#2-ownership-org--user-new--old)). Not the same as “owned by one login only.”
@@ -84,7 +84,7 @@ Planned row shape: `owner_scope: org | user`, `user_id` nullable, unique `(compa
 | **Product catalog (org)** | CSV / Excel import (owner/admin) | K3 | Org × Old; retrieve for all members |
 | **Product catalog (user)** | Personal import / save | K3b | User × Old; org covers on SKU clash |
 | **Voice overlay** | Org settings + optional user overlay | K1 | Org default; user may overlay / reset ([MODEL](./MODEL.md)) |
-| **Exemplar captions** | Manual promote from Confirm / settings UI | K5 | Not chat→KB auto-write; see K6 held |
+| **Exemplar captions** | Manual promote from Confirm / settings UI | K5 | Not chat→KB auto-write; K6 is Mine catalog only |
 | **Offer snippets** | Paste in **import UI** or dedicated upload | K5 optional | Session paste → KB is **K6 held** |
 | **Per-company personas** | CRUD | Later | MVP uses global seed (`knowledge_seed.py`); override = user-owned |
 
@@ -119,7 +119,7 @@ Planned row shape: `owner_scope: org | user`, `user_id` nullable, unique `(compa
 
 - `POST /api/companies/{company_id}/products/import` — org catalog; owner/admin (`scope=org` default).
 - `POST /api/companies/{company_id}/products/import?scope=user` — user personal library; any member.
-- Also: `GET …/products`, `POST …/products` (manual add), `POST …/products/{id}/archive`.
+- Also: `GET …/products`, `POST …/products` (manual add; **409** `sku_taken` + `suggested_sku` if the code exists — no silent upsert), `PATCH …/products/{id}` (edit name/SKU/notes; keeps other `profile` keys), `POST …/products/{id}/archive`.
 - Response (import): `{ imported, updated, skipped, errors[] }`.
 
 ### Errors
@@ -233,39 +233,23 @@ Eval set: ~20 user utterances × ~10 SKUs per company; live FastEmbed regression
 
 - User upload / admin paste → `offer_snippets`: `snippet_id`, `company_id`, `raw_excerpt`, `source`.
 - Same tenant rules as products; retrieve when no SKU match but internal promo text exists.
-- **Chat paste → persist to org KB:** held to **K6** (promote + admin approve — §9).
+- **Chat paste → persist to org KB:** still not in K6 MVP (Mine catalog only — [ADR 0011](../adr/0011-knowledge-commit-without-llm.md)).
 - No dedicated MVP page until needed — Products / Voice first.
 
 ---
 
-## 9. Held — promote to org (K6)
+## 9. Promote to org (K6)
 
-> **Status:** Product + UX **not designed**. No graph node or API until K6 is specced.
+> **Status:** Shipped — [ADR 0011](../adr/0011-knowledge-commit-without-llm.md)
 
-**Intent:** Member adds **User × New / User × Old** content in chat or personal lib, then **promotes** to org. **User covers org only after owner/admin approve** → upsert **Org × Old** (replace by SKU, diff before approve). Same philosophy as Confirm ≠ LLM ([ADR 0003](../adr/0003-confirm-without-llm.md)).
+**Intent:** Member promotes a **Mine** (User × Old) product → **Org × New** proposal → owner/admin approve → **Org × Old** replace-by-SKU. Zero LLM. Chat scratch stays turn-local.
 
-**Why held (after K5):**
+1. `POST …/products/{id}/propose` — row owner; snapshot sku/name/profile; one pending per `(company_id, sku)` (409).
+2. `GET …/proposals` — owner/admin; diff vs current org row (or empty = new SKU).
+3. `POST …/proposals/{id}/approve` — upsert org row + re-embed; idempotent if already approved.
+4. `POST …/reject` — org unchanged; Mine row stays.
 
-| Need first | Reason |
-|------------|--------|
-| K3–K4 working retrieve | Know what a committed row looks like |
-| K5 manual import / settings | Baseline path without agent writes |
-| Approve UX design | Proposal card? diff? batch? TTL? — undecided |
-| ADR 0011 | Lock propose vs commit boundary |
-
-**Until K6:**
-
-- **User × New** → session scratch only — instant draft, not org catalog.
-- **Org × Old** → import API / admin settings only (no chat promote).
-- Agent **must not** upsert org rows from chat without approve HTTP.
-
-**K6 sketch (when ready — not implemented):**
-
-1. Member submits promote → **Org × New** (proposal + diff vs org row if SKU exists).
-2. `POST …/proposals/{id}/approve` — owner/admin, zero LLM, idempotent **replace** org row by SKU.
-3. `POST …/reject` — keep user personal row; org unchanged.
-
-Do not implement until approve flow is agreed and ADR 0011 is accepted.
+**Not in this slice:** chat scratch promote, offer snippets, batch, TTL. Org import still writes Org × Old directly.
 
 ---
 
@@ -277,7 +261,7 @@ Still open:
 
 1. CSV column mapping UI (vs flexible headers only)?
 2. Offer snippets: separate table vs `kind` on products?
-3. **K6:** Proposal UI, diff for product patch, reject / “session only”, proposal TTL?
+3. **K6:** Proposal TTL / batch approve / chat-scratch promote — deferred (ADR 0011).
 
 ---
 
@@ -289,7 +273,7 @@ Still open:
 | **K3b** | User personal lib + org-wins dedupe in §5 | ✅ |
 | **K4** | §7 vector tier + cross-tenant tests | ✅ |
 | **K5** | Import UI ([UI.md](./UI.md)); §8 manual exemplar + offer upload | ✅ exemplars (offer snippets optional / deferred) |
-| **K6** | **Held** — §9 promote + Approvals UI → org replace |
+| **K6** | Promote + Approvals UI → org replace | ✅ ADR 0011 |
 
 ---
 

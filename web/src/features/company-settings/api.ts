@@ -1,6 +1,11 @@
 import { fetchWithAuth } from "@/context/auth-context";
 import { API_BASE } from "@/lib/api-base";
-import { parseApiErrorResponse } from "@/lib/parse-api-error";
+import {
+  type ProductSkuConflict,
+  parseApiErrorBody,
+  parseApiErrorResponse,
+  parseSkuConflict,
+} from "@/lib/parse-api-error";
 
 export type CompanyVoiceSettings = {
   company_id: string;
@@ -35,6 +40,7 @@ export type ProductItem = {
   status: string;
   owner_scope: ProductScope;
   covered_by_company: boolean;
+  pending_proposal_id?: string | null;
   profile: Record<string, string>;
   updated_at: string;
 };
@@ -52,6 +58,22 @@ export type ProductImportResponse = {
   skipped: number;
   errors: string[];
 };
+
+export class ProductSkuConflictError extends Error {
+  readonly conflict: ProductSkuConflict;
+  constructor(conflict: ProductSkuConflict) {
+    super("A product with this product code already exists");
+    this.name = "ProductSkuConflictError";
+    this.conflict = conflict;
+  }
+}
+
+async function throwProductWriteError(res: Response): Promise<never> {
+  const body: unknown = await res.json().catch(() => null);
+  const conflict = parseSkuConflict(body);
+  if (conflict) throw new ProductSkuConflictError(conflict);
+  throw new Error(parseApiErrorBody(body ?? {}, res.status));
+}
 
 export async function apiGetCompanyVoice(
   accessToken: string | null,
@@ -139,7 +161,26 @@ export async function apiCreateProduct(
       body: JSON.stringify(input),
     },
   );
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  if (!res.ok) await throwProductWriteError(res);
+  return res.json();
+}
+
+export async function apiPatchProduct(
+  accessToken: string | null,
+  companyId: string,
+  productId: string,
+  input: { name: string; sku: string; notes?: string },
+): Promise<ProductItem> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/products/${productId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!res.ok) await throwProductWriteError(res);
   return res.json();
 }
 
@@ -151,6 +192,83 @@ export async function apiArchiveProduct(
   const res = await fetchWithAuth(
     accessToken,
     `${API_BASE}/companies/${companyId}/products/${productId}/archive`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export type ProposalFieldChange = "added" | "changed" | "removed" | "same";
+
+export type ProductProposalFieldDiff = {
+  key: string;
+  current: string | null;
+  proposed: string | null;
+  change: ProposalFieldChange;
+};
+
+export type ProductProposalItem = {
+  id: string;
+  company_id: string;
+  sku: string;
+  name: string;
+  status: "pending" | "approved" | "rejected";
+  proposed_by: string | null;
+  proposed_by_email: string | null;
+  source_product_id: string | null;
+  profile: Record<string, string>;
+  current_name: string | null;
+  current_profile: Record<string, string>;
+  fields: ProductProposalFieldDiff[];
+  created_at: string;
+  reviewed_at: string | null;
+};
+
+export async function apiProposeProduct(
+  accessToken: string | null,
+  companyId: string,
+  productId: string,
+): Promise<ProductProposalItem> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/products/${productId}/propose`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiListProposals(
+  accessToken: string | null,
+  companyId: string,
+): Promise<{ company_id: string; items: ProductProposalItem[] }> {
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/companies/${companyId}/proposals`);
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiApproveProposal(
+  accessToken: string | null,
+  companyId: string,
+  proposalId: string,
+): Promise<ProductProposalItem> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/proposals/${proposalId}/approve`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiRejectProposal(
+  accessToken: string | null,
+  companyId: string,
+  proposalId: string,
+): Promise<ProductProposalItem> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/proposals/${proposalId}/reject`,
     { method: "POST" },
   );
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));

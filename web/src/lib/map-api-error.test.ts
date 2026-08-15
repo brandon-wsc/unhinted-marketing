@@ -21,6 +21,12 @@ describe("mapApiError", () => {
     expect(mapApiError("A pending invite already exists for this email", t)).toBe(
       "i18n:settings.members.invite.alreadyPending",
     );
+    expect(mapApiError("A pending proposal already exists for this product code", t)).toBe(
+      "i18n:settings.products.alreadyPending",
+    );
+    expect(mapApiError("A product with this product code already exists", t)).toBe(
+      "i18n:settings.products.fields.skuConflict",
+    );
   });
 
   it("maps Request failed (N) to errors.requestFailed with status", () => {

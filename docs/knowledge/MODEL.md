@@ -154,4 +154,4 @@ No second vector DB. No repo markdown bundle for tenant KB.
 
 1. Offer snippets storage shape (deferred).
 2. Preview persist: `product_context_ids` column vs inside `copy` JSON? (session state has ids today; draft schema TBD)
-3. K6 approve UX (held — see COLLECT §9).
+3. Chat scratch still does not persist to org KB (COLLECT §9 / ADR 0011).

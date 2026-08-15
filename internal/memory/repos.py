@@ -2,7 +2,7 @@ import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, desc, func, select
+from sqlalchemy import delete, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from internal.memory.models import (
     PreviewDraft,
     PreviewImage,
     Product,
+    ProductProposal,
     RawNewsEvent,
     RecommendedQuestions,
     Session,
@@ -23,6 +24,7 @@ from internal.memory.models import (
     User,
 )
 from internal.memory.product_import import build_search_document
+from internal.memory.product_sku import allocate_unique_sku
 
 
 def url_hash(value: str) -> str:
@@ -728,8 +730,12 @@ async def upsert_product_row(
     profile: dict,
     embedding: list[float] | None = None,
     embed: bool = True,
+    create_only: bool = False,
 ) -> tuple[Product, bool]:
     """Upsert by SKU. Returns (row, created). Reactivates archived rows.
+
+    When ``create_only`` is True, an existing SKU is returned unchanged
+    (``created=False``) so callers can 409 instead of silently replacing.
 
     When ``embedding`` is omitted and ``embed`` is True, embeds ``search_document``
     inline (COLLECT K4 re-embed on upsert).
@@ -752,6 +758,8 @@ async def upsert_product_row(
 
     existing = await db.scalar(stmt)
     if existing:
+        if create_only:
+            return existing, False
         existing.name = name
         existing.search_document = search_document
         existing.profile = profile
@@ -784,6 +792,91 @@ async def archive_product(db: AsyncSession, product: Product) -> Product:
     return product
 
 
+async def get_scoped_product_by_sku(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    owner_scope: str,
+    user_id: uuid.UUID | None,
+    sku: str,
+    exclude_id: uuid.UUID | None = None,
+) -> Product | None:
+    stmt = select(Product).where(
+        Product.company_id == company_id,
+        Product.owner_scope == owner_scope,
+        Product.sku == sku,
+    )
+    if owner_scope == "user":
+        stmt = stmt.where(Product.user_id == user_id)
+    else:
+        stmt = stmt.where(Product.user_id.is_(None))
+    if exclude_id is not None:
+        stmt = stmt.where(Product.id != exclude_id)
+    return await db.scalar(stmt)
+
+
+async def next_unique_sku(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    owner_scope: str,
+    user_id: uuid.UUID | None,
+    preferred: str,
+    exclude_id: uuid.UUID | None = None,
+) -> str:
+    base = preferred.strip() or "SKU"
+    stmt = select(Product.sku).where(
+        Product.company_id == company_id,
+        Product.owner_scope == owner_scope,
+        or_(Product.sku == base, Product.sku.startswith(f"{base}-")),
+    )
+    if owner_scope == "user":
+        stmt = stmt.where(Product.user_id == user_id)
+    else:
+        stmt = stmt.where(Product.user_id.is_(None))
+    if exclude_id is not None:
+        stmt = stmt.where(Product.id != exclude_id)
+    taken = set(await db.scalars(stmt))
+    return allocate_unique_sku(preferred, taken)
+
+
+async def update_manual_product(
+    db: AsyncSession,
+    product: Product,
+    *,
+    sku: str,
+    name: str,
+    notes: str = "",
+) -> Product:
+    """Patch name / SKU / notes; keep other profile keys (import columns)."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    profile = {
+        str(key): value if isinstance(value, str) else str(value)
+        for key, value in (product.profile or {}).items()
+        if value is not None and str(value).strip()
+    }
+    profile["name"] = name
+    profile["sku"] = sku
+    if notes:
+        profile["notes"] = notes
+    else:
+        profile.pop("notes", None)
+
+    search_document = build_search_document(profile, sku=sku, name=name)
+    vecs = embed_texts([search_document])
+    product.sku = sku
+    product.name = name
+    product.profile = profile
+    product.search_document = search_document
+    product.status = "active"
+    if vecs:
+        product.embedding = vecs[0]
+    flag_modified(product, "profile")
+    await db.flush()
+    return product
+
+
 async def create_manual_product(
     db: AsyncSession,
     *,
@@ -807,4 +900,105 @@ async def create_manual_product(
         name=name,
         search_document=search_document,
         profile=profile,
+        create_only=True,
     )
+
+
+async def get_org_product_by_sku(
+    db: AsyncSession, *, company_id: uuid.UUID, sku: str
+) -> Product | None:
+    return await db.scalar(
+        select(Product).where(
+            Product.company_id == company_id,
+            Product.owner_scope == "org",
+            Product.sku == sku,
+            Product.status == "active",
+        )
+    )
+
+
+async def get_pending_proposal_by_sku(
+    db: AsyncSession, *, company_id: uuid.UUID, sku: str
+) -> ProductProposal | None:
+    return await db.scalar(
+        select(ProductProposal).where(
+            ProductProposal.company_id == company_id,
+            ProductProposal.sku == sku,
+            ProductProposal.status == "pending",
+        )
+    )
+
+
+async def pending_proposal_ids_for_skus(
+    db: AsyncSession, *, company_id: uuid.UUID, skus: list[str]
+) -> dict[str, uuid.UUID]:
+    if not skus:
+        return {}
+    rows = await db.execute(
+        select(ProductProposal.sku, ProductProposal.id).where(
+            ProductProposal.company_id == company_id,
+            ProductProposal.status == "pending",
+            ProductProposal.sku.in_(skus),
+        )
+    )
+    return {sku: pid for sku, pid in rows.all()}
+
+
+async def create_product_proposal(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    source_product: Product,
+    proposed_by: uuid.UUID,
+) -> ProductProposal:
+    row = ProductProposal(
+        company_id=company_id,
+        source_product_id=source_product.id,
+        proposed_by=proposed_by,
+        sku=source_product.sku,
+        name=source_product.name,
+        profile=dict(source_product.profile or {}),
+        status="pending",
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def get_product_proposal(
+    db: AsyncSession, *, company_id: uuid.UUID, proposal_id: uuid.UUID
+) -> ProductProposal | None:
+    return await db.scalar(
+        select(ProductProposal).where(
+            ProductProposal.id == proposal_id,
+            ProductProposal.company_id == company_id,
+        )
+    )
+
+
+async def list_product_proposals(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    status: str | None = "pending",
+) -> list[ProductProposal]:
+    stmt = select(ProductProposal).where(ProductProposal.company_id == company_id)
+    if status is not None:
+        stmt = stmt.where(ProductProposal.status == status)
+    stmt = stmt.order_by(ProductProposal.created_at.desc())
+    result = await db.scalars(stmt)
+    return list(result.all())
+
+
+async def mark_proposal_reviewed(
+    db: AsyncSession,
+    proposal: ProductProposal,
+    *,
+    status: str,
+    reviewed_by: uuid.UUID,
+) -> ProductProposal:
+    proposal.status = status
+    proposal.reviewed_by = reviewed_by
+    proposal.reviewed_at = datetime.now(UTC)
+    await db.flush()
+    return proposal

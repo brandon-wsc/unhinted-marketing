@@ -12,7 +12,8 @@
     "notAvailable": "—",
     "cancel": "Cancel",
     "save": "Save",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "close": "Close"
   },
   "header": {
     "menu": {
@@ -315,29 +316,41 @@
       "activeCount": "{{count}} active",
       "empty": "No products yet. Import a file or add a row to start.",
       "archive": "Archive",
+      "propose": "Ask to add to company",
+      "pendingReview": "Waiting for review",
+      "alreadyPending": "This product code is already waiting for review",
       "statusActive": "Active",
-      "coveredByCompany": "Covered by company",
-      "personalOnly": "Personal only",
+      "coveredByCompany": "Company",
+      "personalOnly": "Yours",
       "readOnlyOrg": "You can view the company catalog. Ask a company admin to make changes.",
       "coverTitle": "When both lists have the same product",
       "coverBody": "Drafts use the company version. Your personal copy stays for you until you ask to update the company list.",
       "columns": {
         "name": "Name",
-        "note": "Note",
+        "draftsUse": "Drafts use",
         "status": "Status",
         "action": "Action"
       },
       "detail": {
         "title": "Product details",
-        "fieldCount": "{{count}} columns",
-        "empty": "No extra columns on this row.",
-        "close": "Close"
+        "editTitle": "Edit product"
       },
       "fields": {
         "name": "Name",
         "sku": "Product code",
         "notes": "Notes",
-        "notesHint": "Optional. Selling points, ingredients, or anything drafts should know."
+        "notesHint": "Optional. Selling points, ingredients, or anything drafts should know.",
+        "skuExists": "This code is already on the list as {{name}}. Saving will update that row after you confirm.",
+        "skuTaken": "This product code already belongs to {{name}}. Change the code to save this row.",
+        "skuConflict": "A product with this product code already exists.",
+        "nameExists": "Another product already uses this name ({{sku}}). A new row is still OK if the product code is different."
+      },
+      "overwrite": {
+        "title": "This product code is taken",
+        "body": "Product code {{sku}} already belongs to {{name}}. Update that row, stay and change the code, or use a generated code for a new row.",
+        "confirm": "Update",
+        "generate": "Generate code",
+        "keepEditing": "Keep editing"
       },
       "stats": {
         "imported": "Added",
@@ -348,10 +361,18 @@
     },
     "approvals": {
       "title": "Approvals",
-      "subtitle": "When someone wants to add personal product details to the company list, you’ll review it here.",
+      "subtitle": "Review personal product details teammates want on the company list.",
       "emptyTitle": "Nothing waiting for review",
-      "emptyBody": "When a teammate asks to add a product to the company catalog, you’ll see the changes here to approve or decline.",
-      "emptyBadge": "Coming soon"
+      "emptyBody": "When a teammate asks to add a product to the company catalog, the changes show up here.",
+      "proposedBy": "From {{email}}",
+      "approve": "Approve",
+      "reject": "Decline",
+      "detailTitle": "Product approval",
+      "columns": {
+        "product": "Product",
+        "sku": "SKU",
+        "note": "Note"
+      }
     }
   },
   "system": {

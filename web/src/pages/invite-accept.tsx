@@ -129,7 +129,7 @@ export function InviteAcceptPage() {
   return (
     <AuthLayout title={t("invite.titleJoin")} subtitle={t("invite.loggedInBody")}>
       <div className="space-y-4">
-        <Input value={user.email} readOnly className="bg-muted" />
+        <Input value={user.email} readOnly />
         <ActionRow>
           <ReturnHomeButton />
           <Button type="button" loading={submitting} onClick={() => void onJoin()}>

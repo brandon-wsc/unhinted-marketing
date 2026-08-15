@@ -41,6 +41,8 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 4. Confirm stub: invalid `approval_token` → 400; idempotency replay
 5. Signals / questions: auth required
 6. Org invites: create → list → revoke → accept; email bind; bootstrap replace (ADR 0013); 409 only for a real team (`tests/api/test_company_invites.py`)
+7. Product proposals (K6): Mine propose → list → approve upserts org / reject leaves org empty; 409 pending SKU; cannot propose org or others' Mine; member cannot approve; reject then re-propose; snapshot frozen after propose; approve replaces existing org SKU (`tests/api/test_product_proposals.py`)
+8. Product catalog: PATCH keeps extra import columns; create/patch SKU clash → 409 `sku_taken` + `suggested_sku` (no silent overwrite) (`tests/api/test_company_products.py`)
 
 Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 
@@ -51,7 +53,7 @@ Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 | **1 — Utils** | `web/src/lib/**` (except deferred `api.ts` fetch wrappers) · `features/session/session-storage.ts` · `features/session/session-helpers.ts` · `features/session/session-layout.ts` | **85–95%** | **Fail** |
 | **2 — Shared (behavioral)** | `components/password-box.tsx` · `components/user-menu-dropdown.tsx` | **50–70%** behavior | Soft floor (50%) in Vitest thresholds |
 | **3 — Shared (presentational)** | `app-header.tsx` · `app-logo.tsx` · mostly-layout `auth-layout.tsx` · `form-field.tsx` · `icon-button.tsx` | **Omit** or snapshot optional | No gate |
-| **4 — Pages** | `web/src/pages/**` | **20–40%** or smoke only | No hard gate — logic lives in lib/context. Invite accept smoke: `?next=` + action order (return left / accept right) in `invite-accept.test.tsx` |
+| **4 — Pages** | `web/src/pages/**` | **20–40%** or smoke only | No hard gate — logic lives in lib/context. Invite accept smoke: `?next=` + action order (return left / accept right) + logged-in email `readOnly` in `invite-accept.test.tsx` |
 | **5 — Feature UI** | `features/session/components/**` (`chat-panel`, `session-history`, …) | **15–30%** later | No gate in v1 CI — shell mode logic covered via `session-layout.ts` |
 | **6 — Hooks** | `use-session.ts` (large) · `use-container-width.ts` · related hooks | **25–40%** progressive | Pure helpers extracted (`session-helpers.ts` / `session-layout.ts`); hook suite via mocked RTL `renderHook` — still omitted from hard cov gate |
 | **Static** | `pnpm run lint` (Biome) · `pnpm run build` (`tsc -b && vite build`) | Must pass | **Fail** |

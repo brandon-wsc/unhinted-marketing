@@ -22,6 +22,7 @@ alwaysApply: false
 - Raw palette (`bg-blue-600`, `text-zinc-500`) only when no semantic token fits (rare status tones → prefer `Badge` variants)
 - **Washes:** use `accent` / `secondary` (6% ink|white). Do **not** use `bg-muted` / `hover:bg-muted/*` for hover or selected rows — `--color-muted` is solid `#71717a`, not a soft fill. See [docs/design/TOKENS.md](../../docs/design/TOKENS.md).
 - **Tables:** `TableRow` hover/selected = `bg-accent` (`components/ui/table.tsx`)
+- **Fields:** view-only uses native `readOnly` (accent wash on `Input` / `Textarea`). Do not `disabled` a field the user should still copy from.
 
 ## Adding UI
 

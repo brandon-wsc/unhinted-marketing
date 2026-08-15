@@ -1,7 +1,7 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-14  
-> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products catalog (K1/K3/K3b; Approvals held) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
+> **Last updated:** 2026-08-15  
+> **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
 This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). For architecture and phase plans, see ROADMAP.
@@ -21,7 +21,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | HK hot search ingestion | ✅ Done (Google Trends HK only) |
 | Recommended questions cache + API | ✅ Done |
 | OKF knowledge scaffold | ➖ Removed — knowledge in PostgreSQL only |
-| Company settings (Voice + Products + Members) | ✅ K1 / K3 / K3b / org team — `/settings`; Approvals nav hidden until K6 |
+| Company settings (Voice + Products + Members + Approvals) | ✅ K1 / K3 / K3b / org team / K6 — `/settings` |
 | LangGraph session / preview / confirm API | ✅ Soft-complete — enough for Phase 3 UI |
 | Chat UI shell (`useSession` + Streamdown) | ✅ Done |
 | Chat token stream (`message.delta`) | ✅ Done — live deltas via SSE, batched in node |
@@ -144,8 +144,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - Spec: [`docs/knowledge/`](./knowledge/) (MODEL / SESSION / COLLECT / UI); cover rules locked in COLLECT §2
 - **Voice** — `GET/PATCH /api/companies/{id}/voice`; owner/admin edit; persists `roast_level` / locale / forbidden / tone into `entities.profile`
 - **Products** — Alembic `1f96a702125c` `products` table; CSV/xlsx import + Mine Add row (optional notes); org covers user on SKU clash for retrieve
-- **UI** — UserMenu → Company settings (`/settings`); tabs Voice · Products (Org | Mine) · **Members**; **Approvals held / nav hidden** until K6
-- **Next (held):** **K6** promote-to-org Approvals after org-system cleanup
+- **UI** — UserMenu → Company settings (`/settings`); tabs Voice · Products (Org | Mine) · Members · **Approvals** (owner/admin)
+- **K6** — Mine propose → Approvals approve/reject ([ADR 0011](./adr/0011-knowledge-commit-without-llm.md)); chat scratch still not org KB
 - **K1 slim (2026-08-10):** `load_context` → top-level `voice_pack` + `audience_catalog`; LLM nodes get identity-only `company` (no raw `profile` / `personas[]`)
 - **K2 (2026-08-10):** `trend_searcher` → top-level `ranked_signals` + `trend_notes` (no longer nested under `company_context`)
 - **product_matcher (2026-08-10):** SQL Tier A/B retrieve, org-wins SKU cover; `product_clarify` → chat; primary product into brainstormer / executor / grounding
@@ -159,8 +159,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Team UI** — ✅ Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); teammate session isolation in `tests/api/test_session_isolation.py` (CI `backend-api`)
 - **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; `WEB_BASE_URL` required for link building; `internal/notify/` seam
 - **MVP one user ↔ one org** — invite accept **409** if already in a real team; **bootstrap solo-org is replaced** ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); no switcher
-- **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (revisit with K6)
-- **Unblocks K6** promote-to-org Approvals (ADR 0011 later)
+- **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (publish-role gate is not part of K6; still [ADR 0010](./adr/0010-org-membership-invites-and-shared-assets.md))
+- **Unblocks K6** promote-to-org Approvals — **shipped** ([ADR 0011](./adr/0011-knowledge-commit-without-llm.md))
 
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.
 
@@ -316,7 +316,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/login` | Email/password login |
 | `/register` | Sign up + default workspace |
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
-| `/settings` | Company settings — Voice · Products (Org \| Mine) · Members; Approvals held |
+| `/settings` | Company settings — Voice · Products (Org \| Mine) · Members · Approvals |
 | `/invite/:token` | Invite accept (public page; POST accept requires auth) |
 | `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace; `/admin` redirects here |
 
@@ -424,7 +424,7 @@ See `.env.example`. Local `.env` is gitignored.
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
 2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + MinIO (`S3_*`) when configured; formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page; FB/Threads preview skins. LLM call **records** + admin Trace viewer landed ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md), [ADR 0007](./adr/0007-admin-trace-viewer.md)) — ops guide: [PROMPT_TUNING.md](./PROMPT_TUNING.md). Next: retention/purge policy. `/api` prefix shipped ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)).
-4. **Knowledge (next):** Settings through **K5 exemplars** shipped ([docs/knowledge/](./knowledge/)). **K6 Approvals held** until org-system cleanup.
+4. **Knowledge:** Settings through **K6 Approvals** shipped ([docs/knowledge/](./knowledge/), [ADR 0011](./adr/0011-knowledge-commit-without-llm.md)). Chat scratch still not org KB.
 5. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; ~~persist LLM call records ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md))~~; ~~`/api` path prefix ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md))~~; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks; live LLM eval harness later.
 
 ---

@@ -1,13 +1,24 @@
+import { Archive, CirclePlus, Minus } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
+import { IconButton } from "@/components/icon-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -23,16 +34,22 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import {
   apiArchiveProduct,
   apiCreateProduct,
   apiImportProducts,
   apiListProducts,
+  apiPatchProduct,
+  apiProposeProduct,
   type ProductImportResponse,
   type ProductItem,
   type ProductScope,
+  ProductSkuConflictError,
 } from "@/features/company-settings/api";
+import { mapApiError } from "@/lib/map-api-error";
+import type { ProductSkuConflict } from "@/lib/parse-api-error";
 
 type ProductsPanelProps = {
   companyId: string;
@@ -40,9 +57,17 @@ type ProductsPanelProps = {
   onScopeChange: (scope: "org" | "mine") => void;
 };
 
+function extraProfileEntries(profile: Record<string, string>): [string, string][] {
+  return Object.entries(profile).filter(
+    ([key]) => key !== "name" && key !== "sku" && key !== "notes",
+  );
+}
+
 function toApiScope(scope: "org" | "mine"): ProductScope {
   return scope === "mine" ? "user" : "org";
 }
+
+type ProductEditor = { kind: "add" } | { kind: "edit"; product: ProductItem };
 
 export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanelProps) {
   const { t } = useTranslation();
@@ -55,11 +80,42 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
   const [items, setItems] = useState<ProductItem[]>([]);
   const [canEdit, setCanEdit] = useState(false);
   const [importResult, setImportResult] = useState<ProductImportResponse | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [detail, setDetail] = useState<ProductItem | null>(null);
+  const [editor, setEditor] = useState<ProductEditor | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [skuConflict, setSkuConflict] = useState<ProductSkuConflict | null>(null);
   const [newName, setNewName] = useState("");
   const [newSku, setNewSku] = useState("");
   const [newNotes, setNewNotes] = useState("");
+
+  const extraFields = editor?.kind === "edit" ? extraProfileEntries(editor.product.profile) : [];
+  const formEditable = Boolean(canEdit && editor);
+
+  function resetForm() {
+    setNewName("");
+    setNewSku("");
+    setNewNotes("");
+    setFormError(null);
+    setSkuConflict(null);
+  }
+
+  function openAdd() {
+    resetForm();
+    setEditor({ kind: "add" });
+  }
+
+  function openEdit(product: ProductItem) {
+    setFormError(null);
+    setSkuConflict(null);
+    setNewName(product.name);
+    setNewSku(product.sku);
+    setNewNotes(product.profile.notes ?? "");
+    setEditor({ kind: "edit", product });
+  }
+
+  function closeEditor() {
+    setEditor(null);
+    resetForm();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +169,19 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
     }
   }
 
+  async function onPropose(productId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiProposeProduct(accessToken, companyId, productId);
+      await refresh();
+    } catch (err) {
+      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onArchive(productId: string) {
     if (!canEdit) return;
     setBusy(true);
@@ -127,26 +196,72 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
     }
   }
 
-  async function onAddRow() {
+  async function submitAddRow() {
     if (!canEdit) return;
     setBusy(true);
-    setError(null);
+    setFormError(null);
     try {
       await apiCreateProduct(accessToken, companyId, toApiScope(scope), {
         name: newName.trim(),
         sku: newSku.trim(),
         notes: newNotes.trim() || undefined,
       });
-      setAddOpen(false);
-      setNewName("");
-      setNewSku("");
-      setNewNotes("");
+      closeEditor();
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (err instanceof ProductSkuConflictError) {
+        setSkuConflict(err.conflict);
+        return;
+      }
+      setFormError(mapApiError(err instanceof Error ? err.message : String(err), t));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitEditRow(productId: string) {
+    if (!canEdit) return;
+    setBusy(true);
+    setFormError(null);
+    try {
+      await apiPatchProduct(accessToken, companyId, productId, {
+        name: newName.trim(),
+        sku: newSku.trim(),
+        notes: newNotes.trim() || undefined,
+      });
+      closeEditor();
+      await refresh();
+    } catch (err) {
+      if (err instanceof ProductSkuConflictError) {
+        setSkuConflict(err.conflict);
+        return;
+      }
+      setFormError(mapApiError(err instanceof Error ? err.message : String(err), t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onEditorSave() {
+    if (!canEdit || busy || !newName.trim() || !newSku.trim() || !editor) return;
+    if (editor.kind === "add") {
+      void submitAddRow();
+      return;
+    }
+    void submitEditRow(editor.product.id);
+  }
+
+  function applyGeneratedSku() {
+    if (!skuConflict) return;
+    setNewSku(skuConflict.suggested_sku);
+    setSkuConflict(null);
+  }
+
+  function confirmOverwrite() {
+    if (!skuConflict) return;
+    const productId = skuConflict.existing.id;
+    setSkuConflict(null);
+    void submitEditRow(productId);
   }
 
   return (
@@ -205,7 +320,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                     type="button"
                     variant="outline"
                     disabled={!canEdit || busy}
-                    onClick={() => setAddOpen(true)}
+                    onClick={openAdd}
                   >
                     {t("settings.products.addRow")}
                   </Button>
@@ -268,11 +383,11 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                   <TableRow>
                     <TableHead>{t("settings.products.columns.name")}</TableHead>
                     {scope === "mine" && (
-                      <TableHead>{t("settings.products.columns.note")}</TableHead>
+                      <TableHead>{t("settings.products.columns.draftsUse")}</TableHead>
                     )}
                     <TableHead>{t("settings.products.columns.status")}</TableHead>
                     <TableHead className="text-right">
-                      {t("settings.products.columns.action")}
+                      <span className="sr-only">{t("settings.products.columns.action")}</span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -281,22 +396,20 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                     <TableRow
                       key={item.id}
                       className="cursor-pointer"
-                      onClick={() => setDetail(item)}
+                      onClick={() => openEdit(item)}
                     >
-                      <TableCell>
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">{item.sku}</div>
+                      <TableCell className="font-medium">
+                        {item.name}
+                        <span className="font-normal text-muted-foreground">({item.sku})</span>
                       </TableCell>
                       {scope === "mine" && (
                         <TableCell>
                           {item.covered_by_company ? (
-                            <Badge variant="secondary">
+                            <Badge variant="default">
                               {t("settings.products.coveredByCompany")}
                             </Badge>
                           ) : (
-                            <span className="text-muted-foreground">
-                              {t("settings.products.personalOnly")}
-                            </span>
+                            <Badge variant="secondary">{t("settings.products.personalOnly")}</Badge>
                           )}
                         </TableCell>
                       )}
@@ -304,22 +417,72 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                         <Badge variant="outline">{t("settings.products.statusActive")}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {canEdit ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={busy}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void onArchive(item.id);
-                            }}
-                          >
-                            {t("settings.products.archive")}
-                          </Button>
-                        ) : (
-                          <span className="text-muted-foreground">{t("common.notAvailable")}</span>
-                        )}
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {scope === "mine" && item.pending_proposal_id ? (
+                            <Badge variant="secondary">
+                              {t("settings.products.pendingReview")}
+                            </Badge>
+                          ) : null}
+                          {scope === "mine" && canEdit && !item.pending_proposal_id ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <IconButton
+                                  type="button"
+                                  className="size-8"
+                                  disabled={busy}
+                                  aria-label={t("settings.products.propose")}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void onPropose(item.id);
+                                  }}
+                                >
+                                  <CirclePlus />
+                                </IconButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                {t("settings.products.propose")}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : null}
+                          {canEdit ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <IconButton
+                                  type="button"
+                                  className="size-8"
+                                  disabled={busy}
+                                  aria-label={t("settings.products.archive")}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void onArchive(item.id);
+                                  }}
+                                >
+                                  <Archive />
+                                </IconButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                {t("settings.products.archive")}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex">
+                                  <IconButton
+                                    type="button"
+                                    className="size-8"
+                                    disabled
+                                    aria-label={t("common.notAvailable")}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Minus />
+                                  </IconButton>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">{t("common.notAvailable")}</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -339,65 +502,38 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
         </TabsContent>
       </Tabs>
 
-      <Dialog open={detail != null} onOpenChange={(open) => !open && setDetail(null)}>
-        <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{detail?.name ?? t("settings.products.detail.title")}</DialogTitle>
-            <DialogDescription>
-              {detail
-                ? `${detail.sku} · ${t("settings.products.detail.fieldCount", {
-                    count: Object.keys(detail.profile).length,
-                  })}`
-                : null}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto py-4">
-            {detail && Object.keys(detail.profile).length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("settings.products.detail.empty")}</p>
-            ) : (
-              <dl className="space-y-3">
-                {detail &&
-                  Object.entries(detail.profile).map(([key, value]) => (
-                    <div key={key} className="grid gap-1 border-b border-border pb-3 last:border-0">
-                      <dt className="text-xs font-medium text-muted-foreground break-all">{key}</dt>
-                      <dd className="text-sm whitespace-pre-wrap break-words text-foreground">
-                        {value || "—"}
-                      </dd>
-                    </div>
-                  ))}
-              </dl>
-            )}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDetail(null)}>
-              {t("settings.products.detail.close")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog
-        open={addOpen}
+        open={editor != null}
         onOpenChange={(open) => {
-          setAddOpen(open);
-          if (!open) {
-            setNewName("");
-            setNewSku("");
-            setNewNotes("");
-          }
+          if (skuConflict) return;
+          if (!open) closeEditor();
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("settings.products.addRow")}</DialogTitle>
+        <DialogContent className="flex max-h-[85vh] min-h-0 flex-col gap-4 overflow-hidden sm:max-w-lg">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>
+              {editor?.kind === "edit"
+                ? t(
+                    formEditable
+                      ? "settings.products.detail.editTitle"
+                      : "settings.products.detail.title",
+                  )
+                : t("settings.products.addRow")}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-px">
+            {formError && (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
             <FormField id="product-name" label={t("settings.products.fields.name")}>
               <Input
                 id="product-name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 autoComplete="off"
+                readOnly={!formEditable}
               />
             </FormField>
             <FormField id="product-sku" label={t("settings.products.fields.sku")}>
@@ -406,6 +542,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                 value={newSku}
                 onChange={(e) => setNewSku(e.target.value)}
                 autoComplete="off"
+                readOnly={!formEditable}
               />
             </FormField>
             <FormField id="product-notes" label={t("settings.products.fields.notes")}>
@@ -414,28 +551,69 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                 value={newNotes}
                 onChange={(e) => setNewNotes(e.target.value)}
                 rows={4}
-                className="min-h-24"
+                className="field-sizing-fixed max-h-[min(16rem,40vh)] min-h-24 resize-y overflow-y-auto"
                 maxLength={4000}
+                readOnly={!formEditable}
               />
               <p className="text-xs text-muted-foreground">
                 {t("settings.products.fields.notesHint")}
               </p>
             </FormField>
+            {extraFields.map(([key, value]) => (
+              <div key={key} className="space-y-1">
+                <p className="text-xs font-medium break-all text-muted-foreground">{key}</p>
+                <p className="text-sm whitespace-pre-wrap break-words text-foreground">
+                  {value.trim() || "—"}
+                </p>
+              </div>
+            ))}
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="button"
-              disabled={busy || !newName.trim() || !newSku.trim()}
-              onClick={() => void onAddRow()}
-            >
-              {t("common.save")}
-            </Button>
-          </DialogFooter>
+          {formEditable ? (
+            <DialogFooter className="shrink-0">
+              <Button type="button" variant="outline" onClick={closeEditor}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                disabled={busy || !newName.trim() || !newSku.trim()}
+                onClick={onEditorSave}
+              >
+                {t("common.save")}
+              </Button>
+            </DialogFooter>
+          ) : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={skuConflict != null}
+        onOpenChange={(open) => {
+          if (!open) setSkuConflict(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("settings.products.overwrite.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("settings.products.overwrite.body", {
+                sku: skuConflict?.existing.sku ?? newSku.trim(),
+                name: skuConflict?.existing.name ?? "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row">
+            <AlertDialogCancel>{t("settings.products.overwrite.keepEditing")}</AlertDialogCancel>
+            <Button type="button" variant="outline" disabled={busy} onClick={applyGeneratedSku}>
+              {t("settings.products.overwrite.generate")}
+            </Button>
+            {editor?.kind === "add" ? (
+              <AlertDialogAction disabled={busy} onClick={confirmOverwrite}>
+                {t("settings.products.overwrite.confirm")}
+              </AlertDialogAction>
+            ) : null}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

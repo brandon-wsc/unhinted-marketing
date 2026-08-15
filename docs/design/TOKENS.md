@@ -78,5 +78,6 @@ Logo mark fill: `#111113`.
 |---------|----------------|
 | `TableRow` | Soft accent hover (not muted) |
 | `SelectContent` | Popper below trigger; hairline `border-border` (not bare `border` / ink) |
+| `Input` / `Textarea` | **`readOnly`:** keep `border-input`, `bg-accent` wash, `cursor-default` (textarea also `resize-none`). Copyable. **`disabled`:** `opacity-50` + not-allowed — use for true unavailable, not view-only. Do not paint read-only with `bg-muted`. |
 | Products list | Click row → detail dialog lists full `profile` columns; table stays name/sku/status only |
 | Import | Reject files with **> 50** columns (COLLECT); no silent truncate |

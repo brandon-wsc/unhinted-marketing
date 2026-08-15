@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseApiErrorBody, parseApiErrorResponse } from "@/lib/parse-api-error";
+import { parseApiErrorBody, parseApiErrorResponse, parseSkuConflict } from "@/lib/parse-api-error";
 
 describe("parseApiErrorBody", () => {
   it("returns detail string when present", () => {
@@ -42,6 +42,20 @@ describe("parseApiErrorBody", () => {
     ).toBe("Invalid email address");
   });
 
+  it("returns message from object detail", () => {
+    expect(
+      parseApiErrorBody(
+        {
+          detail: {
+            code: "sku_taken",
+            message: "A product with this product code already exists",
+          },
+        },
+        409,
+      ),
+    ).toBe("A product with this product code already exists");
+  });
+
   it("falls back to Request failed (N) when detail is missing", () => {
     expect(parseApiErrorBody({}, 503)).toBe("Request failed (503)");
     expect(parseApiErrorBody({ detail: [] }, 500)).toBe("Request failed (500)");
@@ -82,5 +96,26 @@ describe("parseApiErrorResponse", () => {
     } as unknown as Response;
 
     await expect(parseApiErrorResponse(res)).resolves.toBe("Request failed (502)");
+  });
+});
+
+describe("parseSkuConflict", () => {
+  it("reads FastAPI object detail", () => {
+    expect(
+      parseSkuConflict({
+        detail: {
+          code: "sku_taken",
+          existing: { id: "abc", name: "Oat", sku: "DRK-01" },
+          suggested_sku: "DRK-01-2",
+        },
+      }),
+    ).toEqual({
+      existing: { id: "abc", name: "Oat", sku: "DRK-01" },
+      suggested_sku: "DRK-01-2",
+    });
+  });
+
+  it("returns null for string detail", () => {
+    expect(parseSkuConflict({ detail: "nope" })).toBeNull();
   });
 });
