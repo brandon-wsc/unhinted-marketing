@@ -1,6 +1,8 @@
+import { Archive, CirclePlus, Minus } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
+import { IconButton } from "@/components/icon-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import {
   apiArchiveProduct,
@@ -283,7 +286,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                   <TableRow>
                     <TableHead>{t("settings.products.columns.name")}</TableHead>
                     {scope === "mine" && (
-                      <TableHead>{t("settings.products.columns.note")}</TableHead>
+                      <TableHead>{t("settings.products.columns.draftsUse")}</TableHead>
                     )}
                     <TableHead>{t("settings.products.columns.status")}</TableHead>
                     <TableHead className="text-right">
@@ -305,13 +308,13 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                       {scope === "mine" && (
                         <TableCell>
                           {item.covered_by_company ? (
-                            <Badge variant="secondary">
+                            <Badge variant="default">
                               {t("settings.products.coveredByCompany")}
                             </Badge>
                           ) : (
-                            <span className="text-muted-foreground">
+                            <Badge variant="secondary">
                               {t("settings.products.personalOnly")}
-                            </span>
+                            </Badge>
                           )}
                         </TableCell>
                       )}
@@ -326,36 +329,63 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                             </Badge>
                           ) : null}
                           {scope === "mine" && canEdit && !item.pending_proposal_id ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={busy}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void onPropose(item.id);
-                              }}
-                            >
-                              {t("settings.products.propose")}
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <IconButton
+                                  type="button"
+                                  className="size-8"
+                                  disabled={busy}
+                                  aria-label={t("settings.products.propose")}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void onPropose(item.id);
+                                  }}
+                                >
+                                  <CirclePlus />
+                                </IconButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                {t("settings.products.propose")}
+                              </TooltipContent>
+                            </Tooltip>
                           ) : null}
                           {canEdit ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={busy}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void onArchive(item.id);
-                              }}
-                            >
-                              {t("settings.products.archive")}
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <IconButton
+                                  type="button"
+                                  className="size-8"
+                                  disabled={busy}
+                                  aria-label={t("settings.products.archive")}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void onArchive(item.id);
+                                  }}
+                                >
+                                  <Archive />
+                                </IconButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                {t("settings.products.archive")}
+                              </TooltipContent>
+                            </Tooltip>
                           ) : (
-                            <span className="text-muted-foreground">
-                              {t("common.notAvailable")}
-                            </span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex">
+                                  <IconButton
+                                    type="button"
+                                    className="size-8"
+                                    disabled
+                                    aria-label={t("common.notAvailable")}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Minus />
+                                  </IconButton>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">{t("common.notAvailable")}</TooltipContent>
+                            </Tooltip>
                           )}
                         </div>
                       </TableCell>

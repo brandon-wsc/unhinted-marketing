@@ -319,14 +319,14 @@
       "pendingReview": "審批中",
       "alreadyPending": "呢個產品編號已有待審批申請",
       "statusActive": "使用中",
-      "coveredByCompany": "公司已有相同編號",
-      "personalOnly": "只喺你嘅清單",
+      "coveredByCompany": "公司",
+      "personalOnly": "你的",
       "readOnlyOrg": "你可以睇到公司產品；要改動請搵公司負責人。",
       "coverTitle": "兩個清單都有同一個產品時",
       "coverBody": "出稿會用公司嗰份。你自己嘅版本仍然留住；之後可以申請更新公司清單。",
       "columns": {
         "name": "名稱",
-        "note": "備註",
+        "draftsUse": "出稿用",
         "status": "狀態",
         "action": "操作"
       },

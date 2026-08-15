@@ -30,7 +30,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 |-------|----------|
 | `Company settings · Voice` | Sidebar Voice active · roast 0–3 · locale · forbidden · tone · **exemplar slots** · Save |
 | `Company settings · Products · Org` | Org tab · Import CSV/Excel · import stats · table + Archive |
-| `Company settings · Products · Mine` | Mine tab · Import + Add row · `covered by company` badge · cover rule note |
+| `Company settings · Products · Mine` | Mine tab · Import + Add row · **Drafts use** (Company / Yours) · cover rule note |
 | `Company settings · Members` | ✅ Drawn — editor (idle invite form) + **invite-sent** card + member read-only; sidebar Voice / Products / Members (Approvals hidden) |
 | `Invite accept` | ✅ Drawn — A logged out · B ready · C email mismatch · D invalid · **E already in org (409)** |
 | `Company settings · Approvals` | Pending proposals · field diff · Approve / Decline — owner/admin |
@@ -99,7 +99,7 @@ UserMenu
 | Tab | Content |
 |-----|---------|
 | **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name + `sku`, status, actions) · **row click → dialog** listing all `profile` columns (scroll if many) · archive. Upsert **replace by SKU** — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
-| **Mine** | Same pattern for personal library (+ optional notes on Add row). Org covers user on SKU clash at retrieve — badge “covered by company” when org has same SKU. **Propose** → Approvals queue ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)). |
+| **Mine** | Same pattern for personal library (+ optional notes on Add row). Org covers user on SKU clash at retrieve — **Drafts use** column: Company vs Yours. **Propose** → Approvals queue ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)). |
 
 Flexible headers: no required column names; store raw row in `profile`. **Import hard limit: 50 columns** — reject whole file ([COLLECT §4](./COLLECT.md#4-product-import-k3)). No content column in the table (unknown CSV shapes).
 

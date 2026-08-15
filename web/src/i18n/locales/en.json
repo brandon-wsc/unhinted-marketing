@@ -319,14 +319,14 @@
       "pendingReview": "Waiting for review",
       "alreadyPending": "This product code is already waiting for review",
       "statusActive": "Active",
-      "coveredByCompany": "Covered by company",
-      "personalOnly": "Personal only",
+      "coveredByCompany": "Company",
+      "personalOnly": "Yours",
       "readOnlyOrg": "You can view the company catalog. Ask a company admin to make changes.",
       "coverTitle": "When both lists have the same product",
       "coverBody": "Drafts use the company version. Your personal copy stays for you until you ask to update the company list.",
       "columns": {
         "name": "Name",
-        "note": "Note",
+        "draftsUse": "Drafts use",
         "status": "Status",
         "action": "Action"
       },

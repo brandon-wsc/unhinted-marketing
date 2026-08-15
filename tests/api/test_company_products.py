@@ -143,6 +143,28 @@ async def test_create_product_persists_notes(
 
 
 @pytest.mark.asyncio
+async def test_create_product_persists_embedding(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """asyncpg vector codec rejects the stock SQLAlchemy string form."""
+    from internal.memory import repos
+    from internal.memory.embeddings import EMBEDDING_DIM
+
+    dummy = [0.01] * EMBEDDING_DIM
+    monkeypatch.setattr(repos, "embed_texts", lambda texts: [dummy for _ in texts])
+
+    data = await register_user(client)
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(data["access_token"])
+    res = await client.post(
+        f"/api/companies/{company_id}/products?scope=user",
+        headers=headers,
+        json={"name": "1", "sku": "1", "notes": "1"},
+    )
+    assert res.status_code == 201, res.text
+
+
+@pytest.mark.asyncio
 async def test_outsider_cannot_list_products(client: AsyncClient) -> None:
     owner = await register_user(client, email=f"o-{uuid.uuid4().hex[:8]}@example.com")
     company_id = owner["user"]["organizations"][0]["id"]
