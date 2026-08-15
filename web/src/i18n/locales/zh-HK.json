@@ -331,10 +331,7 @@
         "action": "操作"
       },
       "detail": {
-        "title": "產品詳情",
-        "fieldCount": "{{count}} 個欄位",
-        "empty": "呢行未有額外欄位。",
-        "close": "關閉"
+        "title": "產品詳情"
       },
       "fields": {
         "name": "名稱",

@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -44,6 +43,10 @@ type ProductsPanelProps = {
   scope: "org" | "mine";
   onScopeChange: (scope: "org" | "mine") => void;
 };
+
+function extraProfileEntries(profile: Record<string, string>): [string, string][] {
+  return Object.entries(profile).filter(([key]) => key !== "name" && key !== "sku");
+}
 
 function toApiScope(scope: "org" | "mine"): ProductScope {
   return scope === "mine" ? "user" : "org";
@@ -290,7 +293,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                     )}
                     <TableHead>{t("settings.products.columns.status")}</TableHead>
                     <TableHead className="text-right">
-                      {t("settings.products.columns.action")}
+                      <span className="sr-only">{t("settings.products.columns.action")}</span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -301,9 +304,9 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                       className="cursor-pointer"
                       onClick={() => setDetail(item)}
                     >
-                      <TableCell>
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">{item.sku}</div>
+                      <TableCell className="font-medium">
+                        {item.name}
+                        <span className="font-normal text-muted-foreground">({item.sku})</span>
                       </TableCell>
                       {scope === "mine" && (
                         <TableCell>
@@ -410,37 +413,35 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
       <Dialog open={detail != null} onOpenChange={(open) => !open && setDetail(null)}>
         <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{detail?.name ?? t("settings.products.detail.title")}</DialogTitle>
-            <DialogDescription>
-              {detail
-                ? `${detail.sku} · ${t("settings.products.detail.fieldCount", {
-                    count: Object.keys(detail.profile).length,
-                  })}`
-                : null}
-            </DialogDescription>
+            <DialogTitle>{t("settings.products.detail.title")}</DialogTitle>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto py-4">
-            {detail && Object.keys(detail.profile).length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("settings.products.detail.empty")}</p>
-            ) : (
-              <dl className="space-y-3">
-                {detail &&
-                  Object.entries(detail.profile).map(([key, value]) => (
-                    <div key={key} className="grid gap-1 border-b border-border pb-3 last:border-0">
-                      <dt className="text-xs font-medium text-muted-foreground break-all">{key}</dt>
-                      <dd className="text-sm whitespace-pre-wrap break-words text-foreground">
-                        {value || "—"}
-                      </dd>
-                    </div>
-                  ))}
-              </dl>
-            )}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDetail(null)}>
-              {t("settings.products.detail.close")}
-            </Button>
-          </DialogFooter>
+          {detail ? (
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4">
+              <p className="text-base font-semibold text-foreground">
+                {detail.name}{" "}
+                <span className="font-normal text-muted-foreground">({detail.sku})</span>
+              </p>
+              {extraProfileEntries(detail.profile).map(([key, value]) => {
+                const text = value.trim() || "—";
+                if (key === "notes") {
+                  return (
+                    <p
+                      key={key}
+                      className="text-sm whitespace-pre-wrap break-words text-foreground"
+                    >
+                      {text}
+                    </p>
+                  );
+                }
+                return (
+                  <div key={key} className="space-y-1">
+                    <p className="text-xs font-medium break-all text-muted-foreground">{key}</p>
+                    <p className="text-sm whitespace-pre-wrap break-words text-foreground">{text}</p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 
@@ -459,7 +460,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
           <DialogHeader>
             <DialogTitle>{t("settings.products.addRow")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <FormField id="product-name" label={t("settings.products.fields.name")}>
               <Input
                 id="product-name"

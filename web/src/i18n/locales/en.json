@@ -331,10 +331,7 @@
         "action": "Action"
       },
       "detail": {
-        "title": "Product details",
-        "fieldCount": "{{count}} columns",
-        "empty": "No extra columns on this row.",
-        "close": "Close"
+        "title": "Product details"
       },
       "fields": {
         "name": "Name",
