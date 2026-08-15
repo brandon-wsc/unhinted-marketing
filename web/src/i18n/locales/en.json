@@ -505,6 +505,7 @@
     "once": "Invite links can be used once",
     "titleJoin": "Join team",
     "loggedInBody": "You are signed in as the following account. Join {{company}}:",
+    "replaceWarning": "Joining {{company}} replaces your current one-person company. Products move to Mine. Brand voice is not copied. Chats and drafts stay.",
     "join": "Join company",
     "joining": "Joining…",
     "home": "Back to home",

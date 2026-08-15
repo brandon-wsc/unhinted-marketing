@@ -146,6 +146,11 @@ export function InviteAcceptPage() {
   return (
     <AuthLayout title={t("invite.titleJoin")} subtitle={t("invite.loggedInBody", previewVars)}>
       <div className="space-y-4">
+        {Boolean(user.organizations?.length) && (
+          <Alert variant="info">
+            <AlertDescription>{t("invite.replaceWarning", previewVars)}</AlertDescription>
+          </Alert>
+        )}
         <Input value={user.email} readOnly />
         <ActionRow>
           <ReturnHomeButton />

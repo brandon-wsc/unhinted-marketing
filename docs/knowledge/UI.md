@@ -19,7 +19,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 2. **Security** — UI hides management controls for plain members; **API is SSOT** (`require_company_settings_editor` → 403). No route-level split for MVP; optional `canManageTeam` helper mirrors Voice `can_edit`.
 3. **Invite link** — `{WEB_BASE_URL}/invite/{token}`; create response always includes `invite_url` for copy (WhatsApp / email optional via SMTP).
 4. **Invite accept** — dedicated SPA `/invite/:token`; not anonymous; user must **register or log in with the invited email**, then accept. Copy must **not** imply one-click join without an account. Public `GET /api/invites/{token}` returns `{ email, company_name }` so login/register can **lock** that email ([ADR 0014](../adr/0014-invite-public-preview.md)).
-5. **Register + invite (MVP)** — Register still auto-creates a solo company today; **accept** gains a narrow exception: if the user is the **sole owner** of a **single-member** org (bootstrap from register), accept **replaces** that membership and joins the invited org; the orphaned bootstrap org row is deleted. Any other existing membership → 409. Contract: [ADR 0013](../adr/0013-invite-accept-replaces-bootstrap-org.md) (amends ADR 0010 §4); backend amend ships in the same branch before the invite page.
+5. **Register + invite (MVP)** — Register still auto-creates a solo company today; **accept** replaces a **sole-owner single-member** org ([ADR 0013](../adr/0013-invite-accept-replaces-bootstrap-org.md)). Products **rehome to Mine** on the invited org; **voice is not copied**; sessions/drafts stay. Warn on the join card. Any other existing membership → 409. [ADR 0015](../adr/0015-invite-rehome-solo-products.md).
 6. **Sessions** — teammates do **not** browse each other's chats (slice 5: audit `sessions` routes stay `user_id`-scoped; add API tests). Products + voice remain the only shared assets.
 
 ---
@@ -134,7 +134,7 @@ Title + body sit **inside** the AuthLayout card (Penpot AuthCard), left-aligned.
 | Auth state | UI |
 |------------|-----|
 | Logged out | Show invited **email** + **company name** from `GET /api/invites/{token}`; footer → **Create account** (outline) · **Log in** (primary) with `?next=/invite/:token`. Login/register **lock** that email (`readOnly`); register **hides** company-name (bootstrap org still created, replaced on accept). |
-| Logged in, accept OK | Footer: **Back to home** (outline, left) · **Join company** (primary, right) → `POST /api/invites/{token}/accept` → toast + redirect `/` (or `/settings?tab=members`). |
+| Logged in, accept OK | Warning (info Alert) if the user currently has an org: products → Mine in the invited company; voice not copied; chats/drafts stay. Footer: **Back to home** (outline, left) · **Join company** (primary, right) → `POST /api/invites/{token}/accept` → toast + redirect `/`. |
 | 403 email mismatch | Title in card; body in **Alert** (destructive soft); actions: **Back to home** (left) · **Log out and sign in again** (right). |
 | 409 already in org | “You already belong to a company” + **Back to home** (right-aligned outline; bootstrap replace handled server-side for sole-owner solo org — see locked decision above). |
 | 400 expired / revoked / used | Static error + contact your admin; **Back to home** right-aligned. |

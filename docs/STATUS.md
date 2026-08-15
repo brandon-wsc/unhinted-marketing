@@ -158,7 +158,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Invites API** — ✅ `POST/GET/DELETE …/invites`, `GET /api/invites/{token}` preview (`email` + `company_name`, [ADR 0014](./adr/0014-invite-public-preview.md)), `POST /api/invites/{token}/accept`; `internal/notify/` (`link` / `smtp` / `console`); invite create rate-limited
 - **Team UI** — ✅ Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); teammate session isolation in `tests/api/test_session_isolation.py` (CI `backend-api`)
 - **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; `WEB_BASE_URL` required for link building; `internal/notify/` seam
-- **MVP one user ↔ one org** — invite accept **409** if already in a real team; **bootstrap solo-org is replaced** ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); no switcher
+- **MVP one user ↔ one org** — invite accept **409** if already in a real team; **bootstrap solo-org is replaced** ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); products rehome to Mine, voice discarded ([ADR 0015](./adr/0015-invite-rehome-solo-products.md)); no switcher
 - **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (publish-role gate is not part of K6; still [ADR 0010](./adr/0010-org-membership-invites-and-shared-assets.md))
 - **Unblocks K6** promote-to-org Approvals — **shipped** ([ADR 0011](./adr/0011-knowledge-commit-without-llm.md))
 

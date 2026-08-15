@@ -55,7 +55,7 @@ async def accept_company_invite(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This invite was sent to a different email address",
         )
-    if not await clear_bootstrap_solo_org(db, user.id):
+    if not await clear_bootstrap_solo_org(db, user.id, dest_company_id=invite.organization_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already belong to an organization",

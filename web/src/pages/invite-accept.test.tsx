@@ -14,7 +14,7 @@ const { logout, refreshAccessToken, apiAcceptInvite, apiGetInvitePreview } = vi.
 }));
 
 const auth = vi.hoisted(() => ({
-  user: null as { email: string } | null,
+  user: null as { email: string; organizations?: { id: string }[] } | null,
   loading: false,
   accessToken: "tok" as string | null,
 }));
@@ -101,10 +101,11 @@ describe("InviteAcceptPage", () => {
     expect(await screen.findByRole("heading", { name: "invite.invalidTitle" })).toBeInTheDocument();
   });
 
-  it("logged in: return home then join", async () => {
-    auth.user = { email: "ada@example.com" };
+  it("logged in: warn replace, return home then join", async () => {
+    auth.user = { email: "ada@example.com", organizations: [{ id: "solo" }] };
     renderInvite();
-    const email = await screen.findByDisplayValue("ada@example.com");
+    expect(await screen.findByRole("alert")).toHaveTextContent("invite.replaceWarning");
+    const email = screen.getByDisplayValue("ada@example.com");
     expect(email).toHaveAttribute("readOnly");
     expect(email).not.toBeDisabled();
     const home = screen.getByRole("link", { name: "invite.home" });

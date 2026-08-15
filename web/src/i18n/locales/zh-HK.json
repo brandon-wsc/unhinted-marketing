@@ -505,6 +505,7 @@
     "once": "邀請連結只可使用一次",
     "titleJoin": "加入團隊",
     "loggedInBody": "你正以以下帳戶登入，即將加入 {{company}}：",
+    "replaceWarning": "加入 {{company}} 會取代你而家嘅一人公司。產品會轉去「我的」。語氣設定唔會帶過去。對話同草稿保持不變。",
     "join": "加入公司",
     "joining": "加入中…",
     "home": "返回主頁",

@@ -373,6 +373,80 @@ async def test_accept_replaces_bootstrap_solo_org(
 
 
 @pytest.mark.asyncio
+async def test_accept_rehomes_solo_products_to_mine(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    dest_id = owner["user"]["organizations"][0]["id"]
+    owner_headers = auth_header(owner["access_token"])
+    invite_email = f"rehome-{uuid.uuid4().hex[:8]}@example.com"
+
+    created = await _create_invite(
+        client,
+        company_id=dest_id,
+        headers=owner_headers,
+        email=invite_email,
+    )
+    token = invite_token_from_url(created["invite_url"])
+
+    invitee = await register_user(client, email=invite_email)
+    bootstrap_id = invitee["user"]["organizations"][0]["id"]
+    invitee_headers = auth_header(invitee["access_token"])
+
+    org_import = await client.post(
+        f"/api/companies/{bootstrap_id}/products/import?scope=org",
+        headers=invitee_headers,
+        files={"file": ("org.csv", b"name,sku\nSolo Latte,SLT-01\nShared Sku,DUP-01\n", "text/csv")},
+    )
+    assert org_import.status_code == 200, org_import.text
+    mine_import = await client.post(
+        f"/api/companies/{bootstrap_id}/products/import?scope=user",
+        headers=invitee_headers,
+        files={"file": ("mine.csv", b"name,sku\nMy Cookie,CKE-01\nShared Sku Mine,DUP-01\n", "text/csv")},
+    )
+    assert mine_import.status_code == 200, mine_import.text
+
+    voice = await client.patch(
+        f"/api/companies/{bootstrap_id}/voice",
+        headers=invitee_headers,
+        json={
+            "roast_level": 3,
+            "locale": "zh-HK",
+            "forbidden_phrases": ["舊公司口吻"],
+            "tone_notes": "invitee voice",
+            "exemplar_captions": [],
+        },
+    )
+    assert voice.status_code == 200, voice.text
+
+    accept_res = await client.post(f"/api/invites/{token}/accept", headers=invitee_headers)
+    assert accept_res.status_code == 200, accept_res.text
+
+    mine = await client.get(
+        f"/api/companies/{dest_id}/products?scope=user",
+        headers=invitee_headers,
+    )
+    assert mine.status_code == 200, mine.text
+    by_sku = {item["sku"]: item for item in mine.json()["items"]}
+    assert by_sku["SLT-01"]["name"] == "Solo Latte"
+    assert by_sku["SLT-01"]["owner_scope"] == "user"
+    assert by_sku["CKE-01"]["name"] == "My Cookie"
+    assert by_sku["DUP-01"]["name"] == "Shared Sku"
+    assert "Shared Sku Mine" not in {item["name"] for item in mine.json()["items"]}
+
+    dest_voice = await client.get(f"/api/companies/{dest_id}/voice", headers=invitee_headers)
+    assert dest_voice.status_code == 200
+    pack = dest_voice.json()
+    assert pack["roast_level"] != 3
+    assert "舊公司口吻" not in pack["forbidden_phrases"]
+    assert pack["tone_notes"] != "invitee voice"
+
+    db_session.expire_all()
+    leftover = await db_session.get(Entity, uuid.UUID(bootstrap_id))
+    assert leftover is None
+
+
+@pytest.mark.asyncio
 async def test_accept_rejects_when_already_in_real_team(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
