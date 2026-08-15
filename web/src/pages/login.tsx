@@ -22,10 +22,11 @@ export function LoginPage() {
   const nextPath = safeInternalPath(params.get("next")) ?? "/";
   const inviteToken = inviteTokenFromPath(nextPath);
   const { preview, status: previewStatus } = useInvitePreview(inviteToken);
+  const invitePending = Boolean(inviteToken) && previewStatus === "loading";
   const emailLocked = previewStatus === "ok" && Boolean(preview);
   const registerHref =
     nextPath === "/" ? "/register" : `/register?next=${encodeURIComponent(nextPath)}`;
-  const [email, setEmail] = useState(() => getRememberedUser()?.email ?? "");
+  const [email, setEmail] = useState(() => (inviteToken ? "" : (getRememberedUser()?.email ?? "")));
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -43,10 +44,11 @@ export function LoginPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (invitePending) return;
     setError("");
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(emailLocked && preview ? preview.email : email, password);
       navigate(nextPath, { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : t("errors.loginFailed");
@@ -90,7 +92,7 @@ export function LoginPage() {
             value={email}
             onChange={(e) => onEmailChange(e.target.value)}
             autoComplete="email"
-            readOnly={emailLocked}
+            readOnly={emailLocked || invitePending}
             required
           />
         </FormField>
@@ -102,7 +104,7 @@ export function LoginPage() {
           autoComplete="current-password"
           required
         />
-        <Button type="submit" disabled={submitting} className="w-full">
+        <Button type="submit" disabled={submitting || invitePending} className="w-full">
           {submitting ? t("auth.login.submitting") : t("auth.login.submit")}
         </Button>
       </form>

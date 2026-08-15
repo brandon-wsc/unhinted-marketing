@@ -70,4 +70,33 @@ describe("login/register invite prefill", () => {
     expect(email).toHaveAttribute("readOnly");
     expect(screen.queryByLabelText("auth.register.organizationName")).not.toBeInTheDocument();
   });
+
+  it("holds login submit until invite preview resolves", async () => {
+    apiGetInvitePreview.mockReturnValue(new Promise(() => undefined));
+    render(
+      <MemoryRouter initialEntries={["/login?next=%2Finvite%2Ftok-1"]}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const email = screen.getByLabelText("common.email");
+    expect(email).toHaveAttribute("readOnly");
+    expect(screen.getByRole("button", { name: "auth.login.submit" })).toBeDisabled();
+  });
+
+  it("holds register submit until invite preview resolves", async () => {
+    apiGetInvitePreview.mockReturnValue(new Promise(() => undefined));
+    render(
+      <MemoryRouter initialEntries={["/register?next=%2Finvite%2Ftok-1"]}>
+        <Routes>
+          <Route path="/register" element={<RegisterPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const email = screen.getByLabelText("common.email");
+    expect(email).toHaveAttribute("readOnly");
+    expect(screen.getByRole("button", { name: "auth.register.submit" })).toBeDisabled();
+    expect(screen.queryByLabelText("auth.register.organizationName")).not.toBeInTheDocument();
+  });
 });

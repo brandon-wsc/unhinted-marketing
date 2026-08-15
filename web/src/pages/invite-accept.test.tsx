@@ -14,7 +14,7 @@ const { logout, refreshAccessToken, apiAcceptInvite, apiGetInvitePreview } = vi.
 }));
 
 const auth = vi.hoisted(() => ({
-  user: null as { email: string; organizations?: { id: string }[] } | null,
+  user: null as { email: string; organizations?: { id: string; role?: string }[] } | null,
   loading: false,
   accessToken: "tok" as string | null,
 }));
@@ -102,7 +102,7 @@ describe("InviteAcceptPage", () => {
   });
 
   it("logged in: warn replace, return home then join", async () => {
-    auth.user = { email: "ada@example.com", organizations: [{ id: "solo" }] };
+    auth.user = { email: "ada@example.com", organizations: [{ id: "solo", role: "owner" }] };
     renderInvite();
     expect(await screen.findByRole("alert")).toHaveTextContent("invite.replaceWarning");
     const email = screen.getByDisplayValue("ada@example.com");
@@ -111,6 +111,13 @@ describe("InviteAcceptPage", () => {
     const home = screen.getByRole("link", { name: "invite.home" });
     const join = screen.getByRole("button", { name: "invite.join" });
     expectBefore(home, join);
+  });
+
+  it("logged in member of a team: no replace warning", async () => {
+    auth.user = { email: "ada@example.com", organizations: [{ id: "team", role: "member" }] };
+    renderInvite();
+    expect(await screen.findByDisplayValue("ada@example.com")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("403 mismatch: return home then switch account", async () => {

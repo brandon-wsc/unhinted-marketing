@@ -22,6 +22,7 @@ export function RegisterPage() {
   const nextPath = safeInternalPath(params.get("next")) ?? "/";
   const inviteToken = inviteTokenFromPath(nextPath);
   const { preview, status: previewStatus } = useInvitePreview(inviteToken);
+  const invitePending = Boolean(inviteToken) && previewStatus === "loading";
   const emailLocked = previewStatus === "ok" && Boolean(preview);
   const loginHref = nextPath === "/" ? "/login" : `/login?next=${encodeURIComponent(nextPath)}`;
   const [displayName, setDisplayName] = useState("");
@@ -39,6 +40,7 @@ export function RegisterPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (invitePending) return;
 
     if (password.length < 8 || confirmPassword.length < 8) {
       showError(t("errors.passwordTooShort"));
@@ -53,7 +55,7 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       await register({
-        email,
+        email: emailLocked && preview ? preview.email : email,
         password,
         display_name: displayName,
         organization_name: emailLocked ? undefined : organizationName || undefined,
@@ -98,7 +100,7 @@ export function RegisterPage() {
             required
           />
         </FormField>
-        {!emailLocked && (
+        {!(emailLocked || invitePending) && (
           <FormField id="organizationName" label={t("auth.register.organizationName")}>
             <Input
               id="organizationName"
@@ -115,7 +117,7 @@ export function RegisterPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
-            readOnly={emailLocked}
+            readOnly={emailLocked || invitePending}
             required
           />
         </FormField>
@@ -135,7 +137,7 @@ export function RegisterPage() {
           autoComplete="new-password"
           required
         />
-        <Button type="submit" disabled={submitting} className="w-full">
+        <Button type="submit" disabled={submitting || invitePending} className="w-full">
           {submitting ? t("auth.register.submitting") : t("auth.register.submit")}
         </Button>
       </form>

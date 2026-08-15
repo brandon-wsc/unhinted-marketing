@@ -146,7 +146,7 @@ export function InviteAcceptPage() {
   return (
     <AuthLayout title={t("invite.titleJoin")} subtitle={t("invite.loggedInBody", previewVars)}>
       <div className="space-y-4">
-        {Boolean(user.organizations?.length) && (
+        {user.organizations?.length === 1 && user.organizations[0]?.role === "owner" && (
           <Alert variant="info">
             <AlertDescription>{t("invite.replaceWarning", previewVars)}</AlertDescription>
           </Alert>
