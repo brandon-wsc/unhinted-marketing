@@ -571,11 +571,11 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
               </div>
             ))}
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeEditor}>
-              {formEditable ? t("common.cancel") : t("common.close")}
-            </Button>
-            {formEditable ? (
+          {formEditable ? (
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeEditor}>
+                {t("common.cancel")}
+              </Button>
               <Button
                 type="button"
                 disabled={busy || !newName.trim() || !newSku.trim()}
@@ -583,8 +583,8 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
               >
                 {t("common.save")}
               </Button>
-            ) : null}
-          </DialogFooter>
+            </DialogFooter>
+          ) : null}
         </DialogContent>
       </Dialog>
 
