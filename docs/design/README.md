@@ -19,7 +19,7 @@
 | Session — paged | Mobile 390: `record` (history), `chat` (trail + preview-ready banner), `preview` (IG mock + Confirm gate) |
 | Dialogs | Edit copy … UserMenu — desktop dropdown / mobile dialog (theme = light/dark switch, no system mode). Order: identity → 語言 → 外觀 → **公司設定** → **系統** (platform only; not 管理後台) → **登出** (destructive). **Remove member** confirm |
 | Company settings | Desktop 1440: shell from UserMenu — shipped sidebar **Voice / Products / Members / Approvals**. Frames: Voice; Products Org / Mine; Members; Approvals queue (diff + approve/decline). Spec: [knowledge/UI.md](../knowledge/UI.md). |
-| Invite accept | Desktop 1440 AuthLayout card: A logged out · B ready · C email mismatch · D invalid · **E already in org (409)**. Footer **bottom-right**: return/outline left · accept/primary right. No public company-name preview. |
+| Invite accept | Desktop 1440 AuthLayout card: A logged out · B ready · C email mismatch (Alert) · D invalid · **E already in org (409)**. Title + body **inside** the card; actions **bottom-right** (outline left · primary right). Footer **left-aligned** outside. No public company-name preview. |
 
 Admin console intentionally not designed in Penpot — temporary ops surface. Tenant KB CRUD is **Company settings**, not `/admin`.
 

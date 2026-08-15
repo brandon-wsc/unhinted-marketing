@@ -2,6 +2,7 @@ import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
@@ -95,13 +96,23 @@ export function InviteAcceptPage() {
 
   if (view === "mismatch") {
     return (
-      <AuthLayout title={t("invite.mismatchTitle")} subtitle={t("invite.mismatchBody")}>
-        <ActionRow>
-          <ReturnHomeButton />
-          <Button type="button" onClick={() => void onSwitchAccount()}>
-            {t("invite.logoutRelogin")}
-          </Button>
-        </ActionRow>
+      <AuthLayout title={t("invite.mismatchTitle")}>
+        <div className="space-y-4">
+          <Alert
+            variant="destructive"
+            className="border-destructive/30 bg-destructive-soft text-destructive-foreground"
+          >
+            <AlertDescription className="text-destructive-foreground">
+              {t("invite.mismatchBody")}
+            </AlertDescription>
+          </Alert>
+          <ActionRow>
+            <ReturnHomeButton />
+            <Button type="button" onClick={() => void onSwitchAccount()}>
+              {t("invite.logoutRelogin")}
+            </Button>
+          </ActionRow>
+        </div>
       </AuthLayout>
     );
   }

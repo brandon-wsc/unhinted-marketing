@@ -129,13 +129,13 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 
 **Route:** `/invite/:token` · **not** under `/settings`. The page is public (logged-out CTA is a real state). **Accept** (`POST`) requires a session; login/register return via `?next=`.
 
-Actions sit **bottom-right** of the AuthLayout card (dialog confirm/cancel): outline/return **left**, primary/accept **right**. Not full-width stacked.
+Title + body sit **inside** the AuthLayout card (Penpot AuthCard), left-aligned. Actions **bottom-right**: outline/return **left**, primary/accept **right**. Not full-width stacked. Footer (login/register switcher · invite once-note) stays **outside** the card, **left-aligned**.
 
 | Auth state | UI |
 |------------|-----|
 | Logged out | Explain: use the **email address that received the invite**; footer → **Create account** (outline) · **Log in** (primary) with `?next=/invite/:token` (email not pre-filled — no public invite preview API). |
 | Logged in, accept OK | Footer: **Back to home** (outline, left) · **Join company** (primary, right) → `POST /api/invites/{token}/accept` → toast + redirect `/` (or `/settings?tab=members`). |
-| 403 email mismatch | “This invite was sent to a different email”; footer: **Back to home** (left) · **Log out and sign in again** (right). |
+| 403 email mismatch | Title in card; body in **Alert** (destructive soft); actions: **Back to home** (left) · **Log out and sign in again** (right). |
 | 409 already in org | “You already belong to a company” + **Back to home** (right-aligned outline; bootstrap replace handled server-side for sole-owner solo org — see locked decision above). |
 | 400 expired / revoked / used | Static error + contact your admin; **Back to home** right-aligned. |
 

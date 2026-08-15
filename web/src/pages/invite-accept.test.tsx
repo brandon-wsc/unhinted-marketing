@@ -105,6 +105,7 @@ describe("InviteAcceptPage", () => {
     const user = userEvent.setup();
     renderInvite();
     await user.click(screen.getByRole("button", { name: "invite.join" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("invite.mismatchBody");
     const home = screen.getByRole("link", { name: "invite.home" });
     const switchAccount = screen.getByRole("button", { name: "invite.logoutRelogin" });
     expectBefore(home, switchAccount);
