@@ -138,7 +138,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
 
       <div className="space-y-5 rounded-xl border border-border bg-card p-6">
         {!canEdit && (
-          <Alert>
+          <Alert variant="info">
             <AlertDescription>{t("settings.voice.readOnly")}</AlertDescription>
           </Alert>
         )}

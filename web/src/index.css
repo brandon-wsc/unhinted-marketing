@@ -32,6 +32,9 @@
   --color-success: #16a34a;
   --color-success-foreground: #166534;
   --color-success-soft: rgb(22 163 74 / 0.1);
+  --color-info: #2563eb;
+  --color-info-foreground: #1e40af;
+  --color-info-soft: rgb(37 99 235 / 0.1);
   --color-ring: #111113;
   --color-voice: #c45c00;
   --color-voice-foreground: #ffffff;
@@ -78,6 +81,8 @@
   --color-destructive-soft: rgb(220 38 38 / 0.12);
   --color-success-foreground: #86efac;
   --color-success-soft: rgb(22 163 74 / 0.12);
+  --color-info-foreground: #93c5fd;
+  --color-info-soft: rgb(37 99 235 / 0.12);
   --color-voice: #f0a060;
   --color-voice-foreground: #111113;
   --shadow-color: rgb(0 0 0 / 0.35);

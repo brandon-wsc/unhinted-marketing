@@ -1,4 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority";
+import { Info } from "lucide-react";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -13,6 +14,7 @@ const alertVariants = cva(
           "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current",
         success:
           "border-success/30 bg-success-soft text-success-foreground *:data-[slot=alert-description]:text-success-foreground",
+        info: "border-info/30 bg-info-soft text-info-foreground *:data-[slot=alert-description]:text-info-foreground",
       },
     },
     defaultVariants: {
@@ -24,6 +26,7 @@ const alertVariants = cva(
 function Alert({
   className,
   variant,
+  children,
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
   return (
@@ -32,7 +35,10 @@ function Alert({
       role="alert"
       className={cn(alertVariants({ variant }), className)}
       {...props}
-    />
+    >
+      {variant === "info" ? <Info aria-hidden /> : null}
+      {children}
+    </div>
   );
 }
 
