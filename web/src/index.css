@@ -26,16 +26,30 @@
   --font-sans: "IBM Plex Sans", "Noto Sans HK", ui-sans-serif, system-ui, sans-serif;
   --color-primary: #111113;
   --color-primary-foreground: #fafafa;
-  --color-destructive: #dc2626;
-  --color-destructive-foreground: #991b1b;
-  --color-destructive-soft: rgb(220 38 38 / 0.1);
-  --color-success: #16a34a;
-  --color-success-foreground: #166534;
-  --color-success-soft: rgb(22 163 74 / 0.1);
-  --color-info: #2563eb;
-  --color-info-foreground: #1e40af;
-  --color-info-soft: rgb(37 99 235 / 0.1);
-  --color-ring: #111113;
+
+  /* Status OKLCH knobs — L locked; C has a danger tier; h is identity.
+     Resolved sRGB in docs/design/TOKENS.md. */
+  --status-l: 0.627;
+  --status-c: 0.17;
+  --danger-c: 0.215;
+  --status-fg-l: 0.448;
+  --status-fg-c: 0.108;
+  --danger-fg-c: 0.161;
+  --status-soft-a: 0.1;
+  --success-h: 149.2;
+  --danger-h: 27.3;
+  --info-h: 262.9;
+
+  --color-success: oklch(var(--status-l) var(--status-c) var(--success-h));
+  --color-success-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--success-h));
+  --color-success-soft: oklch(var(--status-l) var(--status-c) var(--success-h) / var(--status-soft-a));
+  --color-destructive: oklch(var(--status-l) var(--danger-c) var(--danger-h));
+  --color-destructive-foreground: oklch(var(--status-fg-l) var(--danger-fg-c) var(--danger-h));
+  --color-destructive-soft: oklch(var(--status-l) var(--danger-c) var(--danger-h) / var(--status-soft-a));
+  --color-info: oklch(var(--status-l) var(--status-c) var(--info-h));
+  --color-info-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--info-h));
+  --color-info-soft: oklch(var(--status-l) var(--status-c) var(--info-h) / var(--status-soft-a));
+  --color-ring: oklch(var(--status-l) var(--status-c) var(--info-h));
   --color-voice: #c45c00;
   --color-voice-foreground: #ffffff;
 
@@ -76,13 +90,16 @@
   --color-card-foreground: #f4f4f5;
   --color-primary: #ececef;
   --color-primary-foreground: #111113;
-  --color-ring: #ececef;
-  --color-destructive-foreground: #fca5a5;
-  --color-destructive-soft: rgb(220 38 38 / 0.12);
-  --color-success-foreground: #86efac;
-  --color-success-soft: rgb(22 163 74 / 0.12);
-  --color-info-foreground: #93c5fd;
-  --color-info-soft: rgb(37 99 235 / 0.12);
+  --status-fg-l: 0.808;
+  --status-fg-c: 0.096;
+  --danger-fg-c: 0.103;
+  --status-soft-a: 0.12;
+  --color-success-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--success-h));
+  --color-success-soft: oklch(var(--status-l) var(--status-c) var(--success-h) / var(--status-soft-a));
+  --color-destructive-foreground: oklch(var(--status-fg-l) var(--danger-fg-c) var(--danger-h));
+  --color-destructive-soft: oklch(var(--status-l) var(--danger-c) var(--danger-h) / var(--status-soft-a));
+  --color-info-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--info-h));
+  --color-info-soft: oklch(var(--status-l) var(--status-c) var(--info-h) / var(--status-soft-a));
   --color-voice: #f0a060;
   --color-voice-foreground: #111113;
   --shadow-color: rgb(0 0 0 / 0.35);
