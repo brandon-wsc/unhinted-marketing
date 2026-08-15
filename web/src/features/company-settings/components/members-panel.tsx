@@ -401,7 +401,7 @@ export function MembersPanel({
           {inviteUrl && (
             <div className="space-y-2">
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Input value={inviteUrl} readOnly className="flex-1 bg-accent text-foreground" />
+                <Input value={inviteUrl} readOnly className="flex-1" />
                 <Button
                   type="button"
                   variant="outline"

@@ -536,7 +536,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 autoComplete="off"
-                disabled={!formEditable}
+                readOnly={!formEditable}
               />
             </FormField>
             <FormField id="product-sku" label={t("settings.products.fields.sku")}>
@@ -545,7 +545,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                 value={newSku}
                 onChange={(e) => setNewSku(e.target.value)}
                 autoComplete="off"
-                disabled={!formEditable}
+                readOnly={!formEditable}
               />
             </FormField>
             <FormField id="product-notes" label={t("settings.products.fields.notes")}>
@@ -556,7 +556,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                 rows={4}
                 className="field-sizing-fixed max-h-[min(16rem,40vh)] min-h-24 resize-y overflow-y-auto"
                 maxLength={4000}
-                disabled={!formEditable}
+                readOnly={!formEditable}
               />
               <p className="text-xs text-muted-foreground">
                 {t("settings.products.fields.notesHint")}
