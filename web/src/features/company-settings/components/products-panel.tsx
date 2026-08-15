@@ -512,8 +512,8 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
           if (!open) closeEditor();
         }}
       >
-        <DialogContent className="flex max-h-[85vh] flex-col gap-4 overflow-hidden sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[85vh] min-h-0 flex-col gap-4 overflow-hidden sm:max-w-lg">
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               {editor?.kind === "edit"
                 ? t(
@@ -554,7 +554,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                 value={newNotes}
                 onChange={(e) => setNewNotes(e.target.value)}
                 rows={4}
-                className="min-h-24"
+                className="field-sizing-fixed max-h-[min(16rem,40vh)] min-h-24 resize-y overflow-y-auto"
                 maxLength={4000}
                 disabled={!formEditable}
               />
@@ -572,7 +572,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
             ))}
           </div>
           {formEditable ? (
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
               <Button type="button" variant="outline" onClick={closeEditor}>
                 {t("common.cancel")}
               </Button>
