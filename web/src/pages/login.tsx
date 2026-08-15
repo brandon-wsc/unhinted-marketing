@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
@@ -8,6 +8,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
+import { useInvitePreview } from "@/features/company-settings/use-invite-preview";
+import { inviteTokenFromPath } from "@/lib/invite-path";
 import { mapApiError } from "@/lib/map-api-error";
 import { getRememberedUser, patchRememberedUser } from "@/lib/remembered-user";
 import { safeInternalPath } from "@/lib/safe-internal-path";
@@ -18,12 +20,19 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const nextPath = safeInternalPath(params.get("next")) ?? "/";
+  const inviteToken = inviteTokenFromPath(nextPath);
+  const { preview, status: previewStatus } = useInvitePreview(inviteToken);
+  const emailLocked = previewStatus === "ok" && Boolean(preview);
   const registerHref =
     nextPath === "/" ? "/register" : `/register?next=${encodeURIComponent(nextPath)}`;
   const [email, setEmail] = useState(() => getRememberedUser()?.email ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (preview?.email) setEmail(preview.email);
+  }, [preview]);
 
   if (!loading && user) return <Navigate to={nextPath} replace />;
 
@@ -47,10 +56,15 @@ export function LoginPage() {
     }
   }
 
+  const subtitle =
+    emailLocked && preview
+      ? t("auth.login.subtitleInvite", { email: preview.email, company: preview.company_name })
+      : t("auth.login.subtitle");
+
   return (
     <AuthLayout
       title={t("auth.login.title")}
-      subtitle={t("auth.login.subtitle")}
+      subtitle={subtitle}
       footer={
         <>
           {t("auth.login.noAccount")}{" "}
@@ -76,6 +90,7 @@ export function LoginPage() {
             value={email}
             onChange={(e) => onEmailChange(e.target.value)}
             autoComplete="email"
+            readOnly={emailLocked}
             required
           />
         </FormField>

@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from internal.memory.embeddings import embed_texts
 from internal.memory.models import (
@@ -322,7 +323,11 @@ async def get_org_invite(
 async def get_org_invite_by_token_hash(
     db: AsyncSession, token_hash: str
 ) -> OrgInvite | None:
-    return await db.scalar(select(OrgInvite).where(OrgInvite.token_hash == token_hash))
+    return await db.scalar(
+        select(OrgInvite)
+        .options(selectinload(OrgInvite.organization))
+        .where(OrgInvite.token_hash == token_hash)
+    )
 
 
 async def revoke_org_invite(db: AsyncSession, invite: OrgInvite) -> OrgInvite:

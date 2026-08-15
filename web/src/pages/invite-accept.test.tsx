@@ -6,10 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiStatusError } from "@/features/company-settings/api";
 import { InviteAcceptPage } from "@/pages/invite-accept";
 
-const { logout, refreshAccessToken, apiAcceptInvite } = vi.hoisted(() => ({
+const { logout, refreshAccessToken, apiAcceptInvite, apiGetInvitePreview } = vi.hoisted(() => ({
   logout: vi.fn().mockResolvedValue(undefined),
   refreshAccessToken: vi.fn().mockResolvedValue("tok"),
   apiAcceptInvite: vi.fn(),
+  apiGetInvitePreview: vi.fn(),
 }));
 
 const auth = vi.hoisted(() => ({
@@ -54,7 +55,7 @@ vi.mock("@/context/auth-context", () => ({
 
 vi.mock("@/features/company-settings/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/company-settings/api")>();
-  return { ...actual, apiAcceptInvite };
+  return { ...actual, apiAcceptInvite, apiGetInvitePreview };
 });
 
 function renderInvite(token = "abc") {
@@ -78,22 +79,34 @@ describe("InviteAcceptPage", () => {
     logout.mockClear();
     refreshAccessToken.mockClear();
     apiAcceptInvite.mockReset();
+    apiGetInvitePreview.mockReset();
+    apiGetInvitePreview.mockResolvedValue({
+      email: "ada@example.com",
+      company_name: "Test Co",
+    });
   });
 
-  it("logged out: register then login, both with next=", () => {
+  it("logged out: register then login, both with next=", async () => {
     renderInvite("tok-1");
-    const register = screen.getByRole("link", { name: "invite.register" });
+    const register = await screen.findByRole("link", { name: "invite.register" });
     const login = screen.getByRole("link", { name: "invite.login" });
     expect(register).toHaveAttribute("href", "/register?next=%2Finvite%2Ftok-1");
     expect(login).toHaveAttribute("href", "/login?next=%2Finvite%2Ftok-1");
     expectBefore(register, login);
   });
 
-  it("logged in: return home then join", () => {
+  it("invalid preview: show invalid copy", async () => {
+    apiGetInvitePreview.mockRejectedValue(new ApiStatusError(400, "expired"));
+    renderInvite();
+    expect(await screen.findByRole("heading", { name: "invite.invalidTitle" })).toBeInTheDocument();
+  });
+
+  it("logged in: return home then join", async () => {
     auth.user = { email: "ada@example.com" };
     renderInvite();
-    expect(screen.getByDisplayValue("ada@example.com")).toHaveAttribute("readOnly");
-    expect(screen.getByDisplayValue("ada@example.com")).not.toBeDisabled();
+    const email = await screen.findByDisplayValue("ada@example.com");
+    expect(email).toHaveAttribute("readOnly");
+    expect(email).not.toBeDisabled();
     const home = screen.getByRole("link", { name: "invite.home" });
     const join = screen.getByRole("button", { name: "invite.join" });
     expectBefore(home, join);
@@ -104,7 +117,7 @@ describe("InviteAcceptPage", () => {
     apiAcceptInvite.mockRejectedValue(new ApiStatusError(403, "mismatch"));
     const user = userEvent.setup();
     renderInvite();
-    await user.click(screen.getByRole("button", { name: "invite.join" }));
+    await user.click(await screen.findByRole("button", { name: "invite.join" }));
     expect(screen.getByRole("alert")).toHaveTextContent("invite.mismatchBody");
     const home = screen.getByRole("link", { name: "invite.home" });
     const switchAccount = screen.getByRole("button", { name: "invite.logoutRelogin" });

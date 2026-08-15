@@ -18,7 +18,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 1. **One settings shell** — `/settings?tab=members` shares the Voice / Products page; **no** separate admin route for tenant team management (contrast: **System** = platform ops only).
 2. **Security** — UI hides management controls for plain members; **API is SSOT** (`require_company_settings_editor` → 403). No route-level split for MVP; optional `canManageTeam` helper mirrors Voice `can_edit`.
 3. **Invite link** — `{WEB_BASE_URL}/invite/{token}`; create response always includes `invite_url` for copy (WhatsApp / email optional via SMTP).
-4. **Invite accept** — dedicated SPA `/invite/:token`; not anonymous; user must **register or log in with the invited email**, then accept. Copy must **not** imply one-click join without an account.
+4. **Invite accept** — dedicated SPA `/invite/:token`; not anonymous; user must **register or log in with the invited email**, then accept. Copy must **not** imply one-click join without an account. Public `GET /api/invites/{token}` returns `{ email, company_name }` so login/register can **lock** that email ([ADR 0014](../adr/0014-invite-public-preview.md)).
 5. **Register + invite (MVP)** — Register still auto-creates a solo company today; **accept** gains a narrow exception: if the user is the **sole owner** of a **single-member** org (bootstrap from register), accept **replaces** that membership and joins the invited org; the orphaned bootstrap org row is deleted. Any other existing membership → 409. Contract: [ADR 0013](../adr/0013-invite-accept-replaces-bootstrap-org.md) (amends ADR 0010 §4); backend amend ships in the same branch before the invite page.
 6. **Sessions** — teammates do **not** browse each other's chats (slice 5: audit `sessions` routes stay `user_id`-scoped; add API tests). Products + voice remain the only shared assets.
 
@@ -76,7 +76,7 @@ UserMenu
 | **Members → Roster** | `GET …/members` — display name, email, role, joined | Org | any member read | **slice 4** |
 | **Members → Manage** | role change (`admin` ↔ `member`), remove, self-leave | Org | owner/admin (not self-leave for owner) | **slice 4** |
 | **Members → Invite** | `POST …/invites` · copy `invite_url` · list/revoke pending | Org | owner/admin | **slice 4** |
-| **Invite accept** | `POST /api/invites/{token}/accept` | Join org | authed user, email must match invite | **slice 4** |
+| **Invite accept** | `GET /api/invites/{token}` preview · `POST /api/invites/{token}/accept` | Join org | preview public; accept authed, email must match | **slice 4** |
 | Session chat | Spoken SKU/price (no form) | User × New | current user | shipped; **private** per user |
 | Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** ✅ |
 | **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6** ✅ |
@@ -133,13 +133,13 @@ Title + body sit **inside** the AuthLayout card (Penpot AuthCard), left-aligned.
 
 | Auth state | UI |
 |------------|-----|
-| Logged out | Explain: use the **email address that received the invite**; footer → **Create account** (outline) · **Log in** (primary) with `?next=/invite/:token` (email not pre-filled — no public invite preview API). |
+| Logged out | Show invited **email** + **company name** from `GET /api/invites/{token}`; footer → **Create account** (outline) · **Log in** (primary) with `?next=/invite/:token`. Login/register **lock** that email (`readOnly`); register **hides** company-name (bootstrap org still created, replaced on accept). |
 | Logged in, accept OK | Footer: **Back to home** (outline, left) · **Join company** (primary, right) → `POST /api/invites/{token}/accept` → toast + redirect `/` (or `/settings?tab=members`). |
 | 403 email mismatch | Title in card; body in **Alert** (destructive soft); actions: **Back to home** (left) · **Log out and sign in again** (right). |
 | 409 already in org | “You already belong to a company” + **Back to home** (right-aligned outline; bootstrap replace handled server-side for sole-owner solo org — see locked decision above). |
 | 400 expired / revoked / used | Static error + contact your admin; **Back to home** right-aligned. |
 
-**Login / register:** honor `?next=` after success (preserve path + query). Register flow unchanged except redirect back to invite page.
+**Login / register:** honor `?next=` after success (preserve path + query). When `next` is `/invite/:token` and preview succeeds, email is pre-filled and locked.
 
 ---
 

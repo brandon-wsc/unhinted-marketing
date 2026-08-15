@@ -155,7 +155,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 **Decision (2026-08-11) — Org membership, invites, shared-asset scope:** → [ADR 0010](./adr/0010-org-membership-invites-and-shared-assets.md)
 
 - **Members API** — ✅ `GET/PATCH/DELETE …/members`, `PATCH /api/companies/{id}` rename; sole-owner rules enforced
-- **Invites API** — ✅ `POST/GET/DELETE …/invites`, `POST /api/invites/{token}/accept`; `internal/notify/` (`link` / `smtp` / `console`); invite create rate-limited
+- **Invites API** — ✅ `POST/GET/DELETE …/invites`, `GET /api/invites/{token}` preview (`email` + `company_name`, [ADR 0014](./adr/0014-invite-public-preview.md)), `POST /api/invites/{token}/accept`; `internal/notify/` (`link` / `smtp` / `console`); invite create rate-limited
 - **Team UI** — ✅ Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); teammate session isolation in `tests/api/test_session_isolation.py` (CI `backend-api`)
 - **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; `WEB_BASE_URL` required for link building; `internal/notify/` seam
 - **MVP one user ↔ one org** — invite accept **409** if already in a real team; **bootstrap solo-org is replaced** ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); no switcher

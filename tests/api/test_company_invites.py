@@ -62,6 +62,74 @@ async def test_create_invite_returns_invite_url(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_preview_invite_is_public(client: AsyncClient) -> None:
+    owner = await register_user(
+        client,
+        email=f"owner-{uuid.uuid4().hex[:8]}@example.com",
+        organization_name="Harbour Co",
+    )
+    company_id = owner["user"]["organizations"][0]["id"]
+    invite_email = f"invitee-{uuid.uuid4().hex[:8]}@example.com"
+    created = await _create_invite(
+        client,
+        company_id=company_id,
+        headers=auth_header(owner["access_token"]),
+        email=invite_email,
+    )
+    token = invite_token_from_url(created["invite_url"])
+
+    res = await client.get(f"/api/invites/{token}")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body == {"email": invite_email, "company_name": "Harbour Co"}
+
+
+@pytest.mark.asyncio
+async def test_preview_unknown_token(client: AsyncClient) -> None:
+    res = await client.get("/api/invites/not-a-real-token")
+    assert res.status_code == 400
+    assert "email" not in res.json()
+
+
+@pytest.mark.asyncio
+async def test_preview_expired_invite(client: AsyncClient, db_session: AsyncSession) -> None:
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    created = await _create_invite(
+        client,
+        company_id=company_id,
+        headers=auth_header(owner["access_token"]),
+        email=f"expired-{uuid.uuid4().hex[:8]}@example.com",
+    )
+    token = invite_token_from_url(created["invite_url"])
+    invite_row = await db_session.scalar(select(OrgInvite).where(OrgInvite.id == uuid.UUID(created["id"])))
+    assert invite_row is not None
+    invite_row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    await db_session.commit()
+
+    res = await client.get(f"/api/invites/{token}")
+    assert res.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_preview_revoked_invite(client: AsyncClient) -> None:
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    owner_headers = auth_header(owner["access_token"])
+    created = await _create_invite(
+        client,
+        company_id=company_id,
+        headers=owner_headers,
+        email=f"revoked-{uuid.uuid4().hex[:8]}@example.com",
+    )
+    token = invite_token_from_url(created["invite_url"])
+    await client.delete(f"/api/companies/{company_id}/invites/{created['id']}", headers=owner_headers)
+
+    res = await client.get(f"/api/invites/{token}")
+    assert res.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_create_invite_normalizes_email(client: AsyncClient) -> None:
     owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
     company_id = owner["user"]["organizations"][0]["id"]
