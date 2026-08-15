@@ -169,7 +169,7 @@ Implementation target: `node_payload(node, state)` in `internal/session/knowledg
 
 Draft schema (planned): `product_context_ids` on `DraftOut` / `EditOut`; persist on `preview_drafts` with `source_signal_ids`.
 
-**Chat-only product facts (no import):** **User × New** (session scratch) for this turn; **do not** write to **Org × Old** until [COLLECT §9 K6](./COLLECT.md#9-held--promote-to-org-k6) admin approve.
+**Chat-only product facts (no import):** **User × New** (session scratch) for this turn; **do not** write to **Org × Old** until [COLLECT §9 K6](./COLLECT.md#9-promote-to-org-k6) owner/admin approve.
 
 ---
 
@@ -182,5 +182,5 @@ Today `load_context` emits top-level `voice_pack` + `audience_catalog` and ident
 ## References
 
 - [MODEL.md](./MODEL.md)
-- [COLLECT.md](./COLLECT.md) — user-owned import & retrieve; K6 held for chat→KB approve
+- [COLLECT.md](./COLLECT.md) — user-owned import & retrieve; chat scratch still not org KB (K6 is Mine catalog only)
 - [ADR 0009](../adr/0009-research-gate-and-tavily-ingest.md)

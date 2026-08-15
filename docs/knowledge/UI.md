@@ -31,7 +31,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 | `Company settings · Voice` | Sidebar Voice active · roast 0–3 · locale · forbidden · tone · **exemplar slots** · Save |
 | `Company settings · Products · Org` | Org tab · Import CSV/Excel · import stats · table + Archive |
 | `Company settings · Products · Mine` | Mine tab · Import + Add row · **Drafts use** (Company / Yours) · cover rule note |
-| `Company settings · Members` | ✅ Drawn — editor (idle invite form) + **invite-sent** card + member read-only; sidebar Voice / Products / Members (Approvals hidden) |
+| `Company settings · Members` | ✅ Drawn — editor (idle invite form) + **invite-sent** card + member read-only; sidebar Voice / Products / Members / Approvals |
 | `Invite accept` | ✅ Drawn — A logged out · B ready · C email mismatch · D invalid · **E already in org (409)** |
 | `Company settings · Approvals` | Pending proposals · field diff · Approve / Decline — owner/admin |
 

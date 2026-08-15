@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-14  
+> **Last updated:** 2026-08-15  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -159,7 +159,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Team UI** — ✅ Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); teammate session isolation in `tests/api/test_session_isolation.py` (CI `backend-api`)
 - **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; `WEB_BASE_URL` required for link building; `internal/notify/` seam
 - **MVP one user ↔ one org** — invite accept **409** if already in a real team; **bootstrap solo-org is replaced** ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); no switcher
-- **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (revisit with K6)
+- **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (publish-role gate is not part of K6; still [ADR 0010](./adr/0010-org-membership-invites-and-shared-assets.md))
 - **Unblocks K6** promote-to-org Approvals — **shipped** ([ADR 0011](./adr/0011-knowledge-commit-without-llm.md))
 
 BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `useSession` + custom SSE; markdown via standalone [`streamdown`](https://streamdown.ai/) + `@streamdown/cjk`.

@@ -92,7 +92,8 @@ describe("InviteAcceptPage", () => {
   it("logged in: return home then join", () => {
     auth.user = { email: "ada@example.com" };
     renderInvite();
-    expect(screen.getByDisplayValue("ada@example.com")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("ada@example.com")).toHaveAttribute("readOnly");
+    expect(screen.getByDisplayValue("ada@example.com")).not.toBeDisabled();
     const home = screen.getByRole("link", { name: "invite.home" });
     const join = screen.getByRole("button", { name: "invite.join" });
     expectBefore(home, join);
