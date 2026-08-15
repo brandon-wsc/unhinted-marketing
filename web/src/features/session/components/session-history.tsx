@@ -1,3 +1,4 @@
+import { ChevronLeft } from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -24,6 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { SessionListItem } from "@/features/session/types";
 
 type Props = {
@@ -258,15 +260,19 @@ export function SessionHistorySidebar({
     >
       <div className="flex shrink-0 items-center gap-1 px-3 pb-1 pt-3">
         {pageMode && onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
-            aria-label={t("chat.mobile.back")}
-          >
-            <BackIcon />
-            {t("chat.mobile.back")}
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton
+                type="button"
+                className="size-9 rounded-full"
+                onClick={onBack}
+                aria-label={t("chat.mobile.back")}
+              >
+                <ChevronLeft />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t("chat.mobile.back")}</TooltipContent>
+          </Tooltip>
         ) : !pageMode ? (
           <IconButton
             type="button"
@@ -468,20 +474,6 @@ export function SessionHistoryMobileSheet({
         />
       </div>
     </div>
-  );
-}
-
-function BackIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M10 3.5 5.5 8 10 12.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 
