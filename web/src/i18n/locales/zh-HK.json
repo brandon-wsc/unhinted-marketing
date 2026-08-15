@@ -355,14 +355,13 @@
       "emptyTitle": "暫時未有待審批項目",
       "emptyBody": "有成員申請加入公司產品清單時，變更會喺度顯示。",
       "proposedBy": "由 {{email}} 提出",
-      "newSku": "新增",
-      "replace": "取代",
       "approve": "批准",
       "reject": "拒絕",
+      "detailTitle": "產品審批",
       "columns": {
-        "field": "欄位",
-        "current": "公司",
-        "proposed": "申請"
+        "product": "產品",
+        "sku": "SKU",
+        "note": "備註"
       }
     }
   },

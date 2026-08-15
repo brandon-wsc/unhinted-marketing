@@ -355,14 +355,13 @@
       "emptyTitle": "Nothing waiting for review",
       "emptyBody": "When a teammate asks to add a product to the company catalog, the changes show up here.",
       "proposedBy": "From {{email}}",
-      "newSku": "New",
-      "replace": "Replace",
       "approve": "Approve",
       "reject": "Decline",
+      "detailTitle": "Product approval",
       "columns": {
-        "field": "Field",
-        "current": "Company",
-        "proposed": "Proposed"
+        "product": "Product",
+        "sku": "SKU",
+        "note": "Note"
       }
     }
   },

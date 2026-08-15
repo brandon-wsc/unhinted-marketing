@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -23,6 +30,10 @@ type ApprovalsPanelProps = {
   companyId: string;
 };
 
+function proposalNote(item: ProductProposalItem): string {
+  return item.profile?.notes?.trim() ?? "";
+}
+
 export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
@@ -30,6 +41,7 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ProductProposalItem[]>([]);
+  const [detail, setDetail] = useState<ProductProposalItem | null>(null);
 
   async function refresh() {
     const data = await apiListProposals(accessToken, companyId);
@@ -60,6 +72,7 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
     setError(null);
     try {
       await apiApproveProposal(accessToken, companyId, id);
+      setDetail(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -73,6 +86,7 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
     setError(null);
     try {
       await apiRejectProposal(accessToken, companyId, id);
+      setDetail(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -108,73 +122,107 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {items.map((item) => {
-            const visible = item.fields.filter((f) => f.change !== "same");
-            return (
-              <div key={item.id} className="space-y-4 rounded-xl border border-border bg-card p-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold">{item.name}</h2>
-                    <p className="text-xs text-muted-foreground">{item.sku}</p>
-                    {item.proposed_by_email && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {t("settings.approvals.proposedBy", { email: item.proposed_by_email })}
-                      </p>
-                    )}
-                  </div>
-                  <Badge variant="secondary">
-                    {item.current_name
-                      ? t("settings.approvals.replace")
-                      : t("settings.approvals.newSku")}
-                  </Badge>
-                </div>
-
-                {visible.length > 0 && (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t("settings.approvals.columns.field")}</TableHead>
-                        <TableHead>{t("settings.approvals.columns.current")}</TableHead>
-                        <TableHead>{t("settings.approvals.columns.proposed")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {visible.map((field) => (
-                        <TableRow key={field.key} className="hover:bg-accent">
-                          <TableCell className="font-medium">{field.key}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {field.current ?? t("common.notAvailable")}
-                          </TableCell>
-                          <TableCell>{field.proposed ?? t("common.notAvailable")}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-
-                <div className="flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={busyId === item.id}
-                    onClick={() => void onReject(item.id)}
-                  >
-                    {t("settings.approvals.reject")}
-                  </Button>
-                  <Button
-                    type="button"
-                    loading={busyId === item.id}
-                    onClick={() => void onApprove(item.id)}
-                  >
-                    {t("settings.approvals.approve")}
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+        <div className="rounded-xl border border-border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("settings.approvals.columns.product")}</TableHead>
+                <TableHead>{t("settings.approvals.columns.sku")}</TableHead>
+                <TableHead>{t("settings.approvals.columns.note")}</TableHead>
+                <TableHead className="text-right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.id} className="cursor-pointer" onClick={() => setDetail(item)}>
+                  <TableCell className="max-w-56">
+                    <span className="block truncate font-medium">{item.name}</span>
+                  </TableCell>
+                  <TableCell className="max-w-40">
+                    <span className="block truncate text-sm text-muted-foreground">{item.sku}</span>
+                  </TableCell>
+                  <TableCell className="max-w-72">
+                    <span className="block truncate text-sm text-muted-foreground">
+                      {proposalNote(item) || "—"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busyId === item.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void onReject(item.id);
+                        }}
+                      >
+                        {t("settings.approvals.reject")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        loading={busyId === item.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void onApprove(item.id);
+                        }}
+                      >
+                        {t("settings.approvals.approve")}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
+
+      <Dialog open={detail != null} onOpenChange={(open) => !open && setDetail(null)}>
+        <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("settings.approvals.detailTitle")}</DialogTitle>
+            <DialogDescription>
+              {detail?.proposed_by_email
+                ? t("settings.approvals.proposedBy", { email: detail.proposed_by_email })
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4">
+            <div>
+              <p className="text-base font-semibold text-foreground">
+                {detail?.name}{" "}
+                <span className="font-normal text-muted-foreground">({detail?.sku})</span>
+              </p>
+            </div>
+
+            {detail && proposalNote(detail) && (
+              <p className="text-sm whitespace-pre-wrap text-foreground">{proposalNote(detail)}</p>
+            )}
+          </div>
+          {detail && (
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busyId === detail.id}
+                onClick={() => void onReject(detail.id)}
+              >
+                {t("settings.approvals.reject")}
+              </Button>
+              <Button
+                type="button"
+                loading={busyId === detail.id}
+                onClick={() => void onApprove(detail.id)}
+              >
+                {t("settings.approvals.approve")}
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
