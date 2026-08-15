@@ -42,10 +42,16 @@
 
   --color-success: oklch(var(--status-l) var(--status-c) var(--success-h));
   --color-success-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--success-h));
-  --color-success-soft: oklch(var(--status-l) var(--status-c) var(--success-h) / var(--status-soft-a));
+  --color-success-soft: oklch(
+    var(--status-l) var(--status-c) var(--success-h) /
+    var(--status-soft-a)
+  );
   --color-destructive: oklch(var(--status-l) var(--danger-c) var(--danger-h));
   --color-destructive-foreground: oklch(var(--status-fg-l) var(--danger-fg-c) var(--danger-h));
-  --color-destructive-soft: oklch(var(--status-l) var(--danger-c) var(--danger-h) / var(--status-soft-a));
+  --color-destructive-soft: oklch(
+    var(--status-l) var(--danger-c) var(--danger-h) /
+    var(--status-soft-a)
+  );
   --color-info: oklch(var(--status-l) var(--status-c) var(--info-h));
   --color-info-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--info-h));
   --color-info-soft: oklch(var(--status-l) var(--status-c) var(--info-h) / var(--status-soft-a));
@@ -95,9 +101,15 @@
   --danger-fg-c: 0.103;
   --status-soft-a: 0.12;
   --color-success-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--success-h));
-  --color-success-soft: oklch(var(--status-l) var(--status-c) var(--success-h) / var(--status-soft-a));
+  --color-success-soft: oklch(
+    var(--status-l) var(--status-c) var(--success-h) /
+    var(--status-soft-a)
+  );
   --color-destructive-foreground: oklch(var(--status-fg-l) var(--danger-fg-c) var(--danger-h));
-  --color-destructive-soft: oklch(var(--status-l) var(--danger-c) var(--danger-h) / var(--status-soft-a));
+  --color-destructive-soft: oklch(
+    var(--status-l) var(--danger-c) var(--danger-h) /
+    var(--status-soft-a)
+  );
   --color-info-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--info-h));
   --color-info-soft: oklch(var(--status-l) var(--status-c) var(--info-h) / var(--status-soft-a));
   --color-voice: #f0a060;
