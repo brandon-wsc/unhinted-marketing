@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SignalMetrics(BaseModel):
@@ -28,6 +28,8 @@ class TopSignalsResponse(BaseModel):
 
 
 class RecommendedQuestionItem(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
     id: str
     text: str
     rationale: str | None = None
@@ -36,6 +38,8 @@ class RecommendedQuestionItem(BaseModel):
 
 
 class RecommendedQuestionsResponse(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
     company_id: uuid.UUID
     questions: list[RecommendedQuestionItem]
     source_signal_ids: list[str]

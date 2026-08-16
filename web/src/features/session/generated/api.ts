@@ -1584,11 +1584,11 @@ export type components = {
             /** Text */
             text: string;
             /** Rationale */
-            rationale?: string | null;
+            rationale: string | null;
             /** Source Signal Ids */
-            source_signal_ids?: string[];
+            source_signal_ids: string[];
             /** Persona Slug */
-            persona_slug?: string | null;
+            persona_slug: string | null;
         };
         /** RecommendedQuestionsResponse */
         RecommendedQuestionsResponse: {
