@@ -125,6 +125,6 @@ jobs:
       - name: Fail if generated TS types are out of date
         working-directory: scripts/typescript_gen
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npm run generate
           git diff --exit-code -- ../../web/src/features/session/generated

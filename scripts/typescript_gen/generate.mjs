@@ -1,6 +1,6 @@
 // GENERATES web/src/features/session/generated/*.ts from backend contracts.
 // Source of truth: schemas/ (Pydantic) -> docs/contracts/*.schema.json + docs/openapi.json
-// Run: cd scripts/typescript-gen && npm install && npm run generate
+// Run: cd scripts/typescript_gen && npm install && npm run generate
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

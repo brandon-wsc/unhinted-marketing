@@ -17,14 +17,13 @@ export type PreviewMediaMutationResponse = components["schemas"]["PreviewMediaMu
 export type ConfirmSessionResponse = components["schemas"]["ConfirmSessionResponse"];
 export type RecommendedQuestion = components["schemas"]["RecommendedQuestionItem"];
 export type RecommendedQuestionsResponse = components["schemas"]["RecommendedQuestionsResponse"];
-// DraftCopy/PreviewMediaItem have backend defaults; FE treats them as always-present.
-// Keep the generated base plus these non-null guarantees so consumers don't re-narrow.
 export type DraftCopy = components["schemas"]["DraftCopy"];
 export type PreviewMediaItem = components["schemas"]["PreviewMediaItem"];
 
 // --- Generated from JSON Schema mirrors (schemas/ → docs/contracts) ---
 export type AgentProgress = import("./generated/agent-progress").AgentProgressData;
 export type PreviewDraft = import("./generated/preview-updated").PreviewUpdatedData;
+export type SessionBrief = import("./generated/session-brief").SessionBriefData;
 
 // --- FE-local / not-yet-contracted ---
 export type SessionMode = "CHAT" | "AGENT" | "PREVIEW";
@@ -48,13 +47,6 @@ export type AgentActionRecord = {
   model: string | null;
   status: "running" | "done";
   afterMessageId: string | null;
-};
-export type SessionBrief = {
-  can_do: string[];
-  cannot_do: string[];
-  angles: string[];
-  persona: string | null;
-  summary: string;
 };
 export type SessionSnapshot = {
   session_id: string;

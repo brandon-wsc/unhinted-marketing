@@ -70,7 +70,7 @@ Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — runs on 
 | `backend-unit` | `pytest tests/unit` + utils cov ≥85%; session nodes mock-LLM cov ≥70% |
 | `backend-api` | `pgvector/pgvector:pg18` service + `pytest tests/api` + routes cov ≥70% |
 | `frontend` | `pnpm install --frozen-lockfile` → `pnpm run lint` (Biome) → `pnpm run test:coverage` → `pnpm run build` |
-| `contracts` | `python -m scripts.export_contracts` then `git diff --exit-code` on `docs/openapi.json` + `docs/contracts/` |
+| `contracts` | `python -m scripts.check_contracts_fresh`; regenerate TS via `scripts/typescript_gen` and `git diff --exit-code` on `web/src/features/session/generated/` |
 
 **Do not** require whole-repo 80%. Local equivalents:
 
@@ -140,7 +140,7 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 6. ~~**Contracts SSOT**~~ — `AGENTS.md`, ADRs, `schemas/contracts.py` / `tools.py`, `docs/contracts/` + OpenAPI export
 7. ~~**Graph mock-LLM node tests + CI**~~ — `tests/unit/test_session_nodes.py` + routing; opt-in `node_trace_recording()`; CI Tier 1b ≥70%
 
-**Contracts refresh:** after changing `schemas/contracts.py` or `schemas/tools.py` (or API routes), run `python -m scripts.export_contracts` and commit the updated `docs/contracts/` + `docs/openapi.json` mirrors.
+**Contracts refresh:** after changing `schemas/contracts.py` or `schemas/tools.py` (or API routes), run `python -m scripts.export_contracts`, then `cd scripts/typescript_gen && npm install && npm run generate`, and commit the updated `docs/contracts/`, `docs/openapi.json`, and `web/src/features/session/generated/` mirrors.
 
 **Note:** pytest disables the `debugging` plugin (`-p no:debugging`) because the top-level package name `cmd` shadows the stdlib `cmd` module used by `pdb`.
 
