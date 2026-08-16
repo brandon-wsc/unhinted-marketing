@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidEmail } from "@/lib/simple-email";
+import { emailsMatch, isValidEmail } from "@/lib/simple-email";
 
 describe("isValidEmail", () => {
   it("accepts dotted domains and rejects HTML5-only shapes like a@a", () => {
@@ -12,5 +12,12 @@ describe("isValidEmail", () => {
     expect(isValidEmail("@example.com")).toBe(false);
     expect(isValidEmail("a@b@c.com")).toBe(false);
     expect(isValidEmail("a @b.com")).toBe(false);
+  });
+});
+
+describe("emailsMatch", () => {
+  it("compares trimmed case-insensitive emails", () => {
+    expect(emailsMatch("Ada@Example.com", " ada@example.com ")).toBe(true);
+    expect(emailsMatch("ada@example.com", "other@example.com")).toBe(false);
   });
 });

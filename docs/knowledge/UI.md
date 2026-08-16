@@ -135,7 +135,7 @@ Title + body sit **inside** the AuthLayout card (Penpot AuthCard), left-aligned.
 |------------|-----|
 | Logged out | Show invited **email** + **company name** from `GET /api/invites/{token}`; footer → **Create account** (outline) · **Log in** (primary) with `?next=/invite/:token`. Login/register **lock** that email (`readOnly`); register **hides** company-name (bootstrap org still created, replaced on accept). |
 | Logged in, accept OK | Warning (info Alert) only if the user is **sole owner** of their current org (bootstrap replace — ADR 0013): products → Mine in the invited company; voice not copied; chats/drafts stay. Members/admins of a real team do **not** see replace copy (join → 409). Footer: **Back to home** (outline, left) · **Join company** (primary, right) → `POST /api/invites/{token}/accept` → toast + redirect `/`. |
-| 403 email mismatch | Title in card; body in **Alert** (destructive soft); actions: **Back to home** (left) · **Log out and sign in again** (right). |
+| 403 email mismatch | Detected from preview vs signed-in email (before Join) as well as POST 403. Title **Email mismatch**. Destructive Alert **explains**, does not command, and **does not interpolate** the invited address: “You're signed in with a different email than this invite.” Actions: **Back to home** (outline) · **Sign out** (primary, `auth.logout`). After logout, stay on `/invite/:token` (logged-out invite card — not `/login`). |
 | 409 already in org | “You already belong to a company” + **Back to home** (right-aligned outline; bootstrap replace handled server-side for sole-owner solo org — see locked decision above). |
 | 400 expired / revoked / used | Static error + contact your admin; **Back to home** right-aligned. |
 

@@ -120,15 +120,25 @@ describe("InviteAcceptPage", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("403 mismatch: return home then switch account", async () => {
+  it("logged in with a different email: mismatch without Join", async () => {
     auth.user = { email: "other@example.com" };
-    apiAcceptInvite.mockRejectedValue(new ApiStatusError(403, "mismatch"));
-    const user = userEvent.setup();
-    renderInvite();
-    await user.click(await screen.findByRole("button", { name: "invite.join" }));
+    const { unmount } = renderInvite();
+    expect(await screen.findByRole("heading", { name: "invite.mismatchTitle" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("invite.mismatchBody");
+    expect(screen.queryByDisplayValue("other@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "invite.join" })).not.toBeInTheDocument();
     const home = screen.getByRole("link", { name: "invite.home" });
-    const switchAccount = screen.getByRole("button", { name: "invite.logoutRelogin" });
-    expectBefore(home, switchAccount);
+    const signOut = screen.getByRole("button", { name: "auth.logout" });
+    expectBefore(home, signOut);
+
+    logout.mockImplementation(async () => {
+      auth.user = null;
+    });
+    await userEvent.click(signOut);
+    expect(logout).toHaveBeenCalled();
+    unmount();
+    renderInvite();
+    expect(await screen.findByRole("heading", { name: "invite.loggedOutTitle" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "invite.login" })).toBeInTheDocument();
   });
 });

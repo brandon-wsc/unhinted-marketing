@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
 import { ApiStatusError, apiAcceptInvite } from "@/features/company-settings/api";
 import { useInvitePreview } from "@/features/company-settings/use-invite-preview";
+import { emailsMatch } from "@/lib/simple-email";
 
 type InviteView = "ready" | "mismatch" | "conflict" | "invalid";
 
@@ -40,6 +41,7 @@ export function InviteAcceptPage() {
     email: preview?.email ?? "",
     company: preview?.company_name ?? "",
   };
+  const emailMismatch = Boolean(user && preview && !emailsMatch(user.email, preview.email));
 
   async function onJoin() {
     if (!token) return;
@@ -58,9 +60,9 @@ export function InviteAcceptPage() {
     }
   }
 
-  async function onSwitchAccount() {
+  async function onLogout() {
+    setView("ready");
     await logout();
-    navigate(loginTo, { replace: true });
   }
 
   if (loading || (token && previewStatus === "loading")) {
@@ -100,7 +102,7 @@ export function InviteAcceptPage() {
     );
   }
 
-  if (view === "mismatch") {
+  if (view === "mismatch" || emailMismatch) {
     return (
       <AuthLayout title={t("invite.mismatchTitle")}>
         <div className="space-y-4">
@@ -109,13 +111,13 @@ export function InviteAcceptPage() {
             className="border-destructive/30 bg-destructive-soft text-destructive-foreground"
           >
             <AlertDescription className="text-destructive-foreground">
-              {t("invite.mismatchBody", previewVars)}
+              {t("invite.mismatchBody")}
             </AlertDescription>
           </Alert>
           <ActionRow>
             <ReturnHomeButton />
-            <Button type="button" onClick={() => void onSwitchAccount()}>
-              {t("invite.logoutRelogin")}
+            <Button type="button" onClick={() => void onLogout()}>
+              {t("auth.logout")}
             </Button>
           </ActionRow>
         </div>
