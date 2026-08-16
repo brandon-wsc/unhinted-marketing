@@ -110,13 +110,35 @@ def test_export_contracts_respects_export_root(tmp_path, monkeypatch) -> None:
     assert (tmp_path / "docs" / "openapi.json").exists()
 
 
-def test_ts_mirror_guard_catches_missing_keys(tmp_path, monkeypatch) -> None:
+def test_contracts_fresh_detects_drift(tmp_path, monkeypatch) -> None:
     import scripts.check_contracts_fresh as ccf
 
-    mirror = tmp_path / "types.ts"
-    mirror.write_text("export type PreviewDraft = { copy: DraftCopy };")
-    monkeypatch.setattr(ccf, "TYPE_MIRROR", mirror)
+    (tmp_path / "docs" / "contracts").mkdir(parents=True)
+    committed = tmp_path / "docs" / "contracts" / "draft-copy.schema.json"
+    committed.write_text("{}")
 
-    problems = ccf.check_ts_mirror()
+    gen_dir = tmp_path / "gen"
+    committed_dir = tmp_path / "committed"
+    (committed_dir / "docs" / "contracts").mkdir(parents=True)
+    committed = committed_dir / "docs" / "contracts" / "draft-copy.schema.json"
+    committed.write_text("{}")
+
+    class _FakeTmp:
+        def __enter__(self):
+            (gen_dir / "docs" / "contracts").mkdir(parents=True, exist_ok=True)
+            return str(gen_dir)
+
+        def __exit__(self, *exc) -> None:
+            return None
+
+    def fake_run(*args, **kwargs) -> None:
+        generated = gen_dir / "docs" / "contracts" / "draft-copy.schema.json"
+        generated.write_text('{"title": "generated"}')
+
+    monkeypatch.setattr(ccf.subprocess, "run", fake_run)
+    monkeypatch.setattr(ccf.tempfile, "TemporaryDirectory", _FakeTmp)
+    monkeypatch.setattr(ccf, "ROOT", committed_dir)
+
+    problems = ccf.regen_and_diff()
     assert problems
-    assert any("revision" in p for p in problems)
+    assert "contracts/draft-copy.schema.json" in problems

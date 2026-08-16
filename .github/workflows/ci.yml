@@ -116,6 +116,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - run: pip install -e '.[dev]'
       - name: Fail if contract mirrors are out of date
         run: python -m scripts.check_contracts_fresh
+      - name: Fail if generated TS types are out of date
+        working-directory: scripts/typescript_gen
+        run: |
+          npm install --no-audit --no-fund
+          npm run generate
+          git diff --exit-code -- ../../web/src/features/session/generated

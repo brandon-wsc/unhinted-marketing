@@ -4,11 +4,9 @@ Re-exports `docs/contracts/*.schema.json` + `docs/openapi.json` into an isolated
 temp dir (via EXPORT_ROOT) and fails when the committed files have drifted
 (e.g. a schema changed but `python -m scripts.export_contracts` was not run).
 
-Also performs a lightweight consistency probe on the hand-written frontend
-mirror (`web/src/features/session/types.ts`) so preview draft contract keys
-stay aligned with the SSE payload. The strictly enforced bridge (CI) is the
-generated JSON mirrors; the TS file check is informational until a generator
-lands (option 1 plan).
+The frontend TS mirror (`web/src/features/session/generated/`) is generated
+separately by `scripts/typescript_gen` and is checked by CI drift (regenerate +
+`git diff`) — see `.github/workflows/ci.yml`.
 
 Usage:
     python -m scripts.check_contracts_fresh
@@ -24,11 +22,6 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
-TYPE_MIRROR = ROOT / "web" / "src" / "features" / "session" / "types.ts"
-
-# Keys that must remain present in the frontend mirror while `preview.updated`
-# is the canonical draft event (ADR 0001 / ADR 0008).
-REQUIRED_PREVIEW_KEYS = ("copy", "revision", "approval_token", "media", "image_url")
 
 
 def regen_and_diff() -> list[str]:
@@ -54,22 +47,13 @@ def regen_and_diff() -> list[str]:
         return drifted
 
 
-def check_ts_mirror() -> list[str]:
-    """Return preview contract keys missing from the hand-written TS mirror."""
-    if not TYPE_MIRROR.exists():
-        return [f"missing frontend mirror: {TYPE_MIRROR.relative_to(ROOT)}"]
-    text = TYPE_MIRROR.read_text()
-    return [
-        f"types.ts missing key `{key}` (see schemas/contracts.py)"
-        for key in REQUIRED_PREVIEW_KEYS
-        if key not in text
-    ]
-
-
 def main() -> int:
-    problems = regen_and_diff() + check_ts_mirror()
+    problems = regen_and_diff()
     if problems:
-        print("Contract mirrors are stale. Run `python -m scripts.export_contracts` and sync web types:")
+        print(
+            "Contract mirrors are stale. Run `python -m scripts.export_contracts` "
+            "and re-run `npm run generate` in scripts/typescript_gen:"
+        )
         for problem in problems:
             print(f"  - {problem}")
         return 1

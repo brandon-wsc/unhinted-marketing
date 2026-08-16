@@ -3410,6 +3410,11 @@
           }
         },
         "type": "object",
+        "required": [
+          "caption",
+          "hashtags",
+          "cta"
+        ],
         "title": "DraftCopy",
         "description": "Shared post copy across preview skins (ADR 0001)."
       },
@@ -4517,7 +4522,13 @@
         },
         "type": "object",
         "required": [
-          "id"
+          "id",
+          "url",
+          "plan",
+          "format",
+          "role",
+          "seq",
+          "status"
         ],
         "title": "PreviewMediaItem",
         "description": "One append-only image version referenced by a draft (ADR 0008)."
@@ -4567,6 +4578,8 @@
           "revision",
           "approval_token",
           "copy",
+          "image_url",
+          "media",
           "platform",
           "mode"
         ],
@@ -5377,6 +5390,13 @@
           }
         },
         "type": "object",
+        "required": [
+          "can_do",
+          "cannot_do",
+          "angles",
+          "persona",
+          "summary"
+        ],
         "title": "SessionBriefData",
         "description": "Payload for `brief.updated` (matches session BriefOut / FE SessionBrief)."
       },
@@ -6077,6 +6097,8 @@
           "revision",
           "approval_token",
           "copy",
+          "image_url",
+          "media",
           "platform",
           "mode"
         ],
