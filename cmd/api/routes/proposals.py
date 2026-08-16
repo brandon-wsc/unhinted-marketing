@@ -86,7 +86,7 @@ async def _to_item(
     current = _profile_strings(org_row.profile if org_row else None)
     proposer_ids = [proposal.proposed_by] if proposal.proposed_by else []
     email_map = emails if emails is not None else await _emails_for(db, proposer_ids)
-    allowed = {"pending", "approved", "rejected"}
+    allowed = {"pending", "approved", "rejected", "cancelled"}
     reviewed_status = proposal.status if proposal.status in allowed else "pending"
     return ProductProposalItem(
         id=proposal.id,
@@ -207,6 +207,28 @@ async def reject_product_proposal(
     if proposal.status != "pending":
         raise HTTPException(status_code=409, detail="Proposal is not pending")
     await mark_proposal_reviewed(db, proposal, status="rejected", reviewed_by=user.id)
+    await db.commit()
+    await db.refresh(proposal)
+    return await _to_item(db, proposal)
+
+
+@router.post("/{company_id}/proposals/{proposal_id}/cancel", response_model=ProductProposalItem)
+async def cancel_product_proposal(
+    proposal_id: uuid.UUID,
+    company_id: Annotated[uuid.UUID, Depends(require_company_access)],
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ProductProposalItem:
+    proposal = await get_product_proposal(db, company_id=company_id, proposal_id=proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if proposal.proposed_by != user.id:
+        raise HTTPException(status_code=403, detail="Only the proposer can cancel this request")
+    if proposal.status == "cancelled":
+        return await _to_item(db, proposal)
+    if proposal.status != "pending":
+        raise HTTPException(status_code=409, detail="Proposal is not pending")
+    await mark_proposal_reviewed(db, proposal, status="cancelled", reviewed_by=user.id)
     await db.commit()
     await db.refresh(proposal)
     return await _to_item(db, proposal)

@@ -13,14 +13,15 @@ K6 is that path: **propose** (any member, own Mine row) → **Approvals** (owner
 
 ## Decision
 
-1. **Propose / approve / reject are traditional HTTP** — zero LLM. Graph nodes must not upsert org products.
+1. **Propose / approve / reject / cancel are traditional HTTP** — zero LLM. Graph nodes must not upsert org products.
 2. **MVP source = User × Old products only** (Mine catalog). Chat scratch (User × New), offer snippets, and Voice exemplars are out of this ADR. Exemplars stay K5 owner/admin direct promote.
 3. **Snapshot at propose** — `product_proposals` stores `sku`, `name`, `profile` copied from the Mine row. Later Mine edits do not change a pending proposal.
-4. **One pending proposal per `(company_id, sku)`** — second propose → **409**. Rejected/approved rows do not block a new propose.
+4. **One pending proposal per `(company_id, sku)`** — second propose → **409**. Rejected / approved / **cancelled** rows do not block a new propose.
 5. **Approve = replace-by-SKU** — owner/admin `POST …/proposals/{id}/approve` upserts **Org × Old** from the snapshot (same `upsert_product_row` as import) and re-embeds. Idempotent: already approved → 200, no second write.
 6. **Reject** — org unchanged; Mine row stays. `POST …/reject`.
-7. **Who** — any org member proposes **their own** active Mine row. List / approve / reject require `require_company_settings_editor` (owner/admin).
-8. **UI** — `/settings?tab=approvals` in the Company settings sidebar for owner/admin only. Mine tab shows **Propose** (or pending). Diff is proposed vs current org row (or empty = new SKU). No TTL / batch for MVP.
+7. **Cancel** — proposer withdraws a **pending** request (`POST …/cancel`). Org unchanged; Mine row stays. Idempotent if already cancelled. Not pending → 409. Only `proposed_by` (not another member; owner/admin use reject).
+8. **Who** — any org member proposes **their own** active Mine row. List / approve / reject require `require_company_settings_editor` (owner/admin). Cancel requires `require_company_access` + proposer.
+9. **UI** — `/settings?tab=approvals` in the Company settings sidebar for owner/admin only. Mine tab shows **Add to company** or **Cancel request** (icon + tooltip). Diff is proposed vs current org row (or empty = new SKU). No TTL / batch for MVP.
 
 ### HTTP
 
@@ -30,6 +31,7 @@ K6 is that path: **propose** (any member, own Mine row) → **Approvals** (owner
 | GET | `/api/companies/{id}/proposals` | owner/admin |
 | POST | `/api/companies/{id}/proposals/{id}/approve` | owner/admin |
 | POST | `/api/companies/{id}/proposals/{id}/reject` | owner/admin |
+| POST | `/api/companies/{id}/proposals/{id}/cancel` | proposer |
 
 ## Consequences
 

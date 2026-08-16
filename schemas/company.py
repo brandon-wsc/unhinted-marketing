@@ -228,7 +228,7 @@ class ProductProposalItem(BaseModel):
     company_id: uuid.UUID
     sku: str
     name: str
-    status: Literal["pending", "approved", "rejected"]
+    status: Literal["pending", "approved", "rejected", "cancelled"]
     proposed_by: uuid.UUID | None = None
     proposed_by_email: str | None = None
     source_product_id: uuid.UUID | None = None

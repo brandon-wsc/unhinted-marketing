@@ -272,7 +272,7 @@
     "voice": {
       "title": "Voice",
       "subtitle": "Set how your brand sounds in drafts — tone and words to avoid.",
-      "readOnly": "You can view these settings. Ask a company admin if you need changes.",
+      "readOnly": "Ask a company admin if you need changes.",
       "saved": "Saved.",
       "roast": {
         "label": "Tone strength",
@@ -315,8 +315,8 @@
       "activeCount": "{{count}} active",
       "empty": "No products yet.",
       "archive": "Archive",
-      "propose": "Ask to add to company",
-      "pendingReview": "Waiting for review",
+      "propose": "Add to company",
+      "cancelRequest": "Cancel request",
       "alreadyPending": "This product code is already waiting for review",
       "statusActive": "Active",
       "coveredByCompany": "Company",

@@ -1444,6 +1444,64 @@
         }
       }
     },
+    "/api/companies/{company_id}/proposals/{proposal_id}/cancel": {
+      "post": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Cancel Product Proposal",
+        "operationId": "cancel_product_proposal_api_companies__company_id__proposals__proposal_id__cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proposal Id"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductProposalItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions": {
       "get": {
         "tags": [
@@ -4748,7 +4806,8 @@
             "enum": [
               "pending",
               "approved",
-              "rejected"
+              "rejected",
+              "cancelled"
             ],
             "title": "Status"
           },

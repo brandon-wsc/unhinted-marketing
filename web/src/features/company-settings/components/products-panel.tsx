@@ -1,4 +1,4 @@
-import { Archive, CirclePlus } from "lucide-react";
+import { Archive, CirclePlus, CircleX } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
@@ -38,6 +38,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuth } from "@/context/auth-context";
 import {
   apiArchiveProduct,
+  apiCancelProposal,
   apiCreateProduct,
   apiImportProducts,
   apiListProducts,
@@ -174,6 +175,19 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
     setError(null);
     try {
       await apiProposeProduct(accessToken, companyId, productId);
+      await refresh();
+    } catch (err) {
+      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onCancelRequest(proposalId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiCancelProposal(accessToken, companyId, proposalId);
       await refresh();
     } catch (err) {
       setError(mapApiError(err instanceof Error ? err.message : String(err), t));
@@ -403,9 +417,27 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                         <TableCell className="text-right">
                           <div className="flex flex-wrap items-center justify-end gap-2">
                             {scope === "mine" && item.pending_proposal_id ? (
-                              <Badge variant="secondary">
-                                {t("settings.products.pendingReview")}
-                              </Badge>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <IconButton
+                                    type="button"
+                                    className="size-8"
+                                    disabled={busy}
+                                    aria-label={t("settings.products.cancelRequest")}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const proposalId = item.pending_proposal_id;
+                                      if (!proposalId) return;
+                                      void onCancelRequest(proposalId);
+                                    }}
+                                  >
+                                    <CircleX />
+                                  </IconButton>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  {t("settings.products.cancelRequest")}
+                                </TooltipContent>
+                              </Tooltip>
                             ) : null}
                             {scope === "mine" && !item.pending_proposal_id ? (
                               <Tooltip>
