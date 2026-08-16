@@ -303,6 +303,11 @@ export type OrgInviteItem = {
   created_at: string;
 };
 
+export type OrgInvitePreview = {
+  email: string;
+  company_name: string;
+};
+
 export type OrgInviteAcceptResponse = {
   company_id: string;
   role: InviteRole;
@@ -410,6 +415,12 @@ export async function apiRevokeInvite(
     { method: "DELETE" },
   );
   if (!res.ok) await throwApiError(res);
+}
+
+export async function apiGetInvitePreview(token: string): Promise<OrgInvitePreview> {
+  const res = await fetch(`${API_BASE}/invites/${encodeURIComponent(token)}`);
+  if (!res.ok) await throwApiError(res);
+  return res.json();
 }
 
 export async function apiAcceptInvite(

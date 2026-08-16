@@ -11,3 +11,11 @@ export function isValidEmail(value: string): boolean {
   if (!trimmed || trimmed.length > 254) return false;
   return EMAIL_RE.test(trimmed);
 }
+
+export function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function emailsMatch(a: string, b: string): boolean {
+  return normalizeEmail(a) === normalizeEmail(b);
+}

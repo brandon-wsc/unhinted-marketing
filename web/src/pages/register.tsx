@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
+import { useInvitePreview } from "@/features/company-settings/use-invite-preview";
+import { inviteTokenFromPath } from "@/lib/invite-path";
 import { mapApiError } from "@/lib/map-api-error";
 import { safeInternalPath } from "@/lib/safe-internal-path";
 
@@ -18,6 +20,10 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const nextPath = safeInternalPath(params.get("next")) ?? "/";
+  const inviteToken = inviteTokenFromPath(nextPath);
+  const { preview, status: previewStatus } = useInvitePreview(inviteToken);
+  const invitePending = Boolean(inviteToken) && previewStatus === "loading";
+  const emailLocked = previewStatus === "ok" && Boolean(preview);
   const loginHref = nextPath === "/" ? "/login" : `/login?next=${encodeURIComponent(nextPath)}`;
   const [displayName, setDisplayName] = useState("");
   const [organizationName, setOrganizationName] = useState("");
@@ -26,10 +32,15 @@ export function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (preview?.email) setEmail(preview.email);
+  }, [preview]);
+
   if (!loading && user) return <Navigate to={nextPath} replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (invitePending) return;
 
     if (password.length < 8 || confirmPassword.length < 8) {
       showError(t("errors.passwordTooShort"));
@@ -44,10 +55,10 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       await register({
-        email,
+        email: emailLocked && preview ? preview.email : email,
         password,
         display_name: displayName,
-        organization_name: organizationName || undefined,
+        organization_name: emailLocked ? undefined : organizationName || undefined,
       });
       navigate(nextPath, { replace: true });
     } catch (err) {
@@ -58,10 +69,18 @@ export function RegisterPage() {
     }
   }
 
+  const subtitle =
+    emailLocked && preview
+      ? t("auth.register.subtitleInvite", {
+          email: preview.email,
+          company: preview.company_name,
+        })
+      : t("auth.register.subtitle");
+
   return (
     <AuthLayout
       title={t("auth.register.title")}
-      subtitle={t("auth.register.subtitle")}
+      subtitle={subtitle}
       footer={
         <>
           {t("auth.register.hasAccount")}{" "}
@@ -81,14 +100,16 @@ export function RegisterPage() {
             required
           />
         </FormField>
-        <FormField id="organizationName" label={t("auth.register.organizationName")}>
-          <Input
-            id="organizationName"
-            value={organizationName}
-            onChange={(e) => setOrganizationName(e.target.value)}
-            autoComplete="organization"
-          />
-        </FormField>
+        {!(emailLocked || invitePending) && (
+          <FormField id="organizationName" label={t("auth.register.organizationName")}>
+            <Input
+              id="organizationName"
+              value={organizationName}
+              onChange={(e) => setOrganizationName(e.target.value)}
+              autoComplete="organization"
+            />
+          </FormField>
+        )}
         <FormField id="email" label={t("common.email")}>
           <Input
             id="email"
@@ -96,6 +117,7 @@ export function RegisterPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
+            readOnly={emailLocked || invitePending}
             required
           />
         </FormField>
@@ -115,7 +137,7 @@ export function RegisterPage() {
           autoComplete="new-password"
           required
         />
-        <Button type="submit" disabled={submitting} className="w-full">
+        <Button type="submit" disabled={submitting || invitePending} className="w-full">
           {submitting ? t("auth.register.submitting") : t("auth.register.submit")}
         </Button>
       </form>

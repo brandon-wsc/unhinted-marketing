@@ -148,6 +148,11 @@ class OrgInviteListResponse(BaseModel):
     items: list[OrgInviteItem]
 
 
+class OrgInvitePreviewResponse(BaseModel):
+    email: EmailStr
+    company_name: str
+
+
 class OrgInviteAcceptResponse(BaseModel):
     company_id: uuid.UUID
     role: Literal["admin", "member"]

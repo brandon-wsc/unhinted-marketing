@@ -804,6 +804,48 @@
         }
       }
     },
+    "/api/invites/{token}": {
+      "get": {
+        "tags": [
+          "invites"
+        ],
+        "summary": "Preview Company Invite",
+        "operationId": "preview_company_invite_api_invites__token__get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgInvitePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/invites/{token}/accept": {
       "post": {
         "tags": [
@@ -4232,6 +4274,25 @@
           "items"
         ],
         "title": "OrgInviteListResponse"
+      },
+      "OrgInvitePreviewResponse": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "company_name"
+        ],
+        "title": "OrgInvitePreviewResponse"
       },
       "OrganizationSummary": {
         "properties": {

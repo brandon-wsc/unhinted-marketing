@@ -2,10 +2,13 @@ import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
 import { ApiStatusError, apiAcceptInvite } from "@/features/company-settings/api";
+import { useInvitePreview } from "@/features/company-settings/use-invite-preview";
+import { emailsMatch } from "@/lib/simple-email";
 
 type InviteView = "ready" | "mismatch" | "conflict" | "invalid";
 
@@ -26,6 +29,7 @@ export function InviteAcceptPage() {
   const { t } = useTranslation();
   const { token } = useParams<{ token: string }>();
   const { user, loading, logout, refreshAccessToken, accessToken } = useAuth();
+  const { preview, status: previewStatus } = useInvitePreview(token);
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<InviteView>("ready");
@@ -33,6 +37,11 @@ export function InviteAcceptPage() {
   const next = token ? `/invite/${token}` : "/";
   const loginTo = `/login?next=${encodeURIComponent(next)}`;
   const registerTo = `/register?next=${encodeURIComponent(next)}`;
+  const previewVars = {
+    email: preview?.email ?? "",
+    company: preview?.company_name ?? "",
+  };
+  const emailMismatch = Boolean(user && preview && !emailsMatch(user.email, preview.email));
 
   async function onJoin() {
     if (!token) return;
@@ -51,12 +60,12 @@ export function InviteAcceptPage() {
     }
   }
 
-  async function onSwitchAccount() {
+  async function onLogout() {
+    setView("ready");
     await logout();
-    navigate(loginTo, { replace: true });
   }
 
-  if (loading) {
+  if (loading || (token && previewStatus === "loading")) {
     return (
       <AuthLayout title={t("invite.titleJoin")} subtitle={t("common.loading")}>
         <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
@@ -64,7 +73,7 @@ export function InviteAcceptPage() {
     );
   }
 
-  if (!token) {
+  if (!token || previewStatus === "invalid") {
     return (
       <AuthLayout title={t("invite.invalidTitle")} subtitle={t("invite.invalidBody")}>
         <ActionRow>
@@ -78,7 +87,7 @@ export function InviteAcceptPage() {
     return (
       <AuthLayout
         title={t("invite.loggedOutTitle")}
-        subtitle={t("invite.loggedOutBody")}
+        subtitle={t("invite.loggedOutBody", previewVars)}
         footer={t("invite.once")}
       >
         <ActionRow>
@@ -93,15 +102,25 @@ export function InviteAcceptPage() {
     );
   }
 
-  if (view === "mismatch") {
+  if (view === "mismatch" || emailMismatch) {
     return (
-      <AuthLayout title={t("invite.mismatchTitle")} subtitle={t("invite.mismatchBody")}>
-        <ActionRow>
-          <ReturnHomeButton />
-          <Button type="button" onClick={() => void onSwitchAccount()}>
-            {t("invite.logoutRelogin")}
-          </Button>
-        </ActionRow>
+      <AuthLayout title={t("invite.mismatchTitle")}>
+        <div className="space-y-4">
+          <Alert
+            variant="destructive"
+            className="border-destructive/30 bg-destructive-soft text-destructive-foreground"
+          >
+            <AlertDescription className="text-destructive-foreground">
+              {t("invite.mismatchBody")}
+            </AlertDescription>
+          </Alert>
+          <ActionRow>
+            <ReturnHomeButton />
+            <Button type="button" onClick={() => void onLogout()}>
+              {t("auth.logout")}
+            </Button>
+          </ActionRow>
+        </div>
       </AuthLayout>
     );
   }
@@ -127,8 +146,13 @@ export function InviteAcceptPage() {
   }
 
   return (
-    <AuthLayout title={t("invite.titleJoin")} subtitle={t("invite.loggedInBody")}>
+    <AuthLayout title={t("invite.titleJoin")} subtitle={t("invite.loggedInBody", previewVars)}>
       <div className="space-y-4">
+        {user.organizations?.length === 1 && user.organizations[0]?.role === "owner" && (
+          <Alert variant="info">
+            <AlertDescription>{t("invite.replaceWarning", previewVars)}</AlertDescription>
+          </Alert>
+        )}
         <Input value={user.email} readOnly />
         <ActionRow>
           <ReturnHomeButton />

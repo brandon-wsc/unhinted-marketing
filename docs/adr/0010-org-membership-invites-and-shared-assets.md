@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-11
 - **Supersedes:** — (unblocks K6 promote-to-org Approvals, held in STATUS since 2026-08-10)
-- **Amended by:** [ADR 0013](./0013-invite-accept-replaces-bootstrap-org.md) (§4: bootstrap solo-org replace on accept)
+- **Amended by:** [ADR 0013](./0013-invite-accept-replaces-bootstrap-org.md) (§4: bootstrap solo-org replace on accept); [ADR 0014](./0014-invite-public-preview.md) (§2: public preview of bound email + company name)
 
 ## Context
 
@@ -37,6 +37,7 @@ New table `org_invites`: `id`, `organization_id` (FK, cascade), `email` (normali
 | POST | `/api/companies/{id}/invites` | owner/admin | body `{email, role}`; response **always includes `invite_url`**; rate-limit create |
 | GET | `/api/companies/{id}/invites` | owner/admin | pending invites |
 | DELETE | `/api/companies/{id}/invites/{invite_id}` | owner/admin | revoke |
+| GET | `/api/invites/{token}` | public | pending invite only; `{ email, company_name }` — [ADR 0014](./0014-invite-public-preview.md) |
 | POST | `/api/invites/{token}/accept` | authed user whose email matches invite | validates hash, expiry, not-revoked; marks `accepted_at`, creates membership |
 
 Invite tokens are **single-use, 7-day expiry, bound to the invited email** (accepting account's email must match after normalize; mismatch → 403). Revoking an invite does not affect already-accepted memberships — use member DELETE.

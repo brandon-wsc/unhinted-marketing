@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from internal.memory.embeddings import embed_texts
 from internal.memory.models import (
@@ -227,12 +228,47 @@ async def delete_company(db: AsyncSession, company: Entity) -> None:
     await db.flush()
 
 
-async def clear_bootstrap_solo_org(db: AsyncSession, user_id: uuid.UUID) -> bool:
-    """ADR 0013: drop a register-bootstrap org so invite accept can proceed.
+async def _rehome_solo_products_to_mine(
+    db: AsyncSession,
+    *,
+    from_company_id: uuid.UUID,
+    to_company_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> None:
+    """Move all catalog rows onto dest as Mine (ADR 0015). Org SKU wins over Mine dupes."""
+    rows = list(
+        (
+            await db.scalars(select(Product).where(Product.company_id == from_company_id))
+        ).all()
+    )
+    org_rows = [row for row in rows if row.owner_scope == "org"]
+    mine_rows = [row for row in rows if row.owner_scope == "user"]
+    taken_skus: set[str] = set()
+    for row in org_rows:
+        row.company_id = to_company_id
+        row.owner_scope = "user"
+        row.user_id = user_id
+        taken_skus.add(row.sku)
+    await db.flush()
+    for row in mine_rows:
+        if row.sku in taken_skus:
+            await db.delete(row)
+            continue
+        row.company_id = to_company_id
+        row.user_id = user_id
+        taken_skus.add(row.sku)
+    await db.flush()
+
+
+async def clear_bootstrap_solo_org(
+    db: AsyncSession, user_id: uuid.UUID, *, dest_company_id: uuid.UUID
+) -> bool:
+    """ADR 0013/0015: drop a register-bootstrap org so invite accept can proceed.
 
     Returns True if the user has no membership, or their only membership was
-    sole owner of a single-member org (now deleted). Returns False if a real
-    team membership blocks accept (caller should 409).
+    sole owner of a single-member org (products rehomed to dest Mine, org
+    deleted). Returns False if a real team membership blocks accept (caller
+    should 409).
     """
     memberships = await list_user_memberships(db, user_id)
     if not memberships:
@@ -247,6 +283,12 @@ async def clear_bootstrap_solo_org(db: AsyncSession, user_id: uuid.UUID) -> bool
     company = await get_company(db, membership.organization_id)
     if company is None:
         return False
+    await _rehome_solo_products_to_mine(
+        db,
+        from_company_id=company.id,
+        to_company_id=dest_company_id,
+        user_id=user_id,
+    )
     await db.delete(membership)
     await db.flush()
     await delete_company(db, company)
@@ -322,7 +364,11 @@ async def get_org_invite(
 async def get_org_invite_by_token_hash(
     db: AsyncSession, token_hash: str
 ) -> OrgInvite | None:
-    return await db.scalar(select(OrgInvite).where(OrgInvite.token_hash == token_hash))
+    return await db.scalar(
+        select(OrgInvite)
+        .options(selectinload(OrgInvite.organization))
+        .where(OrgInvite.token_hash == token_hash)
+    )
 
 
 async def revoke_org_invite(db: AsyncSession, invite: OrgInvite) -> OrgInvite:
