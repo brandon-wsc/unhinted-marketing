@@ -93,3 +93,30 @@ def test_publish_social_post_ok() -> None:
     assert body.draft_copy.caption == "hello"
     assert body.model_dump(by_alias=True)["copy"]["caption"] == "hello"
     assert body.revision == 2
+
+
+def test_export_contracts_respects_export_root(tmp_path, monkeypatch) -> None:
+    import scripts.export_contracts as ec
+
+    monkeypatch.setenv("EXPORT_ROOT", str(tmp_path))
+    tmp_contracts = tmp_path / "docs" / "contracts"
+    monkeypatch.setattr(ec, "CONTRACTS_DIR", tmp_contracts)
+    monkeypatch.setattr(ec, "OPENAPI_PATH", tmp_path / "docs" / "openapi.json")
+
+    ec.export_json_schemas()
+    ec.export_openapi()
+
+    assert (tmp_contracts / "draft-copy.schema.json").exists()
+    assert (tmp_path / "docs" / "openapi.json").exists()
+
+
+def test_ts_mirror_guard_catches_missing_keys(tmp_path, monkeypatch) -> None:
+    import scripts.check_contracts_fresh as ccf
+
+    mirror = tmp_path / "types.ts"
+    mirror.write_text("export type PreviewDraft = { copy: DraftCopy };")
+    monkeypatch.setattr(ccf, "TYPE_MIRROR", mirror)
+
+    problems = ccf.check_ts_mirror()
+    assert problems
+    assert any("revision" in p for p in problems)

@@ -8,6 +8,7 @@ Usage (repo root, after `pip install -e ".[dev]"`):
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,7 @@ from schemas.tools import (
     QueryMarketTrendsResponse,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("EXPORT_ROOT", Path(__file__).resolve().parents[1]))
 CONTRACTS_DIR = ROOT / "docs" / "contracts"
 OPENAPI_PATH = ROOT / "docs" / "openapi.json"
 
