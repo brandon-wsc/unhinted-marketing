@@ -130,7 +130,7 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 |--------|------|-------------|
 | GET | `/api/health` | Liveness → `{"status":"ok"}` |
 
-Full auth and session specs: [ROADMAP.md](./ROADMAP.md); what’s shipped: [STATUS.md](./STATUS.md). Agent SSOT map: [AGENTS.md](../AGENTS.md). Refresh OpenAPI / JSON Schema mirrors: `python -m scripts.export_contracts`.
+Full auth and session specs: [ROADMAP.md](./ROADMAP.md); what’s shipped: [STATUS.md](./STATUS.md). Agent SSOT map: [AGENTS.md](../AGENTS.md). Refresh OpenAPI / JSON Schema mirrors: `python -m scripts.export_contracts`; regenerate FE session TS mirrors: `cd scripts/typescript_gen && npm install && npm run generate`.
 
 ---
 
