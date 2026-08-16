@@ -1,4 +1,4 @@
-import { Archive, CirclePlus, Minus } from "lucide-react";
+import { Archive, CirclePlus, CircleX } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
@@ -38,6 +38,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuth } from "@/context/auth-context";
 import {
   apiArchiveProduct,
+  apiCancelProposal,
   apiCreateProduct,
   apiImportProducts,
   apiListProducts,
@@ -182,6 +183,19 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
     }
   }
 
+  async function onCancelRequest(proposalId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiCancelProposal(accessToken, companyId, proposalId);
+      await refresh();
+    } catch (err) {
+      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onArchive(productId: string) {
     if (!canEdit) return;
     setBusy(true);
@@ -270,11 +284,6 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           {t("settings.products.title")}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {scope === "org"
-            ? t("settings.products.subtitleOrg")
-            : t("settings.products.subtitleMine")}
-        </p>
       </div>
 
       <Tabs value={scope} onValueChange={(v) => onScopeChange(v === "mine" ? "mine" : "org")}>
@@ -291,13 +300,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
               </Alert>
             )}
 
-            {!canEdit && scope === "org" && (
-              <Alert variant="info">
-                <AlertDescription>{t("settings.products.readOnlyOrg")}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            {canEdit && (
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   ref={fileRef}
@@ -305,32 +308,24 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                   type="file"
                   accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="sr-only"
-                  disabled={!canEdit || busy}
+                  disabled={busy}
                   onChange={(e) => void onImportFile(e.target.files?.[0])}
                 />
-                <Button
-                  type="button"
-                  disabled={!canEdit || busy}
-                  onClick={() => fileRef.current?.click()}
-                >
+                <Button type="button" disabled={busy} onClick={() => fileRef.current?.click()}>
                   {t("settings.products.import")}
                 </Button>
                 {scope === "mine" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!canEdit || busy}
-                    onClick={openAdd}
-                  >
+                  <Button type="button" variant="outline" disabled={busy} onClick={openAdd}>
                     {t("settings.products.addRow")}
                   </Button>
                 )}
                 <p className="text-xs text-muted-foreground">{t("settings.products.importHint")}</p>
               </div>
-              <Badge variant="secondary">
-                {t("settings.products.activeCount", { count: items.length })}
-              </Badge>
-            </div>
+            )}
+
+            <Badge variant="secondary">
+              {t("settings.products.activeCount", { count: items.length })}
+            </Badge>
 
             {importResult && (
               <div className="flex flex-wrap gap-4 rounded-lg bg-accent px-3.5 py-3 text-sm">
@@ -386,9 +381,11 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                       <TableHead>{t("settings.products.columns.draftsUse")}</TableHead>
                     )}
                     <TableHead>{t("settings.products.columns.status")}</TableHead>
-                    <TableHead className="text-right">
-                      <span className="sr-only">{t("settings.products.columns.action")}</span>
-                    </TableHead>
+                    {canEdit && (
+                      <TableHead className="text-right">
+                        <span className="sr-only">{t("settings.products.columns.action")}</span>
+                      </TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -416,35 +413,53 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                       <TableCell>
                         <Badge variant="outline">{t("settings.products.statusActive")}</Badge>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          {scope === "mine" && item.pending_proposal_id ? (
-                            <Badge variant="secondary">
-                              {t("settings.products.pendingReview")}
-                            </Badge>
-                          ) : null}
-                          {scope === "mine" && canEdit && !item.pending_proposal_id ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <IconButton
-                                  type="button"
-                                  className="size-8"
-                                  disabled={busy}
-                                  aria-label={t("settings.products.propose")}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void onPropose(item.id);
-                                  }}
-                                >
-                                  <CirclePlus />
-                                </IconButton>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">
-                                {t("settings.products.propose")}
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : null}
-                          {canEdit ? (
+                      {canEdit && (
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            {scope === "mine" && item.pending_proposal_id ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <IconButton
+                                    type="button"
+                                    className="size-8"
+                                    disabled={busy}
+                                    aria-label={t("settings.products.cancelRequest")}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const proposalId = item.pending_proposal_id;
+                                      if (!proposalId) return;
+                                      void onCancelRequest(proposalId);
+                                    }}
+                                  >
+                                    <CircleX />
+                                  </IconButton>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  {t("settings.products.cancelRequest")}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : null}
+                            {scope === "mine" && !item.pending_proposal_id ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <IconButton
+                                    type="button"
+                                    className="size-8"
+                                    disabled={busy}
+                                    aria-label={t("settings.products.propose")}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void onPropose(item.id);
+                                    }}
+                                  >
+                                    <CirclePlus />
+                                  </IconButton>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  {t("settings.products.propose")}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : null}
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <IconButton
@@ -464,26 +479,9 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                                 {t("settings.products.archive")}
                               </TooltipContent>
                             </Tooltip>
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="inline-flex">
-                                  <IconButton
-                                    type="button"
-                                    className="size-8"
-                                    disabled
-                                    aria-label={t("common.notAvailable")}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <Minus />
-                                  </IconButton>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">{t("common.notAvailable")}</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </TableCell>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

@@ -145,7 +145,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Voice** — `GET/PATCH /api/companies/{id}/voice`; owner/admin edit; persists `roast_level` / locale / forbidden / tone into `entities.profile`
 - **Products** — Alembic `1f96a702125c` `products` table; CSV/xlsx import + Mine Add row (optional notes); org covers user on SKU clash for retrieve
 - **UI** — UserMenu → Company settings (`/settings`); tabs Voice · Products (Org | Mine) · Members · **Approvals** (owner/admin)
-- **K6** — Mine propose → Approvals approve/reject ([ADR 0011](./adr/0011-knowledge-commit-without-llm.md)); chat scratch still not org KB
+- **K6** — Mine propose → Approvals approve/reject; proposer can cancel pending ([ADR 0011](./adr/0011-knowledge-commit-without-llm.md)); chat scratch still not org KB
 - **K1 slim (2026-08-10):** `load_context` → top-level `voice_pack` + `audience_catalog`; LLM nodes get identity-only `company` (no raw `profile` / `personas[]`)
 - **K2 (2026-08-10):** `trend_searcher` → top-level `ranked_signals` + `trend_notes` (no longer nested under `company_context`)
 - **product_matcher (2026-08-10):** SQL Tier A/B retrieve, org-wins SKU cover; `product_clarify` → chat; primary product into brainstormer / executor / grounding

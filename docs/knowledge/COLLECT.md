@@ -248,6 +248,7 @@ Eval set: ~20 user utterances × ~10 SKUs per company; live FastEmbed regression
 2. `GET …/proposals` — owner/admin; diff vs current org row (or empty = new SKU).
 3. `POST …/proposals/{id}/approve` — upsert org row + re-embed; idempotent if already approved.
 4. `POST …/reject` — org unchanged; Mine row stays.
+5. `POST …/cancel` — proposer withdraws pending; org unchanged; can propose again.
 
 **Not in this slice:** chat scratch promote, offer snippets, batch, TTL. Org import still writes Org × Old directly.
 

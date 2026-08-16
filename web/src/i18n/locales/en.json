@@ -233,7 +233,6 @@
       "title": "Members",
       "subtitleEditor": "Team roster, invites, and company name.",
       "subtitleMember": "Team roster and company name.",
-      "readOnly": "Only admins can invite members or change roles.",
       "saved": "Saved.",
       "companyName": "Company name",
       "roster": "Members",
@@ -273,7 +272,7 @@
     "voice": {
       "title": "Voice",
       "subtitle": "Set how your brand sounds in drafts — tone and words to avoid.",
-      "readOnly": "You can view these settings. Ask a company admin if you need changes.",
+      "readOnly": "Ask a company admin if you need changes.",
       "saved": "Saved.",
       "roast": {
         "label": "Tone strength",
@@ -306,8 +305,6 @@
     },
     "products": {
       "title": "Products",
-      "subtitleOrg": "Your company catalog — drafts prefer these details when talking about products.",
-      "subtitleMine": "Your personal product list. If a code already exists in the company catalog, the company version is used.",
       "tabs": {
         "org": "Company",
         "mine": "Mine"
@@ -316,15 +313,14 @@
       "importHint": "Rows with the same product code update existing ones.",
       "addRow": "Add row",
       "activeCount": "{{count}} active",
-      "empty": "No products yet. Import a file or add a row to start.",
+      "empty": "No products yet.",
       "archive": "Archive",
-      "propose": "Ask to add to company",
-      "pendingReview": "Waiting for review",
+      "propose": "Add to company",
+      "cancelRequest": "Cancel request",
       "alreadyPending": "This product code is already waiting for review",
       "statusActive": "Active",
       "coveredByCompany": "Company",
       "personalOnly": "Yours",
-      "readOnlyOrg": "You can view the company catalog. Ask a company admin to make changes.",
       "coverTitle": "When both lists have the same product",
       "coverBody": "Drafts use the company version. Your personal copy stays for you until you ask to update the company list.",
       "columns": {

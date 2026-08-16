@@ -16,7 +16,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 **Locked decisions (2026-08-13) — Team + invite UI (slice 4; ships with session isolation audit slice 5 on same branch):**
 
 1. **One settings shell** — `/settings?tab=members` shares the Voice / Products page; **no** separate admin route for tenant team management (contrast: **System** = platform ops only).
-2. **Security** — UI hides management controls for plain members; **API is SSOT** (`require_company_settings_editor` → 403). No route-level split for MVP; optional `canManageTeam` helper mirrors Voice `can_edit`.
+2. **Security** — UI hides management controls for plain members; **API is SSOT** (`require_company_settings_editor` → 403). No route-level split for MVP; optional `canManageTeam` helper mirrors Voice `can_edit`. Shared values stay visible as **read-only** (not disabled-tease). Voice: one muted line to ask an admin for changes. Products: no tab descriptions. Members: no extra banner — hide Invite / role actions. Approvals tab stays hidden.
 3. **Invite link** — `{WEB_BASE_URL}/invite/{token}`; create response always includes `invite_url` for copy (WhatsApp / email optional via SMTP).
 4. **Invite accept** — dedicated SPA `/invite/:token`; not anonymous; user must **register or log in with the invited email**, then accept. Copy must **not** imply one-click join without an account. Public `GET /api/invites/{token}` returns `{ email, company_name }` so login/register can **lock** that email ([ADR 0014](../adr/0014-invite-public-preview.md)).
 5. **Register + invite (MVP)** — Register still auto-creates a solo company today; **accept** replaces a **sole-owner single-member** org ([ADR 0013](../adr/0013-invite-accept-replaces-bootstrap-org.md)). Products **rehome to Mine** on the invited org; **voice is not copied**; sessions/drafts stay. Warn on the join card. Any other existing membership → 409. [ADR 0015](../adr/0015-invite-rehome-solo-products.md).
@@ -91,22 +91,22 @@ UserMenu
 
 - Controls only — no cards for decoration; one purpose: brand knobs + optional exemplars.
 - Persist on company `entities.profile`; compress to `voice_pack` in `load_context` ([MODEL.md](./MODEL.md#brand-voice-voice_pack)).
-- Member (non-admin): **read-only** (`can_edit=false`); owner/admin edit + Confirm promote.
+- Member (non-admin): **read-only** (`can_edit=false`); hide Save; fields `readOnly` not greyed-out disabled. One muted line under the subtitle — no info Alert. Owner/admin edit + Confirm promote.
 - Exemplars: ≤3 × ≤150 chars in Voice form; or Confirm → **Save caption as voice example**.
 
 ### Products (K3 / K3b)
 
 | Tab | Content |
 |-----|---------|
-| **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name + `sku`, status, actions) · **row click → same form as Add row** (name / product code / notes; extra import columns read-only). Editors can save (`PATCH`). Upsert **replace by SKU** on import — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
-| **Mine** | Same form for personal library (Add row + row click to edit). Org covers user on SKU clash at retrieve — **Drafts use** column: Company vs Yours. **Propose** → Approvals queue ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)). |
+| **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name + `sku`, status, actions) · **row click → same form as Add row** (name / product code / notes; extra import columns read-only). Editors can save (`PATCH`). Members: hide import / archive; row opens read-only detail. No tab descriptions. Cover rule stays on Mine. Count badge sits above the table (left), not as a right-aligned toolbar orphan. Upsert **replace by SKU** on import — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
+| **Mine** | Same form for personal library (Add row + row click to edit). Org covers user on SKU clash at retrieve — **Drafts use** column: Company vs Yours. **Add to company** / **Cancel request** (icon + tooltip) → Approvals queue ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)). |
 
 Flexible headers: no required column names; store raw row in `profile`. **Import hard limit: 50 columns** — reject whole file ([COLLECT §4](./COLLECT.md#4-product-import-k3)). No content column in the table (unknown CSV shapes).
 
 ### Approvals (K6)
 
 - List pending Mine→org proposals; show field diff vs current org row; **Approve** / **Decline** HTTP, zero LLM ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)).
-- **UI:** `/settings?tab=approvals` in sidebar for owner/admin only. Members propose from Products → Mine.
+- **UI:** `/settings?tab=approvals` in sidebar for owner/admin only. Members propose from Products → Mine; they can **cancel** a pending request from Mine.
 - Chat still must not write org catalog.
 
 ### Members (org team — slice 4)
@@ -115,8 +115,8 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 
 **Layout (top → bottom):**
 
-1. **Company name** — single field + Save; owner/admin edit; members read-only. `PATCH /api/companies/{id}` `{ name }`.
-2. **Member roster** — table: display name, email, role badge, joined date. `GET …/members`. All members can view.
+1. **Company name** — single field + Save; owner/admin edit; members see the name as text (no Save). `PATCH /api/companies/{id}` `{ name }`.
+2. **Member roster** — table: display name, email, role badge, joined date. `GET …/members`. All members can view. Members do **not** get a permission banner.
 3. **Manage row** (owner/admin only) — role `Select`: `admin` | `member` only; **Remove** with confirm. Owner row never demotable/removable from UI (API 409). Members cannot manage others.
 4. **Invite** (owner/admin only) — email + role (`admin` | `member`) + **Send invite**. Idle: form only. On success: show **copy link** (`invite_url`) + short hint (WhatsApp / paste to colleague) — do not show the URL before send. Reject emails already on the roster (409). No in-app email required (`EMAIL_BACKEND=link`).
 5. **Pending invites** (owner/admin only) — table: email, role, expires; **Revoke** → `DELETE …/invites/{id}`.

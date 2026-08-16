@@ -212,7 +212,7 @@ export type ProductProposalItem = {
   company_id: string;
   sku: string;
   name: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "cancelled";
   proposed_by: string | null;
   proposed_by_email: string | null;
   source_product_id: string | null;
@@ -232,6 +232,20 @@ export async function apiProposeProduct(
   const res = await fetchWithAuth(
     accessToken,
     `${API_BASE}/companies/${companyId}/products/${productId}/propose`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiCancelProposal(
+  accessToken: string | null,
+  companyId: string,
+  proposalId: string,
+): Promise<ProductProposalItem> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/proposals/${proposalId}/cancel`,
     { method: "POST" },
   );
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));

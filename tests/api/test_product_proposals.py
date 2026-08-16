@@ -201,6 +201,74 @@ async def test_member_cannot_approve_or_reject(client: AsyncClient, db_session) 
 
 
 @pytest.mark.asyncio
+async def test_proposer_can_cancel_then_repropose(client: AsyncClient, db_session) -> None:
+    owner = await register_user(client, email=f"own-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    member = await register_user(client, email=f"mem-{uuid.uuid4().hex[:8]}@example.com")
+    other = await register_user(client, email=f"oth-{uuid.uuid4().hex[:8]}@example.com")
+    await join_org(
+        db_session,
+        user_id=uuid.UUID(member["user"]["id"]),
+        company_id=uuid.UUID(company_id),
+        role="member",
+    )
+    await join_org(
+        db_session,
+        user_id=uuid.UUID(other["user"]["id"]),
+        company_id=uuid.UUID(company_id),
+        role="member",
+    )
+    member_headers = auth_header(member["access_token"])
+    owner_headers = auth_header(owner["access_token"])
+    product_id = await _mine_product(client, company_id, member_headers, sku="CAN-01")
+    proposal_id = (
+        await client.post(
+            f"/api/companies/{company_id}/products/{product_id}/propose",
+            headers=member_headers,
+        )
+    ).json()["id"]
+
+    stolen = await client.post(
+        f"/api/companies/{company_id}/proposals/{proposal_id}/cancel",
+        headers=auth_header(other["access_token"]),
+    )
+    assert stolen.status_code == 403
+
+    cancelled = await client.post(
+        f"/api/companies/{company_id}/proposals/{proposal_id}/cancel",
+        headers=member_headers,
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+
+    replay = await client.post(
+        f"/api/companies/{company_id}/proposals/{proposal_id}/cancel",
+        headers=member_headers,
+    )
+    assert replay.status_code == 200
+    assert replay.json()["status"] == "cancelled"
+
+    listed = await client.get(
+        f"/api/companies/{company_id}/products?scope=user",
+        headers=member_headers,
+    )
+    assert listed.json()["items"][0]["pending_proposal_id"] is None
+
+    queue = await client.get(
+        f"/api/companies/{company_id}/proposals",
+        headers=owner_headers,
+    )
+    assert queue.json()["items"] == []
+
+    again = await client.post(
+        f"/api/companies/{company_id}/products/{product_id}/propose",
+        headers=member_headers,
+    )
+    assert again.status_code == 201, again.text
+    assert again.json()["status"] == "pending"
+
+
+@pytest.mark.asyncio
 async def test_reject_then_repropose_same_content(client: AsyncClient, db_session) -> None:
     owner = await register_user(client, email=f"own-{uuid.uuid4().hex[:8]}@example.com")
     company_id = owner["user"]["organizations"][0]["id"]

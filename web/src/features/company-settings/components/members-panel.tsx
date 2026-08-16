@@ -238,11 +238,6 @@ export function MembersPanel({
         </p>
       </div>
 
-      {!canManageTeam && (
-        <Alert variant="info">
-          <AlertDescription>{t("settings.members.readOnly")}</AlertDescription>
-        </Alert>
-      )}
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>

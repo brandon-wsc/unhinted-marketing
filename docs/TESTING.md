@@ -41,7 +41,7 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 4. Confirm stub: invalid `approval_token` → 400; idempotency replay
 5. Signals / questions: auth required
 6. Org invites: create → list → revoke → accept; email bind; bootstrap replace (ADR 0013); 409 only for a real team (`tests/api/test_company_invites.py`)
-7. Product proposals (K6): Mine propose → list → approve upserts org / reject leaves org empty; 409 pending SKU; cannot propose org or others' Mine; member cannot approve; reject then re-propose; snapshot frozen after propose; approve replaces existing org SKU (`tests/api/test_product_proposals.py`)
+7. Product proposals (K6): Mine propose → list → approve upserts org / reject leaves org empty; 409 pending SKU; cannot propose org or others' Mine; member cannot approve; reject then re-propose; proposer can cancel then re-propose; snapshot frozen after propose; approve replaces existing org SKU (`tests/api/test_product_proposals.py`)
 8. Product catalog: PATCH keeps extra import columns; create/patch SKU clash → 409 `sku_taken` + `suggested_sku` (no silent overwrite) (`tests/api/test_company_products.py`)
 
 Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
