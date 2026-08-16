@@ -132,7 +132,9 @@ describe("InviteAcceptPage", () => {
     apiAcceptInvite.mockRejectedValue(new ApiStatusError(409, "conflict"));
     renderInvite();
     await userEvent.click(await screen.findByRole("button", { name: "invite.join" }));
-    expect(await screen.findByRole("heading", { name: "invite.conflictTitle" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "invite.conflictTitle" }),
+    ).toBeInTheDocument();
     expect(apiAcceptInvite).toHaveBeenCalled();
   });
 
@@ -147,7 +149,9 @@ describe("InviteAcceptPage", () => {
   it("logged in with a different email: mismatch without Join", async () => {
     auth.user = { email: "other@example.com" };
     const { unmount } = renderInvite();
-    expect(await screen.findByRole("heading", { name: "invite.mismatchTitle" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "invite.mismatchTitle" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("invite.mismatchBody");
     expect(screen.queryByDisplayValue("other@example.com")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "invite.join" })).not.toBeInTheDocument();
@@ -162,7 +166,9 @@ describe("InviteAcceptPage", () => {
     expect(logout).toHaveBeenCalled();
     unmount();
     renderInvite();
-    expect(await screen.findByRole("heading", { name: "invite.loggedOutTitle" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "invite.loggedOutTitle" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "invite.login" })).toBeInTheDocument();
   });
 });
