@@ -120,6 +120,30 @@ describe("InviteAcceptPage", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("logged in with matching email ignoring case: Join, not mismatch", async () => {
+    auth.user = { email: "Ada@Example.com" };
+    renderInvite();
+    expect(await screen.findByRole("button", { name: "invite.join" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "invite.mismatchTitle" })).not.toBeInTheDocument();
+  });
+
+  it("join 409: already in a company", async () => {
+    auth.user = { email: "ada@example.com", organizations: [{ id: "team", role: "member" }] };
+    apiAcceptInvite.mockRejectedValue(new ApiStatusError(409, "conflict"));
+    renderInvite();
+    await userEvent.click(await screen.findByRole("button", { name: "invite.join" }));
+    expect(await screen.findByRole("heading", { name: "invite.conflictTitle" })).toBeInTheDocument();
+    expect(apiAcceptInvite).toHaveBeenCalled();
+  });
+
+  it("join 400: invite no longer valid", async () => {
+    auth.user = { email: "ada@example.com" };
+    apiAcceptInvite.mockRejectedValue(new ApiStatusError(400, "expired"));
+    renderInvite();
+    await userEvent.click(await screen.findByRole("button", { name: "invite.join" }));
+    expect(await screen.findByRole("heading", { name: "invite.invalidTitle" })).toBeInTheDocument();
+  });
+
   it("logged in with a different email: mismatch without Join", async () => {
     auth.user = { email: "other@example.com" };
     const { unmount } = renderInvite();
