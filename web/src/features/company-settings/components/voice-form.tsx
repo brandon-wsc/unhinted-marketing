@@ -134,14 +134,12 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
           {t("settings.voice.title")}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">{t("settings.voice.subtitle")}</p>
+        {!canEdit && (
+          <p className="mt-1 text-sm text-muted-foreground">{t("settings.voice.readOnly")}</p>
+        )}
       </div>
 
       <div className="space-y-5 rounded-xl border border-border bg-card p-6">
-        {!canEdit && (
-          <Alert variant="info">
-            <AlertDescription>{t("settings.voice.readOnly")}</AlertDescription>
-          </Alert>
-        )}
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -155,12 +153,19 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
 
         <div className="space-y-2">
           <p className="text-sm font-medium leading-none">{t("settings.voice.roast.label")}</p>
-          <div className="inline-flex flex-wrap gap-0 rounded-lg bg-accent p-1">
+          <div
+            className={cn(
+              "inline-flex flex-wrap gap-0 rounded-lg bg-accent p-1",
+              !canEdit && "pointer-events-none",
+            )}
+            aria-disabled={!canEdit}
+          >
             {ROAST_LEVELS.map((level) => (
               <button
                 key={level}
                 type="button"
-                disabled={!canEdit || saving}
+                disabled={saving}
+                tabIndex={canEdit ? undefined : -1}
                 onClick={() => setRoastLevel(level)}
                 className={cn(
                   "rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors",
@@ -180,7 +185,8 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
           <Input
             id="voice-locale"
             value={locale}
-            disabled={!canEdit || saving}
+            readOnly={!canEdit}
+            disabled={saving}
             onChange={(e) => setLocale(e.target.value)}
             autoComplete="off"
           />
@@ -191,7 +197,8 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
           <Input
             id="voice-forbidden"
             value={forbiddenText}
-            disabled={!canEdit || saving}
+            readOnly={!canEdit}
+            disabled={saving}
             onChange={(e) => setForbiddenText(e.target.value)}
             autoComplete="off"
           />
@@ -202,7 +209,8 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
           <Textarea
             id="voice-tone"
             value={toneNotes}
-            disabled={!canEdit || saving}
+            readOnly={!canEdit}
+            disabled={saving}
             onChange={(e) => setToneNotes(e.target.value)}
             rows={4}
             className="min-h-24"
@@ -228,7 +236,8 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
               <Textarea
                 id={`voice-exemplar-${index}`}
                 value={caption}
-                disabled={!canEdit || saving}
+                readOnly={!canEdit}
+                disabled={saving}
                 maxLength={MAX_EXEMPLAR_CHARS}
                 onChange={(e) => {
                   const next = [...exemplars];

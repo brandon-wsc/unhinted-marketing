@@ -233,7 +233,6 @@
       "title": "成員",
       "subtitleEditor": "團隊名單、邀請連結同公司名稱。",
       "subtitleMember": "團隊名單同公司名稱。",
-      "readOnly": "只有管理員可以邀請成員或變更角色。",
       "saved": "已儲存。",
       "companyName": "公司名稱",
       "roster": "成員",
@@ -306,8 +305,6 @@
     },
     "products": {
       "title": "產品",
-      "subtitleOrg": "公司產品清單，團隊出稿時會優先用呢度嘅資料。",
-      "subtitleMine": "你自己嘅產品清單。如果同公司有同一個編號，會用公司嗰份。",
       "tabs": {
         "org": "公司",
         "mine": "我的"
@@ -316,7 +313,7 @@
       "importHint": "同一個產品編號會更新現有資料。",
       "addRow": "新增一項",
       "activeCount": "{{count}} 項",
-      "empty": "暫時未有產品。上載檔案或新增一項開始。",
+      "empty": "暫時未有產品。",
       "archive": "封存",
       "propose": "申請加入公司清單",
       "pendingReview": "審批中",
@@ -324,7 +321,6 @@
       "statusActive": "使用中",
       "coveredByCompany": "公司",
       "personalOnly": "你的",
-      "readOnlyOrg": "你可以睇到公司產品；要改動請搵公司負責人。",
       "coverTitle": "兩個清單都有同一個產品時",
       "coverBody": "出稿會用公司嗰份。你自己嘅版本仍然留住；之後可以申請更新公司清單。",
       "columns": {
