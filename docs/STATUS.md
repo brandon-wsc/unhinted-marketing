@@ -122,13 +122,18 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Primitives** — `web/src/components/ui/*` is the only control stack (shadcn); compose in `components/` / `features/`; no parallel Button/Input/Dialog
 - **Tokens** — Prefer semantic utilities (`bg-card`, `text-muted-foreground`, …) from `web/src/index.css` `@theme`; avoid `var(--color-*)` in JSX classNames
 - **Session shell layout** — `split` vs `paged` from **container width vs content min-widths** (`session-layout.ts`: history + chat [+ preview]), not viewport `lg` / device names; measured via `useContainerWidth` on the chat shell
-- **Agent rule** — [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc)
+- **Agent rule** — [`AGENTS.md`](../AGENTS.md) (Web UI system)
 - **Composed helpers** — `FormField`, `IconButton` in `web/src/components/`; menus/confirm via `DropdownMenu` / `AlertDialog`
 
 **Decision (2026-08-09) — Design-in-repo docs first (harness desk proposed, CSS unchanged):**
 
 - Positioning + token proposal under [`docs/design/`](./design/) — reliable shell harnesses unhinged craft; see [BRIEF](./design/BRIEF.md) / [TOKENS](./design/TOKENS.md)
 - No Liquid Glass / neon shell; structure stays shadcn
+
+**Decision (2026-08-16) — Portable agent instructions (no harness lock-in):**
+
+- Execution rules (commits, Alembic, web UI) live in [`AGENTS.md`](../AGENTS.md). Nested [`web/AGENTS.md`](../web/AGENTS.md) / [`migrations/AGENTS.md`](../migrations/AGENTS.md) only point back; they are not a second copy.
+- Do not keep a parallel copy in harness-specific files (`.cursor/rules/*.mdc`, `CLAUDE.md`, …). Personal tool prefs stay in the operator's home directory, not this repo.
 
 **Decision (2026-08-10) — Harness desk applied to runtime + chrome refresh:**
 
@@ -320,7 +325,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/invite/:token` | Invite accept (public page; POST accept requires auth) |
 | `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace; `/admin` redirects here |
 
-**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; harness-desk values from [`docs/design/`](./design/) **applied**; layers in [`.cursor/rules/web-ui-system.mdc`](../.cursor/rules/web-ui-system.mdc). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`, `UserMenu`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
+**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; harness-desk values from [`docs/design/`](./design/) **applied**; layers in [`AGENTS.md`](../AGENTS.md). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`, `UserMenu`). Session shell uses content-width `split`/`paged` (`session-layout.ts`). Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
 
 **UX features:**
 
@@ -363,7 +368,7 @@ unhinted-marketing/
 ├── migrations/           # Alembic (auth → signals → sessions)
 ├── tests/                # pytest: unit (no DB) + api (TEST_DATABASE_URL)
 ├── web/                  # React frontend (Phase 3 chat / agent / preview / history UI)
-├── AGENTS.md             # Coding-agent SSOT map
+├── AGENTS.md             # Portable coding-agent SSOT (not editor-specific rules)
 └── docs/
     ├── ROADMAP.md
     ├── GETTING_STARTED.md

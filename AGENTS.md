@@ -2,6 +2,8 @@
 
 Short map for coding agents. Prefer these sources over inventing parallel docs or shapes.
 
+Execution conventions (commits, Alembic, web UI) live **in this file**. Do not keep a second copy in harness-specific packs (`.cursor/rules`, `CLAUDE.md`, and similar). A tool may *point* here; it must not own the rules.
+
 ## What this is
 
 AI marketing assistant for Hong Kong: background **signal ingest** + user-guided **session** (chat → recommend → preview → confirm). LLM owns the session loop only; **Confirm / publish is traditional HTTP** (no LLM).
@@ -19,13 +21,15 @@ AI marketing assistant for Hong Kong: background **signal ingest** + user-guided
 | HTTP + Pydantic API shapes | [`schemas/`](schemas/) · FastAPI OpenAPI | Export: `python -m scripts.export_contracts` |
 | Canonical draft + SSE catalog | [`schemas/contracts.py`](schemas/contracts.py) · [`docs/contracts/`](docs/contracts/) | JSON Schema mirrors |
 | External tools | [`schemas/tools.py`](schemas/tools.py) | `query_market_trends`, `publish_social_post` |
-| DB schema history | [`migrations/`](migrations/) | Alembic hex revisions — see `.cursor/rules` |
+| DB schema history | [`migrations/`](migrations/) | Alembic hex revisions — conventions below |
 | Test policy | [`docs/TESTING.md`](docs/TESTING.md) | Path-tiered gates; LLM nodes mocked in CI |
-| Frontend UI system | [`web/src/components/ui/`](web/src/components/ui/) · [`web/src/index.css`](web/src/index.css) | shadcn primitives + semantic tokens; layers in [`.cursor/rules/web-ui-system.mdc`](.cursor/rules/web-ui-system.mdc) |
+| Frontend UI system | [`web/src/components/ui/`](web/src/components/ui/) · [`web/src/index.css`](web/src/index.css) | shadcn primitives + semantic tokens; layers below |
 | Visual design (docs + tokens + Penpot) | [`docs/design/`](docs/design/) · [`design/penpot/`](design/penpot/) | Brief + token inventory + Core `.penpot`; proposed harness desk — CSS apply later |
-| Cursor execution rules | [`.cursor/rules/`](.cursor/rules/) | Scoped (e.g. commits, Alembic, web UI); not a second product SSOT |
+| Agent execution | this file | Portable `AGENTS.md` — commits, Alembic, web UI; not a second product SSOT |
 
 **Runtime state:** REST (e.g. `POST /api/sessions/{id}/messages`) is the client source of truth. SSE is an enhancement layer (live deltas / progress) that merges with dedupe — see [ADR 0002](docs/adr/0002-rest-source-of-truth-sse-enhancement.md). Public HTTP routes live under `/api` ([ADR 0006](docs/adr/0006-api-path-prefix-and-spa-proxy.md)); SPA document routes (`/admin`, …) are separate.
+
+Nested [`web/AGENTS.md`](web/AGENTS.md) and [`migrations/AGENTS.md`](migrations/AGENTS.md) apply when the agent walks `AGENTS.md` from the git root to the current directory. They point back here; do not duplicate the sections.
 
 ## Hard boundaries (do not violate)
 
@@ -60,3 +64,100 @@ pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
 python -m scripts.export_contracts   # OpenAPI + JSON Schema under docs/
 cd web && pnpm run lint && pnpm test && pnpm run build
 ```
+
+## Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```text
+type(scope): summary
+
+optional body explaining why
+```
+
+- `type` — required; see table below
+- `scope` — required; short area (`auth`, `signals`, `web`, `db`, `docs`, `ci`, …)
+- `summary` — imperative, lowercase after the colon, ≤72 chars total subject line, no trailing period
+- `body` — optional; explain **why**, not a file list. Use bullets for multi-part milestones
+
+```text
+✅ feat(signals): bootstrap Phase 1 autopilot for HK signal ingestion
+✅ refactor(db): replace hand-rolled Alembic IDs with standard hex revisions
+✅ chore(web): upgrade TypeScript 7 and document pgvector setup
+
+❌ Bootstrap Phase 1 autopilot backend…     # missing type(scope)
+❌ feat: add stuff                          # missing scope; vague summary
+❌ feat(signals): Added signal ingestion.   # past tense + trailing period
+```
+
+| Type | When |
+|------|------|
+| `feat` | New user-facing capability or API |
+| `fix` | Bug fix |
+| `refactor` | Behavior-preserving code change |
+| `docs` | Docs / roadmap / status only |
+| `chore` | Tooling, deps, ignore files, misc |
+| `test` | Tests only |
+| `ci` | CI/CD config |
+| `perf` | Performance improvement |
+
+Prefer domain names over roadmap phases for `scope`: `auth`, `signals`, `sessions`, `web`, `db`, `llm`, `workers`, `docs`, `repo`. Prefer why over what. Keep Phase 0/1-style milestone bullets when the commit spans many areas. Never put secrets or env values in messages.
+
+## Alembic migrations
+
+Use Alembic defaults. Do **not** invent sequential IDs (`001_auth`, `002_phase1`).
+
+```
+migrations/versions/{rev}_{slug}.py
+revision = "{rev}"
+```
+
+- `rev` — Alembic-generated hex ID (leave as generated)
+- `slug` — short `snake_case` intent from `-m` (domain/capability, not ROADMAP phase)
+- Filename stem starts with `revision`; do not rewrite `revision` to match a pretty name
+
+```text
+✅ 8791b607d5bc_auth.py       revision = "8791b607d5bc"
+✅ 5dae474953cd_signals.py    revision = "5dae474953cd"
+
+❌ 001_auth.py / revision "001_auth"     # hand-rolled sequential ID
+❌ 002_phase1_data.py                    # phase name + stem ≠ revision
+```
+
+```bash
+alembic revision -m "sessions"
+# → versions/<hex>_sessions.py with revision = "<hex>"
+# keep the generated revision; only edit upgrade/downgrade
+```
+
+Name the schema capability (`auth`, `signals`, `sessions`, `campaigns`), not roadmap phases (`phase1`, `phase2`). Do not list every table in the slug; docstring may list tables. Changing `revision` strings requires updating every DB `alembic_version` row (or `alembic stamp`). Prefer not rewriting history once shared.
+
+## Web UI system
+
+| Layer | Role |
+|-------|------|
+| `web/src/components/ui/*` | shadcn primitives only; own/edit here; add variants via `cva`, don't break call sites |
+| `web/src/components/*` | App chrome / composed widgets (`AppShell`, `AuthLayout`, `PasswordBox`) |
+| `web/src/features/*/components/*` | Domain UI — compose `ui/*`, no parallel Button/Input/Dialog |
+| `web/src/pages/*` | Route shells; keep thin |
+
+- Prefer semantic utilities: `bg-card`, `text-muted-foreground`, `border-border`, `bg-primary`, `text-destructive`, `text-success`, `text-info`, `hover:bg-accent`
+- Do **not** invent parallel controls with `var(--color-*)` in classNames; use theme utilities from `index.css` `@theme`
+- Raw palette (`bg-blue-600`, `text-zinc-500`) only when no semantic token fits (rare status tones → prefer `Badge` variants)
+- **Washes:** use `accent` / `secondary` (6% ink|white). Do **not** use `bg-muted` / `hover:bg-muted/*` for hover or selected rows — `--color-muted` is solid `#71717a`, not a soft fill. See [docs/design/TOKENS.md](docs/design/TOKENS.md).
+- **Tables:** `TableRow` hover/selected = `bg-accent` (`components/ui/table.tsx`)
+- **Fields:** view-only uses native `readOnly` (accent wash on `Input` / `Textarea`). Do not `disabled` a field the user should still copy from. `readOnly` must not use the edit `focus-visible` ring (`read-only:focus-visible:ring-0`).
+
+Adding UI: check `components/ui` first; if missing, `pnpm dlx shadcn@latest add <name>`. Never re-export a second `Button` / `Input` / `Dialog` from feature or auth helpers. Prefer composed helpers in `components/` for repeated stacks: `FormField`, `IconButton`.
+
+- `SelectContent` defaults to **`position="popper"`** (dropdown **below** the trigger). Do not revert to Radix `item-aligned`. Popper chrome: `border-border` (+ `dark:border-white/10`), same as `DropdownMenuContent`. Bare `border` inherits ink and reads too dark.
+- Prefer standard `sm` / `md` / `lg` for micro chrome only (no one-off `min-[…px]:`)
+- Session workspace: **content-based** `split` | `paged` in the shell (`session-layout.ts` + `useContainerWidth`) — do not gate panes on viewport `lg` or device names
+- Leaf widgets take a `paged` / mode prop from the shell; they do not decide layout mode themselves
+
+## When reviewing changes
+
+- Flag chat/LLM paths that publish, confirm, or upsert org catalog products; those are HTTP-only (ADR 0003, ADR 0011).
+- Flag a second knowledge store or a second streaming-markdown stack.
+- Flag hand-rolled Alembic revision IDs and parallel `Button`/`Input`/`Dialog` outside `web/src/components/ui`.
+- Leave formatting and lint to CI.

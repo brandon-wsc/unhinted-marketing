@@ -506,4 +506,4 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 - [OpenAPI](./openapi.json) — generated; refresh with `python -m scripts.export_contracts`
 - [Contract JSON Schemas](./contracts/) — draft / SSE / tools
 - [ADRs](./adr/) — product decisions
-- [AGENTS.md](../AGENTS.md) — coding-agent SSOT map
+- [AGENTS.md](../AGENTS.md) — portable coding-agent SSOT (not editor-specific rules)
