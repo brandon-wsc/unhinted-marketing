@@ -23,6 +23,11 @@
           "type": "string"
         }
       },
+      "required": [
+        "caption",
+        "hashtags",
+        "cta"
+      ],
       "title": "DraftCopy",
       "type": "object"
     },
@@ -83,7 +88,13 @@
         }
       },
       "required": [
-        "id"
+        "id",
+        "url",
+        "plan",
+        "format",
+        "role",
+        "seq",
+        "status"
       ],
       "title": "PreviewMediaItem",
       "type": "object"
@@ -132,7 +143,11 @@
   },
   "required": [
     "revision",
-    "approval_token"
+    "approval_token",
+    "image_url",
+    "media",
+    "copy",
+    "platform"
   ],
   "title": "PreviewUpdatedData",
   "type": "object"

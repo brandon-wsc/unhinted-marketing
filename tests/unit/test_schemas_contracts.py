@@ -93,3 +93,52 @@ def test_publish_social_post_ok() -> None:
     assert body.draft_copy.caption == "hello"
     assert body.model_dump(by_alias=True)["copy"]["caption"] == "hello"
     assert body.revision == 2
+
+
+def test_export_contracts_respects_export_root(tmp_path, monkeypatch) -> None:
+    import scripts.export_contracts as ec
+
+    monkeypatch.setenv("EXPORT_ROOT", str(tmp_path))
+    tmp_contracts = tmp_path / "docs" / "contracts"
+    monkeypatch.setattr(ec, "CONTRACTS_DIR", tmp_contracts)
+    monkeypatch.setattr(ec, "OPENAPI_PATH", tmp_path / "docs" / "openapi.json")
+
+    ec.export_json_schemas()
+    ec.export_openapi()
+
+    assert (tmp_contracts / "draft-copy.schema.json").exists()
+    assert (tmp_path / "docs" / "openapi.json").exists()
+
+
+def test_contracts_fresh_detects_drift(tmp_path, monkeypatch) -> None:
+    import scripts.check_contracts_fresh as ccf
+
+    (tmp_path / "docs" / "contracts").mkdir(parents=True)
+    committed = tmp_path / "docs" / "contracts" / "draft-copy.schema.json"
+    committed.write_text("{}")
+
+    gen_dir = tmp_path / "gen"
+    committed_dir = tmp_path / "committed"
+    (committed_dir / "docs" / "contracts").mkdir(parents=True)
+    committed = committed_dir / "docs" / "contracts" / "draft-copy.schema.json"
+    committed.write_text("{}")
+
+    class _FakeTmp:
+        def __enter__(self):
+            (gen_dir / "docs" / "contracts").mkdir(parents=True, exist_ok=True)
+            return str(gen_dir)
+
+        def __exit__(self, *exc) -> None:
+            return None
+
+    def fake_run(*args, **kwargs) -> None:
+        generated = gen_dir / "docs" / "contracts" / "draft-copy.schema.json"
+        generated.write_text('{"title": "generated"}')
+
+    monkeypatch.setattr(ccf.subprocess, "run", fake_run)
+    monkeypatch.setattr(ccf.tempfile, "TemporaryDirectory", _FakeTmp)
+    monkeypatch.setattr(ccf, "ROOT", committed_dir)
+
+    problems = ccf.regen_and_diff()
+    assert problems
+    assert "contracts/draft-copy.schema.json" in problems

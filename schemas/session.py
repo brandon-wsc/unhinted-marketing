@@ -119,7 +119,9 @@ class UpdateDraftRequest(BaseModel):
 
 
 class UpdateDraftResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(
+        populate_by_name=True, json_schema_serialization_defaults_required=True
+    )
 
     revision: int
     approval_token: str
@@ -146,7 +148,9 @@ class AddSessionImageRequest(BaseModel):
 class PreviewMediaMutationResponse(BaseModel):
     """Shared shape after plan edit / regen / add (new draft revision)."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(
+        populate_by_name=True, json_schema_serialization_defaults_required=True
+    )
 
     revision: int
     approval_token: str

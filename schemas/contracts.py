@@ -15,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class DraftCopy(BaseModel):
     """Shared post copy across preview skins (ADR 0001)."""
 
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
     caption: str = ""
     hashtags: list[str] = Field(default_factory=list, max_length=40)
     cta: str = Field(default="", max_length=500)
@@ -22,6 +24,8 @@ class DraftCopy(BaseModel):
 
 class PreviewMediaItem(BaseModel):
     """One append-only image version referenced by a draft (ADR 0008)."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     id: str
     url: str | None = None
@@ -35,7 +39,9 @@ class PreviewMediaItem(BaseModel):
 class PreviewUpdatedData(BaseModel):
     """Payload for SSE / turn event `preview.updated`."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(
+        populate_by_name=True, json_schema_serialization_defaults_required=True
+    )
 
     revision: int = Field(ge=0)
     approval_token: str = Field(min_length=1)
@@ -49,6 +55,8 @@ class PreviewUpdatedData(BaseModel):
 class SessionBriefData(BaseModel):
     """Payload for `brief.updated` (matches session BriefOut / FE SessionBrief)."""
 
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
     can_do: list[str] = Field(default_factory=list)
     cannot_do: list[str] = Field(default_factory=list)
     angles: list[str] = Field(default_factory=list)
@@ -58,6 +66,8 @@ class SessionBriefData(BaseModel):
 
 class AgentProgressData(BaseModel):
     """Payload for `agent.progress`."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     node: str
     model_tier: str | None = None

@@ -505,5 +505,6 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 - [LiteLLM](https://docs.litellm.ai/)
 - [OpenAPI](./openapi.json) — generated; refresh with `python -m scripts.export_contracts`
 - [Contract JSON Schemas](./contracts/) — draft / SSE / tools
+- [Session TS mirrors](../web/src/features/session/generated/) — generated; refresh with `cd scripts/typescript_gen && npm run generate`
 - [ADRs](./adr/) — product decisions
 - [AGENTS.md](../AGENTS.md) — portable coding-agent SSOT (not editor-specific rules)

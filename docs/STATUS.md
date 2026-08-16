@@ -90,7 +90,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Navigation** — Chat shows top-left history icon → Record; Record / Preview show **上一頁** back to Chat; open Preview from in-chat ready banner (no auto-jump, no bottom tab bar)
 - **Still deferred** — history control in the app header top bar (icon currently overlays chat)
 
-**Decision (2026-08-02) — Contracts SSOT entry:** `AGENTS.md` + [ADRs](./adr/) + `schemas/contracts.py` / `schemas/tools.py` + generated `docs/contracts/` + `docs/openapi.json`. REST > SSE locked in [ADR 0002](./adr/0002-rest-source-of-truth-sse-enhancement.md); Confirm without LLM in [ADR 0003](./adr/0003-confirm-without-llm.md).
+**Decision (2026-08-02) — Contracts SSOT entry:** `AGENTS.md` + [ADRs](./adr/) + `schemas/contracts.py` / `schemas/tools.py` + generated `docs/contracts/` + `docs/openapi.json`; FE session types mirror in `web/src/features/session/generated/` via `scripts/typescript_gen`. REST > SSE locked in [ADR 0002](./adr/0002-rest-source-of-truth-sse-enhancement.md); Confirm without LLM in [ADR 0003](./adr/0003-confirm-without-llm.md).
 
 **Decision (2026-08-02) — Graph mock-LLM CI:** Session node unit tests monkeypatch LLM/repos (no API key on GitHub). Opt-in `node_trace_recording()` for step I/O. CI Tier 1b ≥70% on `nodes` + `trace`. Live LLM eval stays manual/nightly.
 
@@ -364,7 +364,7 @@ unhinted-marketing/
 │   ├── session/          # LangGraph graph, nodes, Postgres checkpointer, SSE bus
 │   └── config.py
 ├── schemas/              # Pydantic (auth, perception, session, contracts, tools)
-├── scripts/              # export_contracts → docs/openapi.json + docs/contracts/
+├── scripts/              # export_contracts → docs/openapi.json + docs/contracts/; typescript_gen → FE TS mirrors
 ├── migrations/           # Alembic (auth → signals → sessions)
 ├── tests/                # pytest: unit (no DB) + api (TEST_DATABASE_URL)
 ├── web/                  # React frontend (Phase 3 chat / agent / preview / history UI)

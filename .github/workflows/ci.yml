@@ -116,7 +116,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[dev]"
-      - run: python -m scripts.export_contracts
-      - name: Fail if OpenAPI or JSON schemas are out of date
-        run: git diff --exit-code docs/openapi.json docs/contracts/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install -e '.[dev]'
+      - name: Fail if contract mirrors are out of date
+        run: python -m scripts.check_contracts_fresh
+      - name: Fail if generated TS types are out of date
+        working-directory: scripts/typescript_gen
+        run: |
+          npm ci --no-audit --no-fund
+          npm run generate
+          git diff --exit-code -- ../../web/src/features/session/generated

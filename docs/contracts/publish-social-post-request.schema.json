@@ -23,6 +23,11 @@
           "type": "string"
         }
       },
+      "required": [
+        "caption",
+        "hashtags",
+        "cta"
+      ],
       "title": "DraftCopy",
       "type": "object"
     }

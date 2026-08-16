@@ -31,7 +31,9 @@
     }
   },
   "required": [
-    "node"
+    "node",
+    "model_tier",
+    "model"
   ],
   "title": "AgentProgressData",
   "type": "object"

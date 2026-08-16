@@ -40,6 +40,13 @@
       "type": "string"
     }
   },
+  "required": [
+    "can_do",
+    "cannot_do",
+    "angles",
+    "persona",
+    "summary"
+  ],
   "title": "SessionBriefData",
   "type": "object"
 }

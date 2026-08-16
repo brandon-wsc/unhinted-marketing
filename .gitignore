@@ -49,3 +49,4 @@ logs/
 
 # PostgreSQL local
 pgdata/
+scripts/typescript_gen/node_modules

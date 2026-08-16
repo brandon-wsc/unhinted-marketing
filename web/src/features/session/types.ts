@@ -1,39 +1,45 @@
-export type SessionMode = "CHAT" | "AGENT" | "PREVIEW";
+// Public type surface for the session feature.
+// Backend-owned shapes are re-exported from ./generated (AUTO-GENERATED from schemas/).
+// Hand-written types here are FE-local contracts not (yet) covered by backend contracts.
 
-export type Session = {
-  id: string;
-  company_id: string;
-  user_id: string;
-  mode: SessionMode | string;
-  status: string;
-  created_at: string;
-  updated_at: string;
+// --- Backend-owned, generated from OpenAPI (schemas/ → docs/openapi.json) ---
+import type { components } from "./generated/api";
+export type Session = components["schemas"]["SessionResponse"];
+export type SessionListItem = components["schemas"]["SessionListItem"];
+export type SessionMessagesResponse = components["schemas"]["SessionMessagesResponse"];
+// POST /messages re-sends the turn events at the end; those are the same
+// SessionEvent shape as SSE (backend serializes them as loose dicts).
+export type PostMessageResponse = Omit<components["schemas"]["PostMessageResponse"], "events"> & {
+  events: SessionEvent[];
 };
+export type UpdateDraftResponse = components["schemas"]["UpdateDraftResponse"];
+export type PreviewMediaMutationResponse = components["schemas"]["PreviewMediaMutationResponse"];
+export type ConfirmSessionResponse = components["schemas"]["ConfirmSessionResponse"];
+export type RecommendedQuestion = components["schemas"]["RecommendedQuestionItem"];
+export type RecommendedQuestionsResponse = components["schemas"]["RecommendedQuestionsResponse"];
+export type DraftCopy = components["schemas"]["DraftCopy"];
+export type PreviewMediaItem = components["schemas"]["PreviewMediaItem"];
 
+// --- Generated from JSON Schema mirrors (schemas/ → docs/contracts) ---
+export type AgentProgress = import("./generated/agent-progress").AgentProgressData;
+export type PreviewDraft = import("./generated/preview-updated").PreviewUpdatedData;
+export type SessionBrief = import("./generated/session-brief").SessionBriefData;
+
+// --- FE-local / not-yet-contracted ---
+export type SessionMode = "CHAT" | "AGENT" | "PREVIEW";
 export type ChatMessage = {
   id: string;
   session_id: string;
   role: string;
   content: string;
   created_at: string;
-  /** Server-persisted extras (e.g. agent_actions on user turns). */
   metadata?: Record<string, unknown>;
 };
-
 export type SessionEventData = Record<string, unknown>;
-
 export type SessionEvent = {
   type: string;
   data: SessionEventData;
 };
-
-export type AgentProgress = {
-  node: string;
-  model_tier: string | null;
-  model: string | null;
-};
-
-/** Persisted-in-UI trail of graph nodes for the current session (Cursor-style). */
 export type AgentActionRecord = {
   id: string;
   node: string;
@@ -42,100 +48,6 @@ export type AgentActionRecord = {
   status: "running" | "done";
   afterMessageId: string | null;
 };
-
-export type SessionBrief = {
-  can_do: string[];
-  cannot_do: string[];
-  angles: string[];
-  persona: string | null;
-  summary: string;
-};
-
-export type DraftCopy = {
-  caption: string;
-  hashtags: string[];
-  cta: string;
-};
-
-export type PreviewMediaItem = {
-  id: string;
-  url: string | null;
-  plan: Record<string, unknown>;
-  format: "single" | "comic_4panel" | string;
-  role: string;
-  seq: number;
-  status: string;
-};
-
-export type PreviewDraft = {
-  copy: DraftCopy;
-  image_url: string | null;
-  media: PreviewMediaItem[];
-  revision: number;
-  approval_token: string;
-  platform: string;
-};
-
-export type RecommendedQuestion = {
-  id: string;
-  text: string;
-  rationale: string | null;
-  source_signal_ids: string[];
-  persona_slug: string | null;
-};
-
-export type RecommendedQuestionsResponse = {
-  company_id: string;
-  questions: RecommendedQuestion[];
-  source_signal_ids: string[];
-  generated_at: string;
-  expires_at: string;
-  is_stale: boolean;
-};
-
-export type SessionListItem = Session & {
-  title: string | null;
-  pinned?: boolean;
-};
-
-export type SessionMessagesResponse = {
-  session: Session;
-  messages: ChatMessage[];
-  /** From sessions.state — restores BriefCard after Stop / reopen. */
-  brief?: SessionBrief | null;
-  awaiting_image_ok?: boolean;
-};
-
-export type PostMessageResponse = {
-  session: Session;
-  messages: ChatMessage[];
-  interrupted: boolean;
-  mode: SessionMode | string;
-  revision: number | null;
-  pending_confirm: boolean;
-  approval_token: string | null;
-  events: SessionEvent[];
-};
-
-export type UpdateDraftResponse = {
-  revision: number;
-  approval_token: string;
-  copy: DraftCopy;
-  image_url: string | null;
-  media?: PreviewMediaItem[];
-  platform: string;
-  mode: string;
-};
-
-export type PreviewMediaMutationResponse = UpdateDraftResponse;
-
-export type ConfirmSessionResponse = {
-  receipt_id: string;
-  status: string;
-  tool_name: string;
-  idempotency_key: string;
-};
-
 export type SessionSnapshot = {
   session_id: string;
   mode: SessionMode | string;

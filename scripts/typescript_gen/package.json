@@ -1,0 +1,13 @@
+{
+  "name": "unhinted-typescript-gen",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "generate": "node generate.mjs"
+  },
+  "dependencies": {
+    "json-schema-to-typescript": "^15.0.4",
+    "openapi-typescript": "^7.13.0"
+  }
+}
