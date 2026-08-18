@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   agentActionsFromMessages,
   asStringList,
+  isUserFacingAgentNode,
   mergePreviewDraft,
   newActionId,
   OUTCOME_NODE,
@@ -100,6 +101,14 @@ describe("OUTCOME_NODE", () => {
   });
 });
 
+describe("isUserFacingAgentNode", () => {
+  it("hides internal graph nodes", () => {
+    expect(isUserFacingAgentNode("fast_rule_checker")).toBe(false);
+    expect(isUserFacingAgentNode("persist_preview")).toBe(false);
+    expect(isUserFacingAgentNode("route_intent")).toBe(true);
+  });
+});
+
 describe("newActionId", () => {
   it("embeds the node name", () => {
     expect(newActionId("brainstormer")).toMatch(/^action-\d+-brainstormer-[a-z0-9]+$/);
@@ -126,6 +135,7 @@ describe("agentActionsFromMessages", () => {
         metadata: {
           agent_actions: [
             { node: "brainstormer", model_tier: "fast", model: "gpt" },
+            { node: "fast_rule_checker" },
             { node: "" },
             null,
             { node: "executor_post" },

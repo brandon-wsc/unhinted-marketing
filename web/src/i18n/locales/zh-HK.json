@@ -74,7 +74,11 @@
       "nodes": {
         "working": "處理緊…",
         "route_intent": "理解緊你嘅需求…",
+        "query_generator": "搵緊資料…",
+        "research_ingest": "整理緊市場資料…",
         "load_context": "載入緊公司資料…",
+        "product_matcher": "對緊產品資料…",
+        "chat": "回覆緊…",
         "trend_searcher": "搜尋緊香港熱話…",
         "brainstormer": "諗緊內容方向…",
         "executor_post": "起草緊貼文…",

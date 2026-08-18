@@ -16,14 +16,16 @@ EMBEDDING_DIM = 384
 _lock = threading.Lock()
 _model: Any | None = None
 _model_failed = False
+_load_started = False
 
 
 def reset_product_embedder_for_tests() -> None:
     """Clear singleton (unit tests)."""
-    global _model, _model_failed
+    global _model, _model_failed, _load_started
     with _lock:
         _model = None
         _model_failed = False
+        _load_started = False
 
 
 def _model_name() -> str:
@@ -33,28 +35,48 @@ def _model_name() -> str:
     )
 
 
-def _get_model() -> Any | None:
+def _init_model_safe() -> None:
     global _model, _model_failed
+    try:
+        from fastembed import TextEmbedding
+
+        name = _model_name()
+        loaded = TextEmbedding(model_name=name)
+    except Exception:
+        with _lock:
+            _model_failed = True
+        logger.exception("Product embedder init failed — vector tier disabled")
+        return
+    with _lock:
+        _model = loaded
+    logger.info("Product embedder ready model=%s dim=%s", _model_name(), EMBEDDING_DIM)
+
+
+def start_product_embedder_warmup() -> None:
+    """Load FastEmbed in a daemon thread. Never blocks the caller."""
+    global _load_started
     if not settings.product_embeddings_enabled:
-        return None
-    if _model_failed:
+        return
+    with _lock:
+        if _model is not None or _model_failed or _load_started:
+            return
+        _load_started = True
+    threading.Thread(
+        target=_init_model_safe,
+        name="product-embedder-init",
+        daemon=True,
+    ).start()
+
+
+def _get_model() -> Any | None:
+    if not settings.product_embeddings_enabled:
         return None
     if _model is not None:
         return _model
-    with _lock:
-        if _model is not None or _model_failed:
-            return _model
-        try:
-            from fastembed import TextEmbedding
-
-            name = _model_name()
-            _model = TextEmbedding(model_name=name)
-            logger.info("Product embedder ready model=%s dim=%s", name, EMBEDDING_DIM)
-        except Exception:
-            _model_failed = True
-            logger.exception("Product embedder init failed — vector tier disabled")
-            return None
-        return _model
+    if _model_failed:
+        return None
+    start_product_embedder_warmup()
+    return _model
 
 
 def embed_texts(texts: list[str]) -> list[list[float] | None]:

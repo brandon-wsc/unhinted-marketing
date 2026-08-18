@@ -74,7 +74,11 @@
       "nodes": {
         "working": "Working…",
         "route_intent": "Understanding your request…",
+        "query_generator": "Looking up information…",
+        "research_ingest": "Gathering market context…",
         "load_context": "Loading company context…",
+        "product_matcher": "Matching products…",
+        "chat": "Replying…",
         "trend_searcher": "Searching HK trends…",
         "brainstormer": "Brainstorming angles…",
         "executor_post": "Drafting post copy…",

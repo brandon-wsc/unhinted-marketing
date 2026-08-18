@@ -95,14 +95,16 @@ _NEED_SEARCH_UTTERANCES = [
 _lock = threading.Lock()
 _router: Any | None = None
 _router_failed = False
+_load_started = False
 
 
 def reset_semantic_router_for_tests() -> None:
     """Clear singleton (unit tests)."""
-    global _router, _router_failed
+    global _router, _router_failed, _load_started
     with _lock:
         _router = None
         _router_failed = False
+        _load_started = False
 
 
 def _build_router() -> Any:
@@ -121,32 +123,56 @@ def _build_router() -> Any:
     return SemanticRouter(encoder=encoder, routes=routes, auto_sync="local")
 
 
-def get_semantic_router() -> Any | None:
-    """Lazy process-level SemanticRouter; None if disabled or init failed."""
+def _init_router_safe() -> None:
     global _router, _router_failed
+    try:
+        router = _build_router()
+    except Exception:
+        with _lock:
+            _router_failed = True
+        logger.exception(
+            "Semantic router init failed — falling back to regex research gate"
+        )
+        return
+    with _lock:
+        _router = router
+    logger.info(
+        "Semantic router ready model=%s threshold=%s",
+        settings.semantic_router_model or DEFAULT_MODEL,
+        settings.semantic_router_score_threshold,
+    )
+
+
+def start_semantic_router_warmup() -> None:
+    """Download / load FastEmbed in a daemon thread. Never blocks the caller."""
+    global _load_started
     if not settings.semantic_router_enabled:
-        return None
-    if _router_failed:
+        return
+    with _lock:
+        if _router is not None or _router_failed or _load_started:
+            return
+        _load_started = True
+    threading.Thread(
+        target=_init_router_safe,
+        name="semantic-router-init",
+        daemon=True,
+    ).start()
+
+
+def get_semantic_router() -> Any | None:
+    """Process-level SemanticRouter, or None if disabled / still loading / failed.
+
+    First call kicks off a background load so a cold FastEmbed download cannot
+    stall the session event loop (chat would show no progress).
+    """
+    if not settings.semantic_router_enabled:
         return None
     if _router is not None:
         return _router
-    with _lock:
-        if _router is not None or _router_failed:
-            return _router
-        try:
-            _router = _build_router()
-            logger.info(
-                "Semantic router ready model=%s threshold=%s",
-                settings.semantic_router_model or DEFAULT_MODEL,
-                settings.semantic_router_score_threshold,
-            )
-        except Exception:
-            _router_failed = True
-            logger.exception(
-                "Semantic router init failed — falling back to regex research gate"
-            )
-            return None
-        return _router
+    if _router_failed:
+        return None
+    start_semantic_router_warmup()
+    return _router
 
 
 def classify_semantic_route(text: str) -> SemanticRouteName | None:

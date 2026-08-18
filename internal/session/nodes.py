@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -243,6 +244,8 @@ def agent_progress(node: str) -> Callable[[NodeFn], NodeFn]:
         @wraps(fn)
         async def wrapped(state: SessionState) -> dict[str, Any]:
             await publish_agent_progress(state, node)
+            # Let SSE flush before CPU-bound FastEmbed / LLM work.
+            await asyncio.sleep(0)
             out = await fn(state)
             record_node_step(node, dict(state), out)
             return out
@@ -271,7 +274,7 @@ async def fast_rule_checker(state: SessionState) -> dict[str, Any]:
     from internal.session.fast_rules import research_pass_for_route
     from internal.session.semantic_gate import classify_semantic_route
 
-    route = classify_semantic_route(text)
+    route = await asyncio.to_thread(classify_semantic_route, text)
     return {
         "research_rule_pass": research_pass_for_route(route, text),
         "research": {

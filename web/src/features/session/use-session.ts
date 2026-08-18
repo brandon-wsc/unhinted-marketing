@@ -19,6 +19,7 @@ import {
 } from "./api";
 import {
   agentActionsFromMessages,
+  isUserFacingAgentNode,
   mergePreviewDraft,
   newActionId,
   OUTCOME_NODE,
@@ -128,6 +129,7 @@ export function useSession(companyId: string | undefined) {
 
   const appendAgentAction = useCallback(
     (progress: AgentProgress, afterMessageId: string | null) => {
+      if (!isUserFacingAgentNode(progress.node)) return;
       const anchor = afterMessageId ?? turnAnchorRef.current;
       setAgentActions((prev) => {
         const marked = prev.map((a) =>
@@ -177,7 +179,7 @@ export function useSession(companyId: string | undefined) {
       const progressFromEvents = events
         .filter((ev) => ev.type === "agent.progress")
         .map((ev) => parseAgentProgress((ev.data ?? {}) as Record<string, unknown>))
-        .filter((p): p is AgentProgress => !!p);
+        .filter((p): p is AgentProgress => !!p && isUserFacingAgentNode(p.node));
       if (progressFromEvents.length > 0) {
         setAgentActions((prev) => {
           const withoutTurn = prev.filter((a) => a.afterMessageId !== afterMessageId);
@@ -753,6 +755,10 @@ export function useSession(companyId: string | undefined) {
         turnAnchorRef.current = pending.id;
         messagesRef.current = [...messagesRef.current, pending];
         setMessages(messagesRef.current);
+        appendAgentAction(
+          { node: "route_intent", model_tier: null, model: null },
+          pending.id,
+        );
 
         const res = await apiPostSessionMessage(accessToken, active.id, text, {
           signal: abort.signal,
@@ -855,6 +861,7 @@ export function useSession(companyId: string | undefined) {
       ensureOutcomeActions,
       finishRunningActions,
       refreshHistory,
+      appendAgentAction,
     ],
   );
 

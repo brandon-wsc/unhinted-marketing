@@ -283,6 +283,71 @@ describe("useSession", () => {
     expect(result.current.sending).toBe(false);
   });
 
+  it("shows optimistic route progress while the turn POST is in flight", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [],
+    });
+    let resolvePost: (value: unknown) => void = () => {};
+    apiPostSessionMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePost = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    let sendPromise: Promise<void> = Promise.resolve();
+    act(() => {
+      sendPromise = result.current.sendMessage("plan a post");
+    });
+
+    await waitFor(() => {
+      expect(
+        result.current.agentActions.some(
+          (a) => a.node === "route_intent" && a.status === "running",
+        ),
+      ).toBe(true);
+    });
+
+    await act(async () => {
+      resolvePost({
+        session: { ...sessionFixture, mode: "CHAT" },
+        messages: [
+          {
+            id: "u-server",
+            session_id: "sess-1",
+            role: "user",
+            content: "plan a post",
+            created_at: "2026-01-01T00:00:01Z",
+          },
+        ],
+        interrupted: false,
+        mode: "CHAT",
+        revision: null,
+        pending_confirm: false,
+        approval_token: null,
+        events: [
+          { type: "agent.progress", data: { node: "fast_rule_checker" } },
+          { type: "agent.progress", data: { node: "route_intent", model_tier: "cheap" } },
+        ],
+      });
+      await sendPromise;
+    });
+
+    expect(result.current.agentActions.some((a) => a.node === "fast_rule_checker")).toBe(
+      false,
+    );
+    expect(
+      result.current.agentActions.some(
+        (a) => a.node === "route_intent" && a.status === "done",
+      ),
+    ).toBe(true);
+  });
+
   it("sendMessage rolls back optimistic user message on failure", async () => {
     apiCreateSession.mockResolvedValue(sessionFixture);
     apiPostSessionMessage.mockRejectedValue(new Error("boom"));
