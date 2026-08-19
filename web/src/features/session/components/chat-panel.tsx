@@ -1,16 +1,28 @@
 import { cjk } from "@streamdown/cjk";
-import { Check, Square } from "lucide-react";
+import { Check, CornerDownRight, Ellipsis, Pencil, Square, Trash2 } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
+import { IconButton } from "@/components/icon-button";
 import { SendIcon } from "@/components/icons/send-icon";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
+import {
+  MAX_QUEUED_SESSION_MESSAGES,
+  QUEUE_TUCK_PX,
+  queuedComposerOverlayPx,
+} from "@/features/session/session-helpers";
 import { sessionLayoutMode } from "@/features/session/session-layout";
 import type {
   AgentActionRecord,
@@ -40,7 +52,8 @@ export function ChatPanel() {
     mode,
     sending,
     stopping,
-    composerLocked,
+    queueFull,
+    queuedMessages,
     streamingText,
     agentActions,
     brief,
@@ -57,6 +70,8 @@ export function ChatPanel() {
     historyLoading,
     restoring,
     sendMessage,
+    enqueueQueuedMessage,
+    dequeueQueuedMessage,
     resumeImage,
     stopTurn,
     updateDraft,
@@ -74,6 +89,8 @@ export function ChatPanel() {
   } = useSession(companyId);
   const { questions, loading: questionsLoading, isStale } = useRecommendedQuestions(companyId);
   const [input, setInput] = useState("");
+  const [editInsertAt, setEditInsertAt] = useState<number | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [historyCollapsed, setHistoryCollapsed] = useState(() => {
     try {
       return localStorage.getItem(HISTORY_COLLAPSED_KEY) === "1";
@@ -152,24 +169,54 @@ export function ChatPanel() {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, sending, streamingText, agentActions, brief, awaitingImageOk]);
+  }, [messages, sending, streamingText, agentActions, brief, awaitingImageOk, queuedMessages]);
 
   async function onSubmit(e?: FormEvent) {
     e?.preventDefault();
-    if (composerLocked) return;
+    if (stopping) return;
     const text = input.trim();
     if (!text) return;
+    const queueIndex = editInsertAt;
+    if (sending && queueFull && queueIndex == null) return;
     setInput("");
+    setEditInsertAt(null);
     try {
-      await sendMessage(text);
+      await sendMessage(text, queueIndex != null ? { queueIndex } : undefined);
     } catch {
       setInput(text);
+      setEditInsertAt(queueIndex);
       showError(t("chat.error.sendFailed"));
     }
   }
 
+  function beginEditQueued(id: string) {
+    const item = queuedMessages.find((q) => q.id === id);
+    if (!item) return;
+    if (editInsertAt != null) {
+      const pending = input.trim();
+      if (pending && !enqueueQueuedMessage(pending, editInsertAt)) return;
+    } else if (input.trim()) {
+      if (queuedMessages.length >= MAX_QUEUED_SESSION_MESSAGES) return;
+      enqueueQueuedMessage(input);
+    }
+    const removedAt = dequeueQueuedMessage(id);
+    if (removedAt < 0) return;
+    setInput(item.content);
+    setEditInsertAt(removedAt);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  function cancelQueuedEdit() {
+    if (editInsertAt == null) return;
+    const text = input.trim();
+    if (text) enqueueQueuedMessage(text, editInsertAt);
+    setInput("");
+    setEditInsertAt(null);
+  }
+
   async function onRetryUserMessage(content: string) {
-    if (!content.trim() || composerLocked) return;
+    if (!content.trim() || stopping) return;
+    if (sending && queueFull) return;
     try {
       await sendMessage(content);
     } catch {
@@ -178,7 +225,8 @@ export function ChatPanel() {
   }
 
   async function onPickQuestion(question: RecommendedQuestion) {
-    if (composerLocked) return;
+    if (stopping) return;
+    if (sending && queueFull) return;
     try {
       await sendMessage(question.text);
     } catch {
@@ -264,7 +312,12 @@ export function ChatPanel() {
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     // isComposing guard: Enter must not send while a CJK IME candidate is open.
-    if (composerLocked) return;
+    if (stopping) return;
+    if (e.key === "Escape" && editInsertAt != null) {
+      e.preventDefault();
+      cancelQueuedEdit();
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void onSubmit();
@@ -322,9 +375,12 @@ export function ChatPanel() {
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div
-          className={`mx-auto flex w-full flex-col gap-5 px-4 pb-6 sm:px-6 ${
+          className={`mx-auto flex w-full flex-col gap-5 px-4 sm:px-6 ${
             isSplit ? "pt-6" : "pt-14"
           } ${previewMode ? "max-w-none" : "max-w-3xl"}`}
+          style={{
+            paddingBottom: `calc(1.5rem + ${queuedComposerOverlayPx(queuedMessages.length)}px)`,
+          }}
         >
           {restoring ? (
             <p className="py-16 text-center text-sm text-muted-foreground">
@@ -340,7 +396,7 @@ export function ChatPanel() {
                 questions={questions}
                 loading={questionsLoading}
                 isStale={isStale}
-                disabled={composerLocked}
+                disabled={stopping || (sending && queueFull)}
                 onSelect={(q) => void onPickQuestion(q)}
               />
             </div>
@@ -353,7 +409,7 @@ export function ChatPanel() {
                   <ChatMessageItem
                     message={m}
                     retryContent={prevUser}
-                    retryDisabled={composerLocked}
+                    retryDisabled={stopping || (sending && queueFull)}
                     onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
                   />
                   {turnActions.length > 0 && <AgentActionList actions={turnActions} />}
@@ -410,7 +466,7 @@ export function ChatPanel() {
           {llmError && !messages.some((m) => isLlmErrorContent(m.content)) && (
             <LlmErrorCard
               message={llmError}
-              retryDisabled={composerLocked}
+              retryDisabled={stopping || (sending && queueFull)}
               onRetry={
                 findLastUserContent(messages)
                   ? () => void onRetryUserMessage(findLastUserContent(messages)!)
@@ -428,48 +484,118 @@ export function ChatPanel() {
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-border bg-card">
+      <div className="shrink-0">
         <form
           onSubmit={onSubmit}
-          className={`mx-auto flex w-full items-end gap-3 px-4 py-4 sm:px-6 ${
+          className={`mx-auto flex w-full flex-col gap-1.5 px-4 pb-4 sm:px-6 ${
             previewMode ? "max-w-none" : "max-w-3xl"
           }`}
         >
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            rows={2}
-            placeholder={t("chat.input.placeholder")}
-            disabled={composerLocked}
-            className="min-h-0 flex-1 resize-none rounded-xl px-4 py-3"
-          />
-          {composerLocked ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              disabled={stopping}
-              onClick={() => void onStopTurn()}
-              className="shrink-0 rounded-full text-foreground"
-              title={stopping ? t("chat.stopping") : t("chat.stop")}
-              aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
-            >
-              <Square className="size-3.5" fill="currentColor" stroke="none" />
-            </Button>
-          ) : (
-            <Button
-              type="submit"
-              variant="ghost"
-              size="icon"
-              disabled={!input.trim()}
-              className="shrink-0 rounded-full text-foreground"
-              title={t("chat.send")}
-              aria-label={t("chat.send")}
-            >
-              <SendIcon className="size-[18px]" />
-            </Button>
-          )}
+          {(awaitingImageOk && queuedMessages.length > 0) || queueFull ? (
+            <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
+              {awaitingImageOk && queuedMessages.length > 0 ? (
+                <p>{t("chat.queue.holdForImage")}</p>
+              ) : null}
+              {queueFull ? <p>{t("chat.queue.full")}</p> : null}
+            </div>
+          ) : null}
+          <div className="relative">
+            {queuedMessages.length > 0 ? (
+              <div
+                className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-border bg-background"
+                style={{ bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`, paddingBottom: QUEUE_TUCK_PX }}
+              >
+                <ul className="flex flex-col p-1">
+                  {queuedMessages.map((item) => (
+                    <li
+                      key={item.id}
+                      className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight hover:bg-accent"
+                    >
+                      <CornerDownRight
+                        className="size-3 shrink-0 text-muted-foreground/70"
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                        {item.content}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
+                        <IconButton
+                          type="button"
+                          className="h-6 w-6"
+                          title={t("chat.queue.remove")}
+                          aria-label={t("chat.queue.remove")}
+                          onClick={() => dequeueQueuedMessage(item.id)}
+                        >
+                          <Trash2 className="size-3" />
+                        </IconButton>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <IconButton
+                              type="button"
+                              className="h-6 w-6"
+                              title={t("chat.queue.more")}
+                              aria-label={t("chat.queue.more")}
+                            >
+                              <Ellipsis className="size-3" />
+                            </IconButton>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem onSelect={() => beginEditQueued(item.id)}>
+                              <Pencil className="size-3.5" />
+                              {t("chat.queue.edit")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <div className="relative z-10 rounded-2xl border border-border bg-card px-3 py-2 shadow-sm">
+              <div className="relative">
+                <Textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  rows={2}
+                  placeholder={t("chat.input.placeholder")}
+                  disabled={stopping}
+                  className="min-h-16 resize-none border-0 bg-transparent px-2 pr-20 shadow-none focus-visible:ring-0"
+                />
+                <div className="absolute bottom-2 right-1 flex items-center gap-1">
+                  {(sending || stopping) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={stopping}
+                      onClick={() => void onStopTurn()}
+                      className="h-8 w-8 rounded-full text-foreground"
+                      title={stopping ? t("chat.stopping") : t("chat.stop")}
+                      aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
+                    >
+                      <Square className="size-3.5" fill="currentColor" stroke="none" />
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    size="icon"
+                    disabled={
+                      stopping || !input.trim() || (sending && queueFull && editInsertAt == null)
+                    }
+                    className="h-8 w-8 rounded-full text-foreground"
+                    title={t("chat.send")}
+                    aria-label={t("chat.send")}
+                  >
+                    <SendIcon className="size-[18px]" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
         </form>
       </div>
     </div>

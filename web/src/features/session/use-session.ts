@@ -20,8 +20,10 @@ import {
 import {
   agentActionsFromMessages,
   isUserFacingAgentNode,
+  MAX_QUEUED_SESSION_MESSAGES,
   mergePreviewDraft,
   newActionId,
+  newQueuedChatMessage,
   OUTCOME_NODE,
   parseAgentProgress,
   parseBrief,
@@ -40,6 +42,7 @@ import type {
   DraftCopy,
   PreviewDraft,
   PreviewMediaMutationResponse,
+  QueuedChatMessage,
   Session,
   SessionBrief,
   SessionListItem,
@@ -74,6 +77,7 @@ export function useSession(companyId: string | undefined) {
   const [previewAfterMessageId, setPreviewAfterMessageId] = useState<string | null>(null);
   // True while the graph sits at interrupt_before executor_image_plan.
   const [awaitingImageOk, setAwaitingImageOk] = useState(false);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedChatMessage[]>([]);
   const [draft, setDraft] = useState<PreviewDraft | null>(null);
   const [confirmReceipt, setConfirmReceipt] = useState<ConfirmSessionResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
@@ -96,6 +100,15 @@ export function useSession(companyId: string | undefined) {
   // discarded turn. suppressLiveTurnEventsRef drops late SSE until the next send.
   const turnEpochRef = useRef(0);
   const suppressLiveTurnEventsRef = useRef(false);
+  const sendingRef = useRef(false);
+  const stoppingRef = useRef(false);
+  const awaitingImageOkRef = useRef(false);
+  const queuedRef = useRef<QueuedChatMessage[]>([]);
+  const drainQueueRef = useRef<() => void>(() => {});
+  queuedRef.current = queuedMessages;
+  sendingRef.current = sending;
+  stoppingRef.current = stopping;
+  awaitingImageOkRef.current = awaitingImageOk;
 
   const resetTransientUi = useCallback(() => {
     setStreamingText(null);
@@ -109,6 +122,9 @@ export function useSession(companyId: string | undefined) {
     setDraft(null);
     setConfirmReceipt(null);
     setLlmError(null);
+    queuedRef.current = [];
+    setQueuedMessages([]);
+    awaitingImageOkRef.current = false;
   }, []);
 
   const lastUserMessageId = useCallback(() => {
@@ -251,6 +267,7 @@ export function useSession(companyId: string | undefined) {
 
         // Mid resume-image Stop re-parks; keep Generate-image CTA.
         const stillParked = data.awaiting_image_ok === true;
+        awaitingImageOkRef.current = stillParked;
         setAwaitingImageOk(stillParked);
         if (stillParked) {
           setInterruptAfterMessageId(lastUserMessageId());
@@ -274,6 +291,8 @@ export function useSession(companyId: string | undefined) {
             finishRunningActions();
           }
         }
+        sendingRef.current = false;
+        stoppingRef.current = false;
         setSending(false);
         setStopping(false);
         return;
@@ -306,6 +325,7 @@ export function useSession(companyId: string | undefined) {
         return;
       }
       if (type === "draft.awaiting_image_ok") {
+        awaitingImageOkRef.current = true;
         setAwaitingImageOk(true);
         setInterruptAfterMessageId(lastUserMessageId());
         return;
@@ -660,8 +680,9 @@ export function useSession(companyId: string | undefined) {
   }, [companyId, accessToken, openSession, refreshHistory, startNewChat]);
 
   const stopTurn = useCallback(async () => {
-    if (!accessToken || !sessionId || stopping) return;
-    if (!sending && !awaitingImageOk) return;
+    if (!accessToken || !sessionId || stoppingRef.current) return;
+    if (!sendingRef.current && !awaitingImageOkRef.current) return;
+    stoppingRef.current = true;
     setStopping(true);
     // Invalidate in-flight send/resume before abort so late resolves are dropped.
     turnEpochRef.current += 1;
@@ -678,6 +699,7 @@ export function useSession(companyId: string | undefined) {
       setSession(hydrated.session);
       const lastUser = [...hydrated.messages].reverse().find((m) => m.role === "user");
       const parked = stillParked || hydrated.awaiting_image_ok === true;
+      awaitingImageOkRef.current = parked;
       setAwaitingImageOk(parked);
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
       // Restore BriefCard from sessions.state (Stop must not wipe a surviving brief).
@@ -699,30 +721,47 @@ export function useSession(companyId: string | undefined) {
       finishRunningActions();
       void refreshHistory();
     } finally {
+      stoppingRef.current = false;
+      sendingRef.current = false;
       setStopping(false);
       setSending(false);
+      drainQueueRef.current();
     }
-  }, [
-    accessToken,
-    sessionId,
-    stopping,
-    sending,
-    awaitingImageOk,
-    finishRunningActions,
-    refreshHistory,
-  ]);
+  }, [accessToken, sessionId, finishRunningActions, refreshHistory]);
+
+  const enqueueQueuedAt = useCallback((content: string, index?: number): boolean => {
+    const text = content.trim();
+    if (!text) return false;
+    if (queuedRef.current.length >= MAX_QUEUED_SESSION_MESSAGES) return false;
+    const item = newQueuedChatMessage(text);
+    const next = [...queuedRef.current];
+    if (index == null || index >= next.length) {
+      next.push(item);
+    } else {
+      next.splice(Math.max(0, index), 0, item);
+    }
+    queuedRef.current = next;
+    setQueuedMessages(next);
+    return true;
+  }, []);
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, options?: { queueIndex?: number }) => {
       const text = content.trim();
-      if (!text || !accessToken || !companyId || sending || stopping) {
+      if (!text || !accessToken || !companyId || stoppingRef.current) {
+        return;
+      }
+      if (sendingRef.current || options?.queueIndex != null) {
+        enqueueQueuedAt(text, options?.queueIndex);
         return;
       }
       // Backend rejects sends while parked (409) — discard the parked image
       // turn first (Stop semantics), then continue as a normal message.
-      if (awaitingImageOk) {
+      if (awaitingImageOkRef.current) {
         await stopTurn();
+        if (stoppingRef.current || !accessToken) return;
       }
+      sendingRef.current = true;
       setSending(true);
       setStreamingText(null);
       setAgentProgress(null);
@@ -755,10 +794,7 @@ export function useSession(companyId: string | undefined) {
         turnAnchorRef.current = pending.id;
         messagesRef.current = [...messagesRef.current, pending];
         setMessages(messagesRef.current);
-        appendAgentAction(
-          { node: "route_intent", model_tier: null, model: null },
-          pending.id,
-        );
+        appendAgentAction({ node: "route_intent", model_tier: null, model: null }, pending.id);
 
         const res = await apiPostSessionMessage(accessToken, active.id, text, {
           signal: abort.signal,
@@ -771,6 +807,7 @@ export function useSession(companyId: string | undefined) {
         setMessages(res.messages);
         setMode(res.mode);
         setStreamingText(null);
+        awaitingImageOkRef.current = res.interrupted;
         setAwaitingImageOk(res.interrupted);
         if (!res.interrupted) setInterruptAfterMessageId(null);
 
@@ -846,15 +883,14 @@ export function useSession(companyId: string | undefined) {
         throw err;
       } finally {
         if (sendAbortRef.current === abort) sendAbortRef.current = null;
+        sendingRef.current = false;
         setSending(false);
+        drainQueueRef.current();
       }
     },
     [
       accessToken,
       companyId,
-      sending,
-      stopping,
-      awaitingImageOk,
       session,
       stopTurn,
       applyTurnEvent,
@@ -862,8 +898,26 @@ export function useSession(companyId: string | undefined) {
       finishRunningActions,
       refreshHistory,
       appendAgentAction,
+      enqueueQueuedAt,
     ],
   );
+
+  drainQueueRef.current = () => {
+    if (sendingRef.current || stoppingRef.current || awaitingImageOkRef.current) return;
+    const next = queuedRef.current[0];
+    if (!next) return;
+    queuedRef.current = queuedRef.current.slice(1);
+    setQueuedMessages(queuedRef.current);
+    void sendMessage(next.content);
+  };
+
+  const dequeueQueuedMessage = useCallback((id: string): number => {
+    const idx = queuedRef.current.findIndex((q) => q.id === id);
+    if (idx < 0) return -1;
+    queuedRef.current = queuedRef.current.filter((q) => q.id !== id);
+    setQueuedMessages(queuedRef.current);
+    return idx;
+  }, []);
 
   const applyTurnResponse = useCallback(
     (res: {
@@ -878,6 +932,7 @@ export function useSession(companyId: string | undefined) {
       setMessages(res.messages);
       setMode(res.mode);
       setStreamingText(null);
+      awaitingImageOkRef.current = res.interrupted;
       setAwaitingImageOk(res.interrupted);
       if (!res.interrupted) setInterruptAfterMessageId(null);
 
@@ -917,7 +972,16 @@ export function useSession(companyId: string | undefined) {
 
   const resumeImage = useCallback(
     async (imageFormat?: "single" | "comic_4panel") => {
-      if (!accessToken || !sessionId || sending || stopping || !awaitingImageOk) return;
+      if (
+        !accessToken ||
+        !sessionId ||
+        sendingRef.current ||
+        stoppingRef.current ||
+        !awaitingImageOkRef.current
+      ) {
+        return;
+      }
+      sendingRef.current = true;
       setSending(true);
       setLlmError(null);
       const epoch = ++turnEpochRef.current;
@@ -939,10 +1003,12 @@ export function useSession(companyId: string | undefined) {
         throw err;
       } finally {
         if (sendAbortRef.current === abort) sendAbortRef.current = null;
+        sendingRef.current = false;
         setSending(false);
+        drainQueueRef.current();
       }
     },
-    [accessToken, sessionId, sending, stopping, awaitingImageOk, applyTurnResponse, refreshHistory],
+    [accessToken, sessionId, applyTurnResponse, refreshHistory],
   );
 
   const applyMediaMutation = useCallback((res: PreviewMediaMutationResponse) => {
@@ -1092,9 +1158,9 @@ export function useSession(companyId: string | undefined) {
     mode,
     sending,
     stopping,
-    // Parked image-OK (awaitingImageOk) must not lock the composer — user can keep
-    // chatting; the InterruptCard owns the resume CTA. Stop only shows mid-turn.
-    composerLocked: sending || stopping,
+    composerLocked: stopping,
+    queueFull: queuedMessages.length >= MAX_QUEUED_SESSION_MESSAGES,
+    queuedMessages,
     sseConnected,
     streamingText,
     agentProgress,
@@ -1113,6 +1179,8 @@ export function useSession(companyId: string | undefined) {
     historyLoading,
     restoring,
     sendMessage,
+    enqueueQueuedMessage: enqueueQueuedAt,
+    dequeueQueuedMessage,
     resumeImage,
     stopTurn,
     updateDraft,

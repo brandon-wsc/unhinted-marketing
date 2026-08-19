@@ -67,6 +67,14 @@
     "send": "送出",
     "stop": "停止",
     "stopping": "停止中…",
+    "queue": {
+      "badge": "排隊緊",
+      "remove": "取消呢條排隊",
+      "edit": "改訊息",
+      "more": "更多",
+      "full": "最多排 3 條 — 等而家呢轉完再送。",
+      "holdForImage": "等你揀圖或者停止，先會送排隊訊息。"
+    },
     "live": "即時連線",
     "offline": "未連線",
     "agent": {

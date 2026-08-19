@@ -338,14 +338,250 @@ describe("useSession", () => {
       await sendPromise;
     });
 
-    expect(result.current.agentActions.some((a) => a.node === "fast_rule_checker")).toBe(
-      false,
-    );
+    expect(result.current.agentActions.some((a) => a.node === "fast_rule_checker")).toBe(false);
     expect(
-      result.current.agentActions.some(
-        (a) => a.node === "route_intent" && a.status === "done",
-      ),
+      result.current.agentActions.some((a) => a.node === "route_intent" && a.status === "done"),
     ).toBe(true);
+  });
+
+  it("queues a follow-up send until the in-flight turn finishes", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [],
+    });
+    let resolveFirst: (value: unknown) => void = () => {};
+    apiPostSessionMessage
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u-b",
+            session_id: "sess-1",
+            role: "user",
+            content: "follow up",
+            created_at: "2026-01-01T00:00:03Z",
+          },
+        ],
+        interrupted: false,
+        mode: "CHAT",
+        revision: null,
+        pending_confirm: false,
+        approval_token: null,
+        events: [],
+      });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    act(() => {
+      void result.current.sendMessage("first");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+    expect(result.current.composerLocked).toBe(false);
+
+    await act(async () => {
+      await result.current.sendMessage("follow up");
+    });
+    expect(apiPostSessionMessage).toHaveBeenCalledTimes(1);
+    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["follow up"]);
+
+    await act(async () => {
+      resolveFirst({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u-a",
+            session_id: "sess-1",
+            role: "user",
+            content: "first",
+            created_at: "2026-01-01T00:00:01Z",
+          },
+        ],
+        interrupted: false,
+        mode: "CHAT",
+        revision: null,
+        pending_confirm: false,
+        approval_token: null,
+        events: [],
+      });
+    });
+
+    await waitFor(() => expect(apiPostSessionMessage).toHaveBeenCalledTimes(2));
+    expect(apiPostSessionMessage.mock.calls[1]?.[2]).toBe("follow up");
+    await waitFor(() => expect(result.current.queuedMessages).toEqual([]));
+  });
+
+  it("inserts a follow-up at queueIndex instead of appending", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [],
+    });
+    apiPostSessionMessage.mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    act(() => {
+      void result.current.sendMessage("first");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      await result.current.sendMessage("tail");
+      await result.current.sendMessage("head", { queueIndex: 0 });
+    });
+
+    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["head", "tail"]);
+  });
+
+  it("enqueueQueuedMessage inserts at an index", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [],
+    });
+    apiPostSessionMessage.mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    act(() => {
+      void result.current.sendMessage("first");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      await result.current.sendMessage("b");
+      expect(result.current.enqueueQueuedMessage("a", 0)).toBe(true);
+    });
+
+    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["a", "b"]);
+  });
+
+  it("does not drain the queue while parked at image OK", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [],
+    });
+    let resolveFirst: (value: unknown) => void = () => {};
+    apiPostSessionMessage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    act(() => {
+      void result.current.sendMessage("first");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+    await act(async () => {
+      await result.current.sendMessage("queued while running");
+    });
+
+    await act(async () => {
+      resolveFirst({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u-a",
+            session_id: "sess-1",
+            role: "user",
+            content: "first",
+            created_at: "2026-01-01T00:00:01Z",
+          },
+        ],
+        interrupted: true,
+        mode: "AGENT",
+        revision: null,
+        pending_confirm: false,
+        approval_token: null,
+        events: [{ type: "draft.awaiting_image_ok", data: { awaiting: true } }],
+      });
+    });
+
+    await waitFor(() => expect(result.current.awaitingImageOk).toBe(true));
+    expect(apiPostSessionMessage).toHaveBeenCalledTimes(1);
+    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["queued while running"]);
+  });
+
+  it("keeps the queue across Stop and drains after unlock", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [],
+    });
+    let resolveFirst: (value: unknown) => void = () => {};
+    apiPostSessionMessage
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u-b",
+            session_id: "sess-1",
+            role: "user",
+            content: "after stop",
+            created_at: "2026-01-01T00:00:04Z",
+          },
+        ],
+        interrupted: false,
+        mode: "CHAT",
+        revision: null,
+        pending_confirm: false,
+        approval_token: null,
+        events: [],
+      });
+    apiStopSessionTurn.mockResolvedValue({
+      status: "cancelled",
+      interrupted: false,
+      awaiting_image_ok: false,
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    act(() => {
+      void result.current.sendMessage("first");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+    await act(async () => {
+      await result.current.sendMessage("after stop");
+    });
+
+    await act(async () => {
+      await result.current.stopTurn();
+      resolveFirst({
+        session: sessionFixture,
+        messages: [],
+        interrupted: false,
+        mode: "CHAT",
+        revision: null,
+        pending_confirm: false,
+        approval_token: null,
+        events: [],
+      });
+    });
+
+    await waitFor(() => expect(apiPostSessionMessage).toHaveBeenCalledTimes(2));
+    expect(apiPostSessionMessage.mock.calls[1]?.[2]).toBe("after stop");
   });
 
   it("sendMessage rolls back optimistic user message on failure", async () => {

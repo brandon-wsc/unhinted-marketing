@@ -3,13 +3,19 @@ import {
   agentActionsFromMessages,
   asStringList,
   isUserFacingAgentNode,
+  MAX_QUEUED_SESSION_MESSAGES,
   mergePreviewDraft,
   newActionId,
+  newQueuedChatMessage,
   OUTCOME_NODE,
   parseAgentProgress,
   parseBrief,
   parseDraftCopy,
   previewAnchorFromActions,
+  QUEUE_LIST_PAD_PX,
+  QUEUE_ROW_PX,
+  QUEUE_TUCK_PX,
+  queuedComposerOverlayPx,
   waitForSseReady,
 } from "@/features/session/session-helpers";
 import type { AgentActionRecord, ChatMessage, PreviewDraft } from "@/features/session/types";
@@ -106,6 +112,32 @@ describe("isUserFacingAgentNode", () => {
     expect(isUserFacingAgentNode("fast_rule_checker")).toBe(false);
     expect(isUserFacingAgentNode("persist_preview")).toBe(false);
     expect(isUserFacingAgentNode("route_intent")).toBe(true);
+  });
+});
+
+describe("MAX_QUEUED_SESSION_MESSAGES", () => {
+  it("caps the in-flight send queue at 3", () => {
+    expect(MAX_QUEUED_SESSION_MESSAGES).toBe(3);
+  });
+});
+
+describe("queuedComposerOverlayPx", () => {
+  it("is 0 when the queue is empty", () => {
+    expect(queuedComposerOverlayPx(0)).toBe(0);
+    expect(queuedComposerOverlayPx(-1)).toBe(0);
+  });
+
+  it("uses fixed row height for 1 and 3 items", () => {
+    expect(queuedComposerOverlayPx(1)).toBe(QUEUE_ROW_PX + QUEUE_LIST_PAD_PX - QUEUE_TUCK_PX);
+    expect(queuedComposerOverlayPx(3)).toBe(3 * QUEUE_ROW_PX + QUEUE_LIST_PAD_PX - QUEUE_TUCK_PX);
+  });
+});
+
+describe("newQueuedChatMessage", () => {
+  it("trims content and uses a local-q id", () => {
+    const item = newQueuedChatMessage("  hi  ");
+    expect(item.content).toBe("hi");
+    expect(item.id).toMatch(/^local-q-/);
   });
 });
 

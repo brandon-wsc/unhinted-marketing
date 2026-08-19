@@ -5,6 +5,7 @@ import type {
   DraftCopy,
   PreviewDraft,
   PreviewMediaItem,
+  QueuedChatMessage,
   SessionBrief,
 } from "./types";
 
@@ -53,6 +54,29 @@ const INTERNAL_AGENT_NODES = new Set(["fast_rule_checker", "persist_preview"]);
 
 export function isUserFacingAgentNode(node: string): boolean {
   return !INTERNAL_AGENT_NODES.has(node);
+}
+
+/** SPA-only follow-up Sends while a turn is in flight (ADR 0016). */
+export const MAX_QUEUED_SESSION_MESSAGES = 3;
+
+/** Single-line queue row (py-1 + 12px text / h-6 actions). */
+export const QUEUE_ROW_PX = 32;
+/** Queue list `p-1`. */
+export const QUEUE_LIST_PAD_PX = 8;
+/** Queue card tucked under the composer top edge. */
+export const QUEUE_TUCK_PX = 12;
+
+/** Extra scroll padding so transcript clears the absolute queue overlay. */
+export function queuedComposerOverlayPx(count: number): number {
+  if (count <= 0) return 0;
+  return count * QUEUE_ROW_PX + QUEUE_LIST_PAD_PX - QUEUE_TUCK_PX;
+}
+
+export function newQueuedChatMessage(content: string): QueuedChatMessage {
+  return {
+    id: `local-q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    content: content.trim(),
+  };
 }
 
 /** Outcome events → node names, used when SSE missed live agent.progress. */
