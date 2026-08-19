@@ -29,6 +29,9 @@ async def lifespan(app: FastAPI):
     app.state.checkpoint_pool = pool
     app.state.checkpointer = checkpointer
     app.state.session_graph = graph
+    from internal.session.semantic_gate import start_semantic_router_warmup
+
+    start_semantic_router_warmup()
     try:
         yield
     finally:

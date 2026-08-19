@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-15  
+> **Last updated:** 2026-08-19  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -33,10 +33,12 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
+**Decision (2026-08-19) — Queue send while turn in-flight:** → [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md) (supersedes ADR 0004 composer lock). Composer stays open; Send enqueues in the SPA (max 3); Stop discards the running turn only; drain after idle unless parked at image OK.
+
 **Decision (2026-08-08) — Chat research gate + Tavily∪PG:** → [ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)
 
 - **Unified `route_intent`** — one structured call: `graph_intent` + `research` (`need_facts` / `ambiguous` / `ask_clarify` / `entity_surface`); no separate graph-routing classifier
-- **`fast_rule_checker`** — semantic-router + FastEmbed (multilingual MiniLM; e5-small not in FastEmbed registry) with regex fallback; only `need_search` → `research_rule_pass`
+- **`fast_rule_checker`** — semantic-router + FastEmbed (multilingual MiniLM; e5-small not in FastEmbed registry) with regex fallback; only `need_search` → `research_rule_pass`. Cold encoder load is **background** (API lifespan + first classify); a turn never waits on download. Until the router is ready, the gate uses regex. Chat shows optimistic `route_intent` progress — do not surface “downloading embedding” or `fast_rule_checker` / `persist_preview` in the action trail.
 - **`query_generator`** — 1–3 atomic `search_queries`; reject spoken clauses and mixed Latin+CJK entity pastes; gloss fallback (`兔糧` → `rabbit food`) when LLM unavailable
 - **Both sources** — research always uses PostgreSQL **and** Tavily; do not skip Tavily on PG hit; both land in `raw_news_events`
 - **Act ≠ search** — `start` / revise gated on clear intent (+ clarify if ambiguous), not on Tavily success; **ambiguity does not block research** — searchable phrases search best-effort first; ask_clarify is for drafting, not a quiz instead of search
@@ -234,7 +236,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Auth pages + protected shell | ✅ | Login / register; `/` is now the chat workspace |
 | Chat UI shell | ✅ | `web/src/features/session/` — `useSession` + message list / composer; Streamdown + `@streamdown/cjk`; Vite proxies `/api` → API |
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
-| Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer locked while in-flight or parked; Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
+| Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); optimistic `route_intent` while POST/SSE catch up; hide `fast_rule_checker` / `persist_preview`; brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer open while in-flight with FE send queue (max 3) and Stop beside Send ([ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md)); Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
 | Landing: recommended questions cards | ✅ | Empty-state cards from `GET /api/companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
 | Preview Mode (left chat / right preview) | ✅ | Split: IG mock + **Edit Copy dialog** + multi-image carousel; **hover/tap image → Edit image**. Paged: Preview push page with **上一頁** (content-width shell, not `lg`) |
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |
@@ -420,8 +422,8 @@ See `.env.example`. Local `.env` is gitignored.
 | ID | Risk | Status |
 |----|------|--------|
 | **H1** | Auth rate limit + known-default / weak `JWT_SECRET` | ✅ **Mitigated on this branch** — in-memory limit on register/login/refresh; `APP_ENV=production` refuses insecure JWT |
-| **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ✅ **Mitigated** — [ADR 0004](./adr/0004-stop-discard-and-image-resume.md): composer lock; Stop discards; `POST /resume-image` only; `/messages` 409 while busy/parked; chat/JSON completions stream + `aclose` on cancel (best-effort upstream abort) |
-| **H3** | `use-session.ts` correctness concentrated & untested | ✅ **Mitigated** — pure helpers in `session-helpers.ts` (+ Tier 1 cov gate); `use-session.test.ts` covers restore / send / confirm / SSE merge |
+| **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ✅ **Mitigated** — [ADR 0004](./adr/0004-stop-discard-and-image-resume.md) + [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md): Stop discards; FE queue while in-flight; `POST /resume-image` only; `/messages` 409 while busy/parked; chat/JSON completions stream + `aclose` on cancel (best-effort upstream abort) |
+| **H3** | `use-session.ts` correctness concentrated & untested | ✅ **Mitigated** — pure helpers in `session-helpers.ts` (+ Tier 1 cov gate); `use-session.test.ts` covers restore / send / queue-while-in-flight / optimistic `route_intent` / confirm / SSE merge |
 | **I1** | Confirm idempotency key global (cross-user receipt leak) | ✅ **Mitigated** — foreign key → 409; same session/user only replays |
 
 ### Other gaps

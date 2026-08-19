@@ -1,6 +1,6 @@
 # ADR 0004 — Stop discards turn; image resume is explicit
 
-- **Status:** Accepted
+- **Status:** Accepted (§1 composer lock superseded by [ADR 0016](./0016-queue-send-while-turn-in-flight.md))
 - **Date:** 2026-08-02
 - **Supersedes:** — (closes STATUS H2: blind `ainvoke(None)` on any `POST /messages`)
 
@@ -10,7 +10,7 @@ While the graph runs, overlapping `POST /messages` and “resume image by typing
 
 ## Decision
 
-1. **Composer lock (product):** While a turn is in-flight **or** the session is parked awaiting image OK, the chat composer (input + Send) is locked. The primary control becomes **Stop**.
+1. **Composer lock (product):** ~~While a turn is in-flight **or** the session is parked awaiting image OK, the chat composer (input + Send) is locked. The primary control becomes **Stop**.~~ **Superseded by [ADR 0016](./0016-queue-send-while-turn-in-flight.md):** in-flight typing/Send queues locally; Stop stays available beside Send. Parked image OK still must not blind-resume via `POST /messages`.
 2. **Stop = discard this turn:** Do not keep partial graph progress. Restore `sessions.state` to the pre-turn snapshot, delete messages created by that turn, and `adelete_thread` on the LangGraph checkpointer. After unlock, the next Send is a **new** message. **Exception:** Stop mid `POST /resume-image` cancels the image run and **re-parks** at the image interrupt (`awaiting_image_ok` / Generate-image CTA returns); only Stop while already parked (no in-flight) discards the whole agent turn.
 3. **Backend participates:** Per-session in-memory turn registry holds the running `asyncio.Task`. `POST /sessions/{id}/stop` cancels the task (in-flight) or discards parked state. Concurrent `POST /messages` while busy or parked returns **409**.
 4. **Image resume is explicit:** Only `POST /sessions/{id}/resume-image` may `ainvoke(None)` when parked. Normal `POST /messages` never blind-resumes.

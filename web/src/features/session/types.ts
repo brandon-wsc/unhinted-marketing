@@ -48,6 +48,10 @@ export type AgentActionRecord = {
   status: "running" | "done";
   afterMessageId: string | null;
 };
+export type QueuedChatMessage = {
+  id: string;
+  content: string;
+};
 export type SessionSnapshot = {
   session_id: string;
   mode: SessionMode | string;

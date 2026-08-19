@@ -67,6 +67,14 @@
     "send": "Send",
     "stop": "Stop",
     "stopping": "Stopping…",
+    "queue": {
+      "badge": "Queued",
+      "remove": "Remove from queue",
+      "edit": "Edit message",
+      "more": "More",
+      "full": "Queue is full (3). Wait for this turn to finish.",
+      "holdForImage": "Queued messages wait until you pick an image format or Stop."
+    },
     "live": "Live",
     "offline": "Offline",
     "agent": {
@@ -74,7 +82,11 @@
       "nodes": {
         "working": "Working…",
         "route_intent": "Understanding your request…",
+        "query_generator": "Looking up information…",
+        "research_ingest": "Gathering market context…",
         "load_context": "Loading company context…",
+        "product_matcher": "Matching products…",
+        "chat": "Replying…",
         "trend_searcher": "Searching HK trends…",
         "brainstormer": "Brainstorming angles…",
         "executor_post": "Drafting post copy…",
