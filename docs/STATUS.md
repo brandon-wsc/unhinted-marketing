@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-20  
+> **Last updated:** 2026-08-21  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -152,6 +152,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - `accent` / `accent-foreground` alias `voice-soft` / `voice` — hover, selected, queued, ghost/outline button hover.
 - `secondary` stays the 6% ink|white **resting** wash (tabs track, read-only, notes).
 - Field hover → `border-voice-border`; focus → `ring` / `border-voice`. Queued composer stack → `bg-card` + `border-voice-border` (tuck + icon); row hover → `bg-accent` + `text-accent-foreground`. Do not fill the stack with `voice-soft` (no darker hover stop).
+- Composer card stacks textarea then send/stop row below it (not overlaid on the textarea corner); queue tucks above the card ([ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md)).
 - Primary / Confirm stay ink. Do not paint solid `bg-voice` on shell chrome.
 
 **Decision (2026-08-10) — Company settings Voice + Products (knowledge K1/K3/K3b):**

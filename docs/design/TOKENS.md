@@ -110,5 +110,7 @@ Foreground / soft for status are the same hues at `--status-fg-l` (darker) and `
 | `SelectContent` | Popper below trigger; hairline `border-border` (not bare `border` / ink) |
 | `Card` | Hairline `border-border` (not bare `border` / ink) — auth card |
 | `Input` / `Textarea` / `Select` | Rest `border-input`. Hover `border-voice-border`. Focus `border-ring` + `ring-ring` (voice). **Select open** uses the same ring via `data-[state=open]` — click focus moves into the list, so `:focus-visible` on the trigger is not enough. **`readOnly`:** keep `border-input`, `bg-secondary` wash, `cursor-default` (textarea also `resize-none`). Copyable. **`disabled`:** `opacity-50` + not-allowed — use for true unavailable, not view-only. Do not paint read-only with `bg-muted`. |
+| `Tabs` | `variant="pills"` (default): track `bg-secondary`; active trigger `bg-card` + shadow. `variant="line"`: transparent track + `border-b border-border`; active ink underline (`border-foreground`); hover `bg-secondary`. Products **Org \| Mine** → **line**; settings sidebar nav → default **pills**. |
+| Composer card | Outer `rounded-2xl border-border bg-card`; hover `border-voice-border`; `focus-within:border-voice`. Inner textarea is borderless; send/stop icon row sits **below** the textarea (not overlaid). Queue stack tucks above the card ([ADR 0016](../adr/0016-queue-send-while-turn-in-flight.md)). |
 | Products list | Click row → detail dialog lists full `profile` columns; table stays name/sku/status only |
 | Import | Reject files with **> 50** columns (COLLECT); no silent truncate |
