@@ -34,6 +34,7 @@ import type {
 import { useRecommendedQuestions } from "@/features/session/use-recommended-questions";
 import { useSession } from "@/features/session/use-session";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { cn } from "@/lib/utils";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
 
@@ -388,7 +389,12 @@ export function ChatPanel() {
             </p>
           ) : showLanding ? (
             <div className="flex flex-col items-center justify-center py-16 text-center sm:py-24">
-              <h1 className="text-2xl font-semibold tracking-tight">{t("chat.empty.title")}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                <span className="mr-1.5 text-voice" aria-hidden="true">
+                  ✳
+                </span>
+                {t("chat.empty.title")}
+              </h1>
               <p className="mt-2 max-w-md text-sm text-muted-foreground">
                 {t("chat.empty.subtitle")}
               </p>
@@ -586,7 +592,10 @@ export function ChatPanel() {
                     disabled={
                       stopping || !input.trim() || (sending && queueFull && editInsertAt == null)
                     }
-                    className="h-8 w-8 rounded-full text-foreground"
+                    className={cn(
+                      "h-8 w-8 rounded-full",
+                      input.trim() ? "text-voice" : "text-foreground",
+                    )}
                     title={t("chat.send")}
                     aria-label={t("chat.send")}
                   >
@@ -665,7 +674,7 @@ function PreviewReadyBanner({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition hover:border-ring hover:text-foreground"
+      className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
     >
       {t("preview.readyBanner")}
     </button>
@@ -680,20 +689,31 @@ function AgentActionList({ actions }: { actions: AgentActionRecord[] }) {
       {actions.map((action) => {
         const nodeKey = `chat.agent.nodes.${action.node}`;
         const label = t(nodeKey, { defaultValue: t("chat.agent.nodes.working") });
+        const running = action.status === "running";
         return (
           <li
             key={action.id}
-            className="flex items-start gap-2 text-xs leading-snug text-muted-foreground"
+            className={cn(
+              "flex items-start gap-2 text-xs leading-snug",
+              running
+                ? "-mx-1.5 rounded-md bg-voice-soft px-1.5 py-1 text-voice"
+                : "text-muted-foreground",
+            )}
           >
-            <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center text-voice">
-              {action.status === "running" ? (
+            <span
+              className={cn(
+                "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center",
+                running ? "text-voice" : "text-muted-foreground",
+              )}
+            >
+              {running ? (
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-voice" />
               ) : (
                 <Check className="size-3.5" aria-hidden />
               )}
             </span>
             <span className="min-w-0">
-              <span className={action.status === "running" ? "text-foreground" : ""}>{label}</span>
+              <span>{label}</span>
               {action.model && (
                 <span className="ml-1.5 opacity-70">
                   {action.model_tier ? `${action.model_tier} · ` : ""}

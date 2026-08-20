@@ -148,7 +148,7 @@ Title + body sit **inside** the AuthLayout card (Penpot AuthCard), left-aligned.
 - Reuse existing shell primitives ([`web/src/components/ui/`](../../web/src/components/ui/)) — tabs, table, input, textarea, button, dialog, **Select**.
 - **Select** — `SelectContent` is **`popper`** (list below trigger, not `item-aligned` overlay). Border is `border-border` (+ `dark:border-white/10`), same as dropdown menus.
 - Table row hover/selected → `bg-accent` (not `muted`) — [TOKENS.md](../design/TOKENS.md) `muted` vs `accent`.
-- Voice accent (`text-voice`) only if showing craft exemplars preview; settings chrome stays neutral primary.
+- Voice accent on craft surfaces only: `text-voice` / `bg-voice-soft` / `border-voice/40` on action-trail running rows, recommended-question cards, login/register corner tagline, filled Voice exemplar slots, and “save as voice example”. Settings chrome (nav, roast chips, Save) stays neutral primary.
 - Penpot: **Company settings** drawn under [design/penpot](../../design/penpot/); CSS follows tokens in `web/src/index.css`.
 - **UI copy:** user-facing only (what the person sees/does). Avoid internal jargon in subtitles (no “K6”, “owner/admin”, “upsert”, “Zero LLM”).
 

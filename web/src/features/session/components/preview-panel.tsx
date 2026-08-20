@@ -184,7 +184,7 @@ export function PreviewPanel({
       <div className="shrink-0 border-t border-border bg-card px-4 py-3">
         {confirmReceipt || confirmed ? (
           <div className="space-y-2">
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm">
+            <div className="rounded-xl border border-success/30 bg-success-soft px-3 py-2.5 text-sm text-success-foreground">
               <p className="font-medium">{t("preview.confirmDone")}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {t("preview.confirmReceipt", {
@@ -199,6 +199,7 @@ export function PreviewPanel({
                   variant="outline"
                   disabled={promoting}
                   onClick={() => void handlePromoteExemplar()}
+                  className="border-voice/40 text-voice hover:enabled:bg-voice-soft hover:enabled:text-voice"
                 >
                   {promoting ? t("preview.exemplar.working") : t("preview.exemplar.save")}
                 </Button>

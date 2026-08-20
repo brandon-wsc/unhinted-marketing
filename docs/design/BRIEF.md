@@ -1,6 +1,6 @@
 # Unhinted — Visual brief
 
-> **Status:** Docs-only — positioning locked for discussion; **CSS tokens not applied yet.**
+> **Status:** Positioning locked. Runtime tokens + localized craft pulse applied (`web/src/index.css`, session / auth / Voice settings).
 > Penpot visual SSOT: see [README.md](./README.md) page inventory.
 
 ## North star
@@ -79,7 +79,7 @@ Craft may sound casual; the publish gate stays serious.
 
 ## Shell reference
 
-Structure ≈ shadcn / big-tech product UI. Proposed brand difference = **ink primary + IBM Plex / Noto Sans HK + voice accent** (see [TOKENS.md](./TOKENS.md)) — apply in a later code pass.
+Structure ≈ shadcn / big-tech product UI. Brand difference = **ink primary + IBM Plex / Noto Sans HK + voice accent** (see [TOKENS.md](./TOKENS.md)).
 
 ## When unsure
 

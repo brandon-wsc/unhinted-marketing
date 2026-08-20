@@ -245,7 +245,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
                   setExemplars(next);
                 }}
                 rows={3}
-                className="min-h-20"
+                className={cn("min-h-20", caption.trim() && "border-voice/40")}
               />
               <p className="text-xs text-muted-foreground">
                 {t("settings.voice.exemplars.chars", {

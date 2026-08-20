@@ -67,6 +67,7 @@ export function LoginPage() {
     <AuthLayout
       title={t("auth.login.title")}
       subtitle={subtitle}
+      craftSignal
       footer={
         <>
           {t("auth.login.noAccount")}{" "}

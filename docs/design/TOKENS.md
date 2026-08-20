@@ -32,8 +32,9 @@ Loaded via `web/index.html` Google Fonts.
 | `--color-info` | `#4f83ee` | *(same)* | Informational (not brand) |
 | `--color-info-foreground` | `#345290` | `#a0c0ff` | Info text |
 | `--color-info-soft` | solid @ **10%** | solid @ **12%** | Soft info |
-| `--color-voice` | `#c45c00` | `#f0a060` | Craft voice / action pulse (not shell fill) |
+| `--color-voice` | `#a9580f` | `#f49d5f` | Craft voice / action pulse (not shell fill) |
 | `--color-voice-foreground` | `#ffffff` | `#111113` | On-voice |
+| `--color-voice-soft` | solid @ **10%** | solid @ **12%** | Soft voice wash (running rows, hairlines) |
 
 Logo mark fill: `#111113`.
 
@@ -59,16 +60,18 @@ Logo mark fill: `#111113`.
 - Shell chrome → `primary`, surfaces, `muted-foreground`.
 - Focus (`--color-ring`) → same OKLCH as `info`. Do not reuse ink/`primary` for field or keyboard rings — black-on-black (and light-on-light in dark) fails focus appearance. Resting field chrome stays `border-input`. Invalid stays `destructive`.
 
-Status solids (`success` / `destructive` / `info` / `ring`) are **OKLCH-aligned** in [`web/src/index.css`](../../web/src/index.css): shared `--status-l`, default `--status-c`, danger-only `--danger-c`, hue knobs. Hex below is resolved sRGB for Penpot / humans. Voice, primary, and surfaces stay out of this ramp.
+Status solids (`success` / `destructive` / `info` / `ring`) are **OKLCH-aligned** in [`web/src/index.css`](../../web/src/index.css): shared `--status-l`, default `--status-c`, danger-only `--danger-c`, hue knobs. Hex below is resolved sRGB for Penpot / humans. Primary and surfaces stay out of this ramp. Voice has its **own** L/C knobs (below) — it is used as `text-voice` on cards, so light L is darker than `--status-l` (status solids at 0.627 fail AA as small text).
 
 | Token | Hex | OKLCH |
 |-------|-----|--------|
 | `success` | `#16a34a` | `L 0.627 · C 0.170 · h 149` |
 | `destructive` | `#ee3c37` | `L 0.627 · C 0.215 · h 27` (`--danger-c`, not `--status-c`) |
 | `info` / `ring` | `#4f83ee` | `L 0.627 · C 0.170 · h 263` |
+| `voice` (light) | `#a9580f` | `L 0.548 · C 0.130 · h 55` |
+| `voice` (dark) | `#f49d5f` | `L 0.772 · C 0.130 · h 55` |
 
-Foreground / soft are the same hues at `--status-fg-l` (darker) and `--status-soft-a` (10% light / 12% dark). Dark info chroma is capped (`--status-fg-c: 0.096`) so blue stays in sRGB. Do not pick Tailwind blue-600 (`#2563eb`) — it is darker and as chromatic as old red-600.
-- Action trail / spitball / temp loading → `voice` (+ icons); do not recolor the whole app.
+Foreground / soft for status are the same hues at `--status-fg-l` (darker) and `--status-soft-a` (10% light / 12% dark). Dark info chroma is capped (`--status-fg-c: 0.096`) so blue stays in sRGB. Do not pick Tailwind blue-600 (`#2563eb`) — it is darker and as chromatic as old red-600. Voice reuses `--status-soft-a` for `voice-soft`.
+- Action trail / spitball / temp loading → `text-voice` / `bg-voice` (+ icons); running-row / hairline wash → `bg-voice-soft`. Light `text-voice` on white is **5.13:1** (AA); on `--color-background` **4.63:1**. Hue 55 (amber), not danger 27. Do not paint `bg-voice` on shell chrome.
 - Confirmations → `success` (`Alert variant="success"`, `text-success`). Errors → `destructive`. Informational / privilege reminders → `info` (`Alert variant="info"`; status blue, not shell brand). Do not paint primary buttons green.
 - Prefer semantic utilities (`bg-card`, `text-muted-foreground`, `hover:bg-accent`) — no parallel palette in JSX.
 

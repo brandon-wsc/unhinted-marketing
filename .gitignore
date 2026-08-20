@@ -39,6 +39,9 @@ web/coverage-*/
 secrets/
 credentials.json
 
+# Agent design scratch (baoyu-design HTML boards) — not product SSOT
+designs/
+
 # Media cache (generated)
 .cache/
 uploads/

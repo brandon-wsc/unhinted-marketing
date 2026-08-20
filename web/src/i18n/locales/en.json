@@ -24,6 +24,7 @@
     }
   },
   "auth": {
+    "craftTagline": "Reliable tools, unleashed copy",
     "login": {
       "title": "Sign in",
       "subtitle": "Sign in to access the Unhinted Marketing Dashboard",

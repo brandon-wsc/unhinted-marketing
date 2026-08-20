@@ -140,7 +140,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 **Decision (2026-08-10) — Harness desk applied to runtime + chrome refresh:**
 
 - `web/src/index.css` carries the harness desk tokens (IBM Plex Sans / Noto Sans HK, ink primary, voice accent); Inter + indigo removed
-- Voice accent (`text-voice` / `bg-voice`) only on editor-voice surfaces — agent action trail, recommended-question hints
+- Voice accent (`text-voice` / `bg-voice` / `bg-voice-soft` / `border-voice`) on craft surfaces only — running action trail, recommended questions, login/register corner, filled Voice exemplars, save-as-example; not shell / Confirm
 - **Theme is manual light/dark only** — no system mode; single `UserMenu` module renders a dropdown on desktop and the whole menu as a dialog on mobile
 - Composer send/stop are ghost icon buttons (akar send mark; lucide square stop)
 - Focus rings standardized to 1px solid `ring` across input / textarea / select / badge / scroll-area

@@ -56,8 +56,19 @@
   --color-info-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--info-h));
   --color-info-soft: oklch(var(--status-l) var(--status-c) var(--info-h) / var(--status-soft-a));
   --color-ring: oklch(var(--status-l) var(--status-c) var(--info-h));
-  --color-voice: #c45c00;
+
+  /* Voice pulse — own L/C (not status-l): used as text-voice on cards, so
+     light L is darker than status solids to clear WCAG AA. Hue sits in
+     amber, away from destructive h 27. Soft reuses --status-soft-a.
+     Resolved sRGB in docs/design/TOKENS.md. */
+  --voice-l: 0.548;
+  --voice-c: 0.13;
+  --voice-h: 55;
+  --color-voice: oklch(var(--voice-l) var(--voice-c) var(--voice-h));
   --color-voice-foreground: #ffffff;
+  --color-voice-soft: oklch(
+    var(--voice-l) var(--voice-c) var(--voice-h) / var(--status-soft-a)
+  );
 
   /* Light surfaces; :root.dark below overrides at runtime. Declared in @theme
      so utilities like bg-background / text-muted-foreground (used by Streamdown)
@@ -112,8 +123,12 @@
   );
   --color-info-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--info-h));
   --color-info-soft: oklch(var(--status-l) var(--status-c) var(--info-h) / var(--status-soft-a));
-  --color-voice: #f0a060;
+  --voice-l: 0.772;
+  --color-voice: oklch(var(--voice-l) var(--voice-c) var(--voice-h));
   --color-voice-foreground: #111113;
+  --color-voice-soft: oklch(
+    var(--voice-l) var(--voice-c) var(--voice-h) / var(--status-soft-a)
+  );
   --shadow-color: rgb(0 0 0 / 0.35);
 
   --color-accent: rgb(255 255 255 / 0.06);
