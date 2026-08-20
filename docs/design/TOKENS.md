@@ -37,7 +37,12 @@ Loaded via `web/index.html` Google Fonts.
 | `--color-voice-soft` | solid @ **10%** | solid @ **12%** | Craft wash — hover fill, running rows |
 | `--color-voice-border` | `#dcbda9` | `#7e6250` | Opaque craft hairline (same hue 55; not `voice/40`) |
 
-Logo mark fill: `#111113`.
+Logo mark: rounded tile in `primary`, vessel in `primary-foreground`, voice diamond in the cup (`voice`). Dark inverts the tile (same tokens).
+
+An `<img>` SVG can't inherit the app's JS-toggled `.dark` CSS variables (the repo theme does not follow the OS), so the mark is two baked files rather than inline paths in TSX:
+- [`logo-light.svg`](../../web/public/logo-light.svg) / [`logo-dark.svg`](../../web/public/logo-dark.svg)
+- **App** — `AppLogo` sets `<img src>` from the app theme
+- **Favicon** — same files via two `rel="icon"` links with `prefers-color-scheme` (OS-driven; no extra combined SVG)
 
 ---
 

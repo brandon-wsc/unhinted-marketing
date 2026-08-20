@@ -6,9 +6,11 @@
 ## North star
 
 **Reliable tools that harness unhinged creative energy.**
-Product name stays **Unhinted**. "Unhinged" describes the copy kid / craft voice — never the company wordmark or shell chrome.
+Product name stays **Unhinted**. "Unhinged" describes the copy kid / craft voice.
 
-Metaphor: a professional studio desk harnessing a chaotic copy kid. The kid is not the product; the harness is.
+The **app UI shell** stays a reliable desk (ink, scannable, no meme chrome). The **logo mark** is the one chrome exception: it may carry `--color-voice` as a contained pulse. Wordmark type stays IBM Plex “Unhinted” — not a display/meme lockup.
+
+Metaphor: a professional studio desk harnessing a chaotic copy kid. The kid is not the product; the harness is. **Mark (shipped):** ink tile · white vessel · voice diamond in the cup. `logo-light.svg` / `logo-dark.svg`: header follows the app theme; favicon follows the OS — see `TOKENS.md`.
 
 ## Core tension (asymmetric)
 
