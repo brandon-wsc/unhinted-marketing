@@ -279,7 +279,7 @@
       "pending": {
         "title": "待處理邀請",
         "expires": "到期",
-        "revoke": "撤銷"
+        "revoke": "撤銷邀請"
       }
     },
     "voice": {

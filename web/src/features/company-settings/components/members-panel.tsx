@@ -1,6 +1,8 @@
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { MailX, UserMinus } from "lucide-react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
+import { IconButton } from "@/components/icon-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -31,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import {
   ApiStatusError,
@@ -63,6 +66,27 @@ function roleBadgeVariant(role: CompanyMember["role"]): "default" | "secondary" 
   if (role === "owner") return "default";
   if (role === "admin") return "secondary";
   return "outline";
+}
+
+function RowIconAction({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <IconButton type="button" className="size-8" aria-label={label} onClick={onClick}>
+          {children}
+        </IconButton>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 export function MembersPanel({
@@ -284,7 +308,11 @@ export function MembersPanel({
               <TableHead>{t("settings.members.columns.email")}</TableHead>
               <TableHead>{t("settings.members.columns.role")}</TableHead>
               <TableHead>{t("settings.members.columns.joined")}</TableHead>
-              {canManageTeam && <TableHead>{t("settings.members.columns.actions")}</TableHead>}
+              {canManageTeam && (
+                <TableHead className="text-right">
+                  <span className="sr-only">{t("settings.members.columns.actions")}</span>
+                </TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -293,41 +321,42 @@ export function MembersPanel({
                 <TableCell>{member.display_name}</TableCell>
                 <TableCell>{member.email}</TableCell>
                 <TableCell>
-                  <Badge variant={roleBadgeVariant(member.role)}>
-                    {t(`settings.members.roles.${member.role}`)}
-                  </Badge>
+                  {canManageTeam && member.role !== "owner" ? (
+                    <Select
+                      value={member.role}
+                      onValueChange={(value) => void onRoleChange(member, value as InviteRole)}
+                    >
+                      <SelectTrigger
+                        size="sm"
+                        aria-label={t("settings.members.columns.role")}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">
+                          {t("settings.members.roles.admin")}
+                        </SelectItem>
+                        <SelectItem value="member">
+                          {t("settings.members.roles.member")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Badge variant={roleBadgeVariant(member.role)}>
+                      {t(`settings.members.roles.${member.role}`)}
+                    </Badge>
+                  )}
                 </TableCell>
                 <TableCell>{formatDay(member.joined_at)}</TableCell>
                 {canManageTeam && (
-                  <TableCell>
+                  <TableCell className="text-right">
                     {member.role === "owner" ? null : (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Select
-                          value={member.role}
-                          onValueChange={(value) => void onRoleChange(member, value as InviteRole)}
-                        >
-                          <SelectTrigger size="sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">
-                              {t("settings.members.roles.admin")}
-                            </SelectItem>
-                            <SelectItem value="member">
-                              {t("settings.members.roles.member")}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={() => setRemoveTarget(member)}
-                        >
-                          {t("settings.members.remove")}
-                        </Button>
-                      </div>
+                      <RowIconAction
+                        label={t("settings.members.removeTitle")}
+                        onClick={() => setRemoveTarget(member)}
+                      >
+                        <UserMinus />
+                      </RowIconAction>
                     )}
                   </TableCell>
                 )}
@@ -423,7 +452,9 @@ export function MembersPanel({
                 <TableHead>{t("settings.members.columns.email")}</TableHead>
                 <TableHead>{t("settings.members.columns.role")}</TableHead>
                 <TableHead>{t("settings.members.pending.expires")}</TableHead>
-                <TableHead>{t("settings.members.columns.actions")}</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">{t("settings.members.columns.actions")}</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -436,15 +467,13 @@ export function MembersPanel({
                     </Badge>
                   </TableCell>
                   <TableCell>{formatDay(invite.expires_at)}</TableCell>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
+                  <TableCell className="text-right">
+                    <RowIconAction
+                      label={t("settings.members.pending.revoke")}
                       onClick={() => void onRevoke(invite)}
                     >
-                      {t("settings.members.pending.revoke")}
-                    </Button>
+                      <MailX />
+                    </RowIconAction>
                   </TableCell>
                 </TableRow>
               ))}

@@ -279,7 +279,7 @@
       "pending": {
         "title": "Pending invites",
         "expires": "Expires",
-        "revoke": "Revoke"
+        "revoke": "Revoke invite"
       }
     },
     "voice": {

@@ -98,7 +98,7 @@ UserMenu
 
 | Tab | Content |
 |-----|---------|
-| **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name + `sku`, status, actions) · **row click → same form as Add row** (name / product code / notes; extra import columns read-only). Editors can save (`PATCH`). Members: hide import / archive; row opens read-only detail. No tab descriptions. Cover rule stays on Mine. Count badge sits above the table (left), not as a right-aligned toolbar orphan. Upsert **replace by SKU** on import — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
+| **Org** | Upload CSV/xlsx · result summary (`imported` / `updated` / `skipped` / `errors[]`) · table (name + `sku`, status, trailing **Archive** icon + tooltip) · **row click → same form as Add row** (name / product code / notes; extra import columns read-only). Editors can save (`PATCH`). Members: hide import / archive; row opens read-only detail. No tab descriptions. Cover rule stays on Mine. Count badge sits above the table (left), not as a right-aligned toolbar orphan. Upsert **replace by SKU** on import — no merge-conflict UI ([COLLECT §2](./COLLECT.md#2-ownership-org--user-new--old)). |
 | **Mine** | Same form for personal library (Add row + row click to edit). Org covers user on SKU clash at retrieve — **Drafts use** column: Company vs Yours. **Add to company** / **Cancel request** (icon + tooltip) → Approvals queue ([ADR 0011](../adr/0011-knowledge-commit-without-llm.md)). |
 
 Flexible headers: no required column names; store raw row in `profile`. **Import hard limit: 50 columns** — reject whole file ([COLLECT §4](./COLLECT.md#4-product-import-k3)). No content column in the table (unknown CSV shapes).
@@ -117,9 +117,9 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 
 1. **Company name** — single field + Save; owner/admin edit; members see the name as text (no Save). `PATCH /api/companies/{id}` `{ name }`.
 2. **Member roster** — table: display name, email, role badge, joined date. `GET …/members`. All members can view. Members do **not** get a permission banner.
-3. **Manage row** (owner/admin only) — role `Select`: `admin` | `member` only; **Remove** with confirm. Owner row never demotable/removable from UI (API 409). Members cannot manage others.
+3. **Manage row** (owner/admin only) — role `Select` in the Role column (`admin` | `member` only). Trailing **icon + tooltip** (same 32px `IconButton` as Products archive): **Remove member** with confirm. Owner row never demotable/removable from UI (API 409). Members cannot manage others.
 4. **Invite** (owner/admin only) — email + role (`admin` | `member`) + **Send invite**. Idle: form only. On success: show **copy link** (`invite_url`) + short hint (WhatsApp / paste to colleague) — do not show the URL before send. Reject emails already on the roster (409). No in-app email required (`EMAIL_BACKEND=link`).
-5. **Pending invites** (owner/admin only) — table: email, role, expires; **Revoke** → `DELETE …/invites/{id}`.
+5. **Pending invites** (owner/admin only) — table: email, role, expires; trailing **icon + tooltip** **Revoke invite** → `DELETE …/invites/{id}`.
 
 **Permissions helper:** `canManageTeam = role ∈ { owner, admin }` from `user.organizations[0]` (future: API `can_manage` on members list).
 
