@@ -1,21 +1,23 @@
 # Unhinted — Visual brief
 
-> **Status:** Docs-only — positioning locked for discussion; **CSS tokens not applied yet.**
+> **Status:** Positioning locked. Runtime tokens + localized craft pulse applied (`web/src/index.css`, session / auth / Voice settings).
 > Penpot visual SSOT: see [README.md](./README.md) page inventory.
 
 ## North star
 
 **Reliable tools that harness unhinged creative energy.**
-Product name stays **Unhinted**. "Unhinged" describes the copy kid / craft voice — never the company wordmark or shell chrome.
+Product name stays **Unhinted**. "Unhinged" describes the copy kid / craft voice.
 
-Metaphor: a professional studio desk harnessing a chaotic copy kid. The kid is not the product; the harness is.
+The **app UI shell** stays a reliable desk (ink, scannable, no meme chrome). The **logo mark** is the one chrome exception: it may carry `--color-voice` as a contained pulse. Wordmark type stays IBM Plex “Unhinted” — not a display/meme lockup.
+
+Metaphor: a professional studio desk harnessing a chaotic copy kid. The kid is not the product; the harness is. **Mark (shipped):** ink tile · white vessel · voice diamond in the cup. `logo-light.svg` / `logo-dark.svg`: header follows the app theme; favicon follows the OS — see `TOKENS.md`.
 
 ## Core tension (asymmetric)
 
 - **RELIABLE holds the reins**: more area, default tone, first impression.
-- **UNHINGED is the pulse**: only where a person or agent is speaking.
+- **UNHINGED is the pulse**: interaction (hover, focus, queued) and where a person or agent is speaking.
 
-Do NOT split the UI 50/50 visually (half neon / half corporate). Shell stays normal; madness is localized.
+Do NOT split the UI 50/50 visually (half neon / half corporate). Shell stays normal **at rest**; the voice pulse is localized to active chrome and craft copy.
 
 | Layer | Job |
 |-------|-----|
@@ -49,6 +51,7 @@ Borrow SPIRIT from Material / Fluent / restrained HIG — not cosplay any one OS
 
 ALLOWED (localized):
 
+- Interaction pulse: hover / focus / queued / selected — voice hairline, wash, and ring (shell stays ink **at rest**)
 - Chat editor-voice tone (see [VOICE.md](../VOICE.md) for captions — assistant shell voice stays clear/warm, not meme-account)
 - Agent action trail: short spitball line + distinctive icon per step
 - Empty states / recommended-question cards: light attitude
@@ -79,7 +82,7 @@ Craft may sound casual; the publish gate stays serious.
 
 ## Shell reference
 
-Structure ≈ shadcn / big-tech product UI. Proposed brand difference = **ink primary + IBM Plex / Noto Sans HK + voice accent** (see [TOKENS.md](./TOKENS.md)) — apply in a later code pass.
+Structure ≈ shadcn / big-tech product UI. Brand difference = **ink primary + IBM Plex / Noto Sans HK + voice accent** (see [TOKENS.md](./TOKENS.md)).
 
 ## When unsure
 

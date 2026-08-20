@@ -24,6 +24,7 @@
     }
   },
   "auth": {
+    "craftTagline": "Reliable tools, unleashed copy",
     "login": {
       "title": "Sign in",
       "subtitle": "Sign in to access the Unhinted Marketing Dashboard",
@@ -278,7 +279,7 @@
       "pending": {
         "title": "Pending invites",
         "expires": "Expires",
-        "revoke": "Revoke"
+        "revoke": "Revoke invite"
       }
     },
     "voice": {

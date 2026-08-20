@@ -145,9 +145,9 @@ Name the schema capability (`auth`, `signals`, `sessions`, `campaigns`), not roa
 - Prefer semantic utilities: `bg-card`, `text-muted-foreground`, `border-border`, `bg-primary`, `text-destructive`, `text-success`, `text-info`, `hover:bg-accent`
 - Do **not** invent parallel controls with `var(--color-*)` in classNames; use theme utilities from `index.css` `@theme`
 - Raw palette (`bg-blue-600`, `text-zinc-500`) only when no semantic token fits (rare status tones → prefer `Badge` variants)
-- **Washes:** use `accent` / `secondary` (6% ink|white). Do **not** use `bg-muted` / `hover:bg-muted/*` for hover or selected rows — `--color-muted` is solid `#71717a`, not a soft fill. See [docs/design/TOKENS.md](docs/design/TOKENS.md).
+- **Washes:** `accent` = voice interactive wash (hover / selected / queued). `secondary` = 6% ink|white **resting** wash (tabs track, read-only, notes). Do **not** use `bg-muted` / `hover:bg-muted/*` for hover or selected rows — `--color-muted` is solid `#71717a`, not a soft fill. See [docs/design/TOKENS.md](docs/design/TOKENS.md).
 - **Tables:** `TableRow` hover/selected = `bg-accent` (`components/ui/table.tsx`)
-- **Fields:** view-only uses native `readOnly` (accent wash on `Input` / `Textarea`). Do not `disabled` a field the user should still copy from. `readOnly` must not use the edit `focus-visible` ring (`read-only:focus-visible:ring-0`).
+- **Fields:** rest `border-input`; hover `border-voice-border`; focus `ring` (voice). View-only uses native `readOnly` (`bg-secondary` wash on `Input` / `Textarea`). Do not `disabled` a field the user should still copy from. `readOnly` must not use the edit `focus-visible` ring (`read-only:focus-visible:ring-0`).
 
 Adding UI: check `components/ui` first; if missing, `pnpm dlx shadcn@latest add <name>`. Never re-export a second `Button` / `Input` / `Dialog` from feature or auth helpers. Prefer composed helpers in `components/` for repeated stacks: `FormField`, `IconButton`.
 

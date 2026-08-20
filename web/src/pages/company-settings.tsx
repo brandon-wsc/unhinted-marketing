@@ -96,8 +96,8 @@ export function CompanySettingsPage() {
                 className={cn(
                   "rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
                   activeTab === id
-                    ? "bg-accent font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                    ? "bg-accent font-medium text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )}
               >
                 {t(`settings.nav.${id}`)}

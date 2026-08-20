@@ -24,6 +24,7 @@
     }
   },
   "auth": {
+    "craftTagline": "可靠工具，放膽出稿",
     "login": {
       "title": "登入",
       "subtitle": "使用你的帳戶存取 Unhinted Marketing Dashboard",
@@ -278,7 +279,7 @@
       "pending": {
         "title": "待處理邀請",
         "expires": "到期",
-        "revoke": "撤銷"
+        "revoke": "撤銷邀請"
       }
     },
     "voice": {

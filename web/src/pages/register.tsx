@@ -81,6 +81,7 @@ export function RegisterPage() {
     <AuthLayout
       title={t("auth.register.title")}
       subtitle={subtitle}
+      craftSignal
       footer={
         <>
           {t("auth.register.hasAccount")}{" "}

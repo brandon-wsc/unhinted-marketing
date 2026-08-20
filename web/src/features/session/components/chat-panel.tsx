@@ -34,6 +34,7 @@ import type {
 import { useRecommendedQuestions } from "@/features/session/use-recommended-questions";
 import { useSession } from "@/features/session/use-session";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { cn } from "@/lib/utils";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
 
@@ -353,7 +354,7 @@ export function ChatPanel() {
           <button
             type="button"
             onClick={() => setPagedPane("record")}
-            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card/90 text-muted-foreground backdrop-blur transition hover:bg-accent hover:text-foreground"
+            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card/90 text-muted-foreground backdrop-blur transition hover:border-voice-border hover:bg-accent hover:text-accent-foreground"
             title={t("chat.history.open")}
             aria-label={t("chat.history.open")}
           >
@@ -388,7 +389,12 @@ export function ChatPanel() {
             </p>
           ) : showLanding ? (
             <div className="flex flex-col items-center justify-center py-16 text-center sm:py-24">
-              <h1 className="text-2xl font-semibold tracking-tight">{t("chat.empty.title")}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                <span className="mr-1.5 text-voice" aria-hidden="true">
+                  ✳
+                </span>
+                {t("chat.empty.title")}
+              </h1>
               <p className="mt-2 max-w-md text-sm text-muted-foreground">
                 {t("chat.empty.subtitle")}
               </p>
@@ -502,22 +508,17 @@ export function ChatPanel() {
           <div className="relative">
             {queuedMessages.length > 0 ? (
               <div
-                className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-border bg-background"
+                className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-voice-border bg-card"
                 style={{ bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`, paddingBottom: QUEUE_TUCK_PX }}
               >
                 <ul className="flex flex-col p-1">
                   {queuedMessages.map((item) => (
                     <li
                       key={item.id}
-                      className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight hover:bg-accent"
+                      className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     >
-                      <CornerDownRight
-                        className="size-3 shrink-0 text-muted-foreground/70"
-                        aria-hidden
-                      />
-                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                        {item.content}
-                      </span>
+                      <CornerDownRight className="size-3 shrink-0 text-voice" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate">{item.content}</span>
                       <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
                         <IconButton
                           type="button"
@@ -552,47 +553,45 @@ export function ChatPanel() {
                 </ul>
               </div>
             ) : null}
-            <div className="relative z-10 rounded-2xl border border-border bg-card px-3 py-2 shadow-sm">
-              <div className="relative">
-                <Textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  rows={2}
-                  placeholder={t("chat.input.placeholder")}
-                  disabled={stopping}
-                  className="min-h-16 resize-none border-0 bg-transparent px-2 pr-20 shadow-none focus-visible:ring-0"
-                />
-                <div className="absolute bottom-2 right-1 flex items-center gap-1">
-                  {(sending || stopping) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      disabled={stopping}
-                      onClick={() => void onStopTurn()}
-                      className="h-8 w-8 rounded-full text-foreground"
-                      title={stopping ? t("chat.stopping") : t("chat.stop")}
-                      aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
-                    >
-                      <Square className="size-3.5" fill="currentColor" stroke="none" />
-                    </Button>
-                  )}
+            <div className="relative z-10 flex flex-col rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
+              <Textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                rows={2}
+                placeholder={t("chat.input.placeholder")}
+                disabled={stopping}
+                className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
+              />
+              <div className="flex items-center justify-end gap-1 px-1">
+                {(sending || stopping) && (
                   <Button
-                    type="submit"
+                    type="button"
                     variant="ghost"
                     size="icon"
-                    disabled={
-                      stopping || !input.trim() || (sending && queueFull && editInsertAt == null)
-                    }
+                    disabled={stopping}
+                    onClick={() => void onStopTurn()}
                     className="h-8 w-8 rounded-full text-foreground"
-                    title={t("chat.send")}
-                    aria-label={t("chat.send")}
+                    title={stopping ? t("chat.stopping") : t("chat.stop")}
+                    aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
                   >
-                    <SendIcon className="size-[18px]" />
+                    <Square className="size-3.5" fill="currentColor" stroke="none" />
                   </Button>
-                </div>
+                )}
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon"
+                  disabled={
+                    stopping || !input.trim() || (sending && queueFull && editInsertAt == null)
+                  }
+                  className="h-8 w-8 rounded-full text-foreground"
+                  title={t("chat.send")}
+                  aria-label={t("chat.send")}
+                >
+                  <SendIcon className="size-[18px]" />
+                </Button>
               </div>
             </div>
           </div>
@@ -665,7 +664,7 @@ function PreviewReadyBanner({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition hover:border-ring hover:text-foreground"
+      className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition hover:border-voice-border hover:bg-accent hover:text-accent-foreground"
     >
       {t("preview.readyBanner")}
     </button>
@@ -680,20 +679,31 @@ function AgentActionList({ actions }: { actions: AgentActionRecord[] }) {
       {actions.map((action) => {
         const nodeKey = `chat.agent.nodes.${action.node}`;
         const label = t(nodeKey, { defaultValue: t("chat.agent.nodes.working") });
+        const running = action.status === "running";
         return (
           <li
             key={action.id}
-            className="flex items-start gap-2 text-xs leading-snug text-muted-foreground"
+            className={cn(
+              "flex items-start gap-2 text-xs leading-snug",
+              running
+                ? "-mx-1.5 rounded-md bg-voice-soft px-1.5 py-1 text-voice"
+                : "text-muted-foreground",
+            )}
           >
-            <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center text-voice">
-              {action.status === "running" ? (
+            <span
+              className={cn(
+                "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center",
+                running ? "text-voice" : "text-muted-foreground",
+              )}
+            >
+              {running ? (
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-voice" />
               ) : (
                 <Check className="size-3.5" aria-hidden />
               )}
             </span>
             <span className="min-w-0">
-              <span className={action.status === "running" ? "text-foreground" : ""}>{label}</span>
+              <span>{label}</span>
               {action.model && (
                 <span className="ml-1.5 opacity-70">
                   {action.model_tier ? `${action.model_tier} · ` : ""}

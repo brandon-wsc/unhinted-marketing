@@ -498,7 +498,6 @@ export function EditImageDialog({
             </Button>
             <Button
               type="button"
-              variant="outline"
               size="sm"
               disabled={!selected || !planDirty || busy}
               onClick={() => void handleSavePlan()}

@@ -151,35 +151,39 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
           </Alert>
         )}
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium leading-none">{t("settings.voice.roast.label")}</p>
-          <div
-            className={cn(
-              "inline-flex flex-wrap gap-0 rounded-lg bg-accent p-1",
-              !canEdit && "pointer-events-none",
-            )}
-            aria-disabled={!canEdit}
-          >
-            {ROAST_LEVELS.map((level) => (
-              <button
-                key={level}
-                type="button"
-                disabled={saving}
-                tabIndex={canEdit ? undefined : -1}
-                onClick={() => setRoastLevel(level)}
-                className={cn(
-                  "rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors",
-                  roastLevel === level
-                    ? "bg-card text-foreground shadow"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t(`settings.voice.roast.levels.${level}`)}
-              </button>
-            ))}
+        <fieldset disabled={!canEdit} className="space-y-2">
+          <legend className="text-sm font-medium leading-none">
+            {t("settings.voice.roast.label")}
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {ROAST_LEVELS.map((level) => {
+              const selected = roastLevel === level;
+              return (
+                <label
+                  key={level}
+                  className={cn(
+                    "cursor-pointer rounded-md border px-3.5 py-1.5 text-sm font-medium transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring has-[:disabled]:cursor-not-allowed",
+                    selected
+                      ? "border-foreground bg-secondary text-foreground"
+                      : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="voice-roast"
+                    value={level}
+                    checked={selected}
+                    disabled={saving}
+                    onChange={() => setRoastLevel(level)}
+                    className="sr-only"
+                  />
+                  {t(`settings.voice.roast.levels.${level}`)}
+                </label>
+              );
+            })}
           </div>
           <p className="text-xs text-muted-foreground">{t("settings.voice.roast.hint")}</p>
-        </div>
+        </fieldset>
 
         <FormField id="voice-locale" label={t("settings.voice.locale.label")}>
           <Input
@@ -245,7 +249,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
                   setExemplars(next);
                 }}
                 rows={3}
-                className="min-h-20"
+                className={cn("min-h-20", caption.trim() && "border-voice-border")}
               />
               <p className="text-xs text-muted-foreground">
                 {t("settings.voice.exemplars.chars", {

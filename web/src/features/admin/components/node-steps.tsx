@@ -305,7 +305,7 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
                 <p className="mb-1 text-xs font-medium text-muted-foreground">
                   {t("admin.nodeStepDetail.output")}
                 </p>
-                <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-accent/40 p-3 text-xs">
+                <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-secondary p-3 text-xs">
                   {JSON.stringify(detail.output, null, 2)}
                 </pre>
               </div>
