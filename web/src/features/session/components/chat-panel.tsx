@@ -553,47 +553,45 @@ export function ChatPanel() {
                 </ul>
               </div>
             ) : null}
-            <div className="relative z-10 rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
-              <div className="relative">
-                <Textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  rows={2}
-                  placeholder={t("chat.input.placeholder")}
-                  disabled={stopping}
-                  className="min-h-16 resize-none border-0 bg-transparent px-2 pr-20 shadow-none focus-visible:ring-0"
-                />
-                <div className="absolute bottom-2 right-1 flex items-center gap-1">
-                  {(sending || stopping) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      disabled={stopping}
-                      onClick={() => void onStopTurn()}
-                      className="h-8 w-8 rounded-full text-foreground"
-                      title={stopping ? t("chat.stopping") : t("chat.stop")}
-                      aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
-                    >
-                      <Square className="size-3.5" fill="currentColor" stroke="none" />
-                    </Button>
-                  )}
+            <div className="relative z-10 flex flex-col rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
+              <Textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                rows={2}
+                placeholder={t("chat.input.placeholder")}
+                disabled={stopping}
+                className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
+              />
+              <div className="flex items-center justify-end gap-1 px-1">
+                {(sending || stopping) && (
                   <Button
-                    type="submit"
+                    type="button"
                     variant="ghost"
                     size="icon"
-                    disabled={
-                      stopping || !input.trim() || (sending && queueFull && editInsertAt == null)
-                    }
+                    disabled={stopping}
+                    onClick={() => void onStopTurn()}
                     className="h-8 w-8 rounded-full text-foreground"
-                    title={t("chat.send")}
-                    aria-label={t("chat.send")}
+                    title={stopping ? t("chat.stopping") : t("chat.stop")}
+                    aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
                   >
-                    <SendIcon className="size-[18px]" />
+                    <Square className="size-3.5" fill="currentColor" stroke="none" />
                   </Button>
-                </div>
+                )}
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon"
+                  disabled={
+                    stopping || !input.trim() || (sending && queueFull && editInsertAt == null)
+                  }
+                  className="h-8 w-8 rounded-full text-foreground"
+                  title={t("chat.send")}
+                  aria-label={t("chat.send")}
+                >
+                  <SendIcon className="size-[18px]" />
+                </Button>
               </div>
             </div>
           </div>
