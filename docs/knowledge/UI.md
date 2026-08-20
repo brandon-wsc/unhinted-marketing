@@ -147,8 +147,8 @@ Title + body sit **inside** the AuthLayout card (Penpot AuthCard), left-aligned.
 
 - Reuse existing shell primitives ([`web/src/components/ui/`](../../web/src/components/ui/)) — tabs, table, input, textarea, button, dialog, **Select**.
 - **Select** — `SelectContent` is **`popper`** (list below trigger, not `item-aligned` overlay). Border is `border-border` (+ `dark:border-white/10`), same as dropdown menus.
-- Table row hover/selected → `bg-accent` (not `muted`) — [TOKENS.md](../design/TOKENS.md) `muted` vs `accent`.
-- Voice accent on craft surfaces only: `text-voice` / `bg-voice-soft` / `border-voice/40` on action-trail running rows, recommended-question cards, login/register corner tagline, filled Voice exemplar slots, and “save as voice example”. Settings chrome (nav, roast chips, Save) stays neutral primary.
+- Table row hover/selected → `bg-accent` (voice-soft, not `muted`) — [TOKENS.md](../design/TOKENS.md) `muted` vs `accent` vs `secondary`.
+- Voice is the interaction pulse: hover / focus / queued / selected use `text-voice` / `bg-accent` (`voice-soft`) / `border-voice-border` / `ring` (voice). Craft copy still uses the same family (action trail, recommended questions, login corner, filled exemplars, save-as-example). Settings **resting** chrome stays neutral. Save stays ink. **Tone strength** is a form **choice** (neutral `secondary` wash + ink selected border, `radiogroup`) — not a tab track, not voice. **Products Org | Mine** is a **line tab** (ink underline; hover `secondary`). `info` is status alerts only — not field focus.
 - Penpot: **Company settings** drawn under [design/penpot](../../design/penpot/); CSS follows tokens in `web/src/index.css`.
 - **UI copy:** user-facing only (what the person sees/does). Avoid internal jargon in subtitles (no “K6”, “owner/admin”, “upsert”, “Zero LLM”).
 

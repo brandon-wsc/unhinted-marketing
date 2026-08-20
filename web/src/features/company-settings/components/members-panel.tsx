@@ -333,12 +333,8 @@ export function MembersPanel({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="admin">
-                          {t("settings.members.roles.admin")}
-                        </SelectItem>
-                        <SelectItem value="member">
-                          {t("settings.members.roles.member")}
-                        </SelectItem>
+                        <SelectItem value="admin">{t("settings.members.roles.admin")}</SelectItem>
+                        <SelectItem value="member">{t("settings.members.roles.member")}</SelectItem>
                       </SelectContent>
                     </Select>
                   ) : (

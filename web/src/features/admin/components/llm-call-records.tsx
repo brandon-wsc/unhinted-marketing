@@ -85,7 +85,7 @@ function DetailBlock({ label, value }: { label: string; value: string | null }) 
   return (
     <div>
       <p className="mb-1 text-xs font-medium text-muted-foreground">{label}</p>
-      <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-accent/40 p-3 text-xs text-foreground">
+      <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-secondary p-3 text-xs text-foreground">
         {value}
       </pre>
     </div>

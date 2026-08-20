@@ -21,7 +21,8 @@
 }
 
 /* Harness desk tokens — SSOT: docs/design/TOKENS.md
-   muted = solid mid-gray (not a wash); accent/secondary = 6% soft fill for hover. */
+   muted = solid mid-gray (not a wash); accent = voice interactive wash;
+   secondary = 6% resting wash. */
 @theme {
   --font-sans: "IBM Plex Sans", "Noto Sans HK", ui-sans-serif, system-ui, sans-serif;
   --color-primary: #111113;
@@ -55,20 +56,23 @@
   --color-info: oklch(var(--status-l) var(--status-c) var(--info-h));
   --color-info-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--info-h));
   --color-info-soft: oklch(var(--status-l) var(--status-c) var(--info-h) / var(--status-soft-a));
-  --color-ring: oklch(var(--status-l) var(--status-c) var(--info-h));
 
   /* Voice pulse — own L/C (not status-l): used as text-voice on cards, so
      light L is darker than status solids to clear WCAG AA. Hue sits in
-     amber, away from destructive h 27. Soft reuses --status-soft-a.
+     amber, away from destructive h 27. Soft reuses --status-soft-a (wash).
+     Border is opaque same-hue hairline — not voice/40. Hover fill = soft.
+     Interaction chrome (ring / accent) aliases voice — not info blue.
      Resolved sRGB in docs/design/TOKENS.md. */
   --voice-l: 0.548;
   --voice-c: 0.13;
   --voice-h: 55;
+  --voice-border-l: 0.82;
+  --voice-border-c: 0.045;
   --color-voice: oklch(var(--voice-l) var(--voice-c) var(--voice-h));
   --color-voice-foreground: #ffffff;
-  --color-voice-soft: oklch(
-    var(--voice-l) var(--voice-c) var(--voice-h) / var(--status-soft-a)
-  );
+  --color-voice-soft: oklch(var(--voice-l) var(--voice-c) var(--voice-h) / var(--status-soft-a));
+  --color-voice-border: oklch(var(--voice-border-l) var(--voice-border-c) var(--voice-h));
+  --color-ring: var(--color-voice);
 
   /* Light surfaces; :root.dark below overrides at runtime. Declared in @theme
      so utilities like bg-background / text-muted-foreground (used by Streamdown)
@@ -81,9 +85,11 @@
   --color-card: #ffffff;
   --color-card-foreground: #111113;
 
-  /* shadcn/ui tokens (light); dark overrides below. */
-  --color-accent: rgb(17 17 19 / 0.06);
-  --color-accent-foreground: #111113;
+  /* shadcn/ui tokens (light); dark overrides below.
+     accent = interactive voice wash (alias of voice-soft).
+     secondary = neutral 6% resting wash (tabs track, read-only, notes). */
+  --color-accent: var(--color-voice-soft);
+  --color-accent-foreground: var(--color-voice);
   --color-secondary: rgb(17 17 19 / 0.06);
   --color-secondary-foreground: #111113;
   --color-popover: #ffffff;
@@ -124,15 +130,16 @@
   --color-info-foreground: oklch(var(--status-fg-l) var(--status-fg-c) var(--info-h));
   --color-info-soft: oklch(var(--status-l) var(--status-c) var(--info-h) / var(--status-soft-a));
   --voice-l: 0.772;
+  --voice-border-l: 0.52;
   --color-voice: oklch(var(--voice-l) var(--voice-c) var(--voice-h));
   --color-voice-foreground: #111113;
-  --color-voice-soft: oklch(
-    var(--voice-l) var(--voice-c) var(--voice-h) / var(--status-soft-a)
-  );
+  --color-voice-soft: oklch(var(--voice-l) var(--voice-c) var(--voice-h) / var(--status-soft-a));
+  --color-voice-border: oklch(var(--voice-border-l) var(--voice-border-c) var(--voice-h));
+  --color-ring: var(--color-voice);
   --shadow-color: rgb(0 0 0 / 0.35);
 
-  --color-accent: rgb(255 255 255 / 0.06);
-  --color-accent-foreground: #f4f4f5;
+  --color-accent: var(--color-voice-soft);
+  --color-accent-foreground: var(--color-voice);
   --color-secondary: rgb(255 255 255 / 0.06);
   --color-secondary-foreground: #f4f4f5;
   --color-popover: #161618;

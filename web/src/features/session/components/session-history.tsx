@@ -178,17 +178,19 @@ export function SessionHistorySidebar({
         ) : (
           <div
             className={`flex items-center gap-0.5 rounded-full transition ${
-              active ? "bg-accent" : "hover:bg-accent"
+              active
+                ? "bg-accent text-accent-foreground"
+                : "hover:bg-accent hover:text-accent-foreground"
             }`}
           >
             <button
               type="button"
               onClick={() => onSelect(s.id)}
-              className="min-w-0 flex-1 truncate px-3 py-2 text-left text-[13px] leading-snug text-foreground"
+              className="min-w-0 flex-1 truncate px-3 py-2 text-left text-[13px] leading-snug"
               title={title}
             >
               {s.pinned ? (
-                <span className="mr-1.5 inline-flex text-muted-foreground" aria-hidden>
+                <span className="mr-1.5 inline-flex" aria-hidden>
                   <PinIcon filled />
                 </span>
               ) : null}
@@ -287,7 +289,7 @@ export function SessionHistorySidebar({
         <button
           type="button"
           onClick={onNewChat}
-          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-card px-3 text-sm font-medium text-foreground shadow-sm ring-1 ring-border transition hover:bg-accent"
+          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-card px-3 text-sm font-medium text-foreground shadow-sm ring-1 ring-border transition hover:bg-accent hover:text-accent-foreground"
         >
           <PlusIcon />
           {t("chat.history.new")}
@@ -303,7 +305,7 @@ export function SessionHistorySidebar({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("chat.history.search")}
-            className="w-full rounded-full border-0 bg-card py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-border transition placeholder:text-muted-foreground focus:ring-ring"
+            className="w-full rounded-full border-0 bg-card py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-border transition placeholder:text-muted-foreground hover:ring-voice-border focus:ring-ring"
           />
         </div>
       </div>

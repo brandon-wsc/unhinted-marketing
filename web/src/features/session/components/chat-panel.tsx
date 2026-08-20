@@ -354,7 +354,7 @@ export function ChatPanel() {
           <button
             type="button"
             onClick={() => setPagedPane("record")}
-            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card/90 text-muted-foreground backdrop-blur transition hover:bg-accent hover:text-foreground"
+            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card/90 text-muted-foreground backdrop-blur transition hover:border-voice-border hover:bg-accent hover:text-accent-foreground"
             title={t("chat.history.open")}
             aria-label={t("chat.history.open")}
           >
@@ -508,22 +508,17 @@ export function ChatPanel() {
           <div className="relative">
             {queuedMessages.length > 0 ? (
               <div
-                className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-border bg-background"
+                className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-voice-border bg-card"
                 style={{ bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`, paddingBottom: QUEUE_TUCK_PX }}
               >
                 <ul className="flex flex-col p-1">
                   {queuedMessages.map((item) => (
                     <li
                       key={item.id}
-                      className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight hover:bg-accent"
+                      className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     >
-                      <CornerDownRight
-                        className="size-3 shrink-0 text-muted-foreground/70"
-                        aria-hidden
-                      />
-                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                        {item.content}
-                      </span>
+                      <CornerDownRight className="size-3 shrink-0 text-voice" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate">{item.content}</span>
                       <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
                         <IconButton
                           type="button"
@@ -558,7 +553,7 @@ export function ChatPanel() {
                 </ul>
               </div>
             ) : null}
-            <div className="relative z-10 rounded-2xl border border-border bg-card px-3 py-2 shadow-sm">
+            <div className="relative z-10 rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
               <div className="relative">
                 <Textarea
                   ref={inputRef}
@@ -592,10 +587,7 @@ export function ChatPanel() {
                     disabled={
                       stopping || !input.trim() || (sending && queueFull && editInsertAt == null)
                     }
-                    className={cn(
-                      "h-8 w-8 rounded-full",
-                      input.trim() ? "text-voice" : "text-foreground",
-                    )}
+                    className="h-8 w-8 rounded-full text-foreground"
                     title={t("chat.send")}
                     aria-label={t("chat.send")}
                   >
@@ -674,7 +666,7 @@ function PreviewReadyBanner({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
+      className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition hover:border-voice-border hover:bg-accent hover:text-accent-foreground"
     >
       {t("preview.readyBanner")}
     </button>

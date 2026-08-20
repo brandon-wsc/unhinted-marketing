@@ -286,7 +286,11 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
         </h1>
       </div>
 
-      <Tabs value={scope} onValueChange={(v) => onScopeChange(v === "mine" ? "mine" : "org")}>
+      <Tabs
+        variant="line"
+        value={scope}
+        onValueChange={(v) => onScopeChange(v === "mine" ? "mine" : "org")}
+      >
         <TabsList>
           <TabsTrigger value="org">{t("settings.products.tabs.org")}</TabsTrigger>
           <TabsTrigger value="mine">{t("settings.products.tabs.mine")}</TabsTrigger>
@@ -328,7 +332,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
             </Badge>
 
             {importResult && (
-              <div className="flex flex-wrap gap-4 rounded-lg bg-accent px-3.5 py-3 text-sm">
+              <div className="flex flex-wrap gap-4 rounded-lg bg-secondary px-3.5 py-3 text-sm">
                 <span>
                   <span className="text-muted-foreground">
                     {t("settings.products.stats.imported")}{" "}
@@ -489,7 +493,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
             )}
 
             {scope === "mine" && (
-              <div className="rounded-lg bg-accent px-3.5 py-3">
+              <div className="rounded-lg bg-secondary px-3.5 py-3">
                 <p className="text-xs font-medium">{t("settings.products.coverTitle")}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {t("settings.products.coverBody")}

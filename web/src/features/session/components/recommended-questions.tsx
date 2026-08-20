@@ -35,7 +35,7 @@ export function RecommendedQuestions({ questions, loading, isStale, disabled, on
               type="button"
               disabled={disabled}
               onClick={() => onSelect(q)}
-              className="w-full rounded-xl border border-border border-l-[3px] border-l-voice/40 bg-card px-4 py-3 text-left text-sm leading-relaxed transition hover:border-voice/40 hover:bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl border border-border border-l-[3px] border-l-voice-border bg-card px-4 py-3 text-left text-sm leading-relaxed transition hover:border-voice-border hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="block">{q.text}</span>
               {q.rationale && <span className="mt-1 block text-xs text-voice">{q.rationale}</span>}

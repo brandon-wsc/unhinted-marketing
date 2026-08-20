@@ -199,7 +199,7 @@ export function PreviewPanel({
                   variant="outline"
                   disabled={promoting}
                   onClick={() => void handlePromoteExemplar()}
-                  className="border-voice/40 text-voice hover:enabled:bg-voice-soft hover:enabled:text-voice"
+                  className="border-voice-border text-voice hover:enabled:bg-voice-soft hover:enabled:text-voice"
                 >
                   {promoting ? t("preview.exemplar.working") : t("preview.exemplar.save")}
                 </Button>

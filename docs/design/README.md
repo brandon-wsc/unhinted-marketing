@@ -13,7 +13,7 @@
 
 | Page | Contents |
 |------|----------|
-| Library | Token swatches (light + dark, renamed `token (mode)`), type scale (IBM Plex Sans / Noto Sans HK), component set: buttons, badges, inputs, question cards, agent action trail (voice accent), chat bubbles, tabs, icon buttons (akar send / stop), theme switch. **Accent = hover wash**; muted is solid gray — see [TOKENS.md](./TOKENS.md). |
+| Library | Token swatches (light + dark, renamed `token (mode)`), type scale (IBM Plex Sans / Noto Sans HK), component set: buttons, badges, inputs, question cards, agent action trail (voice accent), chat bubbles, tabs, icon buttons (akar send / stop), theme switch. **Accent = voice hover wash**; secondary is the resting gray wash; muted is solid gray — see [TOKENS.md](./TOKENS.md). |
 | Login · Register | Orderly centered auth card; exactly ONE corner craft signal (voice ✳ + “Reliable tools, unleashed copy”) |
 | Session — split | Desktop 1440: `empty` (landing + recommended questions) and `preview` (chat + action trail + interrupt card; preview pane with IG mock, revision/dirty badges, Confirm gate with serious copy); composer send/stop are icon buttons |
 | Session — paged | Mobile 390: `record` (history), `chat` (trail + preview-ready banner), `preview` (IG mock + Confirm gate) |
