@@ -326,10 +326,7 @@ export function MembersPanel({
                       value={member.role}
                       onValueChange={(value) => void onRoleChange(member, value as InviteRole)}
                     >
-                      <SelectTrigger
-                        size="sm"
-                        aria-label={t("settings.members.columns.role")}
-                      >
+                      <SelectTrigger size="sm" aria-label={t("settings.members.columns.role")}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
