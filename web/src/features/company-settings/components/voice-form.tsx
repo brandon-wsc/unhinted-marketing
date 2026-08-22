@@ -192,7 +192,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
                     "cursor-pointer rounded-md border px-3.5 py-1.5 text-sm font-medium transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring has-[:disabled]:cursor-not-allowed",
                     selected
                       ? "border-foreground bg-secondary text-foreground"
-                      : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground",
+                      : "border-border text-muted-foreground hover:border-voice-border hover:bg-secondary hover:text-foreground",
                   )}
                 >
                   <input
