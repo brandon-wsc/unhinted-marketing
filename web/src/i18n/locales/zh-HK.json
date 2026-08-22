@@ -4,7 +4,7 @@
     "title": "Unhinted Marketing"
   },
   "common": {
-    "loading": "載入中…",
+    "loading": "載入緊…",
     "email": "電郵",
     "password": "密碼",
     "showPassword": "顯示密碼",
@@ -12,7 +12,7 @@
     "notAvailable": "—",
     "cancel": "取消",
     "save": "儲存",
-    "saving": "儲存中…",
+    "saving": "儲存緊…",
     "close": "關閉"
   },
   "header": {
@@ -24,115 +24,115 @@
     }
   },
   "auth": {
-    "craftTagline": "可靠工具，放膽出稿",
+    "craftTagline": "腦細要Growth 我哋秒Post",
     "login": {
       "title": "登入",
-      "subtitle": "使用你的帳戶存取 Unhinted Marketing Dashboard",
-      "subtitleInvite": "使用 {{email}} 登入以加入 {{company}}",
+      "subtitle": "用你個帳戶入 Unhinted Marketing",
+      "subtitleInvite": "用 {{email}} 登入以加入 {{company}}",
       "submit": "登入",
-      "submitting": "登入中…",
-      "noAccount": "還未有帳戶？",
-      "registerLink": "立即註冊"
+      "submitting": "登入緊…",
+      "noAccount": "未有帳戶？",
+      "registerLink": "而家註冊"
     },
     "register": {
       "title": "建立帳戶",
-      "subtitle": "註冊後會自動建立你的公司 workspace",
-      "subtitleInvite": "以 {{email}} 註冊後會加入 {{company}}",
-      "displayName": "顯示名稱",
+      "subtitle": "註冊完會自動開間公司 workspace",
+      "subtitleInvite": "用 {{email}} 註冊完就會加入 {{company}}",
+      "displayName": "暱稱",
       "organizationName": "公司名稱（選填）",
-      "passwordHint": "密碼（至少 8 字）",
+      "passwordHint": "密碼（最少 8 個字）",
       "confirmPassword": "確認密碼",
       "submit": "建立帳戶",
-      "submitting": "建立中…",
-      "hasAccount": "已有帳戶？",
-      "loginLink": "返回登入"
+      "submitting": "建立緊…",
+      "hasAccount": "已經有帳戶？",
+      "loginLink": "返去登入"
     },
     "logout": "登出"
   },
   "chat": {
     "mobile": {
-      "back": "上一頁"
+      "back": "返回"
     },
     "empty": {
-      "title": "今日想推廣啲咩？",
-      "subtitle": "輸入訊息開始對話 — AI 會結合香港熱搜同你嘅公司資料，同你傾內容方向。"
+      "title": "今日想出咩稿？",
+      "subtitle": "打句嘢開始傾 — 我會夾埋香港熱話同你公司資料，一齊諗點出先抵。"
     },
     "questions": {
-      "title": "推薦問題",
-      "loading": "載入推薦問題…",
-      "stale": "即將更新"
+      "title": "試下問呢啲",
+      "loading": "諗緊問題…",
+      "stale": "就快換新"
     },
     "input": {
-      "placeholder": "輸入訊息…（Enter 送出，Shift+Enter 換行）"
+      "placeholder": "打句嘢…（Enter 送出，Shift+Enter 換行）"
     },
     "send": "送出",
     "stop": "停止",
-    "stopping": "停止中…",
+    "stopping": "停緊…",
     "queue": {
       "badge": "排隊緊",
-      "remove": "取消呢條排隊",
+      "remove": "唔好排呢條",
       "edit": "改訊息",
       "more": "更多",
-      "full": "最多排 3 條 — 等而家呢轉完再送。",
-      "holdForImage": "等你揀圖或者停止，先會送排隊訊息。"
+      "full": "最多排 3 條 — 等呢轉搞掂先再送。",
+      "holdForImage": "等你揀圖或者撳停，先會送排隊嗰啲。"
     },
-    "live": "即時連線",
+    "live": "即時",
     "offline": "未連線",
     "agent": {
-      "actions": "Agent 步驟",
+      "actions": "進度",
       "nodes": {
         "working": "處理緊…",
-        "route_intent": "理解緊你嘅需求…",
-        "query_generator": "搵緊資料…",
-        "research_ingest": "整理緊市場資料…",
-        "load_context": "載入緊公司資料…",
-        "product_matcher": "對緊產品資料…",
-        "chat": "回覆緊…",
-        "trend_searcher": "搜尋緊香港熱話…",
-        "brainstormer": "諗緊內容方向…",
-        "executor_post": "起草緊貼文…",
-        "grounding_check": "核對緊 signal 出處…",
-        "reviewer": "審核緊草稿…",
-        "edit_copy": "修訂緊文案…",
-        "executor_image_plan": "設計緊圖片方向…",
-        "executor_image_gen": "生成緊圖片…"
+        "route_intent": "分析緊要求…",
+        "query_generator": "搵緊料…",
+        "research_ingest": "執緊市場資料…",
+        "load_context": "load緊公司資料…",
+        "product_matcher": "對緊產品…",
+        "chat": "覆緊…",
+        "trend_searcher": "掃緊香港熱話…",
+        "brainstormer": "諗緊角度…",
+        "executor_post": "寫緊帖文…",
+        "grounding_check": "Fact Check緊…",
+        "reviewer": "睇緊稿…",
+        "edit_copy": "執緊script…",
+        "executor_image_plan": "諗緊圖點畫…",
+        "executor_image_gen": "出緊圖…"
       },
       "brief": {
-        "title": "內容簡報",
-        "canDo": "可以做",
+        "title": "內容 Brief",
+        "canDo": "得做",
         "cannotDo": "唔會做",
-        "angles": "切入角度"
+        "angles": "角度"
       },
       "interrupt": {
-        "title": "文案已經準備好",
-        "subtitle": "揀視覺格式，然後生成圖片（預設單圖）。",
-        "confirm": "生成圖片",
+        "title": "文案得喇",
+        "subtitle": "揀視覺格式，然後出圖（預設單圖）。",
+        "confirm": "出圖",
         "formatLabel": "圖片格式",
         "formatSingle": "單圖",
         "formatComic": "4格漫畫"
       },
-      "imageOkMessage": "OK，幫我生成圖片。"
+      "imageOkMessage": "得，幫手出圖啦。"
     },
     "error": {
-      "sendFailed": "訊息送出失敗，請再試一次",
-      "stopFailed": "無法停止，請再試一次",
-      "llmFailed": "AI 服務錯誤",
-      "retry": "重試"
+      "sendFailed": "送唔出去喎，再試一次啦。",
+      "stopFailed": "停唔到喎，再試一次。",
+      "llmFailed": "AI 服務出事",
+      "retry": "再試"
     },
     "history": {
-      "open": "打開紀錄",
+      "open": "開啟紀錄",
       "collapse": "收起紀錄",
       "title": "對話紀錄",
-      "subtitle": "繼續以前嘅對話，或者開新 chat",
+      "subtitle": "翻炒舊 Chat，或者開新一舖",
       "close": "關閉",
       "new": "新對話",
       "search": "搜尋對話…",
       "refresh": "重新整理",
-      "loading": "載入紀錄…",
+      "loading": "載入緊紀錄…",
       "empty": "暫時未有對話",
       "untitled": "未命名對話",
-      "restoring": "還原對話中…",
-      "openFailed": "打唔開呢個對話",
+      "restoring": "恢復緊對話…",
+      "openFailed": "打唔開呢個對話喎",
       "createFailed": "開唔到新對話",
       "more": "更多選項",
       "pin": "置頂",
@@ -142,14 +142,14 @@
       "cancel": "取消",
       "deleting": "刪除緊…",
       "deleteTitle": "刪除呢個對話？",
-      "deleteBody": "會永久刪除對話同相關草稿。",
-      "renameFailed": "重新命名失敗",
-      "pinFailed": "置頂更新失敗",
+      "deleteBody": "對話同草稿會永久刪除，救唔返。",
+      "renameFailed": "改名失敗",
+      "pinFailed": "置頂更新唔到",
       "deleteFailed": "刪除失敗",
       "group": {
-        "pinned": "已置頂",
+        "pinned": "置頂",
         "today": "今日",
-        "yesterday": "昨日",
+        "yesterday": "尋日",
         "week": "過去 7 日",
         "older": "更早"
       }
@@ -157,41 +157,41 @@
   },
   "preview": {
     "title": "帖文預覽",
-    "readyBanner": "帖文預覽已準備好 — 撳呢度睇。",
-    "emptyMobile": "未有預覽 — 傾完草稿之後會喺呢度出現。",
+    "readyBanner": "預覽得喇 — 撳入去睇。",
+    "emptyMobile": "未有預覽 — 稿出咗會喺呢度出現。",
     "revision": "修訂 {{n}}",
     "dirty": "未儲存",
     "apply": "套用",
     "applySaving": "儲存緊…",
-    "confirm": "確認發佈",
-    "confirmWorking": "確認緊…",
-    "confirmDone": "已確認",
-    "confirmReceipt": "回執狀態：{{status}}",
-    "confirmHint": "對話入面講「可以出」唔會發佈。確認會用已儲存嘅修訂（有未儲存改動會先自動儲存）。",
+    "confirm": "確認出街",
+    "confirmWorking": "處理緊…",
+    "confirmDone": "出咗",
+    "confirmReceipt": "回執：{{status}}",
+    "confirmHint": "Chat 入面講「可以出」唔會真係出。確認會用已儲存修訂（有未儲存改動會先自動儲存）。",
     "exemplar": {
-      "save": "將文案存做語氣範例",
+      "save": "將文案儲存做語氣範例",
       "working": "儲存緊…",
-      "hint": "公司最多保留 3 條範例，畀之後出稿參考。唔會再發佈一次。",
+      "hint": "公司最多留 3 條範例，之後出稿可以跟節奏。唔會再出一次街。",
       "saved": "已存入公司語氣範例。",
-      "already": "呢條已經喺語氣範例入面。"
+      "already": "呢條已經喺語氣範例度。"
     },
     "fields": {
       "caption": "文案",
       "hashtags": "Hashtags",
-      "cta": "行動呼籲"
+      "cta": "CTA"
     },
     "copy": {
       "edit": "編輯文案",
       "editTitle": "編輯文案",
-      "editHint": "Caption、CTA、hashtags 會一齊存成一個 draft revision。",
-      "empty": "加啲文案…"
+      "editHint": "Caption、CTA、Hashtags 會一齊存成一個 revision。",
+      "empty": "寫啲文案先…"
     },
     "media": {
-      "title": "圖像計劃",
-      "edit": "編輯圖像",
-      "editTitle": "編輯圖像",
-      "editHint": "可以儲存 plan、生成／重新生成圖像，或者上載檔案。",
-      "empty": "未有圖像 — 可以加一張再改 plan。",
+      "title": "圖像 Plan",
+      "edit": "編輯圖片",
+      "editTitle": "編輯圖片",
+      "editHint": "可以儲存 Plan、出圖／再出一次，或者上載檔案。",
+      "empty": "未有圖 — 加一張再改 Plan。",
       "prompt": "Prompt",
       "additionalPrompt": "額外 Prompt",
       "style": "風格",
@@ -199,32 +199,32 @@
       "panel": "第 {{n}} 格",
       "formatSingle": "單圖",
       "formatComic": "四格漫畫",
-      "savePlan": "儲存計劃",
-      "generate": "生成",
-      "regen": "重新生成",
-      "regenWorking": "生成緊…",
+      "savePlan": "儲存 Plan",
+      "generate": "出圖",
+      "regen": "再出一次",
+      "regenWorking": "出緊圖…",
       "cancel": "取消",
-      "delete": "刪除圖像",
-      "uploadHint": "拖放圖像到呢度，或者撳一下上載。",
-      "add": "加圖",
-      "scrollPrev": "向左睇更多圖",
-      "scrollNext": "向右睇更多圖",
+      "delete": "刪除圖片",
+      "uploadHint": "拖圖過嚟，或者撳一下上載。",
+      "add": "新增圖片",
+      "scrollPrev": "向左睇多啲圖",
+      "scrollNext": "向右睇多啲圖",
       "slot": "圖 {{n}}",
-      "pending": "待生成"
+      "pending": "等待輸出"
     },
     "mock": {
       "sponsored": "Instagram 預覽",
-      "placeholder": "圖片佔位",
+      "placeholder": "圖片位置",
       "more": "更多"
     },
     "error": {
-      "saveFailed": "草稿儲存失敗，請再試一次",
-      "confirmFailed": "確認失敗，請再試一次",
-      "planFailed": "圖像計劃儲存失敗，請再試一次",
-      "regenFailed": "重新生成失敗，請再試一次",
-      "addFailed": "加圖失敗，請再試一次",
-      "removeFailed": "刪除圖像失敗，請再試一次",
-      "uploadFailed": "上載圖像失敗，請再試一次"
+      "saveFailed": "草稿儲存唔到喎，再試一次。",
+      "confirmFailed": "確認唔到喎，再試一次。",
+      "planFailed": "圖像 Plan 儲存唔到喎，再試一次。",
+      "regenFailed": "再出圖失敗，再試一次。",
+      "addFailed": "加圖失敗，再試一次。",
+      "removeFailed": "刪圖失敗，再試一次。",
+      "uploadFailed": "上載失敗，再試一次。"
     }
   },
   "settings": {
@@ -239,19 +239,19 @@
     },
     "noCompany": {
       "title": "未有公司",
-      "body": "註冊帳戶時會自動建立公司 workspace。",
+      "body": "註冊帳戶嗰陣會自動開公司 Workspace。",
       "back": "返回主頁"
     },
     "members": {
       "title": "成員",
       "subtitleEditor": "團隊名單、邀請連結同公司名稱。",
       "subtitleMember": "團隊名單同公司名稱。",
-      "saved": "已儲存。",
+      "saved": "儲存咗。",
       "companyName": "公司名稱",
       "roster": "成員",
       "remove": "移除",
       "removeTitle": "移除成員",
-      "removeBody": "確定將{{name}}移出公司？對方會即時失去呢間公司嘅存取權。",
+      "removeBody": "確定將 {{name}} 移出公司？對方會即刻冇權入呢間公司。",
       "roles": {
         "owner": "Owner",
         "admin": "Admin",
@@ -266,35 +266,35 @@
       },
       "invite": {
         "title": "邀請同事",
-        "hint": "發送連結俾同事；對方要用受邀電郵註冊或登入後才可加入。",
+        "hint": "出條 Link 俾同事；對方要用受邀電郵註冊或登入先入到。",
         "send": "發送邀請",
-        "sending": "發送中…",
+        "sending": "發送緊邀請…",
         "copy": "複製連結",
-        "copied": "已複製",
+        "copied": "複製咗",
         "pasteHint": "可貼去 WhatsApp 或 Slack",
-        "invalidEmail": "請輸入有效電郵",
-        "alreadyMember": "呢個電郵已經係成員",
-        "alreadyPending": "呢個電郵已有待處理邀請"
+        "invalidEmail": "入個有效電郵先",
+        "alreadyMember": "呢個電郵已經係成員喇",
+        "alreadyPending": "呢個電郵已經有待處理邀請"
       },
       "pending": {
-        "title": "待處理邀請",
-        "expires": "到期",
+        "title": "待處理嘅邀請",
+        "expires": "到期日",
         "revoke": "撤銷邀請"
       }
     },
     "voice": {
       "title": "語氣",
-      "subtitle": "設定品牌出稿嘅語氣同忌諱字，之後草稿會跟呢度走。",
-      "readOnly": "要改動請搵公司負責人。",
-      "saved": "已儲存。",
+      "subtitle": "定品牌出稿語氣同忌諱字，之後草稿跟呢度走。",
+      "readOnly": "要改請搵公司負責人。",
+      "saved": "儲存咗。",
       "roast": {
         "label": "語氣力度",
         "hint": "愈高愈抽水、愈有梗；平常用預設就得。",
         "levels": {
-          "0": "0 溫和",
-          "1": "1 預設",
-          "2": "2 銳利",
-          "3": "3 大膽"
+          "0": "0 穩陣",
+          "1": "1 輕鬆小編",
+          "2": "2 港式抽水",
+          "3": "3 抽水王"
         }
       },
       "locale": {
@@ -302,7 +302,7 @@
         "hint": "草稿主要用邊種地區寫法，例如 zh-HK。"
       },
       "forbidden": {
-        "label": "唔好用嘅字眼",
+        "label": "忌諱字眼",
         "hint": "最多 15 個，用逗號分隔。草稿會盡量避開。"
       },
       "tone": {
@@ -320,7 +320,7 @@
       "title": "產品",
       "tabs": {
         "org": "公司",
-        "mine": "我的"
+        "mine": "個人"
       },
       "import": "上載 CSV / Excel",
       "importHint": "同一個產品編號會更新現有資料。",
@@ -333,7 +333,7 @@
       "alreadyPending": "呢個產品編號已有待審批申請",
       "statusActive": "使用中",
       "coveredByCompany": "公司",
-      "personalOnly": "你的",
+      "personalOnly": "個人",
       "coverTitle": "兩個清單都有同一個產品時",
       "coverBody": "出稿會用公司嗰份。你自己嘅版本仍然留住；之後可以申請更新公司清單。",
       "columns": {
@@ -348,7 +348,7 @@
       },
       "fields": {
         "name": "名稱",
-        "sku": "產品編號",
+        "sku": "產品編號 (SKU)",
         "notes": "內容／備註",
         "notesHint": "選填。賣點、成分或其他草稿應該知嘅資料。",
         "skuExists": "清單已有呢個編號（{{name}}）。確認後先會更新嗰一行。",
@@ -390,19 +390,19 @@
     "menuEntry": "系統",
     "title": "系統",
     "forbidden": {
-      "title": "冇權限",
-      "body": "系統工具需要較高嘅平台權限。",
+      "title": "未授權",
+      "body": "系統工具要夠高平台權限先入到。",
       "back": "返回主頁"
     }
   },
   "admin": {
     "llmCalls": "LLM 呼叫紀錄",
     "empty": "暫時未有紀錄 — 觸發 LLM call 之後會喺呢度出現",
-    "nodeStepsEmpty": "暫時未有 node steps — 跑完一個 session turn 之後會喺呢度出現",
+    "nodeStepsEmpty": "暫時未有 Node steps — 跑完一個 Session turn 之後會喺呢度出現",
     "loadFailed": "載入失敗",
-    "openNodeSteps": "睇呢個 turn 嘅 steps",
-    "openSessionTrace": "睇 Session Trace",
-    "openResearch": "睇 Research",
+    "openNodeSteps": "檢視呢個 Turn 嘅 Steps",
+    "openSessionTrace": "檢視 Session Trace",
+    "openResearch": "檢視 Research",
     "tabs": {
       "llm": "LLM 呼叫",
       "steps": "Node steps",
@@ -429,7 +429,7 @@
       "tokens": "Tokens",
       "latency": "耗時",
       "flags": "標記",
-      "seq": "序",
+      "seq": "序號",
       "mode": "Mode",
       "intent": "Intent",
       "turnId": "Turn",
@@ -462,31 +462,31 @@
     "nodeStepDetail": {
       "title": "Node step 詳情",
       "output": "Output",
-      "llmCalls": "同 turn / node 嘅 LLM calls"
+      "llmCalls": "同 Turn / Node 嘅 LLM calls"
     },
     "sessionTrace": {
-      "placeholder": "貼上 session UUID…",
+      "placeholder": "貼上 Session UUID…",
       "load": "載入",
-      "empty": "輸入 session ID 開始睇 Trace",
+      "empty": "輸入 Session ID 開始檢視 Trace",
       "summary": "Session",
       "title": "標題",
       "messages": "訊息",
       "noMessages": "未有訊息",
       "revisions": "Draft 修訂",
-      "noRevisions": "未有 draft 修訂",
+      "noRevisions": "未有 Draft 修訂",
       "revision": "修訂 {{n}}",
       "grounding": "Signal grounding",
-      "pickRevision": "揀一個修訂睇 grounding",
-      "noSignals": "呢個修訂冇 source signals / 搵唔到 signal 列",
+      "pickRevision": "揀一個修訂睇 Grounding",
+      "noSignals": "呢個修訂冇 Source signals / 搵唔到 Signal 列",
       "turns": "Graph turns",
-      "noTurns": "未有 node-step / LLM turn 紀錄",
+      "noTurns": "未有 Node-step / LLM turn 紀錄",
       "llmCount": "{{n}} 個 LLM calls"
     },
     "research": {
-      "placeholder": "貼上 session UUID…",
+      "placeholder": "貼上 Session UUID…",
       "load": "載入",
-      "empty": "輸入 session ID 睇 Research（semantic gate + Tavily∪PG）",
-      "noTurns": "呢個 session 未有 research 相關 node steps",
+      "empty": "輸入 Session ID 睇 Research（Semantic gate + Tavily∪PG）",
+      "noTurns": "呢個 Session 未有 Research 相關 Node steps",
       "turnDetail": "Turn 明細",
       "semantic": "Semantic",
       "rulePass": "rule_pass",
@@ -495,7 +495,7 @@
       "entity": "entity",
       "ingest": "ran ingest",
       "queries": "Search queries",
-      "noQueries": "未有 atomic queries",
+      "noQueries": "未有 Atomic queries",
       "hits": "Hits",
       "signals": "Signals（Tavily∪PG）",
       "noSignals": "未有 research_signals"
@@ -503,37 +503,37 @@
   },
   "theme": {
     "label": "主題",
-    "light": "Light",
-    "dark": "Dark"
+    "light": "淺色",
+    "dark": "深色"
   },
   "invite": {
-    "loggedOutTitle": "你受邀加入團隊",
-    "loggedOutBody": "請用 {{email}} 登入或註冊，然後返回此頁加入 {{company}}。",
+    "loggedOutTitle": "有人邀請你加入團隊",
+    "loggedOutBody": "請用 {{email}} 登入或註冊，然後返呢頁加入 {{company}}。",
     "login": "登入",
-    "register": "註冊新帳戶",
-    "once": "邀請連結只可使用一次",
+    "register": "建立新帳戶",
+    "once": "邀請連結只可用一次",
     "titleJoin": "加入團隊",
-    "loggedInBody": "你正以以下帳戶登入，即將加入 {{company}}：",
-    "replaceWarning": "加入 {{company}} 會取代你而家嘅一人公司。產品會轉去「我的」。語氣設定唔會帶過去。對話同草稿保持不變。",
+    "loggedInBody": "你而家用緊以下帳戶登入，即將加入 {{company}}：",
+    "replaceWarning": "加入 {{company}} 會取代你而家嘅個人公司。產品會轉去「個人」。語氣設定唔會帶過去。對話同草稿保持不變。",
     "join": "加入公司",
-    "joining": "加入中…",
+    "joining": "加入緊…",
     "home": "返回主頁",
     "mismatchTitle": "電郵唔相符",
     "mismatchBody": "你而家登入嘅電郵同呢個邀請唔相符。",
     "conflictTitle": "你已屬於一間公司",
-    "conflictBody": "一個帳戶只能加入一間公司。請用主頁繼續，或聯絡管理員。",
+    "conflictBody": "一個帳戶只能加入一間公司。請返回主頁繼續，或聯絡管理員。",
     "invalidTitle": "邀請已失效",
-    "invalidBody": "連結可能已過期、已被撤銷，或已使用過。請聯絡公司管理員重新發送。"
+    "invalidBody": "連結可能已過期、已被撤銷，或已用過。請聯絡公司管理員重新發送。"
   },
   "errors": {
     "loginFailed": "登入失敗",
     "registrationFailed": "註冊失敗",
     "invalidEmail": "電郵格式不正確",
-    "passwordTooShort": "密碼至少需要 8 個字元",
-    "passwordMismatch": "兩次輸入嘅密碼唔一致",
-    "emailAlreadyRegistered": "此電郵已被註冊",
+    "passwordTooShort": "密碼最少需要 8 個字",
+    "passwordMismatch": "兩次輸入嘅密碼不一致",
+    "emailAlreadyRegistered": "呢個電郵已經註冊過",
     "invalidCredentials": "電郵或密碼不正確",
-    "accountDisabled": "帳戶已被停用",
+    "accountDisabled": "呢個帳戶已被停用",
     "invalidRefreshToken": "登入已過期，請重新登入",
     "requestFailed": "請求失敗（{{status}}）"
   }

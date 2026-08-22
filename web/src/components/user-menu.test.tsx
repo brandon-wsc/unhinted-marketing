@@ -99,6 +99,8 @@ describe("UserMenu (desktop dropdown)", () => {
     render(<UserMenu />);
 
     await user.click(screen.getByRole("button", { name: /Ada/i }));
+    expect(screen.getByRole("menuitemradio", { name: "繁體中文（香港）" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: "English" })).toBeInTheDocument();
     await user.click(screen.getByRole("menuitemradio", { name: "繁體中文（香港）" }));
 
     expect(changeLanguage).toHaveBeenCalledWith("zh-HK");

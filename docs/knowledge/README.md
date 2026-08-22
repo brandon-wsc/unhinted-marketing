@@ -20,7 +20,7 @@ Hub for **what** marketing knowledge Unhinted needs, **how** session nodes consu
 
 | Topic | Authority |
 |-------|-----------|
-| HK social craft (trend hooks, zh-HK) | [VOICE.md](../VOICE.md) |
+| HK social craft (Traditional Chinese Hong Kong, `zh-HK`) | [VOICE.md](../VOICE.md) |
 | Locked retrieve/tenant decisions (optional formal ADR) | Future [ADR 0012](../adr/) if needed — behavior shipped K3–K4 |
 | K6 promote / Approvals (commit without LLM) | [ADR 0011](../adr/0011-knowledge-commit-without-llm.md) |
 | Org membership + invites | [ADR 0010](../adr/0010-org-membership-invites-and-shared-assets.md) |
