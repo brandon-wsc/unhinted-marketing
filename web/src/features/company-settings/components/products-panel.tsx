@@ -530,7 +530,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
                       ? "settings.products.detail.editTitle"
                       : "settings.products.detail.title",
                   )
-                : t("settings.products.addRow")}
+                : t("settings.products.detail.addTitle")}
             </DialogTitle>
           </DialogHeader>
           <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-px">

@@ -324,7 +324,7 @@
       },
       "import": "上載 CSV / Excel",
       "importHint": "同一個產品編號會更新現有資料。",
-      "addRow": "新增一項",
+      "addRow": "新增",
       "activeCount": "{{count}} 項",
       "empty": "暫時未有產品。",
       "archive": "封存",
@@ -344,6 +344,7 @@
       },
       "detail": {
         "title": "產品詳情",
+        "addTitle": "新增產品",
         "editTitle": "編輯產品"
       },
       "fields": {

@@ -324,7 +324,7 @@
       },
       "import": "Import CSV / Excel",
       "importHint": "Rows with the same product code update existing ones.",
-      "addRow": "Add row",
+      "addRow": "Add",
       "activeCount": "{{count}} active",
       "empty": "No products yet.",
       "archive": "Archive",
@@ -344,6 +344,7 @@
       },
       "detail": {
         "title": "Product details",
+        "addTitle": "Add product",
         "editTitle": "Edit product"
       },
       "fields": {
