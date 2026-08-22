@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { CircleX } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
+import { IconButton } from "@/components/icon-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import {
   apiGetCompanyVoice,
@@ -21,10 +25,13 @@ type VoiceFormProps = {
   companyId: string;
 };
 
-function padExemplars(raw: string[] | undefined): string[] {
-  const cleaned = (raw ?? []).map((c) => c.slice(0, MAX_EXEMPLAR_CHARS));
-  while (cleaned.length < MAX_EXEMPLARS) cleaned.push("");
-  return cleaned.slice(0, MAX_EXEMPLARS);
+type ExemplarRow = {
+  id: number;
+  caption: string;
+};
+
+function captionsFromRows(rows: ExemplarRow[]): string[] {
+  return rows.map((row) => row.caption);
 }
 
 export function VoiceForm({ companyId }: VoiceFormProps) {
@@ -39,8 +46,16 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
   const [locale, setLocale] = useState("zh-HK");
   const [forbiddenText, setForbiddenText] = useState("");
   const [toneNotes, setToneNotes] = useState("");
-  const [exemplars, setExemplars] = useState<string[]>(() => padExemplars([]));
+  const [exemplars, setExemplars] = useState<ExemplarRow[]>([]);
   const [baseline, setBaseline] = useState<CompanyVoiceSettings | null>(null);
+  const nextExemplarId = useRef(1);
+
+  function rowsFromCaptions(raw: string[] | undefined): ExemplarRow[] {
+    return (raw ?? []).slice(0, MAX_EXEMPLARS).map((caption) => ({
+      id: nextExemplarId.current++,
+      caption: caption.slice(0, MAX_EXEMPLAR_CHARS),
+    }));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +84,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
     setLocale(data.locale);
     setForbiddenText(data.forbidden_phrases.join(", "));
     setToneNotes(data.tone_notes);
-    setExemplars(padExemplars(data.exemplar_captions));
+    setExemplars(rowsFromCaptions(data.exemplar_captions));
   }
 
   function parsePhrases(raw: string): string[] {
@@ -93,6 +108,18 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
     return out;
   }
 
+  function listEquals(a: string[], b: string[]): boolean {
+    return a.join("\0") === b.join("\0");
+  }
+
+  const dirty =
+    baseline != null &&
+    (roastLevel !== baseline.roast_level ||
+      (locale.trim() || "zh-HK") !== baseline.locale ||
+      !listEquals(parsePhrases(forbiddenText), baseline.forbidden_phrases) ||
+      toneNotes.trim() !== baseline.tone_notes ||
+      !listEquals(parseExemplars(captionsFromRows(exemplars)), baseline.exemplar_captions));
+
   async function onSave() {
     if (!canEdit) return;
     setSaving(true);
@@ -104,7 +131,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
         locale: locale.trim() || "zh-HK",
         forbidden_phrases: parsePhrases(forbiddenText),
         tone_notes: toneNotes.trim(),
-        exemplar_captions: parseExemplars(exemplars),
+        exemplar_captions: parseExemplars(captionsFromRows(exemplars)),
       });
       applySettings(updated);
       setBaseline(updated);
@@ -162,10 +189,10 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
                 <label
                   key={level}
                   className={cn(
-                    "cursor-pointer rounded-md border px-3.5 py-1.5 text-sm font-medium transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring has-[:disabled]:cursor-not-allowed",
+                    "cursor-pointer rounded-md border px-3.5 py-1.5 text-sm font-medium transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring has-[:disabled]:cursor-not-allowed has-[:disabled]:pointer-events-none",
                     selected
                       ? "border-foreground bg-secondary text-foreground"
-                      : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground",
+                      : "border-border text-muted-foreground hover:border-voice-border hover:bg-secondary hover:text-foreground has-[:disabled]:hover:border-border",
                   )}
                 >
                   <input
@@ -227,46 +254,94 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
             <p className="text-sm font-medium leading-none">
               {t("settings.voice.exemplars.label")}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("settings.voice.exemplars.hint")}
-            </p>
+            {canEdit && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("settings.voice.exemplars.hint")}
+              </p>
+            )}
           </div>
-          {exemplars.map((caption, index) => (
-            <FormField
-              key={`exemplar-${index}`}
-              id={`voice-exemplar-${index}`}
-              label={t("settings.voice.exemplars.slot", { n: index + 1 })}
-            >
+          {exemplars.length === 0 && (
+            <p className="text-sm text-muted-foreground">{t("settings.voice.exemplars.empty")}</p>
+          )}
+          {exemplars.map((row, index) => (
+            <div key={row.id} className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor={`voice-exemplar-${row.id}`}>
+                  {t("settings.voice.exemplars.slot", { n: index + 1 })}
+                </Label>
+                {canEdit && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <IconButton
+                        type="button"
+                        className="size-8"
+                        disabled={saving}
+                        aria-label={t("settings.voice.exemplars.remove")}
+                        onClick={() =>
+                          setExemplars((current) => current.filter((item) => item.id !== row.id))
+                        }
+                      >
+                        <CircleX />
+                      </IconButton>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      {t("settings.voice.exemplars.remove")}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
               <Textarea
-                id={`voice-exemplar-${index}`}
-                value={caption}
+                id={`voice-exemplar-${row.id}`}
+                value={row.caption}
                 readOnly={!canEdit}
                 disabled={saving}
                 maxLength={MAX_EXEMPLAR_CHARS}
                 onChange={(e) => {
-                  const next = [...exemplars];
-                  next[index] = e.target.value.slice(0, MAX_EXEMPLAR_CHARS);
-                  setExemplars(next);
+                  const nextCaption = e.target.value.slice(0, MAX_EXEMPLAR_CHARS);
+                  setExemplars((current) =>
+                    current.map((item) =>
+                      item.id === row.id ? { ...item, caption: nextCaption } : item,
+                    ),
+                  );
                 }}
                 rows={3}
-                className={cn("min-h-20", caption.trim() && "border-voice-border")}
+                className="min-h-20"
               />
-              <p className="text-xs text-muted-foreground">
-                {t("settings.voice.exemplars.chars", {
-                  used: caption.trim().length,
-                  max: MAX_EXEMPLAR_CHARS,
-                })}
-              </p>
-            </FormField>
+              {canEdit && (
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.voice.exemplars.chars", {
+                    used: row.caption.trim().length,
+                    max: MAX_EXEMPLAR_CHARS,
+                  })}
+                </p>
+              )}
+            </div>
           ))}
+          {canEdit &&
+            exemplars.length < MAX_EXEMPLARS &&
+            exemplars.every((row) => row.caption.trim()) && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() =>
+                  setExemplars((current) => [
+                    ...current,
+                    { id: nextExemplarId.current++, caption: "" },
+                  ])
+                }
+              >
+                {t("settings.voice.exemplars.add")}
+              </Button>
+            )}
         </div>
 
         {canEdit && (
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" disabled={saving} onClick={onCancel}>
+            <Button type="button" variant="outline" disabled={saving || !dirty} onClick={onCancel}>
               {t("common.cancel")}
             </Button>
-            <Button type="button" loading={saving} onClick={() => void onSave()}>
+            <Button type="button" loading={saving} disabled={!dirty} onClick={() => void onSave()}>
               {t("common.save")}
             </Button>
           </div>
