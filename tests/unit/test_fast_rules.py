@@ -100,12 +100,29 @@ def test_query_gen_out_atomic_queries() -> None:
     assert single.atomic_queries() == ["Hong Kong trends"]
 
 
+def test_omit_nulls_drops_null_keys_and_list_items() -> None:
+    from internal.session.io import omit_nulls
+
+    assert omit_nulls(
+        {
+            "search_query": None,
+            "search_queries": ["Usagi food preferences", None, "Usagi rabbit diet"],
+            "time_range": None,
+            "research": {"entity_surface": None, "need_facts": True},
+        }
+    ) == {
+        "search_queries": ["Usagi food preferences", "Usagi rabbit diet"],
+        "research": {"need_facts": True},
+    }
+
+
 def test_query_gen_out_null_optional_fields() -> None:
     """LLM optional-null must not fail the payload (turn c8aab85b)."""
-    from internal.session.io import QueryGenOut
+    import json
 
-    out = QueryGenOut.model_validate_json(
-        """
+    from internal.session.io import QueryGenOut, omit_nulls
+
+    raw = """
         {
           "search_queries": ["Usagi food preferences", "Usagi rabbit diet", null],
           "search_query": null,
@@ -114,8 +131,30 @@ def test_query_gen_out_null_optional_fields() -> None:
           "extra_llm_key": true
         }
         """
-    )
+    out = QueryGenOut.model_validate(omit_nulls(json.loads(raw)))
     assert out.search_query == ""
     assert out.topic == "general"
     assert out.time_range == "week"
     assert out.atomic_queries() == ["Usagi food preferences", "Usagi rabbit diet"]
+
+
+def test_intent_route_nested_nulls() -> None:
+    from internal.session.io import IntentRoute, omit_nulls
+
+    parsed = IntentRoute.model_validate(
+        omit_nulls(
+            {
+                "intent": "chat",
+                "rationale": None,
+                "research": {
+                    "need_facts": True,
+                    "entity_surface": None,
+                    "product_surface": None,
+                },
+            }
+        )
+    )
+    assert parsed.rationale == ""
+    assert parsed.research.need_facts is True
+    assert parsed.research.entity_surface == ""
+    assert parsed.research.product_surface == ""

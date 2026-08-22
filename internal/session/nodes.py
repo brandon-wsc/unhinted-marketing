@@ -65,6 +65,7 @@ from internal.session.io import (
     ResearchFlags,
     ReviewOut,
     TrendRank,
+    omit_nulls,
 )
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW, SessionState
 from internal.session.tiers import NODE_MODEL_TIERS
@@ -167,7 +168,7 @@ async def _parse_llm_json(tier: ModelTier, system: str, user: str, model: type[T
         return None
     try:
         raw = await complete_json(tier=tier, system=system, user=user)
-        parsed = model.model_validate_json(raw)
+        parsed = model.model_validate(omit_nulls(json.loads(raw)))
     except LlmProviderError:
         # Provider/transport/auth/model failures must surface to the UI — do not
         # silently fall back while credentials are configured. The record already
