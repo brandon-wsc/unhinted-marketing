@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-21  
+> **Last updated:** 2026-08-22  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -15,7 +15,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Auth backend (JWT, register/login) | ✅ Done |
 | Auth DB tables + Alembic | ✅ Done |
 | React login / register / dashboard shell | ✅ Done |
-| i18n (zh-HK, English JSON keys) | ✅ Done |
+| i18n (zh-HK, en) | ✅ Done |
 | Dark / light theme (manual switch, no system mode) | ✅ Done |
 | App header (logo + user menu — dropdown on desktop, dialog on mobile) | ✅ Done |
 | HK hot search ingestion | ✅ Done (Google Trends HK only) |
@@ -50,6 +50,12 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Default craft** — HK editor voice (IKEA feel × Duolingo short/sharp): 貼地 · 有鉤 · 有畫面 · 短 · 有邊界
 - **Tunable** — `entities.profile.roast_level` 0–3 (missing → 1); injected as `company_context.voice` in `load_context`
 - **Prompts** — `BRAINSTORM` / `EXECUTOR_POST` / `EDIT_COPY` / `REVIEWER` share craft block + few-shots; chat stays assistant voice
+
+**Decision (2026-08-22) — zh-HK Traditional Chinese voice (no `yue` locale):** → [VOICE.md](./VOICE.md)
+
+- **Locale** — UI + draft locale is `zh-HK` 繁體中文（香港）only (+ `en`). Do not ship a separate 廣東話 / `yue` catalog.
+- **Register** — spoken HK phrasing, 港式英文, and 標語文言 are **voice layers** inside `zh-HK`, not a second language picker.
+- **UI copy** — `zh-HK.json` uses that spoken register (chat empty states, tagline); errors / legal stay clear.
 
 **Decision (2026-08-05) — Image visual format (no new graph node):**
 
@@ -341,7 +347,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 **UX features:**
 
 - **Header:** Logo + brand name (top-left); user menu (top-right) with language, theme switch, logout — dropdown on desktop, dialog on mobile
-- **i18n:** `react-i18next`, locale `zh-HK`, keys in English in `web/src/i18n/locales/zh-HK.json` — extensible via `SUPPORTED_LOCALES`
+- **i18n:** `react-i18next`, locales `zh-HK` / `en` (default `zh-HK`); UI `zh-HK` follows the Traditional Chinese (Hong Kong) voice in [VOICE.md](./VOICE.md) — extensible via `SUPPORTED_LOCALES`
 - **Theme:** Light / dark manual switch (no system mode), persisted in `localStorage`
 - **Form memory:** Last user email / display name / org name from `localStorage` (not fake placeholders)
 - **Auth:** Access token in memory; refresh via cookie; auto-refresh on app load

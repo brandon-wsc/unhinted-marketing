@@ -24,7 +24,7 @@
     }
   },
   "auth": {
-    "craftTagline": "Reliable tools, unleashed copy",
+    "craftTagline": "Boss yaps. Agent posts.",
     "login": {
       "title": "Sign in",
       "subtitle": "Sign in to access the Unhinted Marketing Dashboard",
@@ -63,7 +63,7 @@
       "stale": "Refreshing soon"
     },
     "input": {
-      "placeholder": "Type a message… (Enter to send, Shift+Enter for a new line)"
+      "placeholder": "Type a message…"
     },
     "send": "Send",
     "stop": "Stop",

@@ -9,6 +9,9 @@ const STORAGE_KEY = "unhinted-locale";
 
 function resolveInitialLocale(): string {
   const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored === "yue") {
+    return DEFAULT_LOCALE;
+  }
   if (stored && SUPPORTED_LOCALES.includes(stored as (typeof SUPPORTED_LOCALES)[number])) {
     return stored;
   }
