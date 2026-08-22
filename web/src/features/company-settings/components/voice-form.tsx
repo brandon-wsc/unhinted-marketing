@@ -254,9 +254,11 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
             <p className="text-sm font-medium leading-none">
               {t("settings.voice.exemplars.label")}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("settings.voice.exemplars.hint")}
-            </p>
+            {canEdit && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("settings.voice.exemplars.hint")}
+              </p>
+            )}
           </div>
           {exemplars.length === 0 && (
             <p className="text-sm text-muted-foreground">{t("settings.voice.exemplars.empty")}</p>
@@ -305,12 +307,14 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
                 rows={3}
                 className={cn("min-h-20", row.caption.trim() && "border-voice-border")}
               />
-              <p className="text-xs text-muted-foreground">
-                {t("settings.voice.exemplars.chars", {
-                  used: row.caption.trim().length,
-                  max: MAX_EXEMPLAR_CHARS,
-                })}
-              </p>
+              {canEdit && (
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.voice.exemplars.chars", {
+                    used: row.caption.trim().length,
+                    max: MAX_EXEMPLAR_CHARS,
+                  })}
+                </p>
+              )}
             </div>
           ))}
           {canEdit &&
