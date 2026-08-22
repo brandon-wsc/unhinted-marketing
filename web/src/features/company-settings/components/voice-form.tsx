@@ -305,7 +305,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
                   );
                 }}
                 rows={3}
-                className={cn("min-h-20", row.caption.trim() && "border-voice-border")}
+                className="min-h-20"
               />
               {canEdit && (
                 <p className="text-xs text-muted-foreground">
