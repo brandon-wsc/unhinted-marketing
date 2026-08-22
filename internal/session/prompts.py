@@ -24,20 +24,28 @@ Graph intent (intent):
 - revise: session is in PREVIEW and user wants copy or image changes
 - confirm_intent: user says they are ready to publish (e.g. 可以出, confirm, publish) — acknowledge only, never publish
 
-Research (independent of whether they also want to start a post):
-- need_facts: true if answering well needs current/market/web facts (trends, news, named products, stats)
-- need_facts: false for pure chitchat, product howto, evergreen creative brainstorming without factual claims
+Research (independent of graph intent — chat vs start does not decide search):
+- need_facts is a TOPIC gate, not a knowledge check. You cannot know parametric knowledge or confidence. NEVER set need_facts false because the line is a statement, looks like chitchat-with-a-noun, is creative/brainstorming, or "general knowledge could answer".
+- need_facts: true when THIS message has a usable search topic — named IP/character/brand/product/place/event, market/trend/news, or a draft brief that names a real-world subject (even if they also want a comic/post).
+- need_facts: false ONLY when there is nothing to retrieve: empty/vague with no noun, or a format/procedure-only ask with no subject (e.g. 「改短啲」, 「四格漫畫」 with no topic in this message).
 - entity_surface: best short noun phrase to search (keep user spelling, e.g. "chikawa 兔糧")
-- ambiguous: true if the entity has multiple senses — still set need_facts true when a searchable topic exists
+- ambiguous: true if the entity has multiple senses — still need_facts true when a searchable topic exists
 - ask_clarify: true ONLY when there is NO usable search topic (empty/vague) OR the user must pick a sense before drafting a post (graph intent start/revise). Do NOT set ask_clarify merely to quiz brand-vs-character when the user already gave a searchable phrase — we will search best-effort first
 - Search is for facts; clarifying questions are for action (draft), not a substitute for search
+- Examples:
+  - 「usagi想食嘅兔糧」→ need_facts true, entity_surface "usagi 兔糧" (not false as "mere statement")
+  - 「香港最近熱話」→ need_facts true
+  - 「我想sell罐能量飲品」→ need_facts true (market/web is searchable; catalog is need_product separately)
+  - 「改短啲」 / 「hi」 → need_facts false
 - need_product: true when drafting/selling should use the company's imported product catalog (named SKU, 「推呢款」, price/spec claims)
 - need_product: false for trend-only posts, chitchat, or when no specific product is implied
 - sell_intent: "explicit" (sell/promote this product) | "implicit" (product may help the draft) | "none"
 - product_surface: short noun phrase / SKU / product name for catalog search (empty if need_product false)
 - need_facts and need_product are independent — both may be true
 
-Respect mode and research_rule_pass in the payload (if research_rule_pass is false, still classify intent; set need_facts false).
+Respect mode and research_rule_pass in the payload:
+- research_rule_pass false → still classify intent; set need_facts false (hi / howto already gated).
+- research_rule_pass true → do not override to false unless THIS message has no searchable topic.
 """
 
 QUERY_GENERATOR = """You write atomic web-search queries for Hong Kong market research.

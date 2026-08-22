@@ -1,8 +1,8 @@
 """Structured I/O for session LLM nodes."""
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ResearchFlags(BaseModel):
@@ -25,13 +25,40 @@ class IntentRoute(BaseModel):
     research: ResearchFlags = Field(default_factory=ResearchFlags)
 
 
-class QueryGenOut(BaseModel):
+class LlmJsonModel(BaseModel):
+    """Adapter for LLM JSON: ``null`` / extra keys must not fail the whole payload.
+
+    Models emit null for optional fields and extra keys. Drop nulls so field
+    defaults apply; ignore unknown keys. Semantic mismatches (wrong enum, missing
+    required fields) still fail validation.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="before")
+    @classmethod
+    def omit_nulls(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v is not None}
+        return data
+
+
+class QueryGenOut(LlmJsonModel):
     """Atomic web queries — prefer search_queries; search_query kept for single-query compat."""
 
     search_query: str = Field(default="", max_length=200)
     search_queries: list[str] = Field(default_factory=list, max_length=3)
     topic: Literal["general", "news", "finance"] = "news"
     time_range: Literal["day", "week", "month", "year"] | None = "week"
+
+    @field_validator("search_queries", mode="before")
+    @classmethod
+    def drop_null_query_items(cls, v: Any) -> Any:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [q for q in v if isinstance(q, str) and q.strip()][:3]
+        return v
 
     def atomic_queries(self) -> list[str]:
         qs = [q.strip() for q in self.search_queries if isinstance(q, str) and q.strip()]

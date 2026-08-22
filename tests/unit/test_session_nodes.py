@@ -145,6 +145,38 @@ async def test_query_generator_colloquial_uses_llm(
 
 
 @pytest.mark.asyncio
+async def test_query_generator_accepts_null_optional_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """search_query/time_range null must keep LLM search_queries, not gloss fallback."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+
+    async def fake_complete_json(**_kwargs):
+        return """
+        {
+          "search_queries": ["Usagi food preferences", "Usagi rabbit diet"],
+          "search_query": null,
+          "topic": "general",
+          "time_range": null
+        }
+        """
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    out = await N.query_generator(
+        _base_state(
+            messages=[{"role": "user", "content": "Usagi鍾意食嘅"}],
+            research={"entity_surface": "Usagi 鍾意食", "need_facts": True},
+        )
+    )
+    assert out["search_query"] == "Usagi food preferences"
+    assert out["research"]["search_queries"] == [
+        "Usagi food preferences",
+        "Usagi rabbit diet",
+    ]
+    assert out["research"]["tavily_topic"] == "general"
+
+
+@pytest.mark.asyncio
 async def test_query_generator_fallback_glosses_entity(no_llm: None) -> None:
     out = await N.query_generator(
         _base_state(

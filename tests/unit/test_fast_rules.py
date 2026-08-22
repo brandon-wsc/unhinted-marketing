@@ -98,3 +98,24 @@ def test_query_gen_out_atomic_queries() -> None:
 
     single = QueryGenOut(search_query="Hong Kong trends")
     assert single.atomic_queries() == ["Hong Kong trends"]
+
+
+def test_query_gen_out_null_optional_fields() -> None:
+    """LLM optional-null must not fail the payload (turn c8aab85b)."""
+    from internal.session.io import QueryGenOut
+
+    out = QueryGenOut.model_validate_json(
+        """
+        {
+          "search_queries": ["Usagi food preferences", "Usagi rabbit diet", null],
+          "search_query": null,
+          "topic": "general",
+          "time_range": null,
+          "extra_llm_key": true
+        }
+        """
+    )
+    assert out.search_query == ""
+    assert out.topic == "general"
+    assert out.time_range == "week"
+    assert out.atomic_queries() == ["Usagi food preferences", "Usagi rabbit diet"]
