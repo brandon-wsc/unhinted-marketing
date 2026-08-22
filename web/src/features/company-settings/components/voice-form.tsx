@@ -93,6 +93,18 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
     return out;
   }
 
+  function listEquals(a: string[], b: string[]): boolean {
+    return a.join("\0") === b.join("\0");
+  }
+
+  const dirty =
+    baseline != null &&
+    (roastLevel !== baseline.roast_level ||
+      (locale.trim() || "zh-HK") !== baseline.locale ||
+      !listEquals(parsePhrases(forbiddenText), baseline.forbidden_phrases) ||
+      toneNotes.trim() !== baseline.tone_notes ||
+      !listEquals(parseExemplars(exemplars), baseline.exemplar_captions));
+
   async function onSave() {
     if (!canEdit) return;
     setSaving(true);
@@ -263,10 +275,10 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
 
         {canEdit && (
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" disabled={saving} onClick={onCancel}>
+            <Button type="button" variant="outline" disabled={saving || !dirty} onClick={onCancel}>
               {t("common.cancel")}
             </Button>
-            <Button type="button" loading={saving} onClick={() => void onSave()}>
+            <Button type="button" loading={saving} disabled={!dirty} onClick={() => void onSave()}>
               {t("common.save")}
             </Button>
           </div>

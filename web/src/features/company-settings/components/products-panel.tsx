@@ -90,6 +90,16 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
 
   const extraFields = editor?.kind === "edit" ? extraProfileEntries(editor.product.profile) : [];
   const formEditable = Boolean(canEdit && editor);
+  const editDirty =
+    editor?.kind === "edit" &&
+    (newName.trim() !== editor.product.name.trim() ||
+      newSku.trim() !== editor.product.sku.trim() ||
+      newNotes.trim() !== (editor.product.profile.notes ?? "").trim());
+  const canSaveEditor =
+    formEditable &&
+    !busy &&
+    Boolean(newName.trim() && newSku.trim()) &&
+    (editor?.kind === "add" || editDirty);
 
   function resetForm() {
     setNewName("");
@@ -257,7 +267,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
   }
 
   function onEditorSave() {
-    if (!canEdit || busy || !newName.trim() || !newSku.trim() || !editor) return;
+    if (!canSaveEditor || !editor) return;
     if (editor.kind === "add") {
       void submitAddRow();
       return;
@@ -575,11 +585,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
               <Button type="button" variant="outline" onClick={closeEditor}>
                 {t("common.cancel")}
               </Button>
-              <Button
-                type="button"
-                disabled={busy || !newName.trim() || !newSku.trim()}
-                onClick={onEditorSave}
-              >
+              <Button type="button" disabled={!canSaveEditor} onClick={onEditorSave}>
                 {t("common.save")}
               </Button>
             </DialogFooter>
