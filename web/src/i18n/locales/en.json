@@ -311,9 +311,12 @@
       },
       "exemplars": {
         "label": "Example captions",
-        "hint": "Up to 3 short captions drafts can learn from. You can also save one after Confirm.",
+        "hint": "Up to 3 — you don't need to fill them all. One strong caption is enough for rhythm. You can also save one after Confirm.",
         "slot": "Example {{n}}",
-        "chars": "{{used}} / {{max}}"
+        "chars": "{{used}} / {{max}}",
+        "add": "Add example",
+        "remove": "Remove example",
+        "empty": "No examples yet."
       }
     },
     "products": {
