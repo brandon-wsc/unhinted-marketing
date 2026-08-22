@@ -63,7 +63,7 @@
       "stale": "就快換新"
     },
     "input": {
-      "placeholder": "打句嘢…（Enter 送出，Shift+Enter 換行）"
+      "placeholder": "打句嘢…"
     },
     "send": "送出",
     "stop": "停止",
