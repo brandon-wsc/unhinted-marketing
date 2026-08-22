@@ -14,7 +14,7 @@
 | Page | Contents |
 |------|----------|
 | Library | Token swatches (light + dark, renamed `token (mode)`), type scale (IBM Plex Sans / Noto Sans HK), component set: buttons, badges, inputs, question cards, agent action trail (voice accent), chat bubbles, tabs, icon buttons (akar send / stop), theme switch. **Accent = voice hover wash**; secondary is the resting gray wash; muted is solid gray — see [TOKENS.md](./TOKENS.md). |
-| Login · Register | Orderly centered auth card; exactly ONE corner craft signal (voice ✳ + “Reliable tools, unleashed copy”) |
+| Login · Register | Orderly centered auth card; exactly ONE corner craft signal (voice ✳ + “Boss yaps. Agent posts.” / 「腦細要Growth 我哋秒Post」) |
 | Session — split | Desktop 1440: `empty` (landing + recommended questions) and `preview` (chat + action trail + interrupt card; preview pane with IG mock, revision/dirty badges, Confirm gate with serious copy); composer card stacks textarea then send/stop icon row (not overlaid on the textarea corner); queue tucks above the card |
 | Session — paged | Mobile 390: `record` (history), `chat` (same composer stack + queue tuck), `preview` (IG mock + Confirm gate) |
 | Dialogs | Edit copy … UserMenu — desktop dropdown / mobile dialog (theme = light/dark switch, no system mode). Order: identity → 語言 → 外觀 → **公司設定** → **系統** (platform only; not 管理後台) → **登出** (destructive). **Remove member** confirm |
