@@ -320,20 +320,20 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
           {canEdit &&
             exemplars.length < MAX_EXEMPLARS &&
             exemplars.every((row) => row.caption.trim()) && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={saving}
-              onClick={() =>
-                setExemplars((current) => [
-                  ...current,
-                  { id: nextExemplarId.current++, caption: "" },
-                ])
-              }
-            >
-              {t("settings.voice.exemplars.add")}
-            </Button>
-          )}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() =>
+                  setExemplars((current) => [
+                    ...current,
+                    { id: nextExemplarId.current++, caption: "" },
+                  ])
+                }
+              >
+                {t("settings.voice.exemplars.add")}
+              </Button>
+            )}
         </div>
 
         {canEdit && (
