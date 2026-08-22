@@ -115,6 +115,7 @@ async def test_query_generator_normalize_without_llm(no_llm: None) -> None:
     )
     assert "search_query" in out
     assert "Hong Kong" in out["search_query"] or "香港" in out["search_query"]
+    assert out["research"]["query_source"] == "normalize"
 
 
 @pytest.mark.asyncio
@@ -138,6 +139,7 @@ async def test_query_generator_colloquial_uses_llm(
         )
     )
     assert out["search_query"] == "Usagi rabbit food"
+    assert out["research"]["query_source"] == "llm"
     assert out["research"]["search_queries"] == [
         "Usagi rabbit food",
         "Usagi pet feed Hong Kong",
@@ -174,6 +176,7 @@ async def test_query_generator_accepts_null_optional_json(
         "Usagi rabbit diet",
     ]
     assert out["research"]["tavily_topic"] == "general"
+    assert out["research"]["query_source"] == "llm"
 
 
 @pytest.mark.asyncio
@@ -188,6 +191,7 @@ async def test_query_generator_fallback_glosses_entity(no_llm: None) -> None:
     assert "rabbit food" in out["search_query"].lower()
     assert "usagi" in out["search_query"].lower()
     assert all("兔糧" not in q for q in out["research"]["search_queries"])
+    assert out["research"]["query_source"] == "fallback"
 
 
 @pytest.mark.asyncio
@@ -224,10 +228,72 @@ async def test_research_ingest_pg_and_tavily(
             )
         )
     assert out["research_signals"][0]["signal_id"] == "tavily:abc"
+    assert out["research"]["signals_trusted"] is True
     assert any(s["signal_id"] == "google_trends_hk:1" for s in out["research_signals"])
     assert N.search_tavily.await_count == 2
     N.upsert_signal.assert_awaited()
     mock_db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_research_ingest_untrusted_when_no_tavily(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    monkeypatch.setattr(N, "search_tavily", AsyncMock(return_value=[]))
+    monkeypatch.setattr(N, "upsert_signal", AsyncMock())
+    monkeypatch.setattr(
+        N,
+        "list_top_signals",
+        AsyncMock(return_value=[fake_signal(signal_id="google_trends_hk:1", title="PG")]),
+    )
+    with session_db(mock_db):
+        out = await N.research_ingest(
+            _base_state(
+                search_query="Hong Kong overtime",
+                research={
+                    "search_queries": ["Hong Kong overtime"],
+                    "query_source": "llm",
+                },
+            )
+        )
+    assert out["research"]["signals_trusted"] is False
+    assert any(s["signal_id"] == "google_trends_hk:1" for s in out["research_signals"])
+
+
+@pytest.mark.asyncio
+async def test_research_ingest_untrusted_when_query_fallback(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    monkeypatch.setattr(
+        N,
+        "search_tavily",
+        AsyncMock(
+            return_value=[
+                {
+                    "signal_id": "tavily:abc",
+                    "source": "tavily",
+                    "title": "HK trend",
+                    "url": "https://example.com/a",
+                    "excerpt": "hello",
+                    "metrics": {"rank": 1},
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(N, "upsert_signal", AsyncMock())
+    monkeypatch.setattr(N, "list_top_signals", AsyncMock(return_value=[]))
+    with session_db(mock_db):
+        out = await N.research_ingest(
+            _base_state(
+                search_query="Usagi Hong Kong",
+                research={
+                    "search_queries": ["Usagi Hong Kong"],
+                    "query_source": "fallback",
+                },
+            )
+        )
+    assert out["research"]["signals_trusted"] is False
+    assert out["research_signals"][0]["signal_id"] == "tavily:abc"
 
 
 @pytest.mark.asyncio
@@ -455,6 +521,20 @@ async def test_reviewer_mock_llm_pass(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     )
     assert out["reviewer_passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_reviewer_parse_miss_fails_closed(no_llm: None) -> None:
+    out = await N.reviewer(
+        _base_state(
+            grounding_ok=True,
+            draft={"caption": "ok", "hashtags": [], "cta": ""},
+        )
+    )
+    assert out["reviewer_passed"] is False
+    assert "JSON" not in out["reviewer_feedback"]
+    assert "parse" not in out["reviewer_feedback"].lower()
+    assert out["reviewer_feedback"] == N.REVIEWER_PARSE_MISS_FEEDBACK
 
 
 @pytest.mark.asyncio

@@ -5257,6 +5257,28 @@
             "type": "boolean",
             "title": "Ran Research Ingest",
             "default": false
+          },
+          "query_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Source"
+          },
+          "signals_trusted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signals Trusted"
           }
         },
         "type": "object",

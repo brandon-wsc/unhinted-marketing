@@ -75,6 +75,7 @@ Given company context and candidate signals, pick the most relevant signal_ids (
 Return JSON only:
 {"ranked_signal_ids":["id",...],"notes":"short English note"}
 Only use signal_ids from the input list.
+If signals_trusted is false, do not treat the list as this turn's current facts — rank conservatively and keep notes generic.
 Prefer signals that unlock a timeless human emotion or lived HK scene (tired commute, FOMO queue, boss flip-flops)—not only keyword overlap with the company name.
 """
 
@@ -85,7 +86,9 @@ Do not draft a full publish-ready post unless they clearly ask to start — sugg
 Keep replies concise (2–5 sentences). No tool calls. No emoji spam.
 
 Grounding:
-- If research_signals are provided, lead with what those signals support; do not invent stats/rankings.
+- If signals_trusted is false: do not lead with research_signals as current market facts (they may be stale or unrelated). Do not invent stats. If the user asked for current facts, say you do not have grounded sources yet.
+- If signals_trusted is true and research_signals are provided, lead with what those signals support; do not invent stats/rankings.
+- If signals_trusted is omitted/null, keep the previous two rules based on whether research_signals exist.
 - Do NOT open with a multiple-choice quiz about what the user meant when research_signals exist or a clear topic was given — answer first.
 - Soft clarify (at most one short question) only after answering, and only if ask_clarify is true AND it would change the next action (e.g. drafting a post). Never use clarify instead of using available signals.
 - If product_clarify is true and product_candidates are provided, ask which product/SKU to use (list names briefly) — do not invent SKUs or prices.
@@ -126,6 +129,7 @@ Return JSON only:
 }}
 {_CRAFT_BLOCK}
 Facts must be grounded in the provided signals.
+If signals_trusted is false, do not treat signals as current market facts; avoid stats/rankings and do not invent citations.
 Prefer zh-HK for user-facing strings in can_do/angles/summary when the company is HK-focused.
 Each angle MUST name: (1) the human emotion/pain, (2) a one-second visual hook, (3) the product bridge — not generic「提升品牌曝光」or roasting a named institution.
 cannot_do must include: inventing stats, publishing without UI Confirm, humour that hurts the brand, punching down on named orgs/events as the joke.
@@ -150,6 +154,7 @@ Writing Rules for Authentic HK Vibe:
 - Tone Control: Strictly adhere to the requested `roast_level`. Never use corporate PR speak ("本公司誠意推出").
 - If voice_pack.exemplar_captions are provided, match their rhythm and spoken feel — do not copy them verbatim.
 - Constraints: `source_signal_ids` must be a subset of allowed_signal_ids from the user payload. Never claim the post is already published.
+- If signals_trusted is false: do not present signal titles as current news/stats; write a scene without invented market claims.
 
 Few-shot Examples (Do not copy verbatim, learn the rhythm):
 
@@ -197,6 +202,7 @@ Fail if any of:
 - punchline targets a named institution/event instead of a human emotion
 - no Bridge back to product benefit (pure venting)
 Pass only if copy is usable for preview at the company's roast_level.
+If signals_trusted is false, fail ungrounded market/news/stat claims that lean on ranked signals as current facts.
 """
 
 IMAGE_PLAN = """You design an image generation plan for a social post (no copyrighted brands/logos).

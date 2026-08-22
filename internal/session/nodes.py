@@ -81,6 +81,13 @@ logger = logging.getLogger(__name__)
 MAX_REVIEW_RETRIES = 2
 T = TypeVar("T", bound=BaseModel)
 
+QUERY_SOURCE_LLM = "llm"
+QUERY_SOURCE_NORMALIZE = "normalize"
+QUERY_SOURCE_FALLBACK = "fallback"
+REVIEWER_PARSE_MISS_FEEDBACK = (
+    "Review could not be completed — tighten grounding and craft."
+)
+
 
 def _last_user_text(state: SessionState) -> str:
     messages = state.get("messages") or []
@@ -156,6 +163,14 @@ def _heuristic_intent(state: SessionState) -> str:
     if mode == MODE_AGENT and not (state.get("draft") or {}).get("caption"):
         return "start"
     return "chat"
+
+
+def _signals_trusted(state: SessionState) -> bool | None:
+    """Consumer bit from research_ingest; None if research never marked trust."""
+    research = state.get("research") or {}
+    if "signals_trusted" not in research:
+        return None
+    return bool(research.get("signals_trusted"))
 
 
 def _wants_image_change(text: str) -> bool:
@@ -343,7 +358,11 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
     if normalized:
         return {
             "search_query": normalized,
-            "research": {**research, "search_queries": [normalized]},
+            "research": {
+                **research,
+                "search_queries": [normalized],
+                "query_source": QUERY_SOURCE_NORMALIZE,
+            },
         }
 
     payload = {
@@ -368,13 +387,18 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
                     "search_queries": queries,
                     "tavily_topic": parsed.topic,
                     "tavily_time_range": parsed.time_range,
+                    "query_source": QUERY_SOURCE_LLM,
                 },
             }
     # Fallback: gloss entity/user — never paste mixed-script entity_surface
     queries = fallback_search_queries(entity, user)
     return {
         "search_query": queries[0],
-        "research": {**research, "search_queries": queries},
+        "research": {
+            **research,
+            "search_queries": queries,
+            "query_source": QUERY_SOURCE_FALLBACK,
+        },
     }
 
 
@@ -465,11 +489,17 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
         seen.add(sid)
         merged.append(row)
 
+    query_source = str(research.get("query_source") or "")
+    signals_trusted = query_source != QUERY_SOURCE_FALLBACK and bool(tavily_items)
     return {
         "research_signals": merged[:20],
         "search_query": queries[0] if queries else primary,
         "source_signal_ids": [r["signal_id"] for r in merged[:8]],
-        "research": {**research, "search_queries": queries},
+        "research": {
+            **research,
+            "search_queries": queries,
+            "signals_trusted": signals_trusted,
+        },
     }
 
 
@@ -514,6 +544,7 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
             "company": company,
             "user_request": _last_user_text(state),
             "signals": signals_payload,
+            "signals_trusted": _signals_trusted(state),
         }
         parsed = await _parse_llm_json(
             NODE_MODEL_TIERS["trend_searcher"] or ModelTier.CHEAP,
@@ -545,6 +576,7 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
         "company": company,
         "user_request": _last_user_text(state),
         "signals": _signals_payload(signals),
+        "signals_trusted": _signals_trusted(state),
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["trend_searcher"] or ModelTier.CHEAP,
@@ -602,6 +634,7 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
             "ask_clarify": bool(research.get("ask_clarify") or research.get("ambiguous")),
             "entity_surface": research.get("entity_surface") or "",
             "research_signals": (state.get("research_signals") or [])[:8],
+            "signals_trusted": _signals_trusted(state),
             "voice_pack": {
                 "roast_level": pack.get("roast_level"),
                 "locale": pack.get("locale"),
@@ -657,6 +690,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
                             ),
                             "entity_surface": research.get("entity_surface") or "",
                             "research_signals": (state.get("research_signals") or [])[:8],
+                            "signals_trusted": _signals_trusted(state),
                             "voice_pack": {
                                 "roast_level": pack.get("roast_level"),
                                 "locale": pack.get("locale"),
@@ -790,6 +824,7 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
         "audience_catalog": catalog,
         "user_request": _last_user_text(state),
         "signals": signals,
+        "signals_trusted": _signals_trusted(state),
         "source_signal_ids": state.get("source_signal_ids") or [],
         "primary_product": state.get("primary_product"),
         "related_products": (state.get("related_products") or [])[:2],
@@ -826,6 +861,7 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "active_persona": state.get("active_persona"),
         "brief": state.get("brief") or {},
         "signals": signals,
+        "signals_trusted": _signals_trusted(state),
         "allowed_signal_ids": signal_ids,
         "user_request": _last_user_text(state),
         "primary_product": state.get("primary_product"),
@@ -950,6 +986,7 @@ async def reviewer(state: SessionState) -> dict[str, Any]:
         "voice_pack": _voice_pack(state),
         "primary_product": state.get("primary_product"),
         "source_signal_ids": state.get("source_signal_ids") or [],
+        "signals_trusted": _signals_trusted(state),
         "grounding_ok": state.get("grounding_ok", True),
         "mode": state.get("mode"),
     }
@@ -966,12 +1003,9 @@ async def reviewer(state: SessionState) -> dict[str, Any]:
             "review_attempts": attempts,
         }
 
-    # Fallback: pass when grounded and caption present
-    draft = state.get("draft") or {}
-    ok = bool(draft.get("caption")) and state.get("grounding_ok", True) is not False
     return {
-        "reviewer_passed": ok,
-        "reviewer_feedback": "" if ok else "Caption missing or grounding failed",
+        "reviewer_passed": False,
+        "reviewer_feedback": REVIEWER_PARSE_MISS_FEEDBACK,
         "review_attempts": attempts,
     }
 

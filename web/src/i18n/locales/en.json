@@ -508,6 +508,8 @@
       "askClarify": "ask_clarify",
       "entity": "entity",
       "ingest": "ran ingest",
+      "querySource": "query_source",
+      "signalsTrusted": "signals_trusted",
       "queries": "Search queries",
       "noQueries": "No atomic queries",
       "hits": "Hits",

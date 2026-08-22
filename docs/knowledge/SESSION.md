@@ -68,6 +68,8 @@ Side channel on `route_intent` output (`ResearchFlags` in `internal/session/io.p
 | `ask_clarify` | User must pick a sense before **drafting** (not a substitute for search) |
 | `entity_surface` | Short noun phrase hint for `query_generator` |
 | `rationale` | Debug / trace |
+| `query_source` | How queries were produced: `llm` \| `normalize` \| `fallback` (ops; set by `query_generator`) |
+| `signals_trusted` | Consumer bit (set by `research_ingest`): `false` if fallback queries or no Tavily items this turn |
 
 Example (market-only turn — no catalog):
 

@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-22  
+> **Last updated:** 2026-08-23  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -42,6 +42,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **`query_generator`** — 1–3 atomic `search_queries`; reject spoken clauses and mixed Latin+CJK entity pastes; gloss fallback (`兔糧` → `rabbit food`) when LLM unavailable
 - **Both sources** — research always uses PostgreSQL **and** Tavily; do not skip Tavily on PG hit; both land in `raw_news_events`
 - **Act ≠ search** — `start` / revise gated on clear intent (+ clarify if ambiguous), not on Tavily success; **ambiguity does not block research** — searchable phrases search best-effort first; ask_clarify is for drafting, not a quiz instead of search
+- **Search ≠ trusted** — soft-fail continues the turn; `research.query_source` (`llm` / `normalize` / `fallback`) + `research.signals_trusted` mark quality for chat/draft/reviewer. Gloss+Tavily still run on parse miss; untrusted signals must not be led as current facts. Reviewer parse miss is fail-closed.
 - **Admin** — `GET /api/admin/sessions/{id}/research` + `/admin` Research tab
 - **Implementation** — shipped on `feat/session-research-tavily` (`TAVILY_API_KEY`, semantic-router, nodes, admin)
 
