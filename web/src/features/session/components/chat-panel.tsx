@@ -827,9 +827,7 @@ function AgentActionList({
                 key={action.id}
                 className={cn(
                   "flex items-start gap-2 text-xs leading-snug",
-                  isRunning
-                    ? "-mx-1.5 rounded-md bg-voice-soft px-1.5 py-1 text-voice"
-                    : "text-muted-foreground",
+                  isRunning ? "text-voice" : "text-muted-foreground",
                 )}
               >
                 <span
