@@ -1,5 +1,5 @@
 import { cjk } from "@streamdown/cjk";
-import { Check, CornerDownRight, Ellipsis, Pencil, Square, Trash2 } from "lucide-react";
+import { Check, Copy, CornerDownRight, Ellipsis, Pencil, Square, Trash2 } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
@@ -34,6 +35,8 @@ import type {
 import { useRecommendedQuestions } from "@/features/session/use-recommended-questions";
 import { useSession } from "@/features/session/use-session";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { useNow } from "@/hooks/use-now";
+import { classifyRelativeTime, formatAbsoluteDateTime } from "@/lib/format-relative-time";
 import { cn } from "@/lib/utils";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
@@ -89,6 +92,7 @@ export function ChatPanel() {
     deleteSession,
   } = useSession(companyId);
   const { questions, loading: questionsLoading, isStale } = useRecommendedQuestions(companyId);
+  const now = useNow();
   const [input, setInput] = useState("");
   const [editInsertAt, setEditInsertAt] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -414,6 +418,7 @@ export function ChatPanel() {
                 <div key={m.id} className="flex flex-col gap-5">
                   <ChatMessageItem
                     message={m}
+                    now={now}
                     retryContent={prevUser}
                     retryDisabled={stopping || (sending && queueFull)}
                     onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
@@ -865,11 +870,13 @@ function LlmErrorCard({
 
 function ChatMessageItem({
   message,
+  now,
   onRetry,
   retryContent,
   retryDisabled,
 }: {
   message: ChatMessage;
+  now: Date;
   onRetry?: () => void;
   retryContent?: string | null;
   retryDisabled?: boolean;
@@ -877,8 +884,16 @@ function ChatMessageItem({
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground sm:max-w-[75%]">
-          {message.content}
+        <div className="flex max-w-[85%] flex-col sm:max-w-[75%]">
+          <div className="whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+            {message.content}
+          </div>
+          <MessageMeta
+            align="user"
+            content={message.content}
+            createdAt={message.created_at}
+            now={now}
+          />
         </div>
       </div>
     );
@@ -897,6 +912,105 @@ function ChatMessageItem({
       <Streamdown mode="static" plugins={{ cjk }}>
         {message.content}
       </Streamdown>
+      <MessageMeta
+        align="assistant"
+        content={message.content}
+        createdAt={message.created_at}
+        now={now}
+      />
+    </div>
+  );
+}
+
+function MessageMeta({
+  align,
+  content,
+  createdAt,
+  now,
+}: {
+  align: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  now: Date;
+}) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(id);
+  }, [copied]);
+
+  const relative = classifyRelativeTime(createdAt, now);
+  const absolute = formatAbsoluteDateTime(createdAt);
+  const timeLabel =
+    relative.kind === "relative"
+      ? t(`chat.message.time.${relative.unit}`, { n: relative.n })
+      : relative.kind === "absolute"
+        ? relative.text
+        : null;
+
+  async function onCopy() {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  const copyButton = (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <IconButton
+          type="button"
+          className="h-6 w-6"
+          aria-label={copied ? t("chat.message.copied") : t("chat.message.copy")}
+          onClick={() => void onCopy()}
+        >
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+        </IconButton>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        {copied ? t("chat.message.copied") : t("chat.message.copy")}
+      </TooltipContent>
+    </Tooltip>
+  );
+
+  const timeLabelNode =
+    timeLabel && absolute ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <time
+            dateTime={createdAt}
+            className="cursor-default text-[11px] tabular-nums text-muted-foreground"
+          >
+            {timeLabel}
+          </time>
+        </TooltipTrigger>
+        <TooltipContent side="top">{absolute}</TooltipContent>
+      </Tooltip>
+    ) : null;
+
+  return (
+    <div
+      className={cn(
+        "mt-1 flex items-center gap-1 sm:gap-1.5",
+        align === "user" ? "justify-end" : "justify-start",
+      )}
+    >
+      {align === "user" ? (
+        <>
+          {timeLabelNode}
+          {copyButton}
+        </>
+      ) : (
+        <>
+          {copyButton}
+          {timeLabelNode}
+        </>
+      )}
     </div>
   );
 }
