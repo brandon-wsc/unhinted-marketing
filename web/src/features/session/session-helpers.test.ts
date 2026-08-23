@@ -5,6 +5,7 @@ import {
   agentNodeLabelKey,
   agentTrailHeader,
   asStringList,
+  EMPTY_COMPOSER_DRAFT,
   isUserFacingAgentNode,
   MAX_QUEUED_SESSION_MESSAGES,
   mergePreviewDraft,
@@ -16,9 +17,16 @@ import {
   parseDraftCopy,
   parseTurnDurationMs,
   previewAnchorFromActions,
+  readComposerDraft,
+  stashComposerDraft,
   waitForSseReady,
 } from "@/features/session/session-helpers";
-import type { AgentActionRecord, ChatMessage, PreviewDraft } from "@/features/session/types";
+import type {
+  AgentActionRecord,
+  ChatMessage,
+  ComposerDraft,
+  PreviewDraft,
+} from "@/features/session/types";
 
 describe("asStringList", () => {
   it("keeps only string entries", () => {
@@ -422,5 +430,34 @@ describe("waitForSseReady", () => {
     const done = waitForSseReady(ref, 80);
     await vi.advanceTimersByTimeAsync(120);
     await expect(done).resolves.toBeUndefined();
+  });
+});
+
+describe("composer draft stash", () => {
+  it("saves and restores a per-session snapshot", () => {
+    const drafts = new Map<string, ComposerDraft>();
+    const current: ComposerDraft = {
+      queued: [{ id: "q1", content: "follow up" }],
+      input: "half typed",
+      editInsertAt: 0,
+    };
+    stashComposerDraft(drafts, "sess-a", current);
+    expect(readComposerDraft(drafts, "sess-a")).toEqual(current);
+    expect(readComposerDraft(drafts, "sess-b")).toEqual(EMPTY_COMPOSER_DRAFT);
+    expect(readComposerDraft(drafts, null)).toEqual(EMPTY_COMPOSER_DRAFT);
+  });
+
+  it("copies so later mutations do not leak across sessions", () => {
+    const drafts = new Map<string, ComposerDraft>();
+    const queued = [{ id: "q1", content: "follow up" }];
+    stashComposerDraft(drafts, "sess-a", {
+      queued,
+      input: "a",
+      editInsertAt: null,
+    });
+    queued.push({ id: "q2", content: "other" });
+    expect(readComposerDraft(drafts, "sess-a").queued).toEqual([
+      { id: "q1", content: "follow up" },
+    ]);
   });
 });

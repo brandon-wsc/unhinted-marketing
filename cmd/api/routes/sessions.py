@@ -23,6 +23,7 @@ from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import Session, User
 from internal.session.events import format_sse, session_event_bus
+from internal.session.graph import INTERRUPT_BEFORE
 from internal.session.service import (
     DEFAULT_PLATFORM,
     SessionTurnConflict,
@@ -101,6 +102,14 @@ def _brief_from_state(state: dict | None) -> SessionBriefData | None:
     if not (brief.summary or brief.can_do or brief.cannot_do or brief.angles):
         return None
     return brief
+
+
+def _image_interrupt_from_snapshot(state: dict | None, snap_next: object) -> bool:
+    """Generate-image CTA only — a running graph (`snap.next` non-empty) is not parked."""
+    if bool((state or {}).get("awaiting_image_ok")):
+        return True
+    nxt = snap_next if isinstance(snap_next, (list, tuple)) else ()
+    return any(node in nxt for node in INTERRUPT_BEFORE)
 
 
 async def _require_owned_session(
@@ -439,13 +448,13 @@ async def session_events(
     platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
     media_items = await list_latest_session_media(db, session)
 
-    interrupted = bool(state.get("awaiting_image_ok"))
+    interrupted = _image_interrupt_from_snapshot(state, ())
     try:
         from internal.session.graph import get_session_graph
 
         graph = get_session_graph()
         snap = await graph.aget_state({"configurable": {"thread_id": str(session.id)}})
-        interrupted = bool(snap.next)
+        interrupted = _image_interrupt_from_snapshot(state, snap.next)
     except Exception:
         # Graph/checkpointer may be unavailable in tests / early boot.
         logger.debug("session events: could not read graph interrupt state", exc_info=True)

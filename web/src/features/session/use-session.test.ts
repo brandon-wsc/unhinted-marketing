@@ -87,6 +87,53 @@ const historyItem: SessionListItem = {
   pinned: false,
 };
 
+const sessionB: Session = {
+  ...sessionFixture,
+  id: "sess-2",
+  created_at: "2026-01-02T00:00:00Z",
+  updated_at: "2026-01-02T00:00:00Z",
+};
+
+const sessionC: Session = {
+  ...sessionFixture,
+  id: "sess-3",
+  created_at: "2026-01-03T00:00:00Z",
+  updated_at: "2026-01-03T00:00:00Z",
+};
+
+const msgA = {
+  id: "u-a",
+  session_id: "sess-1",
+  role: "user",
+  content: "from A",
+  created_at: "2026-01-01T00:00:01Z",
+};
+
+const msgB = {
+  id: "u-b",
+  session_id: "sess-2",
+  role: "user",
+  content: "from B",
+  created_at: "2026-01-02T00:00:01Z",
+};
+
+const msgC = {
+  id: "u-c",
+  session_id: "sess-3",
+  role: "user",
+  content: "from C",
+  created_at: "2026-01-03T00:00:01Z",
+};
+
+const idleTurn = {
+  interrupted: false,
+  mode: "CHAT",
+  revision: null,
+  pending_confirm: false,
+  approval_token: null,
+  events: [] as { type: string; data?: Record<string, unknown> }[],
+};
+
 describe("useSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1307,5 +1354,321 @@ describe("useSession", () => {
     expect(result.current.messages).toEqual([priorAssistant]);
     expect(result.current.agentActions).toEqual([]);
     expect(result.current.composerLocked).toBe(false);
+  });
+
+  it("does not paint an in-flight turn onto another session", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockImplementation((_tok: string | null, id: string) =>
+      Promise.resolve(
+        id === "sess-2"
+          ? { session: sessionB, messages: [msgB] }
+          : { session: sessionFixture, messages: [msgA] },
+      ),
+    );
+    let resolvePost: (value: unknown) => void = () => {};
+    apiPostSessionMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePost = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    act(() => {
+      void result.current.sendMessage("first");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      await result.current.openSession("sess-2");
+    });
+    expect(result.current.session?.id).toBe("sess-2");
+    expect(result.current.sending).toBe(false);
+    expect(result.current.messages).toEqual([msgB]);
+
+    await act(async () => {
+      resolvePost({
+        session: sessionFixture,
+        messages: [
+          msgA,
+          {
+            id: "u-a2",
+            session_id: "sess-1",
+            role: "user",
+            content: "first",
+            created_at: "2026-01-01T00:00:02Z",
+          },
+        ],
+        ...idleTurn,
+      });
+    });
+
+    expect(result.current.session?.id).toBe("sess-2");
+    expect(result.current.messages).toEqual([msgB]);
+    expect(result.current.sending).toBe(false);
+  });
+
+  it("restores sending when returning to a session with a live POST", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockImplementation((_tok: string | null, id: string) =>
+      Promise.resolve(
+        id === "sess-2"
+          ? { session: sessionB, messages: [msgB] }
+          : { session: sessionFixture, messages: [msgA] },
+      ),
+    );
+    let resolvePost: (value: unknown) => void = () => {};
+    apiPostSessionMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePost = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    act(() => {
+      void result.current.sendMessage("first");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      await result.current.openSession("sess-2");
+    });
+    expect(result.current.sending).toBe(false);
+
+    await act(async () => {
+      await result.current.openSession("sess-1");
+    });
+    expect(result.current.session?.id).toBe("sess-1");
+    expect(result.current.sending).toBe(true);
+    expect(result.current.messages.some((m) => m.content === "first")).toBe(true);
+
+    await act(async () => {
+      resolvePost({
+        session: sessionFixture,
+        messages: [
+          msgA,
+          {
+            id: "u-a2",
+            session_id: "sess-1",
+            role: "user",
+            content: "first",
+            created_at: "2026-01-01T00:00:02Z",
+          },
+        ],
+        ...idleTurn,
+      });
+    });
+
+    await waitFor(() => expect(result.current.sending).toBe(false));
+    expect(result.current.messages.some((m) => m.content === "first")).toBe(true);
+  });
+
+  it("saves and restores queue plus textarea across session switch", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockImplementation((_tok: string | null, id: string) =>
+      Promise.resolve(
+        id === "sess-2"
+          ? { session: sessionB, messages: [msgB] }
+          : { session: sessionFixture, messages: [msgA] },
+      ),
+    );
+    apiPostSessionMessage.mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    act(() => {
+      result.current.setComposerInput("half typed");
+      void result.current.sendMessage("first");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+    await act(async () => {
+      await result.current.sendMessage("queued on A");
+    });
+
+    await act(async () => {
+      await result.current.openSession("sess-2");
+    });
+    expect(result.current.queuedMessages).toEqual([]);
+    expect(result.current.composerInput).toBe("");
+
+    act(() => {
+      result.current.setComposerInput("from B");
+    });
+
+    await act(async () => {
+      await result.current.openSession("sess-1");
+    });
+    expect(result.current.composerInput).toBe("half typed");
+    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["queued on A"]);
+  });
+
+  it("ignores a slower openSession hydrate", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    let resolveB: ((value: unknown) => void) | undefined;
+    apiGetSessionMessages.mockImplementation((_tok: string | null, id: string) => {
+      if (id === "sess-2") {
+        return new Promise((resolve) => {
+          resolveB = resolve;
+        });
+      }
+      if (id === "sess-3") {
+        return Promise.resolve({ session: sessionC, messages: [msgC] });
+      }
+      return Promise.resolve({ session: sessionFixture, messages: [msgA] });
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    await act(async () => {
+      void result.current.openSession("sess-2");
+      await result.current.openSession("sess-3");
+    });
+    expect(result.current.session?.id).toBe("sess-3");
+    expect(result.current.messages).toEqual([msgC]);
+
+    await act(async () => {
+      resolveB?.({ session: sessionB, messages: [msgB] });
+    });
+    expect(result.current.session?.id).toBe("sess-3");
+    expect(result.current.messages).toEqual([msgC]);
+  });
+
+  it("startNewChat stashes the previous session composer draft", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockImplementation((_tok: string | null, id: string) =>
+      Promise.resolve(
+        id === "sess-new"
+          ? { session: { ...sessionFixture, id: "sess-new" }, messages: [] }
+          : { session: sessionFixture, messages: [msgA] },
+      ),
+    );
+    const fresh = {
+      ...sessionFixture,
+      id: "sess-new",
+      created_at: "2026-01-02T00:00:00Z",
+      updated_at: "2026-01-02T00:00:00Z",
+    };
+    apiCreateSession.mockResolvedValue(fresh);
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    act(() => {
+      result.current.setComposerInput("keep me");
+    });
+
+    await act(async () => {
+      await result.current.startNewChat();
+    });
+    expect(result.current.session?.id).toBe("sess-new");
+    expect(result.current.composerInput).toBe("");
+    expect(result.current.messages).toEqual([]);
+
+    await act(async () => {
+      await result.current.openSession("sess-1");
+    });
+    expect(result.current.session?.id).toBe("sess-1");
+    expect(result.current.composerInput).toBe("keep me");
+  });
+
+  it("does not apply the previous session SSE onto the chat after switch", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockImplementation((_tok: string | null, id: string) =>
+      Promise.resolve(
+        id === "sess-2"
+          ? { session: sessionB, messages: [msgB] }
+          : { session: sessionFixture, messages: [msgA] },
+      ),
+    );
+    const handlers = new Map<string, (type: string, data: Record<string, unknown>) => void>();
+    subscribeSessionEvents.mockImplementation(
+      (opts: {
+        sessionId: string;
+        onOpen?: () => void;
+        onEvent: (type: string, data: Record<string, unknown>) => void;
+      }) => {
+        handlers.set(opts.sessionId, opts.onEvent);
+        opts.onOpen?.();
+        return new Promise<void>(() => {});
+      },
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    await act(async () => {
+      await result.current.openSession("sess-2");
+    });
+    expect(result.current.messages).toEqual([msgB]);
+
+    await act(async () => {
+      handlers.get("sess-1")?.("message.delta", { content: "leak from A" });
+      handlers.get("sess-1")?.("message.assistant", {
+        id: "a-leak",
+        content: "leak from A",
+      });
+    });
+
+    expect(result.current.session?.id).toBe("sess-2");
+    expect(result.current.messages).toEqual([msgB]);
+    expect(result.current.streamingText).toBeNull();
+    expect(result.current.messages.some((m) => m.id === "a-leak")).toBe(false);
+  });
+
+  it("does not show the Generate-image card when snapshot interrupted is only an in-flight graph", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockImplementation((_tok: string | null, id: string) =>
+      Promise.resolve(
+        id === "sess-2"
+          ? { session: sessionB, messages: [msgB], awaiting_image_ok: false }
+          : { session: sessionFixture, messages: [msgA], awaiting_image_ok: false },
+      ),
+    );
+    const handlers = new Map<string, (type: string, data: Record<string, unknown>) => void>();
+    subscribeSessionEvents.mockImplementation(
+      (opts: {
+        sessionId: string;
+        onOpen?: () => void;
+        onEvent: (type: string, data: Record<string, unknown>) => void;
+      }) => {
+        handlers.set(opts.sessionId, opts.onEvent);
+        opts.onOpen?.();
+        return new Promise<void>(() => {});
+      },
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    await act(async () => {
+      await result.current.openSession("sess-2");
+    });
+    expect(result.current.awaitingImageOk).toBe(false);
+
+    await act(async () => {
+      handlers.get("sess-2")?.("session.snapshot", {
+        interrupted: true,
+        state: {},
+        mode: "AGENT",
+      });
+    });
+    expect(result.current.awaitingImageOk).toBe(false);
+
+    await act(async () => {
+      handlers.get("sess-2")?.("session.snapshot", {
+        interrupted: true,
+        state: { awaiting_image_ok: true },
+        mode: "AGENT",
+      });
+    });
+    expect(result.current.awaitingImageOk).toBe(true);
+    expect(result.current.interruptAfterMessageId).toBe("u-b");
   });
 });

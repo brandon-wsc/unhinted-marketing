@@ -2,6 +2,7 @@ import type {
   AgentActionRecord,
   AgentProgress,
   ChatMessage,
+  ComposerDraft,
   DraftCopy,
   PreviewDraft,
   PreviewMediaItem,
@@ -90,6 +91,38 @@ export function newQueuedChatMessage(content: string): QueuedChatMessage {
     id: `local-q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     content: content.trim(),
   };
+}
+
+export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
+  queued: [],
+  input: "",
+  editInsertAt: null,
+};
+
+export function snapshotComposerDraft(current: ComposerDraft): ComposerDraft {
+  return {
+    queued: [...current.queued],
+    input: current.input,
+    editInsertAt: current.editInsertAt,
+  };
+}
+
+export function stashComposerDraft(
+  drafts: Map<string, ComposerDraft>,
+  sessionId: string | null,
+  current: ComposerDraft,
+): void {
+  if (!sessionId) return;
+  drafts.set(sessionId, snapshotComposerDraft(current));
+}
+
+export function readComposerDraft(
+  drafts: Map<string, ComposerDraft>,
+  sessionId: string | null,
+): ComposerDraft {
+  if (!sessionId) return snapshotComposerDraft(EMPTY_COMPOSER_DRAFT);
+  const found = drafts.get(sessionId);
+  return found ? snapshotComposerDraft(found) : snapshotComposerDraft(EMPTY_COMPOSER_DRAFT);
 }
 
 /** Outcome events → node names, used when SSE missed live agent.progress. */

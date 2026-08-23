@@ -52,6 +52,12 @@ export type QueuedChatMessage = {
   id: string;
   content: string;
 };
+/** SPA-only composer snapshot — save/restore on session switch (ADR 0016). */
+export type ComposerDraft = {
+  queued: QueuedChatMessage[];
+  input: string;
+  editInsertAt: number | null;
+};
 export type SessionSnapshot = {
   session_id: string;
   mode: SessionMode | string;

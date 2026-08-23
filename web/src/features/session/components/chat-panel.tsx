@@ -122,11 +122,13 @@ export function ChatPanel() {
     pinSession,
     deleteSession,
     searchHistory,
+    composerInput,
+    setComposerInput,
+    editInsertAt,
+    setEditInsertAt,
   } = useSession(companyId);
   const { questions, loading: questionsLoading, isStale } = useRecommendedQuestions(companyId);
   const now = useNow();
-  const [input, setInput] = useState("");
-  const [editInsertAt, setEditInsertAt] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [historyCollapsed, setHistoryCollapsed] = useState(() => {
     try {
@@ -246,16 +248,16 @@ export function ChatPanel() {
   async function onSubmit(e?: FormEvent) {
     e?.preventDefault();
     if (stopping) return;
-    const text = input.trim();
+    const text = composerInput.trim();
     if (!text) return;
     const queueIndex = editInsertAt;
     if (sending && queueFull && queueIndex == null) return;
-    setInput("");
+    setComposerInput("");
     setEditInsertAt(null);
     try {
       await sendMessage(text, queueIndex != null ? { queueIndex } : undefined);
     } catch {
-      setInput(text);
+      setComposerInput(text);
       setEditInsertAt(queueIndex);
       showError(t("chat.error.sendFailed"));
     }
@@ -265,24 +267,24 @@ export function ChatPanel() {
     const item = queuedMessages.find((q) => q.id === id);
     if (!item) return;
     if (editInsertAt != null) {
-      const pending = input.trim();
+      const pending = composerInput.trim();
       if (pending && !enqueueQueuedMessage(pending, editInsertAt)) return;
-    } else if (input.trim()) {
+    } else if (composerInput.trim()) {
       if (queuedMessages.length >= MAX_QUEUED_SESSION_MESSAGES) return;
-      enqueueQueuedMessage(input);
+      enqueueQueuedMessage(composerInput);
     }
     const removedAt = dequeueQueuedMessage(id);
     if (removedAt < 0) return;
-    setInput(item.content);
+    setComposerInput(item.content);
     setEditInsertAt(removedAt);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   function cancelQueuedEdit() {
     if (editInsertAt == null) return;
-    const text = input.trim();
+    const text = composerInput.trim();
     if (text) enqueueQueuedMessage(text, editInsertAt);
-    setInput("");
+    setComposerInput("");
     setEditInsertAt(null);
   }
 
@@ -514,6 +516,7 @@ export function ChatPanel() {
             (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
           ) && (
             <AgentActionList
+              key={session?.id ?? "none"}
               actions={agentActions.filter(
                 (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
               )}
@@ -634,8 +637,8 @@ export function ChatPanel() {
             <div className="relative z-10 flex flex-col rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
               <Textarea
                 ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
+                value={composerInput}
+                onChange={(e) => setComposerInput(e.target.value)}
                 onKeyDown={onKeyDown}
                 rows={2}
                 placeholder={t("chat.input.placeholder")}
@@ -662,7 +665,9 @@ export function ChatPanel() {
                   variant="ghost"
                   size="icon"
                   disabled={
-                    stopping || !input.trim() || (sending && queueFull && editInsertAt == null)
+                    stopping ||
+                    !composerInput.trim() ||
+                    (sending && queueFull && editInsertAt == null)
                   }
                   className="h-8 w-8 rounded-full text-foreground"
                   title={t("chat.send")}
