@@ -1,6 +1,13 @@
 import { cjk } from "@streamdown/cjk";
-import { Check, CornerDownRight, Ellipsis, Pencil, Square, Trash2 } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Check, Copy, CornerDownRight, Ellipsis, Pencil, Square, Trash2 } from "lucide-react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { IconButton } from "@/components/icon-button";
@@ -13,16 +20,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
-import {
-  MAX_QUEUED_SESSION_MESSAGES,
-  QUEUE_TUCK_PX,
-  queuedComposerOverlayPx,
-} from "@/features/session/session-helpers";
+import { MAX_QUEUED_SESSION_MESSAGES, QUEUE_TUCK_PX } from "@/features/session/session-helpers";
 import { sessionLayoutMode } from "@/features/session/session-layout";
 import type {
   AgentActionRecord,
@@ -34,11 +38,24 @@ import type {
 import { useRecommendedQuestions } from "@/features/session/use-recommended-questions";
 import { useSession } from "@/features/session/use-session";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { useNow } from "@/hooks/use-now";
+import { classifyRelativeTime, formatAbsoluteDateTime } from "@/lib/format-relative-time";
 import { cn } from "@/lib/utils";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
 
 type PagedPane = "record" | "chat" | "preview";
+
+/** Border-box plus overflowing descendants (tucked queue). */
+function overlayStackHeight(el: HTMLElement): number {
+  const wrap = el.getBoundingClientRect();
+  let top = wrap.top;
+  for (const node of el.querySelectorAll("*")) {
+    const r = node.getBoundingClientRect();
+    if (r.height > 0) top = Math.min(top, r.top);
+  }
+  return Math.max(0, Math.round(wrap.bottom - top));
+}
 
 export function ChatPanel() {
   const { t } = useTranslation();
@@ -89,6 +106,7 @@ export function ChatPanel() {
     deleteSession,
   } = useSession(companyId);
   const { questions, loading: questionsLoading, isStale } = useRecommendedQuestions(companyId);
+  const now = useNow();
   const [input, setInput] = useState("");
   const [editInsertAt, setEditInsertAt] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -101,6 +119,8 @@ export function ChatPanel() {
   });
   const [pagedPane, setPagedPane] = useState<PagedPane>("chat");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const [composerH, setComposerH] = useState(0);
   const { ref: shellRef, width: shellWidth } = useContainerWidth();
   const previewMode = mode === "PREVIEW" && !!draft;
   const layoutMode = sessionLayoutMode(shellWidth, {
@@ -108,6 +128,7 @@ export function ChatPanel() {
     previewReady: previewMode,
   });
   const isSplit = layoutMode === "split";
+  const composerCol = `mx-auto w-full px-4 sm:px-6 ${previewMode ? "max-w-none" : "max-w-3xl"}`;
 
   // Preview page only exists while a draft is ready — fall back to chat.
   useEffect(() => {
@@ -167,10 +188,42 @@ export function ChatPanel() {
     }
   }
 
+  useLayoutEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    const resize = new ResizeObserver(() => setComposerH(overlayStackHeight(el)));
+    const observeTree = () => {
+      resize.observe(el);
+      for (const node of el.querySelectorAll("*")) {
+        resize.observe(node);
+      }
+    };
+    observeTree();
+    setComposerH(overlayStackHeight(el));
+    const mutations = new MutationObserver(() => {
+      observeTree();
+      setComposerH(overlayStackHeight(el));
+    });
+    mutations.observe(el, { childList: true, subtree: true });
+    return () => {
+      resize.disconnect();
+      mutations.disconnect();
+    };
+  }, []);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, sending, streamingText, agentActions, brief, awaitingImageOk, queuedMessages]);
+  }, [
+    messages,
+    sending,
+    streamingText,
+    agentActions,
+    brief,
+    awaitingImageOk,
+    queuedMessages,
+    composerH,
+  ]);
 
   async function onSubmit(e?: FormEvent) {
     e?.preventDefault();
@@ -374,21 +427,19 @@ export function ChatPanel() {
         </div>
       )}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="mb-8 min-h-0 flex-1 overflow-y-auto">
         <div
-          className={`mx-auto flex w-full flex-col gap-5 px-4 sm:px-6 ${
+          className={`flex min-h-full w-full flex-col gap-5 ${composerCol} ${
             isSplit ? "pt-6" : "pt-14"
-          } ${previewMode ? "max-w-none" : "max-w-3xl"}`}
-          style={{
-            paddingBottom: `calc(1.5rem + ${queuedComposerOverlayPx(queuedMessages.length)}px)`,
-          }}
+          }`}
+          style={{ paddingBottom: composerH }}
         >
           {restoring ? (
             <p className="py-16 text-center text-sm text-muted-foreground">
               {t("chat.history.restoring")}
             </p>
           ) : showLanding ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center sm:py-24">
+            <div className="flex flex-1 flex-col items-center justify-center py-16 text-center sm:py-24">
               <h1 className="text-2xl font-semibold tracking-tight">
                 <span className="mr-1.5 text-voice" aria-hidden="true">
                   ✳
@@ -414,6 +465,7 @@ export function ChatPanel() {
                 <div key={m.id} className="flex flex-col gap-5">
                   <ChatMessageItem
                     message={m}
+                    now={now}
                     retryContent={prevUser}
                     retryDisabled={stopping || (sending && queueFull)}
                     onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
@@ -490,12 +542,10 @@ export function ChatPanel() {
         </div>
       </div>
 
-      <div className="shrink-0">
+      <div ref={composerRef} className="pointer-events-none absolute inset-x-0 bottom-4 z-10">
         <form
           onSubmit={onSubmit}
-          className={`mx-auto flex w-full flex-col gap-1.5 px-4 pb-4 sm:px-6 ${
-            previewMode ? "max-w-none" : "max-w-3xl"
-          }`}
+          className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
         >
           {(awaitingImageOk && queuedMessages.length > 0) || queueFull ? (
             <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
@@ -509,7 +559,10 @@ export function ChatPanel() {
             {queuedMessages.length > 0 ? (
               <div
                 className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-voice-border bg-card"
-                style={{ bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`, paddingBottom: QUEUE_TUCK_PX }}
+                style={{
+                  bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`,
+                  paddingBottom: QUEUE_TUCK_PX,
+                }}
               >
                 <ul className="flex flex-col p-1">
                   {queuedMessages.map((item) => (
@@ -562,7 +615,7 @@ export function ChatPanel() {
                 rows={2}
                 placeholder={t("chat.input.placeholder")}
                 disabled={stopping}
-                className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
+                className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none not-read-only:hover:border-0 not-read-only:focus-visible:border-0 not-read-only:focus-visible:ring-0 not-read-only:focus-visible:hover:border-0"
               />
               <div className="flex items-center justify-end gap-1 px-1">
                 {(sending || stopping) && (
@@ -865,11 +918,13 @@ function LlmErrorCard({
 
 function ChatMessageItem({
   message,
+  now,
   onRetry,
   retryContent,
   retryDisabled,
 }: {
   message: ChatMessage;
+  now: Date;
   onRetry?: () => void;
   retryContent?: string | null;
   retryDisabled?: boolean;
@@ -877,8 +932,16 @@ function ChatMessageItem({
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground sm:max-w-[75%]">
-          {message.content}
+        <div className="flex max-w-[85%] flex-col sm:max-w-[75%]">
+          <div className="whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+            {message.content}
+          </div>
+          <MessageMeta
+            align="user"
+            content={message.content}
+            createdAt={message.created_at}
+            now={now}
+          />
         </div>
       </div>
     );
@@ -897,6 +960,105 @@ function ChatMessageItem({
       <Streamdown mode="static" plugins={{ cjk }}>
         {message.content}
       </Streamdown>
+      <MessageMeta
+        align="assistant"
+        content={message.content}
+        createdAt={message.created_at}
+        now={now}
+      />
+    </div>
+  );
+}
+
+function MessageMeta({
+  align,
+  content,
+  createdAt,
+  now,
+}: {
+  align: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  now: Date;
+}) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(id);
+  }, [copied]);
+
+  const relative = classifyRelativeTime(createdAt, now);
+  const absolute = formatAbsoluteDateTime(createdAt);
+  const timeLabel =
+    relative.kind === "relative"
+      ? t(`chat.message.time.${relative.unit}`, { n: relative.n })
+      : relative.kind === "absolute"
+        ? relative.text
+        : null;
+
+  async function onCopy() {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  const copyButton = (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <IconButton
+          type="button"
+          className="h-6 w-6"
+          aria-label={copied ? t("chat.message.copied") : t("chat.message.copy")}
+          onClick={() => void onCopy()}
+        >
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+        </IconButton>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        {copied ? t("chat.message.copied") : t("chat.message.copy")}
+      </TooltipContent>
+    </Tooltip>
+  );
+
+  const timeLabelNode =
+    timeLabel && absolute ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <time
+            dateTime={createdAt}
+            className="cursor-default text-[11px] tabular-nums text-muted-foreground"
+          >
+            {timeLabel}
+          </time>
+        </TooltipTrigger>
+        <TooltipContent side="top">{absolute}</TooltipContent>
+      </Tooltip>
+    ) : null;
+
+  return (
+    <div
+      className={cn(
+        "mt-1 flex items-center gap-1 sm:gap-1.5",
+        align === "user" ? "justify-end" : "justify-start",
+      )}
+    >
+      {align === "user" ? (
+        <>
+          {timeLabelNode}
+          {copyButton}
+        </>
+      ) : (
+        <>
+          {copyButton}
+          {timeLabelNode}
+        </>
+      )}
     </div>
   );
 }

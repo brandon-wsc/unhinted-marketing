@@ -78,6 +78,16 @@
     },
     "live": "Live",
     "offline": "Offline",
+    "message": {
+      "copy": "Copy",
+      "copied": "Copied",
+      "time": {
+        "s": "{{n}}s ago",
+        "m": "{{n}}m ago",
+        "h": "{{n}}h ago",
+        "d": "{{n}}d ago"
+      }
+    },
     "agent": {
       "actions": "Agent steps",
       "nodes": {
