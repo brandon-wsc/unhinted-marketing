@@ -1,6 +1,13 @@
 import { cjk } from "@streamdown/cjk";
 import { Check, Copy, CornerDownRight, Ellipsis, Pencil, Square, Trash2 } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { IconButton } from "@/components/icon-button";
@@ -19,11 +26,7 @@ import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
-import {
-  MAX_QUEUED_SESSION_MESSAGES,
-  QUEUE_TUCK_PX,
-  queuedComposerOverlayPx,
-} from "@/features/session/session-helpers";
+import { MAX_QUEUED_SESSION_MESSAGES, QUEUE_TUCK_PX } from "@/features/session/session-helpers";
 import { sessionLayoutMode } from "@/features/session/session-layout";
 import type {
   AgentActionRecord,
@@ -42,6 +45,17 @@ import { cn } from "@/lib/utils";
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
 
 type PagedPane = "record" | "chat" | "preview";
+
+/** Border-box plus overflowing descendants (tucked queue). */
+function overlayStackHeight(el: HTMLElement): number {
+  const wrap = el.getBoundingClientRect();
+  let top = wrap.top;
+  for (const node of el.querySelectorAll("*")) {
+    const r = node.getBoundingClientRect();
+    if (r.height > 0) top = Math.min(top, r.top);
+  }
+  return Math.max(0, Math.round(wrap.bottom - top));
+}
 
 export function ChatPanel() {
   const { t } = useTranslation();
@@ -105,6 +119,8 @@ export function ChatPanel() {
   });
   const [pagedPane, setPagedPane] = useState<PagedPane>("chat");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const [composerH, setComposerH] = useState(0);
   const { ref: shellRef, width: shellWidth } = useContainerWidth();
   const previewMode = mode === "PREVIEW" && !!draft;
   const layoutMode = sessionLayoutMode(shellWidth, {
@@ -112,6 +128,7 @@ export function ChatPanel() {
     previewReady: previewMode,
   });
   const isSplit = layoutMode === "split";
+  const composerCol = `mx-auto w-full px-4 sm:px-6 ${previewMode ? "max-w-none" : "max-w-3xl"}`;
 
   // Preview page only exists while a draft is ready — fall back to chat.
   useEffect(() => {
@@ -171,10 +188,42 @@ export function ChatPanel() {
     }
   }
 
+  useLayoutEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    const resize = new ResizeObserver(() => setComposerH(overlayStackHeight(el)));
+    const observeTree = () => {
+      resize.observe(el);
+      for (const node of el.querySelectorAll("*")) {
+        resize.observe(node);
+      }
+    };
+    observeTree();
+    setComposerH(overlayStackHeight(el));
+    const mutations = new MutationObserver(() => {
+      observeTree();
+      setComposerH(overlayStackHeight(el));
+    });
+    mutations.observe(el, { childList: true, subtree: true });
+    return () => {
+      resize.disconnect();
+      mutations.disconnect();
+    };
+  }, []);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, sending, streamingText, agentActions, brief, awaitingImageOk, queuedMessages]);
+  }, [
+    messages,
+    sending,
+    streamingText,
+    agentActions,
+    brief,
+    awaitingImageOk,
+    queuedMessages,
+    composerH,
+  ]);
 
   async function onSubmit(e?: FormEvent) {
     e?.preventDefault();
@@ -378,21 +427,19 @@ export function ChatPanel() {
         </div>
       )}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="mb-8 min-h-0 flex-1 overflow-y-auto">
         <div
-          className={`mx-auto flex w-full flex-col gap-5 px-4 sm:px-6 ${
+          className={`flex min-h-full w-full flex-col gap-5 ${composerCol} ${
             isSplit ? "pt-6" : "pt-14"
-          } ${previewMode ? "max-w-none" : "max-w-3xl"}`}
-          style={{
-            paddingBottom: `calc(1.5rem + ${queuedComposerOverlayPx(queuedMessages.length)}px)`,
-          }}
+          }`}
+          style={{ paddingBottom: composerH }}
         >
           {restoring ? (
             <p className="py-16 text-center text-sm text-muted-foreground">
               {t("chat.history.restoring")}
             </p>
           ) : showLanding ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center sm:py-24">
+            <div className="flex flex-1 flex-col items-center justify-center py-16 text-center sm:py-24">
               <h1 className="text-2xl font-semibold tracking-tight">
                 <span className="mr-1.5 text-voice" aria-hidden="true">
                   ✳
@@ -495,12 +542,10 @@ export function ChatPanel() {
         </div>
       </div>
 
-      <div className="shrink-0">
+      <div ref={composerRef} className="pointer-events-none absolute inset-x-0 bottom-4 z-10">
         <form
           onSubmit={onSubmit}
-          className={`mx-auto flex w-full flex-col gap-1.5 px-4 pb-4 sm:px-6 ${
-            previewMode ? "max-w-none" : "max-w-3xl"
-          }`}
+          className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
         >
           {(awaitingImageOk && queuedMessages.length > 0) || queueFull ? (
             <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
@@ -514,7 +559,10 @@ export function ChatPanel() {
             {queuedMessages.length > 0 ? (
               <div
                 className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-voice-border bg-card"
-                style={{ bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`, paddingBottom: QUEUE_TUCK_PX }}
+                style={{
+                  bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`,
+                  paddingBottom: QUEUE_TUCK_PX,
+                }}
               >
                 <ul className="flex flex-col p-1">
                   {queuedMessages.map((item) => (

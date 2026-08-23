@@ -59,18 +59,8 @@ export function isUserFacingAgentNode(node: string): boolean {
 /** SPA-only follow-up Sends while a turn is in flight (ADR 0016). */
 export const MAX_QUEUED_SESSION_MESSAGES = 3;
 
-/** Single-line queue row (py-1 + 12px text / h-6 actions). */
-export const QUEUE_ROW_PX = 32;
-/** Queue list `p-1`. */
-export const QUEUE_LIST_PAD_PX = 8;
 /** Queue card tucked under the composer top edge. */
 export const QUEUE_TUCK_PX = 12;
-
-/** Extra scroll padding so transcript clears the absolute queue overlay. */
-export function queuedComposerOverlayPx(count: number): number {
-  if (count <= 0) return 0;
-  return count * QUEUE_ROW_PX + QUEUE_LIST_PAD_PX - QUEUE_TUCK_PX;
-}
 
 export function newQueuedChatMessage(content: string): QueuedChatMessage {
   return {
