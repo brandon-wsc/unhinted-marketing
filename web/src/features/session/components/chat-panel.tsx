@@ -562,7 +562,7 @@ export function ChatPanel() {
                 rows={2}
                 placeholder={t("chat.input.placeholder")}
                 disabled={stopping}
-                className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
+                className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none not-read-only:hover:border-0 not-read-only:focus-visible:border-0 not-read-only:focus-visible:ring-0 not-read-only:focus-visible:hover:border-0"
               />
               <div className="flex items-center justify-end gap-1 px-1">
                 {(sending || stopping) && (
