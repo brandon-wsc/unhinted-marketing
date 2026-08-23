@@ -102,29 +102,40 @@ def fallback_search_queries(
     """Deterministic Tavily queries when query_generator LLM is unavailable.
 
     Never paste mixed-script ``entity_surface`` (e.g. ``usagi 兔糧``) as-is.
+    Split Latin entity vs glossed CJK product nouns — do not glue into one
+    ``Usagi rabbit food`` string.
     """
-    seed = " ".join((entity or user or "").split())
-    if not seed:
+    blob = " ".join((entity or "", user or "")).strip()
+    if not blob:
         return ["Hong Kong trending topics"]
 
-    glossed = gloss_cjk_search_terms(seed)
-    # Drop leftover CJK so we don't ship brand+漢字 blobs to Tavily.
-    latinish = " ".join(re.sub(r"[\u4e00-\u9fff]+", " ", glossed).split())
     candidates: list[str] = []
-    for raw in (latinish, glossed):
+    seen: set[str] = set()
+
+    def _push(raw: str) -> None:
+        raw = (raw or "").strip()
         if not raw:
-            continue
+            return
         q = normalize_search_query(raw)
         if q is None:
-            # normalize may reject mixed script; strip CJK and retry
             stripped = " ".join(re.sub(r"[\u4e00-\u9fff]+", " ", raw).split())
-            if stripped:
-                q = normalize_search_query(stripped) or f"{stripped} Hong Kong"
-            else:
-                continue
+            if not stripped:
+                return
+            q = normalize_search_query(stripped) or f"{stripped} Hong Kong"
         q = q[:max_len].strip()
-        if q and q.lower() not in {c.lower() for c in candidates}:
+        key = q.lower()
+        if q and key not in seen:
+            seen.add(key)
             candidates.append(q)
+
+    latin = " ".join(
+        dict.fromkeys(re.sub(r"[\u4e00-\u9fff]+", " ", blob).split())
+    )
+    if latin:
+        _push(latin)
+    for zh, en in _CJK_SEARCH_GLOSS:
+        if zh in blob:
+            _push(en)
     return candidates[:3] or ["Hong Kong trending topics"]
 
 

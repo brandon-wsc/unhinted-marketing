@@ -97,6 +97,24 @@ def _last_user_text(state: SessionState) -> str:
     return ""
 
 
+def _recent_thread(state: SessionState, *, limit: int = 6) -> list[dict[str, str]]:
+    """Trimmed user/assistant turns for follow-up routing and query rewrite."""
+    out: list[dict[str, str]] = []
+    for m in (state.get("messages") or [])[-limit:]:
+        role = str(m.get("role") or "")
+        if role not in ("user", "assistant"):
+            continue
+        content = str(m.get("content") or "").strip()
+        if not content:
+            continue
+        out.append({"role": role, "content": content[:400]})
+    return out
+
+
+def _is_follow_up(state: SessionState) -> bool:
+    return sum(1 for m in (state.get("messages") or []) if m.get("role") == "user") >= 2
+
+
 def _slim_company(state: SessionState) -> dict[str, Any]:
     """Identity-only company slice for LLM payloads (K1/K2)."""
     ctx = state.get("company_context") or {}
@@ -309,6 +327,7 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
         "mode": state.get("mode", MODE_CHAT),
         "has_draft": bool((state.get("draft") or {}).get("caption")),
         "last_user_message": _last_user_text(state),
+        "recent_thread": _recent_thread(state),
         "research_rule_pass": bool(rule_pass),
     }
     parsed = await _parse_llm_json(
@@ -352,10 +371,11 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
     research = state.get("research") or {}
     entity = str(research.get("entity_surface") or "").strip()
 
-    # Cheap path only when the *user* line is already keyword-like.
-    # Colloquial user text always goes through LLM (entity_surface is a hint only).
+    # Cheap path only when the *user* line is already keyword-like AND this is
+    # the first user turn. Follow-ups like "Chiikawa" must not become
+    # "Chiikawa Hong Kong" via normalize — rewrite from recent_thread.
     normalized = normalize_search_query(user)
-    if normalized:
+    if normalized and not _is_follow_up(state):
         return {
             "search_query": normalized,
             "research": {
@@ -367,6 +387,7 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
 
     payload = {
         "last_user_message": user,
+        "recent_thread": _recent_thread(state),
         "research": research,
         "entity_surface": entity,
         "company": _slim_company(state).get("name"),
@@ -391,7 +412,11 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
                 },
             }
     # Fallback: gloss entity/user — never paste mixed-script entity_surface
-    queries = fallback_search_queries(entity, user)
+    hint = user
+    if _is_follow_up(state):
+        prior_users = [m["content"] for m in _recent_thread(state) if m["role"] == "user"]
+        hint = " ".join(prior_users) or user
+    queries = fallback_search_queries(entity, hint)
     return {
         "search_query": queries[0],
         "research": {

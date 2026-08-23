@@ -66,6 +66,7 @@ def test_fallback_search_queries_glosses_rabbit_food() -> None:
     assert all("兔糧" not in q for q in qs)
     assert any("rabbit food" in q.lower() for q in qs)
     assert any("usagi" in q.lower() for q in qs)
+    assert not any("usagi" in q.lower() and "rabbit food" in q.lower() for q in qs)
 
 
 def test_polish_search_queries_expands_mixed_script() -> None:

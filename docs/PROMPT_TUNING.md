@@ -23,7 +23,7 @@ Join key: **`turn_id`** (one graph `ainvoke` / resume). LLM rows and node steps 
 Paste `session_id` (or jump from LLM detail / Session Trace):
 
 - **semantic_route** / **rule_pass** — gate decision before `query_generator`
-- **search_queries** — should be short English/keyword atomic queries, **not** spoken Cantonese and **not** mixed pastes like `usagi 兔糧`
+- **search_queries** — one conjunct per query (`usagi` / `Usagi favorite food` / `rabbit feed`), **not** spoken Cantonese, **not** mixed pastes like `usagi 兔糧`, **not** glued `Usagi rabbit food`
 - **Signals** — Tavily∪PG hits with `source`, title, url; `metrics.query` shows which atomic query produced the hit
 
 If queries still look like entity_surface verbatim, check `query_generator` LLM (`parse_ok` / fallback) and the gloss path in `fast_rules`.

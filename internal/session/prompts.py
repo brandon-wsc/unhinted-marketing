@@ -23,12 +23,13 @@ Graph intent (intent):
 - start: user wants content / picks a recommended question / asks to draft a post
 - revise: session is in PREVIEW and user wants copy or image changes
 - confirm_intent: user says they are ready to publish (e.g. 可以出, confirm, publish) — acknowledge only, never publish
+- Follow-up: if recent_thread has a prior user question and this turn is only a short sense/IP pick (e.g. "Chiikawa", "真兔"), keep intent=chat unless they clearly ask to draft a post
 
 Research (independent of graph intent — chat vs start does not decide search):
 - need_facts is a TOPIC gate, not a knowledge check. You cannot know parametric knowledge or confidence. NEVER set need_facts false because the line is a statement, looks like chitchat-with-a-noun, is creative/brainstorming, or "general knowledge could answer".
-- need_facts: true when THIS message has a usable search topic — named IP/character/brand/product/place/event, market/trend/news, or a draft brief that names a real-world subject (even if they also want a comic/post).
+- need_facts: true when THIS message has a usable search topic — named IP/character/brand/product/place/event, market/trend/news, or a draft brief that names a real-world subject (even if they also want a comic/post). A short sense-pick after a prior fact question still need_facts true.
 - need_facts: false ONLY when there is nothing to retrieve: empty/vague with no noun, or a format/procedure-only ask with no subject (e.g. 「改短啲」, 「四格漫畫」 with no topic in this message).
-- entity_surface: best short noun phrase to search (keep user spelling, e.g. "chikawa 兔糧")
+- entity_surface: best short noun phrase to search (keep user spelling, e.g. "chikawa 兔糧"). On a sense-pick follow-up, combine prior topic + chosen sense (e.g. "Chiikawa Usagi 兔糧"), not the IP name alone
 - ambiguous: true if the entity has multiple senses — still need_facts true when a searchable topic exists
 - ask_clarify: true ONLY when there is NO usable search topic (empty/vague) OR the user must pick a sense before drafting a post (graph intent start/revise). Do NOT set ask_clarify merely to quiz brand-vs-character when the user already gave a searchable phrase — we will search best-effort first
 - Search is for facts; clarifying questions are for action (draft), not a substitute for search
@@ -58,16 +59,21 @@ Return JSON only:
 }
 
 Rules:
-- Prefer search_queries: 1–3 SHORT atomic queries (keywords / proper nouns), NOT spoken sentences
-- Strip Cantonese colloquial wrappers (想食嘅、啲、係咪、有冇…) — keep the entity + product type
-- NEVER emit entity_surface verbatim when it mixes Latin brand + Chinese nouns (e.g. "usagi 兔糧") — always expand the Chinese noun to English
+- Prefer search_queries: 1–3 SHORT atomic queries. One conjunct per query — do NOT glue entity + intent + product type into one string.
+- Spoken wrappers (想食嘅、啲、係咪、有冇…) are not queries. Rewrite intent into indexed keywords (e.g. favorite food), never 鍾意食咩 / full Cantonese clauses.
+- NEVER emit mixed Latin+CJK entity_surface verbatim (e.g. "usagi 兔糧"). Split: keep the Latin entity as its own query; expand the Chinese product noun to English as a SEPARATE query.
 - Examples:
   - user「usagi想食嘅兔糧」+ entity_surface「usagi 兔糧」
-    → ["Usagi rabbit food", "Usagi pet rabbit feed Hong Kong"]  (NOT "usagi 兔糧")
+    → ["usagi", "Usagi favorite food", "rabbit feed"]
+    NOT ["Usagi rabbit food"] and NOT "usagi 兔糧"
   - user「香港最近熱話」→ ["Hong Kong trending topics", "Hong Kong hot search"]
-- Each query: 2–8 words, mix English keywords + preserve brand/IP spelling when useful
+  - prior「usagi想食嘅兔糧」+ now「Chiikawa」
+    → ["Chiikawa Usagi", "Chiikawa Usagi favorite food", "ちいかわ うさぎ"]
+    NOT ["Chiikawa Hong Kong"]
+- recent_thread is prior user/assistant turns. If last_user_message is a short sense pick, write queries from the PRIOR question + this sense. Still 1–3 queries this turn — do not loop search.
+- Each query: 1–8 words. Preserve brand/IP spelling. Product-class queries must not repeat the entity unless the user named a branded SKU.
 - Do not paste the raw chat dump; do not include "help me" / "write a post"
-- If ambiguous entity, still emit best-effort atomic queries from entity_surface (do not refuse)
+- If ambiguous entity, still emit split best-effort queries (do not refuse)
 """
 
 TREND_SEARCH = """You are a HK market signal ranker for social content.
@@ -89,6 +95,7 @@ Grounding:
 - If signals_trusted is false: do not lead with research_signals as current market facts (they may be stale or unrelated). Do not invent stats. If the user asked for current facts, say you do not have grounded sources yet.
 - If signals_trusted is true and research_signals are provided, lead with what those signals support; do not invent stats/rankings.
 - If signals_trusted is omitted/null, keep the previous two rules based on whether research_signals exist.
+- Signals may come from different search_queries (see metrics.query). Do not merge hits from an entity-only query with hits from a product-class query into one fact (e.g. do not claim a character's favourite food from a random "Usagi" wiki plus a "rabbit feed" page). If signals do not jointly support the user's question, say you do not have grounded sources yet.
 - Do NOT open with a multiple-choice quiz about what the user meant when research_signals exist or a clear topic was given — answer first.
 - Soft clarify (at most one short question) only after answering, and only if ask_clarify is true AND it would change the next action (e.g. drafting a post). Never use clarify instead of using available signals.
 - If product_clarify is true and product_candidates are provided, ask which product/SKU to use (list names briefly) — do not invent SKUs or prices.

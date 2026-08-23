@@ -126,7 +126,7 @@ async def test_query_generator_colloquial_uses_llm(
 
     async def fake_complete_json(**_kwargs):
         return QueryGenOut(
-            search_queries=["Usagi rabbit food", "Usagi pet feed Hong Kong"],
+            search_queries=["usagi", "Usagi favorite food", "rabbit feed"],
             topic="general",
             time_range="month",
         ).model_dump_json()
@@ -138,11 +138,12 @@ async def test_query_generator_colloquial_uses_llm(
             research={"entity_surface": "usagi 兔糧", "need_facts": True},
         )
     )
-    assert out["search_query"] == "Usagi rabbit food"
+    assert out["search_query"] == "usagi"
     assert out["research"]["query_source"] == "llm"
     assert out["research"]["search_queries"] == [
-        "Usagi rabbit food",
-        "Usagi pet feed Hong Kong",
+        "usagi",
+        "Usagi favorite food",
+        "rabbit feed",
     ]
 
 
@@ -180,6 +181,69 @@ async def test_query_generator_accepts_null_optional_json(
 
 
 @pytest.mark.asyncio
+async def test_query_generator_follow_up_skips_cheap_hk_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    captured: dict[str, str] = {}
+
+    async def fake_complete_json(**kwargs):
+        captured["user"] = kwargs["user"]
+        return QueryGenOut(
+            search_queries=["Chiikawa Usagi", "Chiikawa Usagi favorite food"],
+            topic="general",
+        ).model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    out = await N.query_generator(
+        _base_state(
+            messages=[
+                {"role": "user", "content": "usagi想食嘅兔糧"},
+                {"role": "assistant", "content": "你講邊個 Usagi？"},
+                {"role": "user", "content": "Chiikawa"},
+            ],
+            research={"entity_surface": "Chiikawa Usagi 兔糧", "need_facts": True},
+        )
+    )
+    payload = json.loads(captured["user"])
+    assert payload["last_user_message"] == "Chiikawa"
+    assert any(m.get("content") == "usagi想食嘅兔糧" for m in payload["recent_thread"])
+    assert "Hong Kong" not in out["search_query"]
+    assert out["research"]["search_queries"] == [
+        "Chiikawa Usagi",
+        "Chiikawa Usagi favorite food",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_route_intent_payload_includes_recent_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    captured: dict[str, str] = {}
+
+    async def fake_complete_json(**kwargs):
+        captured["user"] = kwargs["user"]
+        return IntentRoute(intent="chat", rationale="disambiguate").model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    out = await N.route_intent(
+        _base_state(
+            research_rule_pass=True,
+            messages=[
+                {"role": "user", "content": "usagi想食嘅兔糧"},
+                {"role": "assistant", "content": "你講邊個 Usagi？"},
+                {"role": "user", "content": "Chiikawa"},
+            ],
+        )
+    )
+    payload = json.loads(captured["user"])
+    assert payload["last_user_message"] == "Chiikawa"
+    assert any(m.get("content") == "usagi想食嘅兔糧" for m in payload["recent_thread"])
+    assert out["intent"] == "chat"
+
+
+@pytest.mark.asyncio
 async def test_query_generator_fallback_glosses_entity(no_llm: None) -> None:
     out = await N.query_generator(
         _base_state(
@@ -187,11 +251,31 @@ async def test_query_generator_fallback_glosses_entity(no_llm: None) -> None:
             research={"entity_surface": "usagi 兔糧", "need_facts": True},
         )
     )
-    assert "兔糧" not in out["search_query"]
-    assert "rabbit food" in out["search_query"].lower()
-    assert "usagi" in out["search_query"].lower()
-    assert all("兔糧" not in q for q in out["research"]["search_queries"])
+    qs = out["research"]["search_queries"]
+    assert all("兔糧" not in q for q in qs)
+    assert any("usagi" in q.lower() for q in qs)
+    assert any("rabbit food" in q.lower() for q in qs)
+    assert not any("usagi" in q.lower() and "rabbit food" in q.lower() for q in qs)
     assert out["research"]["query_source"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_query_generator_follow_up_fallback_uses_prior_turn(no_llm: None) -> None:
+    out = await N.query_generator(
+        _base_state(
+            messages=[
+                {"role": "user", "content": "usagi想食嘅兔糧"},
+                {"role": "assistant", "content": "你講邊個 Usagi？"},
+                {"role": "user", "content": "Chiikawa"},
+            ],
+            research={"entity_surface": "Chiikawa", "need_facts": True},
+        )
+    )
+    qs = out["research"]["search_queries"]
+    blob = " ".join(qs).lower()
+    assert "rabbit food" in blob
+    assert any("chiikawa" in q.lower() or "usagi" in q.lower() for q in qs)
+    assert not (len(qs) == 1 and "hong kong" in qs[0].lower() and "rabbit" not in qs[0].lower())
 
 
 @pytest.mark.asyncio
