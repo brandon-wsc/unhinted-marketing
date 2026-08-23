@@ -424,7 +424,7 @@ export function ChatPanel() {
   const chatColumn = (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {!isSplit && (
-        <div className="absolute left-4 top-3 z-10">
+        <div className="absolute left-4 top-3 z-20">
           <button
             type="button"
             onClick={() => setPagedPane("record")}
@@ -448,237 +448,244 @@ export function ChatPanel() {
         </div>
       )}
 
-      <div ref={scrollRef} className="mb-8 min-h-0 flex-1 overflow-y-auto">
+      <div className="relative grid min-h-0 flex-1 grid-cols-1 grid-rows-1">
         <div
-          className={`flex min-h-full w-full flex-col gap-5 ${composerCol} ${
-            isSplit ? "pt-6" : "pt-14"
-          }`}
-          style={{ paddingBottom: composerH }}
+          ref={scrollRef}
+          className="col-start-1 row-start-1 mb-8 min-h-0 overflow-y-auto [scrollbar-gutter:stable]"
         >
-          {restoring ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              {t("chat.history.restoring")}
-            </p>
-          ) : showLanding ? (
-            <div className="flex flex-1 flex-col items-center justify-center py-16 text-center sm:py-24">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                <span className="mr-1.5 text-voice" aria-hidden="true">
-                  ✳
-                </span>
-                {t("chat.empty.title")}
-              </h1>
-              <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                {t("chat.empty.subtitle")}
+          <div
+            className={`flex min-h-full w-full flex-col gap-5 ${composerCol} ${
+              isSplit ? "pt-6" : "pt-14"
+            }`}
+            style={{ paddingBottom: composerH }}
+          >
+            {restoring ? (
+              <p className="py-16 text-center text-sm text-muted-foreground">
+                {t("chat.history.restoring")}
               </p>
-              <RecommendedQuestions
-                questions={questions}
-                loading={questionsLoading}
-                isStale={isStale}
-                disabled={stopping || (sending && queueFull)}
-                onSelect={(q) => void onPickQuestion(q)}
+            ) : showLanding ? (
+              <div className="flex flex-1 flex-col items-center justify-center py-16 text-center sm:py-24">
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  <span className="mr-1.5 text-voice" aria-hidden="true">
+                    ✳
+                  </span>
+                  {t("chat.empty.title")}
+                </h1>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  {t("chat.empty.subtitle")}
+                </p>
+                <RecommendedQuestions
+                  questions={questions}
+                  loading={questionsLoading}
+                  isStale={isStale}
+                  disabled={stopping || (sending && queueFull)}
+                  onSelect={(q) => void onPickQuestion(q)}
+                />
+              </div>
+            ) : (
+              messages.map((m, index) => {
+                const prevUser = findPreviousUserContent(messages, index);
+                const turnActions = agentActions.filter((a) => a.afterMessageId === m.id);
+                return (
+                  <div key={m.id} className="flex flex-col gap-5">
+                    <ChatMessageItem
+                      message={m}
+                      now={now}
+                      retryContent={prevUser}
+                      retryDisabled={stopping || (sending && queueFull)}
+                      onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
+                    />
+                    {turnActions.length > 0 && (
+                      <AgentActionList
+                        actions={turnActions}
+                        persistedDurationMs={parseTurnDurationMs(m.metadata)}
+                      />
+                    )}
+                    {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
+                    {awaitingImageOk && interruptAfterMessageId === m.id && (
+                      <InterruptCard
+                        sending={sending || stopping}
+                        onResume={(format) => void onResumeImageGen(format)}
+                      />
+                    )}
+                    {previewMode && previewAfterMessageId === m.id && !isSplit && (
+                      <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
+                    )}
+                  </div>
+                );
+              })
+            )}
+            {/* Fallback if anchor message was replaced / missing — keep cards visible. */}
+            {agentActions.some(
+              (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
+            ) && (
+              <AgentActionList
+                key={session?.id ?? "none"}
+                actions={agentActions.filter(
+                  (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
+                )}
+                persistedDurationMs={null}
               />
-            </div>
-          ) : (
-            messages.map((m, index) => {
-              const prevUser = findPreviousUserContent(messages, index);
-              const turnActions = agentActions.filter((a) => a.afterMessageId === m.id);
-              return (
-                <div key={m.id} className="flex flex-col gap-5">
-                  <ChatMessageItem
-                    message={m}
-                    now={now}
-                    retryContent={prevUser}
-                    retryDisabled={stopping || (sending && queueFull)}
-                    onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
-                  />
-                  {turnActions.length > 0 && (
-                    <AgentActionList
-                      actions={turnActions}
-                      persistedDurationMs={parseTurnDurationMs(m.metadata)}
-                    />
-                  )}
-                  {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
-                  {awaitingImageOk && interruptAfterMessageId === m.id && (
-                    <InterruptCard
-                      sending={sending || stopping}
-                      onResume={(format) => void onResumeImageGen(format)}
-                    />
-                  )}
-                  {previewMode && previewAfterMessageId === m.id && !isSplit && (
-                    <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
-                  )}
-                </div>
-              );
-            })
-          )}
-          {/* Fallback if anchor message was replaced / missing — keep cards visible. */}
-          {agentActions.some(
-            (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
-          ) && (
-            <AgentActionList
-              key={session?.id ?? "none"}
-              actions={agentActions.filter(
-                (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
+            )}
+            {brief &&
+              briefAfterMessageId &&
+              !messages.some((m) => m.id === briefAfterMessageId) && <BriefCard brief={brief} />}
+            {awaitingImageOk &&
+              interruptAfterMessageId &&
+              !messages.some((m) => m.id === interruptAfterMessageId) && (
+                <InterruptCard
+                  sending={sending || stopping}
+                  onResume={(format) => void onResumeImageGen(format)}
+                />
               )}
-              persistedDurationMs={null}
-            />
-          )}
-          {brief && briefAfterMessageId && !messages.some((m) => m.id === briefAfterMessageId) && (
-            <BriefCard brief={brief} />
-          )}
-          {awaitingImageOk &&
-            interruptAfterMessageId &&
-            !messages.some((m) => m.id === interruptAfterMessageId) && (
+            {previewMode &&
+              previewAfterMessageId &&
+              !messages.some((m) => m.id === previewAfterMessageId) &&
+              !isSplit && <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />}
+            {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
+            {awaitingImageOk && !interruptAfterMessageId && (
               <InterruptCard
                 sending={sending || stopping}
                 onResume={(format) => void onResumeImageGen(format)}
               />
             )}
-          {previewMode &&
-            previewAfterMessageId &&
-            !messages.some((m) => m.id === previewAfterMessageId) &&
-            !isSplit && <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />}
-          {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
-          {awaitingImageOk && !interruptAfterMessageId && (
-            <InterruptCard
-              sending={sending || stopping}
-              onResume={(format) => void onResumeImageGen(format)}
-            />
-          )}
-          {previewMode && !previewAfterMessageId && !isSplit && (
-            <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
-          )}
-          {/* Inline LLM error when failed before an assistant row was persisted. */}
-          {llmError && !messages.some((m) => isLlmErrorContent(m.content)) && (
-            <LlmErrorCard
-              message={llmError}
-              retryDisabled={stopping || (sending && queueFull)}
-              onRetry={
-                findLastUserContent(messages)
-                  ? () => void onRetryUserMessage(findLastUserContent(messages)!)
-                  : undefined
-              }
-            />
-          )}
-          {streamingText !== null && (
-            <div className="text-sm leading-relaxed">
-              <Streamdown mode="streaming" plugins={{ cjk }}>
-                {streamingText}
-              </Streamdown>
-            </div>
-          )}
+            {previewMode && !previewAfterMessageId && !isSplit && (
+              <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
+            )}
+            {/* Inline LLM error when failed before an assistant row was persisted. */}
+            {llmError && !messages.some((m) => isLlmErrorContent(m.content)) && (
+              <LlmErrorCard
+                message={llmError}
+                retryDisabled={stopping || (sending && queueFull)}
+                onRetry={
+                  findLastUserContent(messages)
+                    ? () => void onRetryUserMessage(findLastUserContent(messages)!)
+                    : undefined
+                }
+              />
+            )}
+            {streamingText !== null && (
+              <div className="text-sm leading-relaxed">
+                <Streamdown mode="streaming" plugins={{ cjk }}>
+                  {streamingText}
+                </Streamdown>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div ref={composerRef} className="pointer-events-none absolute inset-x-0 bottom-4 z-10">
-        <form
-          onSubmit={onSubmit}
-          className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
-        >
-          {(awaitingImageOk && queuedMessages.length > 0) || queueFull ? (
-            <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
-              {awaitingImageOk && queuedMessages.length > 0 ? (
-                <p>{t("chat.queue.holdForImage")}</p>
+        <div className="pointer-events-none col-start-1 row-start-1 z-10 flex flex-col justify-end overflow-y-auto pb-4 [scrollbar-gutter:stable]">
+          <div ref={composerRef}>
+            <form
+              onSubmit={onSubmit}
+              className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
+            >
+              {(awaitingImageOk && queuedMessages.length > 0) || queueFull ? (
+                <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
+                  {awaitingImageOk && queuedMessages.length > 0 ? (
+                    <p>{t("chat.queue.holdForImage")}</p>
+                  ) : null}
+                  {queueFull ? <p>{t("chat.queue.full")}</p> : null}
+                </div>
               ) : null}
-              {queueFull ? <p>{t("chat.queue.full")}</p> : null}
-            </div>
-          ) : null}
-          <div className="relative">
-            {queuedMessages.length > 0 ? (
-              <div
-                className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-voice-border bg-card"
-                style={{
-                  bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`,
-                  paddingBottom: QUEUE_TUCK_PX,
-                }}
-              >
-                <ul className="flex flex-col p-1">
-                  {queuedMessages.map((item) => (
-                    <li
-                      key={item.id}
-                      className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <CornerDownRight className="size-3 shrink-0 text-voice" aria-hidden />
-                      <span className="min-w-0 flex-1 truncate">{item.content}</span>
-                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
-                        <IconButton
-                          type="button"
-                          className="h-6 w-6"
-                          title={t("chat.queue.remove")}
-                          aria-label={t("chat.queue.remove")}
-                          onClick={() => dequeueQueuedMessage(item.id)}
+              <div className="relative">
+                {queuedMessages.length > 0 ? (
+                  <div
+                    className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-voice-border bg-card"
+                    style={{
+                      bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`,
+                      paddingBottom: QUEUE_TUCK_PX,
+                    }}
+                  >
+                    <ul className="flex flex-col p-1">
+                      {queuedMessages.map((item) => (
+                        <li
+                          key={item.id}
+                          className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                         >
-                          <Trash2 className="size-3" />
-                        </IconButton>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
+                          <CornerDownRight className="size-3 shrink-0 text-voice" aria-hidden />
+                          <span className="min-w-0 flex-1 truncate">{item.content}</span>
+                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
                             <IconButton
                               type="button"
                               className="h-6 w-6"
-                              title={t("chat.queue.more")}
-                              aria-label={t("chat.queue.more")}
+                              title={t("chat.queue.remove")}
+                              aria-label={t("chat.queue.remove")}
+                              onClick={() => dequeueQueuedMessage(item.id)}
                             >
-                              <Ellipsis className="size-3" />
+                              <Trash2 className="size-3" />
                             </IconButton>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem onSelect={() => beginEditQueued(item.id)}>
-                              <Pencil className="size-3.5" />
-                              {t("chat.queue.edit")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            <div className="relative z-10 flex flex-col rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
-              <Textarea
-                ref={inputRef}
-                value={composerInput}
-                onChange={(e) => setComposerInput(e.target.value)}
-                onKeyDown={onKeyDown}
-                rows={2}
-                placeholder={t("chat.input.placeholder")}
-                disabled={stopping}
-                className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none not-read-only:hover:border-0 not-read-only:focus-visible:border-0 not-read-only:focus-visible:ring-0 not-read-only:focus-visible:hover:border-0"
-              />
-              <div className="flex items-center justify-end gap-1 px-1">
-                {(sending || stopping) && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <IconButton
+                                  type="button"
+                                  className="h-6 w-6"
+                                  title={t("chat.queue.more")}
+                                  aria-label={t("chat.queue.more")}
+                                >
+                                  <Ellipsis className="size-3" />
+                                </IconButton>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                <DropdownMenuItem onSelect={() => beginEditQueued(item.id)}>
+                                  <Pencil className="size-3.5" />
+                                  {t("chat.queue.edit")}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <div className="relative z-10 flex flex-col rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
+                  <Textarea
+                    ref={inputRef}
+                    value={composerInput}
+                    onChange={(e) => setComposerInput(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    rows={2}
+                    placeholder={t("chat.input.placeholder")}
                     disabled={stopping}
-                    onClick={() => void onStopTurn()}
-                    className="h-8 w-8 rounded-full text-foreground"
-                    title={stopping ? t("chat.stopping") : t("chat.stop")}
-                    aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
-                  >
-                    <Square className="size-3.5" fill="currentColor" stroke="none" />
-                  </Button>
-                )}
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="icon"
-                  disabled={
-                    stopping ||
-                    !composerInput.trim() ||
-                    (sending && queueFull && editInsertAt == null)
-                  }
-                  className="h-8 w-8 rounded-full text-foreground"
-                  title={t("chat.send")}
-                  aria-label={t("chat.send")}
-                >
-                  <SendIcon className="size-[18px]" />
-                </Button>
+                    className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none not-read-only:hover:border-0 not-read-only:focus-visible:border-0 not-read-only:focus-visible:ring-0 not-read-only:focus-visible:hover:border-0"
+                  />
+                  <div className="flex items-center justify-end gap-1 px-1">
+                    {(sending || stopping) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={stopping}
+                        onClick={() => void onStopTurn()}
+                        className="h-8 w-8 rounded-full text-foreground"
+                        title={stopping ? t("chat.stopping") : t("chat.stop")}
+                        aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
+                      >
+                        <Square className="size-3.5" fill="currentColor" stroke="none" />
+                      </Button>
+                    )}
+                    <Button
+                      type="submit"
+                      variant="ghost"
+                      size="icon"
+                      disabled={
+                        stopping ||
+                        !composerInput.trim() ||
+                        (sending && queueFull && editInsertAt == null)
+                      }
+                      className="h-8 w-8 rounded-full text-foreground"
+                      title={t("chat.send")}
+                      aria-label={t("chat.send")}
+                    >
+                      <SendIcon className="size-[18px]" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
+            </form>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
