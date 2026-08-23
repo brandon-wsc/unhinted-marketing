@@ -22,7 +22,7 @@ Do NOT split the UI 50/50 visually (half neon / half corporate). Shell stays nor
 | Layer | Job |
 |-------|-----|
 | **Shell** | Tech-product standard (shadcn structure): scannable desk — header, history, composer, preview, Confirm |
-| **Craft** | Chat editor voice + agent action trail — spitball copy, special icons, temp loading filler (e.g. 「幫緊你…」 “working on it”) |
+| **Craft** | Chat editor voice + agent action trail — spitball copy, special icons, temp loading filler (e.g. 「幫緊你幫緊你」 “on it, on it”) |
 
 ## Shell — must read as a big-tech product desk
 
@@ -53,9 +53,9 @@ ALLOWED (localized):
 
 - Interaction pulse: hover / focus / queued / selected — voice hairline, wash, and ring (shell stays ink **at rest**)
 - Chat editor-voice tone (see [VOICE.md](../VOICE.md) for captions — assistant shell voice stays clear/warm, not meme-account)
-- Agent action trail: short spitball line + distinctive icon per step
+- Agent action trail: short spitball line + distinctive icon per step. In-flight header is 「幫緊你幫緊你」 / “Working” (no live seconds; chevron stays enabled). Completed header is 「做咗x秒」 / “Worked for”.
 - Empty states / recommended-question cards: light attitude
-- Temporary loading filler ONLY when no real progress yet (e.g. 「幫緊你幫緊你」 “on it, on it”) — yield immediately when `agent.progress` arrives
+- Temporary loading filler ONLY when no real progress yet (e.g. 「幫緊你幫緊你」 “on it, on it”) — yield immediately when `agent.progress` arrives. The in-flight trail header reuses that same spitball line until the turn ends.
 - Login/register: orderly form; at most ONE corner craft signal — never half-viewport unhinged
 
 FORBIDDEN on craft surfaces:

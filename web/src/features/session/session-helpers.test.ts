@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   agentActionsFromMessages,
+  agentNodeFallbackKey,
+  agentNodeLabelKey,
+  agentTrailHeader,
   asStringList,
   isUserFacingAgentNode,
   MAX_QUEUED_SESSION_MESSAGES,
@@ -11,6 +14,7 @@ import {
   parseAgentProgress,
   parseBrief,
   parseDraftCopy,
+  parseTurnDurationMs,
   previewAnchorFromActions,
   waitForSseReady,
 } from "@/features/session/session-helpers";
@@ -95,6 +99,20 @@ describe("parseAgentProgress", () => {
   });
 });
 
+describe("parseTurnDurationMs", () => {
+  it("reads a non-negative integer from metadata", () => {
+    expect(parseTurnDurationMs({ duration_ms: 41_250 })).toBe(41250);
+    expect(parseTurnDurationMs({ duration_ms: 0 })).toBe(0);
+  });
+
+  it("rejects missing or invalid values", () => {
+    expect(parseTurnDurationMs(undefined)).toBeNull();
+    expect(parseTurnDurationMs({})).toBeNull();
+    expect(parseTurnDurationMs({ duration_ms: -1 })).toBeNull();
+    expect(parseTurnDurationMs({ duration_ms: "41" })).toBeNull();
+  });
+});
+
 describe("OUTCOME_NODE", () => {
   it("maps outcome events to graph nodes", () => {
     expect(OUTCOME_NODE["brief.updated"]).toBe("brainstormer");
@@ -108,6 +126,60 @@ describe("isUserFacingAgentNode", () => {
     expect(isUserFacingAgentNode("fast_rule_checker")).toBe(false);
     expect(isUserFacingAgentNode("persist_preview")).toBe(false);
     expect(isUserFacingAgentNode("route_intent")).toBe(true);
+  });
+});
+
+describe("agentNodeLabelKey", () => {
+  it("nests running vs done under nodes", () => {
+    expect(agentNodeLabelKey("route_intent", "running")).toBe(
+      "chat.agent.nodes.running.route_intent",
+    );
+    expect(agentNodeLabelKey("query_generator", "done")).toBe(
+      "chat.agent.nodes.done.query_generator",
+    );
+    expect(agentNodeFallbackKey("running")).toBe("chat.agent.nodes.running.working");
+    expect(agentNodeFallbackKey("done")).toBe("chat.agent.nodes.done.working");
+  });
+});
+
+describe("agentTrailHeader", () => {
+  it("uses the static working line while in flight — no live seconds", () => {
+    expect(agentTrailHeader(true, null)).toEqual({ kind: "working" });
+    expect(agentTrailHeader(true, 12_000)).toEqual({ kind: "working" });
+  });
+
+  it("shows worked-for only after the turn ends and at least 1s elapsed", () => {
+    expect(agentTrailHeader(false, null)).toBeNull();
+    expect(agentTrailHeader(false, 999)).toBeNull();
+    expect(agentTrailHeader(false, 1000)).toEqual({ kind: "workedFor", durationMs: 1000 });
+    expect(agentTrailHeader(false, 41_250)).toEqual({ kind: "workedFor", durationMs: 41250 });
+  });
+});
+
+describe("agent node locale copy", () => {
+  it("keeps running/done keys aligned across locales", async () => {
+    const en = (await import("@/i18n/locales/en.json")).default;
+    const zh = (await import("@/i18n/locales/zh-HK.json")).default;
+    expect(zh.chat.agent.working).toBe("幫緊你幫緊你");
+    expect(en.chat.agent.working).toBe("Working");
+    expect(Object.keys(en.chat.agent.nodes.running).sort()).toEqual(
+      Object.keys(en.chat.agent.nodes.done).sort(),
+    );
+    expect(Object.keys(en.chat.agent.nodes.running).sort()).toEqual(
+      Object.keys(zh.chat.agent.nodes.running).sort(),
+    );
+    expect(Object.keys(en.chat.agent.nodes.done).sort()).toEqual(
+      Object.keys(zh.chat.agent.nodes.done).sort(),
+    );
+    for (const [node, label] of Object.entries(en.chat.agent.nodes.running)) {
+      expect(label.endsWith("…"), node).toBe(true);
+      expect(
+        String(en.chat.agent.nodes.done[node as keyof typeof en.chat.agent.nodes.done]).endsWith(
+          "…",
+        ),
+        node,
+      ).toBe(false);
+    }
   });
 });
 

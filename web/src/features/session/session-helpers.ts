@@ -56,6 +56,29 @@ export function isUserFacingAgentNode(node: string): boolean {
   return !INTERNAL_AGENT_NODES.has(node);
 }
 
+/** i18n key for a trail row — running keeps “…”, done is past tense. */
+export function agentNodeLabelKey(node: string, status: AgentActionRecord["status"]): string {
+  return `chat.agent.nodes.${status}.${node}`;
+}
+
+export function agentNodeFallbackKey(status: AgentActionRecord["status"]): string {
+  return `chat.agent.nodes.${status}.working`;
+}
+
+/** In-flight trail header is a static spitball line — duration only after the turn ends. */
+export type AgentTrailHeader = { kind: "working" } | { kind: "workedFor"; durationMs: number };
+
+export function agentTrailHeader(
+  running: boolean,
+  elapsedMs: number | null,
+): AgentTrailHeader | null {
+  if (running) return { kind: "working" };
+  if (elapsedMs != null && elapsedMs >= 1000) {
+    return { kind: "workedFor", durationMs: elapsedMs };
+  }
+  return null;
+}
+
 /** SPA-only follow-up Sends while a turn is in flight (ADR 0016). */
 export const MAX_QUEUED_SESSION_MESSAGES = 3;
 
@@ -81,6 +104,12 @@ export const OUTCOME_NODE: Record<string, string> = {
 
 export function newActionId(node: string): string {
   return `action-${Date.now()}-${node}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function parseTurnDurationMs(metadata?: Record<string, unknown>): number | null {
+  const raw = metadata?.duration_ms;
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) return null;
+  return Math.floor(raw);
 }
 
 /** Rebuild Cursor-style action trail from persisted user-message metadata. */

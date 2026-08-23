@@ -7,6 +7,7 @@ import contextlib
 import copy
 import logging
 import secrets
+import time
 import uuid
 from typing import Any
 
@@ -52,6 +53,29 @@ def _extract_llm_provider_error(exc: BaseException) -> LlmProviderError | None:
 
 def _session_config(session_id: uuid.UUID) -> dict[str, Any]:
     return {"configurable": {"thread_id": str(session_id)}}
+
+
+def user_turn_metadata(
+    existing: dict[str, Any] | None,
+    progress_events: list[dict[str, Any]],
+    duration_ms: int | None,
+) -> dict[str, Any] | None:
+    """Merge agent.progress trail + turn wall-clock into user-message metadata.
+
+    Returns None when there is nothing to persist (no user-facing progress).
+    """
+    actions = [
+        ev.get("data") or {}
+        for ev in progress_events
+        if ev.get("type") == "agent.progress" and isinstance(ev.get("data"), dict)
+    ]
+    if not actions:
+        return None
+    meta = dict(existing or {})
+    meta["agent_actions"] = actions
+    if duration_ms is not None and duration_ms >= 0:
+        meta["duration_ms"] = int(duration_ms)
+    return meta
 
 
 def normalize_draft_copy(copy: dict[str, Any] | None) -> dict[str, Any]:
@@ -309,16 +333,11 @@ async def _persist_after_invoke(
     user_content: str,
     pre_state: dict[str, Any],
     entry: TurnEntry | None,
+    duration_ms: int | None = None,
 ) -> dict[str, Any]:
     if user_msg is not None:
-        agent_actions = [
-            ev.get("data") or {}
-            for ev in progress_events
-            if ev.get("type") == "agent.progress" and isinstance(ev.get("data"), dict)
-        ]
-        if agent_actions:
-            meta = dict(user_msg.metadata_ or {})
-            meta["agent_actions"] = agent_actions
+        meta = user_turn_metadata(user_msg.metadata_ or {}, progress_events, duration_ms)
+        if meta is not None:
             user_msg.metadata_ = meta
             flag_modified(user_msg, "metadata_")
 
@@ -501,13 +520,14 @@ async def _invoke_graph(
     graph_input: dict[str, Any] | None,
     user_content: str,
     message_dicts: list[dict[str, Any]],
-) -> tuple[dict[str, Any], bool, LlmProviderError | None, list[dict[str, Any]]]:
+) -> tuple[dict[str, Any], bool, LlmProviderError | None, list[dict[str, Any]], int]:
     graph = get_session_graph()
     config = _session_config(session.id)
     provider_error: LlmProviderError | None = None
     values: dict[str, Any] = {}
     still_interrupted = False
     progress_events: list[dict[str, Any]] = []
+    started = time.perf_counter()
 
     with (
         session_db(db),
@@ -561,7 +581,8 @@ async def _invoke_graph(
             if not progress_events:
                 progress_events = session_event_bus.end_turn_progress(session.id)
 
-    return values, still_interrupted, provider_error, progress_events
+    duration_ms = max(0, int((time.perf_counter() - started) * 1000))
+    return values, still_interrupted, provider_error, progress_events, duration_ms
 
 
 async def run_session_turn(
@@ -597,7 +618,13 @@ async def run_session_turn(
     )
 
     try:
-        values, still_interrupted, provider_error, progress_events = await _invoke_graph(
+        (
+            values,
+            still_interrupted,
+            provider_error,
+            progress_events,
+            duration_ms,
+        ) = await _invoke_graph(
             db,
             session,
             graph_input=_graph_values(session, message_dicts),
@@ -616,6 +643,7 @@ async def run_session_turn(
             user_content=user_content,
             pre_state=pre_state,
             entry=entry,
+            duration_ms=duration_ms,
         )
     except asyncio.CancelledError:
         await _discard_turn_state(
@@ -681,7 +709,13 @@ async def resume_image_turn(
             session.state = st
             await db.flush()
 
-        values, still_interrupted, provider_error, progress_events = await _invoke_graph(
+        (
+            values,
+            still_interrupted,
+            provider_error,
+            progress_events,
+            duration_ms,
+        ) = await _invoke_graph(
             db,
             session,
             graph_input=None,
@@ -700,6 +734,7 @@ async def resume_image_turn(
             user_content="",
             pre_state=_strip_discard_meta(parked_restore),
             entry=entry,
+            duration_ms=duration_ms,
         )
         return result
     except asyncio.CancelledError:

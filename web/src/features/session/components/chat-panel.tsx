@@ -1,5 +1,14 @@
 import { cjk } from "@streamdown/cjk";
-import { Check, Copy, CornerDownRight, Ellipsis, Pencil, Square, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  CornerDownRight,
+  Ellipsis,
+  Pencil,
+  Square,
+  Trash2,
+} from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent,
@@ -26,7 +35,14 @@ import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
-import { MAX_QUEUED_SESSION_MESSAGES, QUEUE_TUCK_PX } from "@/features/session/session-helpers";
+import {
+  agentNodeFallbackKey,
+  agentNodeLabelKey,
+  agentTrailHeader,
+  MAX_QUEUED_SESSION_MESSAGES,
+  parseTurnDurationMs,
+  QUEUE_TUCK_PX,
+} from "@/features/session/session-helpers";
 import { sessionLayoutMode } from "@/features/session/session-layout";
 import type {
   AgentActionRecord,
@@ -40,6 +56,7 @@ import { useSession } from "@/features/session/use-session";
 import { useContainerWidth } from "@/hooks/use-container-width";
 import { useNow } from "@/hooks/use-now";
 import { classifyRelativeTime, formatAbsoluteDateTime } from "@/lib/format-relative-time";
+import { formatWorkedDuration, workedDurationLocale } from "@/lib/format-worked-duration";
 import { cn } from "@/lib/utils";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
@@ -470,7 +487,12 @@ export function ChatPanel() {
                     retryDisabled={stopping || (sending && queueFull)}
                     onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
                   />
-                  {turnActions.length > 0 && <AgentActionList actions={turnActions} />}
+                  {turnActions.length > 0 && (
+                    <AgentActionList
+                      actions={turnActions}
+                      persistedDurationMs={parseTurnDurationMs(m.metadata)}
+                    />
+                  )}
                   {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
                   {awaitingImageOk && interruptAfterMessageId === m.id && (
                     <InterruptCard
@@ -493,6 +515,7 @@ export function ChatPanel() {
               actions={agentActions.filter(
                 (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
               )}
+              persistedDurationMs={null}
             />
           )}
           {brief && briefAfterMessageId && !messages.some((m) => m.id === briefAfterMessageId) && (
@@ -724,50 +747,96 @@ function PreviewReadyBanner({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-function AgentActionList({ actions }: { actions: AgentActionRecord[] }) {
-  const { t } = useTranslation();
+function AgentActionList({
+  actions,
+  persistedDurationMs,
+}: {
+  actions: AgentActionRecord[];
+  persistedDurationMs: number | null;
+}) {
+  const { t, i18n } = useTranslation();
+  const [open, setOpen] = useState(true);
+  const startedAtRef = useRef<number | null>(null);
+  const [frozenMs, setFrozenMs] = useState<number | null>(null);
+
+  const running = actions.some((action) => action.status === "running");
+  if (running && startedAtRef.current == null) {
+    startedAtRef.current = Date.now();
+  }
+
+  useEffect(() => {
+    if (running || startedAtRef.current == null) return;
+    if (persistedDurationMs != null || frozenMs != null) return;
+    setFrozenMs(Math.max(0, Date.now() - startedAtRef.current));
+  }, [running, persistedDurationMs, frozenMs]);
+
+  const elapsedMs = persistedDurationMs ?? frozenMs;
+  const header = agentTrailHeader(running, elapsedMs);
+  const locale = workedDurationLocale(i18n.language);
+  const headerLabel =
+    header?.kind === "working"
+      ? t("chat.agent.working")
+      : header?.kind === "workedFor"
+        ? t("chat.agent.workedFor", {
+            duration: formatWorkedDuration(header.durationMs, locale),
+          })
+        : null;
+  const expanded = headerLabel ? open : true;
+
   if (actions.length === 0) return null;
+
   return (
-    <ul className="flex flex-col gap-1.5 py-0.5" aria-label={t("chat.agent.actions")}>
-      {actions.map((action) => {
-        const nodeKey = `chat.agent.nodes.${action.node}`;
-        const label = t(nodeKey, { defaultValue: t("chat.agent.nodes.working") });
-        const running = action.status === "running";
-        return (
-          <li
-            key={action.id}
-            className={cn(
-              "flex items-start gap-2 text-xs leading-snug",
-              running
-                ? "-mx-1.5 rounded-md bg-voice-soft px-1.5 py-1 text-voice"
-                : "text-muted-foreground",
-            )}
-          >
-            <span
-              className={cn(
-                "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center",
-                running ? "text-voice" : "text-muted-foreground",
-              )}
-            >
-              {running ? (
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-voice" />
-              ) : (
-                <Check className="size-3.5" aria-hidden />
-              )}
-            </span>
-            <span className="min-w-0">
-              <span>{label}</span>
-              {action.model && (
-                <span className="ml-1.5 opacity-70">
-                  {action.model_tier ? `${action.model_tier} · ` : ""}
-                  {action.model}
+    <div className="flex flex-col gap-1.5 py-0.5">
+      {headerLabel ? (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setOpen((value) => !value)}
+          className="flex items-center gap-1 self-start text-xs leading-snug text-muted-foreground hover:text-foreground"
+        >
+          <span>{headerLabel}</span>
+          <ChevronDown
+            className={cn("size-3.5 shrink-0 transition-transform", expanded ? "" : "-rotate-90")}
+            aria-hidden
+          />
+        </button>
+      ) : null}
+      {expanded ? (
+        <ul className="flex flex-col gap-1.5" aria-label={t("chat.agent.actions")}>
+          {actions.map((action) => {
+            const label = t(agentNodeLabelKey(action.node, action.status), {
+              defaultValue: t(agentNodeFallbackKey(action.status)),
+            });
+            const isRunning = action.status === "running";
+            return (
+              <li
+                key={action.id}
+                className={cn(
+                  "flex items-start gap-2 text-xs leading-snug",
+                  isRunning
+                    ? "-mx-1.5 rounded-md bg-voice-soft px-1.5 py-1 text-voice"
+                    : "text-muted-foreground",
+                )}
+              >
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center",
+                    isRunning ? "text-voice" : "text-muted-foreground",
+                  )}
+                >
+                  {isRunning ? (
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-voice" />
+                  ) : (
+                    <Check className="size-3.5" aria-hidden />
+                  )}
                 </span>
-              )}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+                <span className="min-w-0">{label}</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
