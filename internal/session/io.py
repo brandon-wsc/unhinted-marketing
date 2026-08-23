@@ -1,6 +1,6 @@
 """Structured I/O for session LLM nodes."""
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -23,6 +23,20 @@ class IntentRoute(BaseModel):
     intent: Literal["chat", "start", "revise", "confirm_intent"]
     rationale: str = ""
     research: ResearchFlags = Field(default_factory=ResearchFlags)
+
+
+def omit_nulls(value: Any) -> Any:
+    """Drop JSON nulls so Pydantic field defaults apply.
+
+    LLM optional fields often arrive as ``null`` (or null list items). Parse
+    adapters should run this before ``model_validate``; semantic mismatches
+    (wrong enum, missing required fields) still fail validation.
+    """
+    if isinstance(value, dict):
+        return {k: omit_nulls(v) for k, v in value.items() if v is not None}
+    if isinstance(value, list):
+        return [omit_nulls(item) for item in value if item is not None]
+    return value
 
 
 class QueryGenOut(BaseModel):

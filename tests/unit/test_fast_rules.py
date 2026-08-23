@@ -66,6 +66,7 @@ def test_fallback_search_queries_glosses_rabbit_food() -> None:
     assert all("兔糧" not in q for q in qs)
     assert any("rabbit food" in q.lower() for q in qs)
     assert any("usagi" in q.lower() for q in qs)
+    assert not any("usagi" in q.lower() and "rabbit food" in q.lower() for q in qs)
 
 
 def test_polish_search_queries_expands_mixed_script() -> None:
@@ -98,3 +99,63 @@ def test_query_gen_out_atomic_queries() -> None:
 
     single = QueryGenOut(search_query="Hong Kong trends")
     assert single.atomic_queries() == ["Hong Kong trends"]
+
+
+def test_omit_nulls_drops_null_keys_and_list_items() -> None:
+    from internal.session.io import omit_nulls
+
+    assert omit_nulls(
+        {
+            "search_query": None,
+            "search_queries": ["Usagi food preferences", None, "Usagi rabbit diet"],
+            "time_range": None,
+            "research": {"entity_surface": None, "need_facts": True},
+        }
+    ) == {
+        "search_queries": ["Usagi food preferences", "Usagi rabbit diet"],
+        "research": {"need_facts": True},
+    }
+
+
+def test_query_gen_out_null_optional_fields() -> None:
+    """LLM optional-null must not fail the payload (turn c8aab85b)."""
+    import json
+
+    from internal.session.io import QueryGenOut, omit_nulls
+
+    raw = """
+        {
+          "search_queries": ["Usagi food preferences", "Usagi rabbit diet", null],
+          "search_query": null,
+          "topic": "general",
+          "time_range": null,
+          "extra_llm_key": true
+        }
+        """
+    out = QueryGenOut.model_validate(omit_nulls(json.loads(raw)))
+    assert out.search_query == ""
+    assert out.topic == "general"
+    assert out.time_range == "week"
+    assert out.atomic_queries() == ["Usagi food preferences", "Usagi rabbit diet"]
+
+
+def test_intent_route_nested_nulls() -> None:
+    from internal.session.io import IntentRoute, omit_nulls
+
+    parsed = IntentRoute.model_validate(
+        omit_nulls(
+            {
+                "intent": "chat",
+                "rationale": None,
+                "research": {
+                    "need_facts": True,
+                    "entity_surface": None,
+                    "product_surface": None,
+                },
+            }
+        )
+    )
+    assert parsed.rationale == ""
+    assert parsed.research.need_facts is True
+    assert parsed.research.entity_surface == ""
+    assert parsed.research.product_surface == ""

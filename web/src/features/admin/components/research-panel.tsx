@@ -210,6 +210,10 @@ export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
                 <dd>{selected.entity_surface ?? "—"}</dd>
                 <dt className="text-muted-foreground">{t("admin.research.ingest")}</dt>
                 <dd className="font-mono">{flag(selected.ran_research_ingest)}</dd>
+                <dt className="text-muted-foreground">{t("admin.research.querySource")}</dt>
+                <dd className="font-mono">{selected.query_source ?? "—"}</dd>
+                <dt className="text-muted-foreground">{t("admin.research.signalsTrusted")}</dt>
+                <dd className="font-mono">{flag(selected.signals_trusted)}</dd>
               </dl>
 
               <div>

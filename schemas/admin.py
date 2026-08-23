@@ -139,6 +139,8 @@ class ResearchTurn(BaseModel):
     signals: list[ResearchSignalHit] = Field(default_factory=list)
     source_signal_ids: list[str] = Field(default_factory=list)
     ran_research_ingest: bool = False
+    query_source: str | None = None
+    signals_trusted: bool | None = None
 
 
 class SessionResearch(BaseModel):

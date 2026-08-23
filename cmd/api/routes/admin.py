@@ -353,6 +353,10 @@ async def get_session_research(
             qs = research.get("search_queries") or out.get("search_queries")
             if isinstance(qs, list) and qs:
                 turn.search_queries = [str(q) for q in qs if q]
+            if research.get("query_source"):
+                turn.query_source = str(research.get("query_source"))
+            if "signals_trusted" in research:
+                turn.signals_trusted = bool(research.get("signals_trusted"))
             ids = out.get("source_signal_ids")
             if isinstance(ids, list):
                 turn.source_signal_ids = [str(i) for i in ids if i]

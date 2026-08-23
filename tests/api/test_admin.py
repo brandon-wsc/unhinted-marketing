@@ -316,7 +316,10 @@ async def test_session_research(client, db_session) -> None:
             output={
                 "search_query": "usagi rabbit food Hong Kong",
                 "search_queries": ["usagi rabbit food Hong Kong", "兔糧 香港"],
-                "research": {"search_queries": ["usagi rabbit food Hong Kong", "兔糧 香港"]},
+                "research": {
+                    "search_queries": ["usagi rabbit food Hong Kong", "兔糧 香港"],
+                    "query_source": "llm",
+                },
             },
         )
     )
@@ -330,6 +333,11 @@ async def test_session_research(client, db_session) -> None:
             output={
                 "source_signal_ids": ["sig-r1"],
                 "search_queries": ["usagi rabbit food Hong Kong", "兔糧 香港"],
+                "research": {
+                    "search_queries": ["usagi rabbit food Hong Kong", "兔糧 香港"],
+                    "query_source": "llm",
+                    "signals_trusted": True,
+                },
                 "research_signals": [
                     {
                         "signal_id": "sig-r1",
@@ -363,6 +371,8 @@ async def test_session_research(client, db_session) -> None:
     assert len(turn["signals"]) == 1
     assert turn["signals"][0]["source"] == "tavily"
     assert turn["signals"][0]["query"] == "usagi rabbit food Hong Kong"
+    assert turn["query_source"] == "llm"
+    assert turn["signals_trusted"] is True
 
     res = await client.get(f"/api/admin/sessions/{uuid.uuid4()}/research", headers=headers)
     assert res.status_code == 404

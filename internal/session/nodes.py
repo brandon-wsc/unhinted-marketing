@@ -65,6 +65,7 @@ from internal.session.io import (
     ResearchFlags,
     ReviewOut,
     TrendRank,
+    omit_nulls,
 )
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW, SessionState
 from internal.session.tiers import NODE_MODEL_TIERS
@@ -80,6 +81,13 @@ logger = logging.getLogger(__name__)
 MAX_REVIEW_RETRIES = 2
 T = TypeVar("T", bound=BaseModel)
 
+QUERY_SOURCE_LLM = "llm"
+QUERY_SOURCE_NORMALIZE = "normalize"
+QUERY_SOURCE_FALLBACK = "fallback"
+REVIEWER_PARSE_MISS_FEEDBACK = (
+    "Review could not be completed — tighten grounding and craft."
+)
+
 
 def _last_user_text(state: SessionState) -> str:
     messages = state.get("messages") or []
@@ -87,6 +95,24 @@ def _last_user_text(state: SessionState) -> str:
         if m.get("role") == "user":
             return str(m.get("content") or "")
     return ""
+
+
+def _recent_thread(state: SessionState, *, limit: int = 6) -> list[dict[str, str]]:
+    """Trimmed user/assistant turns for follow-up routing and query rewrite."""
+    out: list[dict[str, str]] = []
+    for m in (state.get("messages") or [])[-limit:]:
+        role = str(m.get("role") or "")
+        if role not in ("user", "assistant"):
+            continue
+        content = str(m.get("content") or "").strip()
+        if not content:
+            continue
+        out.append({"role": role, "content": content[:400]})
+    return out
+
+
+def _is_follow_up(state: SessionState) -> bool:
+    return sum(1 for m in (state.get("messages") or []) if m.get("role") == "user") >= 2
 
 
 def _slim_company(state: SessionState) -> dict[str, Any]:
@@ -157,6 +183,14 @@ def _heuristic_intent(state: SessionState) -> str:
     return "chat"
 
 
+def _signals_trusted(state: SessionState) -> bool | None:
+    """Consumer bit from research_ingest; None if research never marked trust."""
+    research = state.get("research") or {}
+    if "signals_trusted" not in research:
+        return None
+    return bool(research.get("signals_trusted"))
+
+
 def _wants_image_change(text: str) -> bool:
     lower = text.lower()
     return any(k in lower for k in ("圖", "图片", "圖片", "image", "photo", "visual", "封面"))
@@ -167,7 +201,7 @@ async def _parse_llm_json(tier: ModelTier, system: str, user: str, model: type[T
         return None
     try:
         raw = await complete_json(tier=tier, system=system, user=user)
-        parsed = model.model_validate_json(raw)
+        parsed = model.model_validate(omit_nulls(json.loads(raw)))
     except LlmProviderError:
         # Provider/transport/auth/model failures must surface to the UI — do not
         # silently fall back while credentials are configured. The record already
@@ -293,6 +327,7 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
         "mode": state.get("mode", MODE_CHAT),
         "has_draft": bool((state.get("draft") or {}).get("caption")),
         "last_user_message": _last_user_text(state),
+        "recent_thread": _recent_thread(state),
         "research_rule_pass": bool(rule_pass),
     }
     parsed = await _parse_llm_json(
@@ -336,17 +371,23 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
     research = state.get("research") or {}
     entity = str(research.get("entity_surface") or "").strip()
 
-    # Cheap path only when the *user* line is already keyword-like.
-    # Colloquial user text always goes through LLM (entity_surface is a hint only).
+    # Cheap path only when the *user* line is already keyword-like AND this is
+    # the first user turn. Follow-ups like "Chiikawa" must not become
+    # "Chiikawa Hong Kong" via normalize — rewrite from recent_thread.
     normalized = normalize_search_query(user)
-    if normalized:
+    if normalized and not _is_follow_up(state):
         return {
             "search_query": normalized,
-            "research": {**research, "search_queries": [normalized]},
+            "research": {
+                **research,
+                "search_queries": [normalized],
+                "query_source": QUERY_SOURCE_NORMALIZE,
+            },
         }
 
     payload = {
         "last_user_message": user,
+        "recent_thread": _recent_thread(state),
         "research": research,
         "entity_surface": entity,
         "company": _slim_company(state).get("name"),
@@ -367,13 +408,22 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
                     "search_queries": queries,
                     "tavily_topic": parsed.topic,
                     "tavily_time_range": parsed.time_range,
+                    "query_source": QUERY_SOURCE_LLM,
                 },
             }
     # Fallback: gloss entity/user — never paste mixed-script entity_surface
-    queries = fallback_search_queries(entity, user)
+    hint = user
+    if _is_follow_up(state):
+        prior_users = [m["content"] for m in _recent_thread(state) if m["role"] == "user"]
+        hint = " ".join(prior_users) or user
+    queries = fallback_search_queries(entity, hint)
     return {
         "search_query": queries[0],
-        "research": {**research, "search_queries": queries},
+        "research": {
+            **research,
+            "search_queries": queries,
+            "query_source": QUERY_SOURCE_FALLBACK,
+        },
     }
 
 
@@ -464,11 +514,17 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
         seen.add(sid)
         merged.append(row)
 
+    query_source = str(research.get("query_source") or "")
+    signals_trusted = query_source != QUERY_SOURCE_FALLBACK and bool(tavily_items)
     return {
         "research_signals": merged[:20],
         "search_query": queries[0] if queries else primary,
         "source_signal_ids": [r["signal_id"] for r in merged[:8]],
-        "research": {**research, "search_queries": queries},
+        "research": {
+            **research,
+            "search_queries": queries,
+            "signals_trusted": signals_trusted,
+        },
     }
 
 
@@ -513,6 +569,7 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
             "company": company,
             "user_request": _last_user_text(state),
             "signals": signals_payload,
+            "signals_trusted": _signals_trusted(state),
         }
         parsed = await _parse_llm_json(
             NODE_MODEL_TIERS["trend_searcher"] or ModelTier.CHEAP,
@@ -544,6 +601,7 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
         "company": company,
         "user_request": _last_user_text(state),
         "signals": _signals_payload(signals),
+        "signals_trusted": _signals_trusted(state),
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["trend_searcher"] or ModelTier.CHEAP,
@@ -601,6 +659,7 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
             "ask_clarify": bool(research.get("ask_clarify") or research.get("ambiguous")),
             "entity_surface": research.get("entity_surface") or "",
             "research_signals": (state.get("research_signals") or [])[:8],
+            "signals_trusted": _signals_trusted(state),
             "voice_pack": {
                 "roast_level": pack.get("roast_level"),
                 "locale": pack.get("locale"),
@@ -656,6 +715,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
                             ),
                             "entity_surface": research.get("entity_surface") or "",
                             "research_signals": (state.get("research_signals") or [])[:8],
+                            "signals_trusted": _signals_trusted(state),
                             "voice_pack": {
                                 "roast_level": pack.get("roast_level"),
                                 "locale": pack.get("locale"),
@@ -789,6 +849,7 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
         "audience_catalog": catalog,
         "user_request": _last_user_text(state),
         "signals": signals,
+        "signals_trusted": _signals_trusted(state),
         "source_signal_ids": state.get("source_signal_ids") or [],
         "primary_product": state.get("primary_product"),
         "related_products": (state.get("related_products") or [])[:2],
@@ -825,6 +886,7 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "active_persona": state.get("active_persona"),
         "brief": state.get("brief") or {},
         "signals": signals,
+        "signals_trusted": _signals_trusted(state),
         "allowed_signal_ids": signal_ids,
         "user_request": _last_user_text(state),
         "primary_product": state.get("primary_product"),
@@ -949,6 +1011,7 @@ async def reviewer(state: SessionState) -> dict[str, Any]:
         "voice_pack": _voice_pack(state),
         "primary_product": state.get("primary_product"),
         "source_signal_ids": state.get("source_signal_ids") or [],
+        "signals_trusted": _signals_trusted(state),
         "grounding_ok": state.get("grounding_ok", True),
         "mode": state.get("mode"),
     }
@@ -965,12 +1028,9 @@ async def reviewer(state: SessionState) -> dict[str, Any]:
             "review_attempts": attempts,
         }
 
-    # Fallback: pass when grounded and caption present
-    draft = state.get("draft") or {}
-    ok = bool(draft.get("caption")) and state.get("grounding_ok", True) is not False
     return {
-        "reviewer_passed": ok,
-        "reviewer_feedback": "" if ok else "Caption missing or grounding failed",
+        "reviewer_passed": False,
+        "reviewer_feedback": REVIEWER_PARSE_MISS_FEEDBACK,
         "review_attempts": attempts,
     }
 

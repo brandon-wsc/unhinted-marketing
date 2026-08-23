@@ -143,6 +143,8 @@ export type ResearchTurn = {
   signals: ResearchSignalHit[];
   source_signal_ids: string[];
   ran_research_ingest: boolean;
+  query_source: string | null;
+  signals_trusted: boolean | null;
 };
 
 export type SessionResearch = {

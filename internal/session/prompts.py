@@ -23,21 +23,30 @@ Graph intent (intent):
 - start: user wants content / picks a recommended question / asks to draft a post
 - revise: session is in PREVIEW and user wants copy or image changes
 - confirm_intent: user says they are ready to publish (e.g. 可以出, confirm, publish) — acknowledge only, never publish
+- Follow-up: if recent_thread has a prior user question and this turn is only a short sense/IP pick (e.g. "Chiikawa", "真兔"), keep intent=chat unless they clearly ask to draft a post
 
-Research (independent of whether they also want to start a post):
-- need_facts: true if answering well needs current/market/web facts (trends, news, named products, stats)
-- need_facts: false for pure chitchat, product howto, evergreen creative brainstorming without factual claims
-- entity_surface: best short noun phrase to search (keep user spelling, e.g. "chikawa 兔糧")
-- ambiguous: true if the entity has multiple senses — still set need_facts true when a searchable topic exists
+Research (independent of graph intent — chat vs start does not decide search):
+- need_facts is a TOPIC gate, not a knowledge check. You cannot know parametric knowledge or confidence. NEVER set need_facts false because the line is a statement, looks like chitchat-with-a-noun, is creative/brainstorming, or "general knowledge could answer".
+- need_facts: true when THIS message has a usable search topic — named IP/character/brand/product/place/event, market/trend/news, or a draft brief that names a real-world subject (even if they also want a comic/post). A short sense-pick after a prior fact question still need_facts true.
+- need_facts: false ONLY when there is nothing to retrieve: empty/vague with no noun, or a format/procedure-only ask with no subject (e.g. 「改短啲」, 「四格漫畫」 with no topic in this message).
+- entity_surface: best short noun phrase to search (keep user spelling, e.g. "chikawa 兔糧"). On a sense-pick follow-up, combine prior topic + chosen sense (e.g. "Chiikawa Usagi 兔糧"), not the IP name alone
+- ambiguous: true if the entity has multiple senses — still need_facts true when a searchable topic exists
 - ask_clarify: true ONLY when there is NO usable search topic (empty/vague) OR the user must pick a sense before drafting a post (graph intent start/revise). Do NOT set ask_clarify merely to quiz brand-vs-character when the user already gave a searchable phrase — we will search best-effort first
 - Search is for facts; clarifying questions are for action (draft), not a substitute for search
+- Examples:
+  - 「usagi想食嘅兔糧」→ need_facts true, entity_surface "usagi 兔糧" (not false as "mere statement")
+  - 「香港最近熱話」→ need_facts true
+  - 「我想sell罐能量飲品」→ need_facts true (market/web is searchable; catalog is need_product separately)
+  - 「改短啲」 / 「hi」 → need_facts false
 - need_product: true when drafting/selling should use the company's imported product catalog (named SKU, 「推呢款」, price/spec claims)
 - need_product: false for trend-only posts, chitchat, or when no specific product is implied
 - sell_intent: "explicit" (sell/promote this product) | "implicit" (product may help the draft) | "none"
 - product_surface: short noun phrase / SKU / product name for catalog search (empty if need_product false)
 - need_facts and need_product are independent — both may be true
 
-Respect mode and research_rule_pass in the payload (if research_rule_pass is false, still classify intent; set need_facts false).
+Respect mode and research_rule_pass in the payload:
+- research_rule_pass false → still classify intent; set need_facts false (hi / howto already gated).
+- research_rule_pass true → do not override to false unless THIS message has no searchable topic.
 """
 
 QUERY_GENERATOR = """You write atomic web-search queries for Hong Kong market research.
@@ -50,16 +59,21 @@ Return JSON only:
 }
 
 Rules:
-- Prefer search_queries: 1–3 SHORT atomic queries (keywords / proper nouns), NOT spoken sentences
-- Strip Cantonese colloquial wrappers (想食嘅、啲、係咪、有冇…) — keep the entity + product type
-- NEVER emit entity_surface verbatim when it mixes Latin brand + Chinese nouns (e.g. "usagi 兔糧") — always expand the Chinese noun to English
+- Prefer search_queries: 1–3 SHORT atomic queries. One conjunct per query — do NOT glue entity + intent + product type into one string.
+- Spoken wrappers (想食嘅、啲、係咪、有冇…) are not queries. Rewrite intent into indexed keywords (e.g. favorite food), never 鍾意食咩 / full Cantonese clauses.
+- NEVER emit mixed Latin+CJK entity_surface verbatim (e.g. "usagi 兔糧"). Split: keep the Latin entity as its own query; expand the Chinese product noun to English as a SEPARATE query.
 - Examples:
   - user「usagi想食嘅兔糧」+ entity_surface「usagi 兔糧」
-    → ["Usagi rabbit food", "Usagi pet rabbit feed Hong Kong"]  (NOT "usagi 兔糧")
+    → ["usagi", "Usagi favorite food", "rabbit feed"]
+    NOT ["Usagi rabbit food"] and NOT "usagi 兔糧"
   - user「香港最近熱話」→ ["Hong Kong trending topics", "Hong Kong hot search"]
-- Each query: 2–8 words, mix English keywords + preserve brand/IP spelling when useful
+  - prior「usagi想食嘅兔糧」+ now「Chiikawa」
+    → ["Chiikawa Usagi", "Chiikawa Usagi favorite food", "ちいかわ うさぎ"]
+    NOT ["Chiikawa Hong Kong"]
+- recent_thread is prior user/assistant turns. If last_user_message is a short sense pick, write queries from the PRIOR question + this sense. Still 1–3 queries this turn — do not loop search.
+- Each query: 1–8 words. Preserve brand/IP spelling. Product-class queries must not repeat the entity unless the user named a branded SKU.
 - Do not paste the raw chat dump; do not include "help me" / "write a post"
-- If ambiguous entity, still emit best-effort atomic queries from entity_surface (do not refuse)
+- If ambiguous entity, still emit split best-effort queries (do not refuse)
 """
 
 TREND_SEARCH = """You are a HK market signal ranker for social content.
@@ -67,6 +81,7 @@ Given company context and candidate signals, pick the most relevant signal_ids (
 Return JSON only:
 {"ranked_signal_ids":["id",...],"notes":"short English note"}
 Only use signal_ids from the input list.
+If signals_trusted is false, do not treat the list as this turn's current facts — rank conservatively and keep notes generic.
 Prefer signals that unlock a timeless human emotion or lived HK scene (tired commute, FOMO queue, boss flip-flops)—not only keyword overlap with the company name.
 """
 
@@ -77,7 +92,10 @@ Do not draft a full publish-ready post unless they clearly ask to start — sugg
 Keep replies concise (2–5 sentences). No tool calls. No emoji spam.
 
 Grounding:
-- If research_signals are provided, lead with what those signals support; do not invent stats/rankings.
+- If signals_trusted is false: do not lead with research_signals as current market facts (they may be stale or unrelated). Do not invent stats. If the user asked for current facts, say you do not have grounded sources yet.
+- If signals_trusted is true and research_signals are provided, lead with what those signals support; do not invent stats/rankings.
+- If signals_trusted is omitted/null, keep the previous two rules based on whether research_signals exist.
+- Signals may come from different search_queries (see metrics.query). Do not merge hits from an entity-only query with hits from a product-class query into one fact (e.g. do not claim a character's favourite food from a random "Usagi" wiki plus a "rabbit feed" page). If signals do not jointly support the user's question, say you do not have grounded sources yet.
 - Do NOT open with a multiple-choice quiz about what the user meant when research_signals exist or a clear topic was given — answer first.
 - Soft clarify (at most one short question) only after answering, and only if ask_clarify is true AND it would change the next action (e.g. drafting a post). Never use clarify instead of using available signals.
 - If product_clarify is true and product_candidates are provided, ask which product/SKU to use (list names briefly) — do not invent SKUs or prices.
@@ -118,6 +136,7 @@ Return JSON only:
 }}
 {_CRAFT_BLOCK}
 Facts must be grounded in the provided signals.
+If signals_trusted is false, do not treat signals as current market facts; avoid stats/rankings and do not invent citations.
 Prefer zh-HK for user-facing strings in can_do/angles/summary when the company is HK-focused.
 Each angle MUST name: (1) the human emotion/pain, (2) a one-second visual hook, (3) the product bridge — not generic「提升品牌曝光」or roasting a named institution.
 cannot_do must include: inventing stats, publishing without UI Confirm, humour that hurts the brand, punching down on named orgs/events as the joke.
@@ -142,6 +161,7 @@ Writing Rules for Authentic HK Vibe:
 - Tone Control: Strictly adhere to the requested `roast_level`. Never use corporate PR speak ("本公司誠意推出").
 - If voice_pack.exemplar_captions are provided, match their rhythm and spoken feel — do not copy them verbatim.
 - Constraints: `source_signal_ids` must be a subset of allowed_signal_ids from the user payload. Never claim the post is already published.
+- If signals_trusted is false: do not present signal titles as current news/stats; write a scene without invented market claims.
 
 Few-shot Examples (Do not copy verbatim, learn the rhythm):
 
@@ -189,6 +209,7 @@ Fail if any of:
 - punchline targets a named institution/event instead of a human emotion
 - no Bridge back to product benefit (pure venting)
 Pass only if copy is usable for preview at the company's roast_level.
+If signals_trusted is false, fail ungrounded market/news/stat claims that lean on ranked signals as current facts.
 """
 
 IMAGE_PLAN = """You design an image generation plan for a social post (no copyrighted brands/logos).

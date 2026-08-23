@@ -1683,6 +1683,10 @@ export type components = {
              * @default false
              */
             ran_research_ingest: boolean;
+            /** Query Source */
+            query_source?: string | null;
+            /** Signals Trusted */
+            signals_trusted?: boolean | null;
         };
         /**
          * ResumeImageRequest
