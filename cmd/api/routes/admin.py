@@ -346,8 +346,6 @@ async def get_session_research(
                 turn.search_queries = [str(q) for q in qs if q]
             elif turn.search_query:
                 turn.search_queries = [turn.search_query]
-            if research.get("query_source"):
-                turn.query_source = str(research.get("query_source"))
         elif step.node == "research_ingest":
             turn.ran_research_ingest = True
             if out.get("search_query"):

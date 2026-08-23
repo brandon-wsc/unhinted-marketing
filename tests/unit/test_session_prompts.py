@@ -1,6 +1,14 @@
 """Lock ROUTE_INTENT / QUERY_GENERATOR / CHAT snippets that encode research policy."""
 
-from internal.session.prompts import CHAT, QUERY_GENERATOR, ROUTE_INTENT
+from internal.session.prompts import (
+    BRAINSTORM,
+    CHAT,
+    EXECUTOR_POST,
+    QUERY_GENERATOR,
+    REVIEWER,
+    ROUTE_INTENT,
+    TREND_SEARCH,
+)
 
 
 def test_route_intent_need_facts_is_topic_gate_not_knowledge_check() -> None:
@@ -33,3 +41,10 @@ def test_chat_does_not_fuse_across_search_queries() -> None:
     assert "metrics.query" in CHAT
     assert "Do not merge hits" in CHAT
     assert "signals_trusted" in CHAT
+
+
+def test_downstream_prompts_respect_signals_trusted() -> None:
+    assert "signals_trusted" in TREND_SEARCH
+    assert "signals_trusted" in BRAINSTORM
+    assert "signals_trusted" in EXECUTOR_POST
+    assert "signals_trusted" in REVIEWER

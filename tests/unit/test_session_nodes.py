@@ -119,6 +119,16 @@ async def test_query_generator_normalize_without_llm(no_llm: None) -> None:
 
 
 @pytest.mark.asyncio
+async def test_query_generator_first_turn_keyword_still_cheap_path(no_llm: None) -> None:
+    out = await N.query_generator(
+        _base_state(messages=[{"role": "user", "content": "Chiikawa"}])
+    )
+    assert "Hong Kong" in out["search_query"]
+    assert out["research"]["query_source"] == "normalize"
+    assert out["research"]["search_queries"] == [out["search_query"]]
+
+
+@pytest.mark.asyncio
 async def test_query_generator_colloquial_uses_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -209,6 +219,7 @@ async def test_query_generator_follow_up_skips_cheap_hk_path(
     assert payload["last_user_message"] == "Chiikawa"
     assert any(m.get("content") == "usagi想食嘅兔糧" for m in payload["recent_thread"])
     assert "Hong Kong" not in out["search_query"]
+    assert out["research"]["query_source"] == "llm"
     assert out["research"]["search_queries"] == [
         "Chiikawa Usagi",
         "Chiikawa Usagi favorite food",

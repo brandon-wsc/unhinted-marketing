@@ -66,10 +66,18 @@ Side channel on `route_intent` output (`ResearchFlags` in `internal/session/io.p
 | `need_facts` | Turn needs current market / web facts → may run `query_generator` + Tavily∪PG |
 | `ambiguous` | Entity has multiple senses; does not block search |
 | `ask_clarify` | User must pick a sense before **drafting** (not a substitute for search) |
-| `entity_surface` | Short noun phrase hint for `query_generator` |
+| `entity_surface` | Short noun phrase hint for `query_generator`. Sense-pick follow-up should combine prior topic + chosen sense (e.g. `Chiikawa Usagi 兔糧`), not the IP name alone |
 | `rationale` | Debug / trace |
-| `query_source` | How queries were produced: `llm` \| `normalize` \| `fallback` (ops; set by `query_generator`) |
+
+Same `research` dict, written later (not on `ResearchFlags`):
+
+| Field | Meaning |
+|-------|---------|
+| `search_queries` | 1–3 atomic queries, **one conjunct each** (entity vs intent vs product class — do not glue `Usagi rabbit food`) |
+| `query_source` | `llm` \| `normalize` \| `fallback` — set by `query_generator` |
 | `signals_trusted` | Consumer bit (set by `research_ingest`): `false` if fallback queries or no Tavily items this turn |
+
+Follow-up turns: `route_intent` / `query_generator` see `recent_thread`. A short sense pick after a fact question stays `chat`, skips the cheap `normalize` path (so `Chiikawa` does not become `Chiikawa Hong Kong`), and rewrites queries from the prior question. **One search hop per user turn** — no loop-until-enough.
 
 Example (market-only turn — no catalog):
 

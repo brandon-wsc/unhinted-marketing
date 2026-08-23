@@ -24,7 +24,9 @@ Paste `session_id` (or jump from LLM detail / Session Trace):
 
 - **semantic_route** / **rule_pass** — gate decision before `query_generator`
 - **search_queries** — one conjunct per query (`usagi` / `Usagi favorite food` / `rabbit feed`), **not** spoken Cantonese, **not** mixed pastes like `usagi 兔糧`, **not** glued `Usagi rabbit food`
-- **Signals** — Tavily∪PG hits with `source`, title, url; `metrics.query` shows which atomic query produced the hit
+- **Follow-up** — after 「usagi想食嘅兔糧」then 「Chiikawa」, queries should look like `Chiikawa Usagi` / favorite food, **not** cheap-path `Chiikawa Hong Kong`. User prompt must include `recent_thread`.
+- **query_source** / **signals_trusted** — `llm` vs `normalize` vs `fallback`; untrusted means leftover PG/gloss hits are not this turn’s facts
+- **Signals** — Tavily∪PG hits with `source`, title, url; `metrics.query` shows which atomic query produced the hit. Chat must not merge entity-only hits with product-class hits into one fact
 
 If queries still look like entity_surface verbatim, check `query_generator` LLM (`parse_ok` / fallback) and the gloss path in `fast_rules`.
 
