@@ -449,6 +449,9 @@ export type paths = {
         /**
          * List Sessions
          * @description List the current user's sessions (newest first), optionally by company.
+         *
+         *     With ``q``, searches session titles and message content across all of the
+         *     user's history (flat newest-first) and includes a matched snippet.
          */
         get: operations["list_sessions_api_sessions_get"];
         put?: never;
@@ -1779,6 +1782,8 @@ export type components = {
              * @default false
              */
             pinned: boolean;
+            /** Matched Snippet */
+            matched_snippet?: string | null;
         };
         /** SessionListResponse */
         SessionListResponse: {
@@ -3068,6 +3073,7 @@ export interface operations {
             query?: {
                 company_id?: string | null;
                 limit?: number;
+                q?: string | null;
             };
             header?: never;
             path?: never;

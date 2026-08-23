@@ -1,4 +1,4 @@
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -39,6 +39,8 @@ type Props = {
   onRename: (sessionId: string, title: string) => Promise<unknown>;
   onPin: (sessionId: string, pinned: boolean) => Promise<unknown>;
   onDelete: (sessionId: string) => Promise<unknown>;
+  /** Server-side history search (title + message content); "" restores the list. */
+  onSearch: (query: string) => void;
   /** Full-bleed page (mobile) — stretch width; pair with onBack. */
   pageMode?: boolean;
   onBack?: () => void;
@@ -99,6 +101,7 @@ export function SessionHistorySidebar({
   onRename,
   onPin,
   onDelete,
+  onSearch,
   pageMode = false,
   onBack,
 }: Props) {
@@ -108,17 +111,19 @@ export function SessionHistorySidebar({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => {
-      const title = (s.title || "").toLowerCase();
-      return title.includes(q) || s.id.toLowerCase().includes(q);
-    });
-  }, [sessions, query]);
+  const searchMode = query.trim().length > 0;
+  const skipInitialSearch = useRef(true);
+  useEffect(() => {
+    if (skipInitialSearch.current) {
+      skipInitialSearch.current = false;
+      return;
+    }
+    const handle = setTimeout(() => onSearch(query), 300);
+    return () => clearTimeout(handle);
+  }, [query, onSearch]);
 
-  const pinned = useMemo(() => filtered.filter((s) => !!s.pinned), [filtered]);
-  const unpinned = useMemo(() => filtered.filter((s) => !s.pinned), [filtered]);
+  const pinned = useMemo(() => sessions.filter((s) => !!s.pinned), [sessions]);
+  const unpinned = useMemo(() => sessions.filter((s) => !s.pinned), [sessions]);
 
   const groups = useMemo(
     () =>
@@ -186,43 +191,55 @@ export function SessionHistorySidebar({
             <button
               type="button"
               onClick={() => onSelect(s.id)}
-              className="min-w-0 flex-1 truncate px-3 py-2 text-left text-[13px] leading-snug"
+              className="min-w-0 flex-1 px-3 py-2 text-left text-[13px] leading-snug"
               title={title}
             >
-              {s.pinned ? (
-                <span className="mr-1.5 inline-flex" aria-hidden>
-                  <PinIcon filled />
+              <span className="block truncate">
+                {s.pinned ? (
+                  <span className="mr-1.5 inline-flex" aria-hidden>
+                    <PinIcon filled />
+                  </span>
+                ) : null}
+                {title}
+              </span>
+              {searchMode && s.matched_snippet ? (
+                <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                  {s.matched_snippet}
                 </span>
               ) : null}
-              {title}
             </button>
-            <div className="relative shrink-0 pr-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton
-                    type="button"
-                    className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100"
-                    aria-label={t("chat.history.more")}
-                  >
-                    <MoreIcon />
-                  </IconButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuItem onSelect={() => void handlePin(s.id, !s.pinned)}>
-                    <PinIcon filled={!!s.pinned} />
-                    {s.pinned ? t("chat.history.unpin") : t("chat.history.pin")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setRenamingId(s.id)}>
-                    <RenameIcon />
-                    {t("chat.history.rename")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDeleteId(s.id)}>
-                    <TrashIcon />
-                    {t("chat.history.delete")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            {!searchMode && (
+              <div className="relative shrink-0 pr-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <IconButton
+                      type="button"
+                      className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100"
+                      aria-label={t("chat.history.more")}
+                    >
+                      <MoreIcon />
+                    </IconButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem onSelect={() => void handlePin(s.id, !s.pinned)}>
+                      <PinIcon filled={!!s.pinned} />
+                      {s.pinned ? t("chat.history.unpin") : t("chat.history.pin")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRenamingId(s.id)}>
+                      <RenameIcon />
+                      {t("chat.history.rename")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => setConfirmDeleteId(s.id)}
+                    >
+                      <TrashIcon />
+                      {t("chat.history.delete")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
           </div>
         )}
       </li>
@@ -305,13 +322,36 @@ export function SessionHistorySidebar({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("chat.history.search")}
-            className="w-full rounded-full border-0 bg-card py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-border transition placeholder:text-muted-foreground hover:ring-voice-border focus:ring-ring"
+            className="w-full rounded-full border-0 bg-card py-2 pl-9 pr-8 text-sm outline-none ring-1 ring-border transition placeholder:text-muted-foreground hover:ring-voice-border focus:ring-ring"
           />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label={t("chat.history.clearSearch")}
+              title={t("chat.history.clearSearch")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            >
+              <X size={12} />
+            </button>
+          ) : null}
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-        {loading && sessions.length === 0 ? (
+        {searchMode ? (
+          loading && sessions.length === 0 ? (
+            <p className="px-3 py-8 text-center text-xs text-muted-foreground">
+              {t("chat.history.loading")}
+            </p>
+          ) : sessions.length === 0 ? (
+            <p className="px-3 py-8 text-center text-xs text-muted-foreground">
+              {t("chat.history.noResults")}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-0.5 pt-1">{sessions.map(renderRow)}</ul>
+          )
+        ) : loading && sessions.length === 0 ? (
           <p className="px-3 py-8 text-center text-xs text-muted-foreground">
             {t("chat.history.loading")}
           </p>
@@ -434,6 +474,7 @@ export function SessionHistoryMobileSheet({
   onRename,
   onPin,
   onDelete,
+  onSearch,
 }: {
   open: boolean;
   onClose: () => void;
@@ -445,6 +486,7 @@ export function SessionHistoryMobileSheet({
   onRename: (sessionId: string, title: string) => Promise<unknown>;
   onPin: (sessionId: string, pinned: boolean) => Promise<unknown>;
   onDelete: (sessionId: string) => Promise<unknown>;
+  onSearch: (query: string) => void;
 }) {
   if (!open) return null;
   return (
@@ -473,6 +515,7 @@ export function SessionHistoryMobileSheet({
           onRename={onRename}
           onPin={onPin}
           onDelete={onDelete}
+          onSearch={onSearch}
         />
       </div>
     </div>

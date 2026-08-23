@@ -120,10 +120,43 @@ async def list_sessions(
     db: Annotated[AsyncSession, Depends(get_db)],
     company_id: Annotated[uuid.UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 40,
+    q: Annotated[str | None, Query(max_length=200)] = None,
 ) -> SessionListResponse:
-    """List the current user's sessions (newest first), optionally by company."""
+    """List the current user's sessions (newest first), optionally by company.
+
+    With ``q``, searches session titles and message content across all of the
+    user's history (flat newest-first) and includes a matched snippet.
+    """
     if company_id is not None and not await repos.user_has_org_access(db, user.id, company_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    query = (q or "").strip()
+    if query:
+        rows = await repos.search_user_sessions(
+            db, user_id=user.id, company_id=company_id, q=query, limit=limit
+        )
+        return SessionListResponse(
+            sessions=[
+                SessionListItem(
+                    id=session.id,
+                    company_id=session.company_id,
+                    user_id=session.user_id,
+                    mode=session.mode,
+                    status=session.status,
+                    created_at=session.created_at,
+                    updated_at=session.updated_at,
+                    title=_display_title(session, preview),
+                    pinned=bool(session.pinned),
+                    matched_snippet=_search_snippet(
+                        query,
+                        match_content,
+                        _brief_text(session.state),
+                        _draft_text((session.state or {}).get("draft")),
+                        _draft_text(draft_copy),
+                    ),
+                )
+                for session, preview, match_content, draft_copy in rows
+            ]
+        )
     rows = await repos.list_user_sessions(
         db, user_id=user.id, company_id=company_id, limit=limit
     )
@@ -143,6 +176,57 @@ async def list_sessions(
             for session, preview in rows
         ]
     )
+
+
+def _matched_snippet(content: str, query: str, width: int = 120) -> str:
+    """Context window around the first case-insensitive match in content."""
+    text = " ".join(content.split())
+    idx = text.lower().find(query.lower())
+    if idx < 0:
+        return text[:width]
+    start = max(0, idx - (width - len(query)) // 2)
+    end = min(len(text), start + width)
+    start = max(0, end - width)
+    snippet = text[start:end]
+    if start > 0:
+        snippet = "…" + snippet
+    if end < len(text):
+        snippet += "…"
+    return snippet
+
+
+def _search_snippet(query: str, *candidates: str | None) -> str | None:
+    """First candidate that actually contains the query, windowed."""
+    for text in candidates:
+        if text and query.lower() in " ".join(text.split()).lower():
+            return _matched_snippet(text, query)
+    return None
+
+
+def _brief_text(state: dict | None) -> str | None:
+    brief = _brief_from_state(state)
+    if not brief:
+        return None
+    parts = [brief.summary, *brief.can_do, *brief.cannot_do, *brief.angles]
+    if brief.persona:
+        parts.append(brief.persona)
+    return " ".join(p for p in parts if p) or None
+
+
+def _draft_text(copy: dict | None) -> str | None:
+    if not isinstance(copy, dict):
+        return None
+    parts: list[str] = []
+    caption = copy.get("caption")
+    hashtags = copy.get("hashtags")
+    cta = copy.get("cta")
+    if isinstance(caption, str):
+        parts.append(caption)
+    if isinstance(hashtags, list):
+        parts.extend(h for h in hashtags if isinstance(h, str))
+    if isinstance(cta, str):
+        parts.append(cta)
+    return " ".join(parts) or None
 
 
 def _display_title(session: Session, preview: str | None) -> str | None:

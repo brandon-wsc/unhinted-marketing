@@ -121,6 +121,7 @@ export function ChatPanel() {
     renameSession,
     pinSession,
     deleteSession,
+    searchHistory,
   } = useSession(companyId);
   const { questions, loading: questionsLoading, isStale } = useRecommendedQuestions(companyId);
   const now = useNow();
@@ -407,6 +408,7 @@ export function ChatPanel() {
     onRename: handleRenameSession,
     onPin: handlePinSession,
     onDelete: handleDeleteSession,
+    onSearch: searchHistory,
   };
 
   const historySidebar = (

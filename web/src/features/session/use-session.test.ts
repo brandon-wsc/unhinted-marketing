@@ -106,6 +106,73 @@ describe("useSession", () => {
     expect(apiGetSessionMessages).not.toHaveBeenCalled();
   });
 
+  it("searchHistory queries the server and restores the list on clear", async () => {
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.history).toEqual([historyItem]));
+
+    const hit: SessionListItem = {
+      ...historyItem,
+      id: "sess-hit",
+      matched_snippet: "…中秋月餅禮盒…",
+    };
+    apiListSessions.mockResolvedValue([hit]);
+    await act(async () => {
+      await result.current.searchHistory("月餅");
+    });
+    expect(apiListSessions).toHaveBeenLastCalledWith("tok", "co-1", "月餅");
+    expect(result.current.history).toEqual([hit]);
+
+    apiListSessions.mockResolvedValue([historyItem]);
+    await act(async () => {
+      await result.current.searchHistory("   ");
+    });
+    expect(apiListSessions).toHaveBeenLastCalledWith("tok", "co-1");
+    expect(result.current.history).toEqual([historyItem]);
+  });
+
+  it("refreshHistory re-applies the active search query", async () => {
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.history).toEqual([historyItem]));
+
+    const hit: SessionListItem = { ...historyItem, id: "sess-hit" };
+    apiListSessions.mockResolvedValue([hit]);
+    await act(async () => {
+      await result.current.searchHistory("月餅");
+    });
+    // Opening a session triggers refreshHistory — results must stay filtered.
+    await act(async () => {
+      await result.current.refreshHistory();
+    });
+    expect(apiListSessions).toHaveBeenLastCalledWith("tok", "co-1", "月餅");
+    expect(result.current.history).toEqual([hit]);
+  });
+
+  it("ignores out-of-order search responses", async () => {
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.history).toEqual([historyItem]));
+
+    let resolveSlow: ((rows: SessionListItem[]) => void) | undefined;
+    const slow = new Promise<SessionListItem[]>((res) => {
+      resolveSlow = res;
+    });
+    const fast: SessionListItem = { ...historyItem, id: "sess-fast" };
+    apiListSessions.mockImplementation((_tok: string | null, _co: string, q?: string) =>
+      q === "slow" ? slow : Promise.resolve([fast]),
+    );
+
+    await act(async () => {
+      void result.current.searchHistory("slow");
+      await result.current.searchHistory("fast");
+    });
+    expect(result.current.history).toEqual([fast]);
+
+    await act(async () => {
+      resolveSlow?.([{ ...historyItem, id: "sess-slow" }]);
+      await slow;
+    });
+    expect(result.current.history).toEqual([fast]);
+  });
+
   it("restores a remembered session and rebuilds agent actions", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({

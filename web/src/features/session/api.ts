@@ -29,8 +29,11 @@ export async function apiCreateSession(
 export async function apiListSessions(
   accessToken: string | null,
   companyId: string,
+  q?: string,
 ): Promise<SessionListItem[]> {
   const qs = new URLSearchParams({ company_id: companyId, limit: "40" });
+  const query = q?.trim();
+  if (query) qs.set("q", query);
   const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions?${qs}`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   const body = (await res.json()) as { sessions: SessionListItem[] };

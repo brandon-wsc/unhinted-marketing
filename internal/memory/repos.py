@@ -2,7 +2,7 @@ import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, desc, func, or_, select
+from sqlalchemy import Text, cast, delete, desc, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -515,6 +515,87 @@ async def list_user_sessions(
     stmt = stmt.order_by(desc(Session.pinned), desc(Session.updated_at)).limit(limit)
     rows = (await db.execute(stmt)).all()
     return [(row[0], row[1]) for row in rows]
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+async def search_user_sessions(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    q: str,
+    company_id: uuid.UUID | None = None,
+    limit: int = 40,
+) -> list[tuple[Session, str | None, str | None, dict | None]]:
+    """Search everything the user can see in a session (case-insensitive):
+    title, chat messages, brief + current draft (``sessions.state`` JSONB),
+    and all draft revisions (``preview_drafts.copy`` JSONB).
+
+    Returns (session, first-user preview, first matching message content,
+    latest matching draft copy). Flat newest-first order — pinned grouping
+    is a browse-mode concern.
+    """
+    pattern = f"%{_escape_like(q)}%"
+    first_user = (
+        select(SessionMessage.content)
+        .where(
+            SessionMessage.session_id == Session.id,
+            SessionMessage.role == "user",
+        )
+        .order_by(SessionMessage.created_at.asc())
+        .limit(1)
+        .correlate(Session)
+        .scalar_subquery()
+    )
+    content_match = SessionMessage.content.ilike(pattern, escape="\\")
+    first_match = (
+        select(SessionMessage.content)
+        .where(SessionMessage.session_id == Session.id, content_match)
+        .order_by(SessionMessage.created_at.asc())
+        .limit(1)
+        .correlate(Session)
+        .scalar_subquery()
+    )
+    state_match = cast(Session.state, Text).ilike(pattern, escape="\\")
+    draft_copy_match = cast(PreviewDraft.copy, Text).ilike(pattern, escape="\\")
+    latest_matching_draft = (
+        select(PreviewDraft.copy)
+        .where(PreviewDraft.session_id == Session.id, draft_copy_match)
+        .order_by(PreviewDraft.revision.desc())
+        .limit(1)
+        .correlate(Session)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(Session, first_user, first_match, latest_matching_draft)
+        .where(Session.user_id == user_id)
+        .where(
+            or_(
+                Session.title.ilike(pattern, escape="\\"),
+                exists(
+                    select(SessionMessage.id).where(
+                        SessionMessage.session_id == Session.id,
+                        content_match,
+                    )
+                ),
+                state_match,
+                exists(
+                    select(PreviewDraft.id).where(
+                        PreviewDraft.session_id == Session.id,
+                        draft_copy_match,
+                    )
+                ),
+            )
+        )
+        .order_by(desc(Session.updated_at))
+        .limit(limit)
+    )
+    if company_id is not None:
+        stmt = stmt.where(Session.company_id == company_id)
+    rows = (await db.execute(stmt)).all()
+    return [(row[0], row[1], row[2], row[3]) for row in rows]
 
 
 async def update_session_meta(

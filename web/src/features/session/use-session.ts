@@ -86,6 +86,8 @@ export function useSession(companyId: string | undefined) {
   const [history, setHistory] = useState<SessionListItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
+  // Guards against out-of-order history list/search responses.
+  const historyReqSeq = useRef(0);
 
   const sessionId = session?.id ?? null;
   const sseReadyRef = useRef<SseReadyHandle | null>(null);
@@ -512,21 +514,44 @@ export function useSession(companyId: string | undefined) {
     };
   }, [sessionId, accessToken, refreshAccessToken, applyTurnEvent, lastUserMessageId]);
 
-  const refreshHistory = useCallback(async () => {
-    if (!accessToken || !companyId) {
-      setHistory([]);
-      return;
-    }
-    setHistoryLoading(true);
-    try {
-      const rows = await apiListSessions(accessToken, companyId);
-      setHistory(rows);
-    } catch {
-      setHistory([]);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [accessToken, companyId]);
+  // Active server-side history search ("" = browse mode). Ref so that
+  // refreshHistory re-applies it — opening a result must not drop the
+  // sidebar back to the plain list.
+  const historyQueryRef = useRef("");
+
+  const fetchHistory = useCallback(
+    async (q: string, { keepOnError = false }: { keepOnError?: boolean } = {}) => {
+      const seq = ++historyReqSeq.current;
+      if (!accessToken || !companyId) {
+        setHistory([]);
+        return;
+      }
+      setHistoryLoading(true);
+      try {
+        const rows = q
+          ? await apiListSessions(accessToken, companyId, q)
+          : await apiListSessions(accessToken, companyId);
+        if (seq === historyReqSeq.current) setHistory(rows);
+      } catch {
+        // Search failure keeps the previous list — a transient error should
+        // not blank out the sidebar mid-typing.
+        if (!keepOnError && seq === historyReqSeq.current) setHistory([]);
+      } finally {
+        if (seq === historyReqSeq.current) setHistoryLoading(false);
+      }
+    },
+    [accessToken, companyId],
+  );
+
+  const refreshHistory = useCallback(() => fetchHistory(historyQueryRef.current), [fetchHistory]);
+
+  const searchHistory = useCallback(
+    async (query: string) => {
+      historyQueryRef.current = query.trim();
+      await fetchHistory(historyQueryRef.current, { keepOnError: true });
+    },
+    [fetchHistory],
+  );
 
   const openSession = useCallback(
     async (targetSessionId: string) => {
@@ -1196,5 +1221,6 @@ export function useSession(companyId: string | undefined) {
     pinSession,
     deleteSession,
     refreshHistory,
+    searchHistory,
   };
 }

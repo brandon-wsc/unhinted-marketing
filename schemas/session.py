@@ -32,6 +32,8 @@ class SessionListItem(BaseModel):
     updated_at: datetime
     title: str | None = None
     pinned: bool = False
+    # Only set on search (?q=): context around the first matching message.
+    matched_snippet: str | None = None
 
 
 class SessionListResponse(BaseModel):

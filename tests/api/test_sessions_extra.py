@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from internal.memory.models import SessionMessage
+from internal.memory.models import PreviewDraft, Session, SessionMessage
 from tests.api.helpers import auth_header, register_user, seed_preview_session
 
 
@@ -113,6 +113,157 @@ async def test_list_sessions_by_company_ok(client, db_session) -> None:
     assert any(s["id"] == session_id for s in sessions)
     match = next(s for s in sessions if s["id"] == session_id)
     assert match["title"] == "first user preview title"
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_search(client, db_session) -> None:
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    # Session A: keyword only in a message body
+    created_a = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    a_id = created_a.json()["id"]
+    db_session.add(
+        SessionMessage(
+            session_id=uuid.UUID(a_id),
+            role="user",
+            content="我想推廣中秋月餅禮盒",
+            metadata_={},
+        )
+    )
+    # Session B: keyword only in the title
+    created_b = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    b_id = created_b.json()["id"]
+    renamed = await client.patch(
+        f"/api/sessions/{b_id}", headers=headers, json={"title": "月餅 giveaway 構思"}
+    )
+    assert renamed.status_code == 200
+    # Session C: unrelated
+    created_c = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    c_id = created_c.json()["id"]
+    db_session.add(
+        SessionMessage(
+            session_id=uuid.UUID(c_id),
+            role="user",
+            content="夏日沙灘帖文",
+            metadata_={},
+        )
+    )
+    await db_session.commit()
+
+    res = await client.get(
+        "/api/sessions", headers=headers, params={"company_id": company_id, "q": "月餅"}
+    )
+    assert res.status_code == 200, res.text
+    sessions = res.json()["sessions"]
+    ids = {s["id"] for s in sessions}
+    assert a_id in ids
+    assert b_id in ids
+    assert c_id not in ids
+
+    match_a = next(s for s in sessions if s["id"] == a_id)
+    assert "月餅" in match_a["matched_snippet"]
+    # Title-only match has no message snippet
+    match_b = next(s for s in sessions if s["id"] == b_id)
+    assert match_b["matched_snippet"] is None
+
+    # No match → empty list
+    res_none = await client.get("/api/sessions", headers=headers, params={"q": "冇呢樣嘢xyz"})
+    assert res_none.status_code == 200
+    assert res_none.json()["sessions"] == []
+
+    # ILIKE wildcards in the query are escaped, not treated as patterns
+    res_wild = await client.get("/api/sessions", headers=headers, params={"q": "%"})
+    assert res_wild.status_code == 200
+    assert res_wild.json()["sessions"] == []
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_search_case_insensitive_and_scoped(client, db_session) -> None:
+    data = await register_user(client)
+    headers = auth_header(data["access_token"])
+    company_id = data["user"]["organizations"][0]["id"]
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+    db_session.add(
+        SessionMessage(
+            session_id=uuid.UUID(session_id),
+            role="assistant",
+            content="Hello IG Caption draft",
+            metadata_={},
+        )
+    )
+    await db_session.commit()
+
+    res = await client.get("/api/sessions", headers=headers, params={"q": "hello ig"})
+    assert res.status_code == 200
+    assert [s["id"] for s in res.json()["sessions"]] == [session_id]
+
+    # Another user cannot search across someone else's history
+    other = await register_user(
+        client,
+        email=f"searcher-{uuid.uuid4().hex[:8]}@example.com",
+        organization_name="Other Co",
+    )
+    res_other = await client.get(
+        "/api/sessions", headers=auth_header(other["access_token"]), params={"q": "hello ig"}
+    )
+    assert res_other.status_code == 200
+    assert res_other.json()["sessions"] == []
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_search_brief_and_draft(client, db_session) -> None:
+    """User-visible side-channel content (brief / draft copy) is searchable."""
+    data = await register_user(client)
+    headers = auth_header(data["access_token"])
+    company_id = data["user"]["organizations"][0]["id"]
+
+    # Keyword only in the brief (sessions.state JSONB)
+    created_a = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    a_id = created_a.json()["id"]
+    sess_a = await db_session.get(Session, uuid.UUID(a_id))
+    assert sess_a is not None
+    sess_a.state = {
+        "brief": {
+            "summary": "推廣手工曲奇禮盒",
+            "can_do": ["IG 帖文"],
+            "cannot_do": [],
+            "angles": [],
+        }
+    }
+    db_session.add(sess_a)
+
+    # Keyword only in draft copy (preview_drafts JSONB)
+    created_b = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    b_id = created_b.json()["id"]
+    db_session.add(
+        PreviewDraft(
+            session_id=uuid.UUID(b_id),
+            revision=1,
+            copy={"caption": "手工曲奇 caption 登場", "hashtags": ["#曲奇"], "cta": "快啲買"},
+            approval_token=f"tok-{uuid.uuid4().hex}",
+        )
+    )
+    await db_session.commit()
+
+    res = await client.get("/api/sessions", headers=headers, params={"q": "曲奇"})
+    assert res.status_code == 200, res.text
+    sessions = res.json()["sessions"]
+    ids = {s["id"] for s in sessions}
+    assert a_id in ids
+    assert b_id in ids
+    snip_a = next(s for s in sessions if s["id"] == a_id)["matched_snippet"]
+    snip_b = next(s for s in sessions if s["id"] == b_id)["matched_snippet"]
+    assert "曲奇" in snip_a
+    assert "曲奇" in snip_b
+
+    # CTA / hashtag text inside draft copy is searchable too
+    res_cta = await client.get("/api/sessions", headers=headers, params={"q": "快啲買"})
+    assert [s["id"] for s in res_cta.json()["sessions"]] == [b_id]
 
 
 @pytest.mark.asyncio

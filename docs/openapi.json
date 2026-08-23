@@ -1508,7 +1508,7 @@
           "sessions"
         ],
         "summary": "List Sessions",
-        "description": "List the current user's sessions (newest first), optionally by company.",
+        "description": "List the current user's sessions (newest first), optionally by company.\n\nWith ``q``, searches session titles and message content across all of the\nuser's history (flat newest-first) and includes a matched snippet.",
         "operationId": "list_sessions_api_sessions_get",
         "security": [
           {
@@ -1543,6 +1543,23 @@
               "minimum": 1,
               "default": 40,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
             }
           }
         ],
@@ -5476,6 +5493,17 @@
             "type": "boolean",
             "title": "Pinned",
             "default": false
+          },
+          "matched_snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Snippet"
           }
         },
         "type": "object",
