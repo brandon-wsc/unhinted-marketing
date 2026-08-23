@@ -5,6 +5,7 @@ import {
   agentNodeLabelKey,
   agentTrailHeader,
   asStringList,
+  bumpSessionInHistory,
   EMPTY_COMPOSER_DRAFT,
   isUserFacingAgentNode,
   MAX_QUEUED_SESSION_MESSAGES,
@@ -18,6 +19,7 @@ import {
   parseTurnDurationMs,
   previewAnchorFromActions,
   readComposerDraft,
+  sortSessionHistory,
   stashComposerDraft,
   waitForSseReady,
 } from "@/features/session/session-helpers";
@@ -26,6 +28,7 @@ import type {
   ChatMessage,
   ComposerDraft,
   PreviewDraft,
+  SessionListItem,
 } from "@/features/session/types";
 
 describe("asStringList", () => {
@@ -430,6 +433,48 @@ describe("waitForSseReady", () => {
     const done = waitForSseReady(ref, 80);
     await vi.advanceTimersByTimeAsync(120);
     await expect(done).resolves.toBeUndefined();
+  });
+});
+
+describe("session history recency", () => {
+  const row = (
+    id: string,
+    updated_at: string,
+    pinned = false,
+  ): SessionListItem => ({
+    id,
+    company_id: "co-1",
+    user_id: "u-1",
+    mode: "CHAT",
+    status: "active",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at,
+    title: id,
+    pinned,
+  });
+
+  it("sorts pinned first then newest updated_at", () => {
+    const older = row("old", "2026-01-01T00:00:00Z");
+    const newer = row("new", "2026-08-01T00:00:00Z");
+    const pinned = row("pin", "2026-02-01T00:00:00Z", true);
+    expect(sortSessionHistory([older, newer, pinned]).map((s) => s.id)).toEqual([
+      "pin",
+      "new",
+      "old",
+    ]);
+  });
+
+  it("bumps an existing row to the top of the unpinned group", () => {
+    const older = row("old", "2026-01-01T00:00:00Z");
+    const newer = row("new", "2026-08-01T00:00:00Z");
+    const next = bumpSessionInHistory([newer, older], "old", "2026-08-23T12:00:00Z");
+    expect(next.map((s) => s.id)).toEqual(["old", "new"]);
+    expect(next[0]?.updated_at).toBe("2026-08-23T12:00:00Z");
+  });
+
+  it("leaves the list unchanged when the session is missing", () => {
+    const rows = [row("a", "2026-08-01T00:00:00Z")];
+    expect(bumpSessionInHistory(rows, "missing", "2026-08-23T12:00:00Z")).toBe(rows);
   });
 });
 

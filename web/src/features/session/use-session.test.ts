@@ -458,6 +458,58 @@ describe("useSession", () => {
     ).toBe(true);
   });
 
+  it("bumps an old session to the top of history as soon as you send", async () => {
+    const newer: SessionListItem = {
+      ...historyItem,
+      id: "sess-new",
+      title: "Newer",
+      created_at: "2026-08-01T00:00:00Z",
+      updated_at: "2026-08-01T00:00:00Z",
+    };
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiListSessions.mockResolvedValue([newer, historyItem]);
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [],
+    });
+    let resolvePost: (value: unknown) => void = () => {};
+    apiPostSessionMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePost = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() =>
+      expect(result.current.history.map((s) => s.id)).toEqual(["sess-new", "sess-1"]),
+    );
+
+    act(() => {
+      void result.current.sendMessage("hello again");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history[0]?.id).toBe("sess-1");
+    });
+
+    await act(async () => {
+      resolvePost({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u-server",
+            session_id: "sess-1",
+            role: "user",
+            content: "hello again",
+            created_at: "2026-08-23T00:00:01Z",
+          },
+        ],
+        ...idleTurn,
+      });
+    });
+  });
+
   it("queues a follow-up send until the in-flight turn finishes", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({

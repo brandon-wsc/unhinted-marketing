@@ -8,6 +8,7 @@ import type {
   PreviewMediaItem,
   QueuedChatMessage,
   SessionBrief,
+  SessionListItem,
 } from "./types";
 
 export function asStringList(value: unknown): string[] {
@@ -98,6 +99,27 @@ export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
   input: "",
   editInsertAt: null,
 };
+
+/** Pinned first, then newest ``updated_at`` — same order as ``GET /api/sessions``. */
+export function sortSessionHistory(rows: SessionListItem[]): SessionListItem[] {
+  return [...rows].sort((a, b) => {
+    const pin = Number(!!b.pinned) - Number(!!a.pinned);
+    if (pin !== 0) return pin;
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+  });
+}
+
+/** Optimistic recency bump so an old thread jumps back to the top on send. */
+export function bumpSessionInHistory(
+  rows: SessionListItem[],
+  sessionId: string,
+  updatedAt: string,
+): SessionListItem[] {
+  if (!rows.some((s) => s.id === sessionId)) return rows;
+  return sortSessionHistory(
+    rows.map((s) => (s.id === sessionId ? { ...s, updated_at: updatedAt } : s)),
+  );
+}
 
 export function snapshotComposerDraft(current: ComposerDraft): ComposerDraft {
   return {

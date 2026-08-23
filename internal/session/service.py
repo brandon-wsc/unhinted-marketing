@@ -502,6 +502,7 @@ async def _persist_after_invoke(
             }
         )
 
+    repos.touch_session(session)
     await db.flush()
     await session_event_bus.publish_many(session.id, events)
     return {
@@ -604,6 +605,7 @@ async def run_session_turn(
     user_msg = await repos.add_session_message(
         db, session_id=session.id, role="user", content=user_content
     )
+    repos.touch_session(session)
     existing = await repos.list_session_messages(db, session.id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
 
@@ -676,6 +678,7 @@ async def resume_image_turn(
     # Snapshot full parked UI state so Stop mid-image can restore the CTA.
     parked_restore = copy.deepcopy(dict(session.state or {}))
     parked_restore["awaiting_image_ok"] = True
+    repos.touch_session(session)
 
     existing = await repos.list_session_messages(db, session.id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]

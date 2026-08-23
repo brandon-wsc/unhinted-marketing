@@ -19,6 +19,7 @@ import {
 } from "./api";
 import {
   agentActionsFromMessages,
+  bumpSessionInHistory,
   EMPTY_COMPOSER_DRAFT,
   isUserFacingAgentNode,
   MAX_QUEUED_SESSION_MESSAGES,
@@ -32,6 +33,7 @@ import {
   parseMediaItems,
   previewAnchorFromActions,
   readComposerDraft,
+  sortSessionHistory,
   stashComposerDraft,
   waitForSseReady,
 } from "./session-helpers";
@@ -716,6 +718,11 @@ export function useSession(companyId: string | undefined) {
 
   const refreshHistory = useCallback(() => fetchHistory(historyQueryRef.current), [fetchHistory]);
 
+  const bumpHistoryRecency = useCallback((targetSessionId: string) => {
+    const now = new Date().toISOString();
+    setHistory((prev) => bumpSessionInHistory(prev, targetSessionId, now));
+  }, []);
+
   const searchHistory = useCallback(
     async (query: string) => {
       historyQueryRef.current = query.trim();
@@ -883,13 +890,7 @@ export function useSession(companyId: string | undefined) {
         cleaned ? { title: cleaned } : { clear_title: true },
       );
       setHistory((prev) =>
-        prev
-          .map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
-          .sort((a, b) => {
-            const pin = Number(!!b.pinned) - Number(!!a.pinned);
-            if (pin !== 0) return pin;
-            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-          }),
+        sortSessionHistory(prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))),
       );
       return updated;
     },
@@ -901,13 +902,7 @@ export function useSession(companyId: string | undefined) {
       if (!accessToken) return;
       const updated = await apiUpdateSession(accessToken, targetSessionId, { pinned });
       setHistory((prev) =>
-        prev
-          .map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
-          .sort((a, b) => {
-            const pin = Number(!!b.pinned) - Number(!!a.pinned);
-            if (pin !== 0) return pin;
-            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-          }),
+        sortSessionHistory(prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))),
       );
       return updated;
     },
@@ -1074,6 +1069,7 @@ export function useSession(companyId: string | undefined) {
         suppressLiveTurnEventsRef.current = stillOn(active.id)
           ? false
           : suppressLiveTurnEventsRef.current;
+        bumpHistoryRecency(active.id);
 
         if (stillOn(active.id)) {
           setStreamingText(null);
@@ -1124,6 +1120,7 @@ export function useSession(companyId: string | undefined) {
             mode: res.mode,
             turnAnchor: null,
           });
+          void refreshHistory();
           return;
         }
         messagesRef.current = res.messages;
@@ -1229,6 +1226,7 @@ export function useSession(companyId: string | undefined) {
       stillOn,
       registerInFlight,
       dropInFlight,
+      bumpHistoryRecency,
     ],
   );
 
@@ -1317,6 +1315,7 @@ export function useSession(companyId: string | undefined) {
       const abort = new AbortController();
       registerInFlight(boundId, abort);
       setLlmError(null);
+      bumpHistoryRecency(boundId);
       try {
         const res = await apiResumeSessionImage(accessToken, boundId, {
           signal: abort.signal,
@@ -1325,7 +1324,10 @@ export function useSession(companyId: string | undefined) {
         if (abort.signal.aborted || epoch !== epochOf(boundId)) {
           return;
         }
-        if (!stillOn(boundId)) return;
+        if (!stillOn(boundId)) {
+          void refreshHistory();
+          return;
+        }
         applyTurnResponse(res);
         void refreshHistory();
       } catch (err) {
@@ -1347,6 +1349,7 @@ export function useSession(companyId: string | undefined) {
       stillOn,
       registerInFlight,
       dropInFlight,
+      bumpHistoryRecency,
     ],
   );
 

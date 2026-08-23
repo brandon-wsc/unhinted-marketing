@@ -598,6 +598,16 @@ async def search_user_sessions(
     return [(row[0], row[1], row[2], row[3]) for row in rows]
 
 
+def touch_session(session: Session) -> None:
+    """Bump recency so history lists reorder after a turn.
+
+    ``updated_at`` uses SQLAlchemy ``onupdate``, which only fires when the ORM
+    row is dirty. A follow-up chat turn often writes an equal JSONB ``state``,
+    so the row is skipped and an old session stays buried.
+    """
+    session.updated_at = datetime.now(UTC)
+
+
 async def update_session_meta(
     db: AsyncSession,
     session: Session,
