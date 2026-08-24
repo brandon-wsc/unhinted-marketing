@@ -4,6 +4,7 @@ import { parseApiErrorResponse } from "@/lib/parse-api-error";
 import type {
   ConfirmSessionResponse,
   DraftCopy,
+  ForkSessionResponse,
   PostMessageResponse,
   PreviewMediaMutationResponse,
   RecommendedQuestionsResponse,
@@ -29,8 +30,11 @@ export async function apiCreateSession(
 export async function apiListSessions(
   accessToken: string | null,
   companyId: string,
+  q?: string,
 ): Promise<SessionListItem[]> {
   const qs = new URLSearchParams({ company_id: companyId, limit: "40" });
+  const query = q?.trim();
+  if (query) qs.set("q", query);
   const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions?${qs}`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   const body = (await res.json()) as { sessions: SessionListItem[] };
@@ -66,6 +70,20 @@ export async function apiGetSessionMessages(
   sessionId: string,
 ): Promise<SessionMessagesResponse> {
   const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/messages`);
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiForkSession(
+  accessToken: string | null,
+  sessionId: string,
+  messageId: string,
+): Promise<ForkSessionResponse> {
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/fork`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message_id: messageId }),
+  });
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }

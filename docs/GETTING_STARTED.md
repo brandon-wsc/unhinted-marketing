@@ -117,7 +117,7 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 | PATCH | `/api/sessions/{id}` | Rename (`title` / `clear_title`) and/or `pinned` |
 | DELETE | `/api/sessions/{id}` | Delete session (+ cascaded messages/drafts) |
 | POST | `/api/sessions/{id}/messages` | User turn (LangGraph); 409 if busy or parked awaiting image |
-| GET | `/api/sessions/{id}/messages` | Hydrate transcript (`metadata.agent_actions` on user turns) |
+| GET | `/api/sessions/{id}/messages` | Hydrate transcript (`metadata.agent_actions` + `duration_ms` on user turns) |
 | POST | `/api/sessions/{id}/resume-image` | Resume parked graph into image plan/gen ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
 | POST | `/api/sessions/{id}/stop` | Discard in-flight or parked turn |
 | POST | `/api/sessions/{id}/draft` | Manual draft revision (no LLM) |

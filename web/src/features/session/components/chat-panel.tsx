@@ -1,8 +1,19 @@
 import { cjk } from "@streamdown/cjk";
-import { Check, Copy, CornerDownRight, Ellipsis, Pencil, Square, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  CornerDownRight,
+  Ellipsis,
+  GitFork,
+  Pencil,
+  Square,
+  Trash2,
+} from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -26,12 +37,20 @@ import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
-import { MAX_QUEUED_SESSION_MESSAGES, QUEUE_TUCK_PX } from "@/features/session/session-helpers";
+import {
+  agentNodeFallbackKey,
+  agentNodeLabelKey,
+  agentTrailHeader,
+  MAX_QUEUED_SESSION_MESSAGES,
+  parseTurnDurationMs,
+  QUEUE_TUCK_PX,
+} from "@/features/session/session-helpers";
 import { sessionLayoutMode } from "@/features/session/session-layout";
 import type {
   AgentActionRecord,
   ChatMessage,
   DraftCopy,
+  ForkRef,
   RecommendedQuestion,
   SessionBrief,
 } from "@/features/session/types";
@@ -40,6 +59,7 @@ import { useSession } from "@/features/session/use-session";
 import { useContainerWidth } from "@/hooks/use-container-width";
 import { useNow } from "@/hooks/use-now";
 import { classifyRelativeTime, formatAbsoluteDateTime } from "@/lib/format-relative-time";
+import { formatWorkedDuration, workedDurationLocale } from "@/lib/format-worked-duration";
 import { cn } from "@/lib/utils";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
@@ -60,7 +80,7 @@ function overlayStackHeight(el: HTMLElement): number {
 export function ChatPanel() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { showError } = useToast();
+  const { showError, showInfo } = useToast();
   const companyId = user?.organizations[0]?.id;
   const canPromoteExemplar =
     user?.organizations[0]?.role === "owner" || user?.organizations[0]?.role === "admin";
@@ -87,6 +107,9 @@ export function ChatPanel() {
     history,
     historyLoading,
     restoring,
+    forkedFrom,
+    forking,
+    forkSession,
     sendMessage,
     enqueueQueuedMessage,
     dequeueQueuedMessage,
@@ -104,11 +127,14 @@ export function ChatPanel() {
     renameSession,
     pinSession,
     deleteSession,
+    searchHistory,
+    composerInput,
+    setComposerInput,
+    editInsertAt,
+    setEditInsertAt,
   } = useSession(companyId);
   const { questions, loading: questionsLoading, isStale } = useRecommendedQuestions(companyId);
   const now = useNow();
-  const [input, setInput] = useState("");
-  const [editInsertAt, setEditInsertAt] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [historyCollapsed, setHistoryCollapsed] = useState(() => {
     try {
@@ -228,16 +254,16 @@ export function ChatPanel() {
   async function onSubmit(e?: FormEvent) {
     e?.preventDefault();
     if (stopping) return;
-    const text = input.trim();
+    const text = composerInput.trim();
     if (!text) return;
     const queueIndex = editInsertAt;
     if (sending && queueFull && queueIndex == null) return;
-    setInput("");
+    setComposerInput("");
     setEditInsertAt(null);
     try {
       await sendMessage(text, queueIndex != null ? { queueIndex } : undefined);
     } catch {
-      setInput(text);
+      setComposerInput(text);
       setEditInsertAt(queueIndex);
       showError(t("chat.error.sendFailed"));
     }
@@ -247,24 +273,24 @@ export function ChatPanel() {
     const item = queuedMessages.find((q) => q.id === id);
     if (!item) return;
     if (editInsertAt != null) {
-      const pending = input.trim();
+      const pending = composerInput.trim();
       if (pending && !enqueueQueuedMessage(pending, editInsertAt)) return;
-    } else if (input.trim()) {
+    } else if (composerInput.trim()) {
       if (queuedMessages.length >= MAX_QUEUED_SESSION_MESSAGES) return;
-      enqueueQueuedMessage(input);
+      enqueueQueuedMessage(composerInput);
     }
     const removedAt = dequeueQueuedMessage(id);
     if (removedAt < 0) return;
-    setInput(item.content);
+    setComposerInput(item.content);
     setEditInsertAt(removedAt);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   function cancelQueuedEdit() {
     if (editInsertAt == null) return;
-    const text = input.trim();
+    const text = composerInput.trim();
     if (text) enqueueQueuedMessage(text, editInsertAt);
-    setInput("");
+    setComposerInput("");
     setEditInsertAt(null);
   }
 
@@ -275,6 +301,17 @@ export function ChatPanel() {
       await sendMessage(content);
     } catch {
       showError(t("chat.error.sendFailed"));
+    }
+  }
+
+  async function onForkMessage(messageId: string) {
+    try {
+      const note = await forkSession(messageId);
+      goToChat();
+      if (note === "carried_stale") showInfo(t("chat.fork.noteStale"));
+      else if (note === "not_carried_later") showInfo(t("chat.fork.noteLater"));
+    } catch {
+      showError(t("chat.fork.failed"));
     }
   }
 
@@ -390,6 +427,7 @@ export function ChatPanel() {
     onRename: handleRenameSession,
     onPin: handlePinSession,
     onDelete: handleDeleteSession,
+    onSearch: searchHistory,
   };
 
   const historySidebar = (
@@ -403,7 +441,7 @@ export function ChatPanel() {
   const chatColumn = (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {!isSplit && (
-        <div className="absolute left-4 top-3 z-10">
+        <div className="absolute left-4 top-3 z-20">
           <button
             type="button"
             onClick={() => setPagedPane("record")}
@@ -427,228 +465,257 @@ export function ChatPanel() {
         </div>
       )}
 
-      <div ref={scrollRef} className="mb-8 min-h-0 flex-1 overflow-y-auto">
+      <div className="relative grid min-h-0 flex-1 grid-cols-1 grid-rows-1">
         <div
-          className={`flex min-h-full w-full flex-col gap-5 ${composerCol} ${
-            isSplit ? "pt-6" : "pt-14"
-          }`}
-          style={{ paddingBottom: composerH }}
+          ref={scrollRef}
+          className="col-start-1 row-start-1 mb-8 min-h-0 overflow-y-auto [scrollbar-gutter:stable]"
         >
-          {restoring ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              {t("chat.history.restoring")}
-            </p>
-          ) : showLanding ? (
-            <div className="flex flex-1 flex-col items-center justify-center py-16 text-center sm:py-24">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                <span className="mr-1.5 text-voice" aria-hidden="true">
-                  ✳
-                </span>
-                {t("chat.empty.title")}
-              </h1>
-              <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                {t("chat.empty.subtitle")}
+          <div
+            className={`flex min-h-full w-full flex-col gap-5 ${composerCol} ${
+              isSplit ? "pt-6" : "pt-14"
+            }`}
+            style={{ paddingBottom: composerH }}
+          >
+            {restoring ? (
+              <p className="py-16 text-center text-sm text-muted-foreground">
+                {t("chat.history.restoring")}
               </p>
-              <RecommendedQuestions
-                questions={questions}
-                loading={questionsLoading}
-                isStale={isStale}
-                disabled={stopping || (sending && queueFull)}
-                onSelect={(q) => void onPickQuestion(q)}
-              />
-            </div>
-          ) : (
-            messages.map((m, index) => {
-              const prevUser = findPreviousUserContent(messages, index);
-              const turnActions = agentActions.filter((a) => a.afterMessageId === m.id);
-              return (
-                <div key={m.id} className="flex flex-col gap-5">
-                  <ChatMessageItem
-                    message={m}
-                    now={now}
-                    retryContent={prevUser}
-                    retryDisabled={stopping || (sending && queueFull)}
-                    onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
-                  />
-                  {turnActions.length > 0 && <AgentActionList actions={turnActions} />}
-                  {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
-                  {awaitingImageOk && interruptAfterMessageId === m.id && (
-                    <InterruptCard
-                      sending={sending || stopping}
-                      onResume={(format) => void onResumeImageGen(format)}
+            ) : showLanding ? (
+              <div className="flex flex-1 flex-col items-center justify-center py-16 text-center sm:py-24">
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  <span className="mr-1.5 text-voice" aria-hidden="true">
+                    ✳
+                  </span>
+                  {t("chat.empty.title")}
+                </h1>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  {t("chat.empty.subtitle")}
+                </p>
+                <RecommendedQuestions
+                  questions={questions}
+                  loading={questionsLoading}
+                  isStale={isStale}
+                  disabled={stopping || (sending && queueFull)}
+                  onSelect={(q) => void onPickQuestion(q)}
+                />
+              </div>
+            ) : (
+              messages.map((m, index) => {
+                const prevUser = findPreviousUserContent(messages, index);
+                const turnActions = agentActions.filter((a) => a.afterMessageId === m.id);
+                return (
+                  <div key={m.id} className="flex flex-col gap-5">
+                    <ChatMessageItem
+                      message={m}
+                      now={now}
+                      retryContent={prevUser}
+                      retryDisabled={stopping || (sending && queueFull)}
+                      onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
+                      onFork={() => void onForkMessage(m.id)}
+                      forkDisabled={forking || stopping || sending}
+                      onOpenFork={(id) => handleSelectSession(id)}
                     />
-                  )}
-                  {previewMode && previewAfterMessageId === m.id && !isSplit && (
-                    <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
-                  )}
-                </div>
-              );
-            })
-          )}
-          {/* Fallback if anchor message was replaced / missing — keep cards visible. */}
-          {agentActions.some(
-            (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
-          ) && (
-            <AgentActionList
-              actions={agentActions.filter(
-                (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
+                    {m.metadata?.fork_point === true && forkedFrom && (
+                      <ForkDivider
+                        title={forkedFrom.title}
+                        onOpen={
+                          forkedFrom.session_id
+                            ? () => handleSelectSession(forkedFrom.session_id!)
+                            : undefined
+                        }
+                      />
+                    )}
+                    {turnActions.length > 0 && (
+                      <AgentActionList
+                        actions={turnActions}
+                        persistedDurationMs={parseTurnDurationMs(m.metadata)}
+                      />
+                    )}
+                    {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
+                    {awaitingImageOk && interruptAfterMessageId === m.id && (
+                      <InterruptCard
+                        sending={sending || stopping}
+                        onResume={(format) => void onResumeImageGen(format)}
+                      />
+                    )}
+                    {previewMode && previewAfterMessageId === m.id && !isSplit && (
+                      <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
+                    )}
+                  </div>
+                );
+              })
+            )}
+            {/* Fallback if anchor message was replaced / missing — keep cards visible. */}
+            {agentActions.some(
+              (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
+            ) && (
+              <AgentActionList
+                key={session?.id ?? "none"}
+                actions={agentActions.filter(
+                  (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
+                )}
+                persistedDurationMs={null}
+              />
+            )}
+            {brief &&
+              briefAfterMessageId &&
+              !messages.some((m) => m.id === briefAfterMessageId) && <BriefCard brief={brief} />}
+            {awaitingImageOk &&
+              interruptAfterMessageId &&
+              !messages.some((m) => m.id === interruptAfterMessageId) && (
+                <InterruptCard
+                  sending={sending || stopping}
+                  onResume={(format) => void onResumeImageGen(format)}
+                />
               )}
-            />
-          )}
-          {brief && briefAfterMessageId && !messages.some((m) => m.id === briefAfterMessageId) && (
-            <BriefCard brief={brief} />
-          )}
-          {awaitingImageOk &&
-            interruptAfterMessageId &&
-            !messages.some((m) => m.id === interruptAfterMessageId) && (
+            {previewMode &&
+              previewAfterMessageId &&
+              !messages.some((m) => m.id === previewAfterMessageId) &&
+              !isSplit && <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />}
+            {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
+            {awaitingImageOk && !interruptAfterMessageId && (
               <InterruptCard
                 sending={sending || stopping}
                 onResume={(format) => void onResumeImageGen(format)}
               />
             )}
-          {previewMode &&
-            previewAfterMessageId &&
-            !messages.some((m) => m.id === previewAfterMessageId) &&
-            !isSplit && <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />}
-          {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
-          {awaitingImageOk && !interruptAfterMessageId && (
-            <InterruptCard
-              sending={sending || stopping}
-              onResume={(format) => void onResumeImageGen(format)}
-            />
-          )}
-          {previewMode && !previewAfterMessageId && !isSplit && (
-            <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
-          )}
-          {/* Inline LLM error when failed before an assistant row was persisted. */}
-          {llmError && !messages.some((m) => isLlmErrorContent(m.content)) && (
-            <LlmErrorCard
-              message={llmError}
-              retryDisabled={stopping || (sending && queueFull)}
-              onRetry={
-                findLastUserContent(messages)
-                  ? () => void onRetryUserMessage(findLastUserContent(messages)!)
-                  : undefined
-              }
-            />
-          )}
-          {streamingText !== null && (
-            <div className="text-sm leading-relaxed">
-              <Streamdown mode="streaming" plugins={{ cjk }}>
-                {streamingText}
-              </Streamdown>
-            </div>
-          )}
+            {previewMode && !previewAfterMessageId && !isSplit && (
+              <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
+            )}
+            {/* Inline LLM error when failed before an assistant row was persisted. */}
+            {llmError && !messages.some((m) => isLlmErrorContent(m.content)) && (
+              <LlmErrorCard
+                message={llmError}
+                retryDisabled={stopping || (sending && queueFull)}
+                onRetry={
+                  findLastUserContent(messages)
+                    ? () => void onRetryUserMessage(findLastUserContent(messages)!)
+                    : undefined
+                }
+              />
+            )}
+            {streamingText !== null && (
+              <div className="text-sm leading-relaxed">
+                <Streamdown mode="streaming" plugins={{ cjk }}>
+                  {streamingText}
+                </Streamdown>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div ref={composerRef} className="pointer-events-none absolute inset-x-0 bottom-4 z-10">
-        <form
-          onSubmit={onSubmit}
-          className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
-        >
-          {(awaitingImageOk && queuedMessages.length > 0) || queueFull ? (
-            <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
-              {awaitingImageOk && queuedMessages.length > 0 ? (
-                <p>{t("chat.queue.holdForImage")}</p>
+        <div className="pointer-events-none col-start-1 row-start-1 z-10 flex flex-col justify-end overflow-y-auto pb-4 [scrollbar-gutter:stable]">
+          <div ref={composerRef}>
+            <form
+              onSubmit={onSubmit}
+              className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
+            >
+              {(awaitingImageOk && queuedMessages.length > 0) || queueFull ? (
+                <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
+                  {awaitingImageOk && queuedMessages.length > 0 ? (
+                    <p>{t("chat.queue.holdForImage")}</p>
+                  ) : null}
+                  {queueFull ? <p>{t("chat.queue.full")}</p> : null}
+                </div>
               ) : null}
-              {queueFull ? <p>{t("chat.queue.full")}</p> : null}
-            </div>
-          ) : null}
-          <div className="relative">
-            {queuedMessages.length > 0 ? (
-              <div
-                className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-voice-border bg-card"
-                style={{
-                  bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`,
-                  paddingBottom: QUEUE_TUCK_PX,
-                }}
-              >
-                <ul className="flex flex-col p-1">
-                  {queuedMessages.map((item) => (
-                    <li
-                      key={item.id}
-                      className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <CornerDownRight className="size-3 shrink-0 text-voice" aria-hidden />
-                      <span className="min-w-0 flex-1 truncate">{item.content}</span>
-                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
-                        <IconButton
-                          type="button"
-                          className="h-6 w-6"
-                          title={t("chat.queue.remove")}
-                          aria-label={t("chat.queue.remove")}
-                          onClick={() => dequeueQueuedMessage(item.id)}
+              <div className="relative">
+                {queuedMessages.length > 0 ? (
+                  <div
+                    className="absolute inset-x-3 z-0 overflow-hidden rounded-2xl border border-voice-border bg-card"
+                    style={{
+                      bottom: `calc(100% - ${QUEUE_TUCK_PX}px)`,
+                      paddingBottom: QUEUE_TUCK_PX,
+                    }}
+                  >
+                    <ul className="flex flex-col p-1">
+                      {queuedMessages.map((item) => (
+                        <li
+                          key={item.id}
+                          className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                         >
-                          <Trash2 className="size-3" />
-                        </IconButton>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
+                          <CornerDownRight className="size-3 shrink-0 text-voice" aria-hidden />
+                          <span className="min-w-0 flex-1 truncate">{item.content}</span>
+                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
                             <IconButton
                               type="button"
                               className="h-6 w-6"
-                              title={t("chat.queue.more")}
-                              aria-label={t("chat.queue.more")}
+                              title={t("chat.queue.remove")}
+                              aria-label={t("chat.queue.remove")}
+                              onClick={() => dequeueQueuedMessage(item.id)}
                             >
-                              <Ellipsis className="size-3" />
+                              <Trash2 className="size-3" />
                             </IconButton>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem onSelect={() => beginEditQueued(item.id)}>
-                              <Pencil className="size-3.5" />
-                              {t("chat.queue.edit")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            <div className="relative z-10 flex flex-col rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
-              <Textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKeyDown}
-                rows={2}
-                placeholder={t("chat.input.placeholder")}
-                disabled={stopping}
-                className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none not-read-only:hover:border-0 not-read-only:focus-visible:border-0 not-read-only:focus-visible:ring-0 not-read-only:focus-visible:hover:border-0"
-              />
-              <div className="flex items-center justify-end gap-1 px-1">
-                {(sending || stopping) && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <IconButton
+                                  type="button"
+                                  className="h-6 w-6"
+                                  title={t("chat.queue.more")}
+                                  aria-label={t("chat.queue.more")}
+                                >
+                                  <Ellipsis className="size-3" />
+                                </IconButton>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                <DropdownMenuItem onSelect={() => beginEditQueued(item.id)}>
+                                  <Pencil className="size-3.5" />
+                                  {t("chat.queue.edit")}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <div className="relative z-10 flex flex-col rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
+                  <Textarea
+                    ref={inputRef}
+                    value={composerInput}
+                    onChange={(e) => setComposerInput(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    rows={2}
+                    placeholder={t("chat.input.placeholder")}
                     disabled={stopping}
-                    onClick={() => void onStopTurn()}
-                    className="h-8 w-8 rounded-full text-foreground"
-                    title={stopping ? t("chat.stopping") : t("chat.stop")}
-                    aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
-                  >
-                    <Square className="size-3.5" fill="currentColor" stroke="none" />
-                  </Button>
-                )}
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="icon"
-                  disabled={
-                    stopping || !input.trim() || (sending && queueFull && editInsertAt == null)
-                  }
-                  className="h-8 w-8 rounded-full text-foreground"
-                  title={t("chat.send")}
-                  aria-label={t("chat.send")}
-                >
-                  <SendIcon className="size-[18px]" />
-                </Button>
+                    className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none not-read-only:hover:border-0 not-read-only:focus-visible:border-0 not-read-only:focus-visible:ring-0 not-read-only:focus-visible:hover:border-0"
+                  />
+                  <div className="flex items-center justify-end gap-1 px-1">
+                    {(sending || stopping) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={stopping}
+                        onClick={() => void onStopTurn()}
+                        className="h-8 w-8 rounded-full text-foreground"
+                        title={stopping ? t("chat.stopping") : t("chat.stop")}
+                        aria-label={stopping ? t("chat.stopping") : t("chat.stop")}
+                      >
+                        <Square className="size-3.5" fill="currentColor" stroke="none" />
+                      </Button>
+                    )}
+                    <Button
+                      type="submit"
+                      variant="ghost"
+                      size="icon"
+                      disabled={
+                        stopping ||
+                        !composerInput.trim() ||
+                        (sending && queueFull && editInsertAt == null)
+                      }
+                      className="h-8 w-8 rounded-full text-foreground"
+                      title={t("chat.send")}
+                      aria-label={t("chat.send")}
+                    >
+                      <SendIcon className="size-[18px]" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
+            </form>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
@@ -724,50 +791,94 @@ function PreviewReadyBanner({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-function AgentActionList({ actions }: { actions: AgentActionRecord[] }) {
-  const { t } = useTranslation();
+function AgentActionList({
+  actions,
+  persistedDurationMs,
+}: {
+  actions: AgentActionRecord[];
+  persistedDurationMs: number | null;
+}) {
+  const { t, i18n } = useTranslation();
+  const [open, setOpen] = useState(true);
+  const startedAtRef = useRef<number | null>(null);
+  const [frozenMs, setFrozenMs] = useState<number | null>(null);
+
+  const running = actions.some((action) => action.status === "running");
+  if (running && startedAtRef.current == null) {
+    startedAtRef.current = Date.now();
+  }
+
+  useEffect(() => {
+    if (running || startedAtRef.current == null) return;
+    if (persistedDurationMs != null || frozenMs != null) return;
+    setFrozenMs(Math.max(0, Date.now() - startedAtRef.current));
+  }, [running, persistedDurationMs, frozenMs]);
+
+  const elapsedMs = persistedDurationMs ?? frozenMs;
+  const header = agentTrailHeader(running, elapsedMs);
+  const locale = workedDurationLocale(i18n.language);
+  const headerLabel =
+    header?.kind === "working"
+      ? t("chat.agent.working")
+      : header?.kind === "workedFor"
+        ? t("chat.agent.workedFor", {
+            duration: formatWorkedDuration(header.durationMs, locale),
+          })
+        : null;
+  const expanded = headerLabel ? open : true;
+
   if (actions.length === 0) return null;
+
   return (
-    <ul className="flex flex-col gap-1.5 py-0.5" aria-label={t("chat.agent.actions")}>
-      {actions.map((action) => {
-        const nodeKey = `chat.agent.nodes.${action.node}`;
-        const label = t(nodeKey, { defaultValue: t("chat.agent.nodes.working") });
-        const running = action.status === "running";
-        return (
-          <li
-            key={action.id}
-            className={cn(
-              "flex items-start gap-2 text-xs leading-snug",
-              running
-                ? "-mx-1.5 rounded-md bg-voice-soft px-1.5 py-1 text-voice"
-                : "text-muted-foreground",
-            )}
-          >
-            <span
-              className={cn(
-                "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center",
-                running ? "text-voice" : "text-muted-foreground",
-              )}
-            >
-              {running ? (
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-voice" />
-              ) : (
-                <Check className="size-3.5" aria-hidden />
-              )}
-            </span>
-            <span className="min-w-0">
-              <span>{label}</span>
-              {action.model && (
-                <span className="ml-1.5 opacity-70">
-                  {action.model_tier ? `${action.model_tier} · ` : ""}
-                  {action.model}
+    <div className="flex flex-col gap-1.5 py-0.5">
+      {headerLabel ? (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setOpen((value) => !value)}
+          className="flex items-center gap-1 self-start text-xs leading-snug text-muted-foreground hover:text-foreground"
+        >
+          <span>{headerLabel}</span>
+          <ChevronDown
+            className={cn("size-3.5 shrink-0 transition-transform", expanded ? "" : "-rotate-90")}
+            aria-hidden
+          />
+        </button>
+      ) : null}
+      {expanded ? (
+        <ul className="flex flex-col gap-1.5" aria-label={t("chat.agent.actions")}>
+          {actions.map((action) => {
+            const label = t(agentNodeLabelKey(action.node, action.status), {
+              defaultValue: t(agentNodeFallbackKey(action.status)),
+            });
+            const isRunning = action.status === "running";
+            return (
+              <li
+                key={action.id}
+                className={cn(
+                  "flex items-start gap-2 text-xs leading-snug",
+                  isRunning ? "text-voice" : "text-muted-foreground",
+                )}
+              >
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center",
+                    isRunning ? "text-voice" : "text-muted-foreground",
+                  )}
+                >
+                  {isRunning ? (
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-voice" />
+                  ) : (
+                    <Check className="size-3.5" aria-hidden />
+                  )}
                 </span>
-              )}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+                <span className="min-w-0">{label}</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -922,12 +1033,18 @@ function ChatMessageItem({
   onRetry,
   retryContent,
   retryDisabled,
+  onFork,
+  forkDisabled,
+  onOpenFork,
 }: {
   message: ChatMessage;
   now: Date;
   onRetry?: () => void;
   retryContent?: string | null;
   retryDisabled?: boolean;
+  onFork?: () => void;
+  forkDisabled?: boolean;
+  onOpenFork?: (sessionId: string) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -965,7 +1082,84 @@ function ChatMessageItem({
         content={message.content}
         createdAt={message.created_at}
         now={now}
+        onFork={onFork}
+        forkDisabled={forkDisabled}
       />
+      {message.forks && message.forks.length > 0 && onOpenFork && (
+        <ForksChip forks={message.forks} onOpen={onOpenFork} />
+      )}
+    </div>
+  );
+}
+
+function ForkDividerRow({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex w-full min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+      <div className="h-px min-w-4 flex-1 bg-border" aria-hidden />
+      {children}
+      <div className="h-px min-w-4 flex-1 bg-border" aria-hidden />
+    </div>
+  );
+}
+
+function ForkDivider({ title, onOpen }: { title?: string | null; onOpen?: () => void }) {
+  const { t } = useTranslation();
+  const label = t("chat.fork.divider", { title: title || t("chat.history.untitled") });
+  return (
+    <ForkDividerRow>
+      {onOpen ? (
+        <button
+          type="button"
+          onClick={onOpen}
+          title={label}
+          className="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          <GitFork className="size-3 shrink-0" aria-hidden />
+          <span className="min-w-0 truncate">{label}</span>
+        </button>
+      ) : (
+        <>
+          <GitFork className="size-3 shrink-0" aria-hidden />
+          <span className="min-w-0 truncate" title={label}>
+            {label}
+          </span>
+        </>
+      )}
+    </ForkDividerRow>
+  );
+}
+
+function ForksChip({ forks, onOpen }: { forks: ForkRef[]; onOpen: (sessionId: string) => void }) {
+  const { t } = useTranslation();
+  const untitled = t("chat.history.untitled");
+  const label =
+    forks.length === 1
+      ? t("chat.fork.toOne", { title: forks[0]!.title || untitled })
+      : t("chat.fork.toMany", { n: forks.length });
+  return (
+    <div className="mt-1">
+      <ForkDividerRow>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title={label}
+              className="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <GitFork className="size-3 shrink-0" aria-hidden />
+              <span className="min-w-0 truncate">{label}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" className="w-56">
+            {forks.map((f) => (
+              <DropdownMenuItem key={f.session_id} onSelect={() => onOpen(f.session_id)}>
+                <GitFork className="size-3.5 shrink-0" aria-hidden />
+                <span className="truncate">{f.title || untitled}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ForkDividerRow>
     </div>
   );
 }
@@ -975,11 +1169,15 @@ function MessageMeta({
   content,
   createdAt,
   now,
+  onFork,
+  forkDisabled,
 }: {
   align: "user" | "assistant";
   content: string;
   createdAt: string;
   now: Date;
+  onFork?: () => void;
+  forkDisabled?: boolean;
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -1026,6 +1224,23 @@ function MessageMeta({
     </Tooltip>
   );
 
+  const forkButton = onFork ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <IconButton
+          type="button"
+          className="h-6 w-6"
+          aria-label={t("chat.message.fork")}
+          disabled={forkDisabled}
+          onClick={onFork}
+        >
+          <GitFork className="size-3.5" />
+        </IconButton>
+      </TooltipTrigger>
+      <TooltipContent side="top">{t("chat.message.fork")}</TooltipContent>
+    </Tooltip>
+  ) : null;
+
   const timeLabelNode =
     timeLabel && absolute ? (
       <Tooltip>
@@ -1056,6 +1271,7 @@ function MessageMeta({
       ) : (
         <>
           {copyButton}
+          {forkButton}
           {timeLabelNode}
         </>
       )}

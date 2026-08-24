@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import uuid
 from collections.abc import AsyncIterator
 from typing import Annotated
@@ -23,10 +24,12 @@ from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import Session, User
 from internal.session.events import format_sse, session_event_bus
+from internal.session.graph import INTERRUPT_BEFORE
 from internal.session.service import (
     DEFAULT_PLATFORM,
     SessionTurnConflict,
     add_session_image,
+    copy_session_preview,
     list_latest_session_media,
     normalize_draft_copy,
     regen_session_image,
@@ -44,6 +47,11 @@ from schemas.session import (
     ConfirmSessionRequest,
     ConfirmSessionResponse,
     CreateSessionRequest,
+    ForkOrigin,
+    ForkPreviewNote,
+    ForkRef,
+    ForkSessionRequest,
+    ForkSessionResponse,
     MessageResponse,
     PostMessageRequest,
     PostMessageResponse,
@@ -103,6 +111,14 @@ def _brief_from_state(state: dict | None) -> SessionBriefData | None:
     return brief
 
 
+def _image_interrupt_from_snapshot(state: dict | None, snap_next: object) -> bool:
+    """Generate-image CTA only — a running graph (`snap.next` non-empty) is not parked."""
+    if bool((state or {}).get("awaiting_image_ok")):
+        return True
+    nxt = snap_next if isinstance(snap_next, (list, tuple)) else ()
+    return any(node in nxt for node in INTERRUPT_BEFORE)
+
+
 async def _require_owned_session(
     db: AsyncSession, session_id: uuid.UUID, user: User
 ) -> Session:
@@ -120,10 +136,43 @@ async def list_sessions(
     db: Annotated[AsyncSession, Depends(get_db)],
     company_id: Annotated[uuid.UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 40,
+    q: Annotated[str | None, Query(max_length=200)] = None,
 ) -> SessionListResponse:
-    """List the current user's sessions (newest first), optionally by company."""
+    """List the current user's sessions (newest first), optionally by company.
+
+    With ``q``, searches session titles and message content across all of the
+    user's history (flat newest-first) and includes a matched snippet.
+    """
     if company_id is not None and not await repos.user_has_org_access(db, user.id, company_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    query = (q or "").strip()
+    if query:
+        rows = await repos.search_user_sessions(
+            db, user_id=user.id, company_id=company_id, q=query, limit=limit
+        )
+        return SessionListResponse(
+            sessions=[
+                SessionListItem(
+                    id=session.id,
+                    company_id=session.company_id,
+                    user_id=session.user_id,
+                    mode=session.mode,
+                    status=session.status,
+                    created_at=session.created_at,
+                    updated_at=session.updated_at,
+                    title=_display_title(session, preview),
+                    pinned=bool(session.pinned),
+                    matched_snippet=_search_snippet(
+                        query,
+                        match_content,
+                        _brief_text(session.state),
+                        _draft_text((session.state or {}).get("draft")),
+                        _draft_text(draft_copy),
+                    ),
+                )
+                for session, preview, match_content, draft_copy in rows
+            ]
+        )
     rows = await repos.list_user_sessions(
         db, user_id=user.id, company_id=company_id, limit=limit
     )
@@ -145,12 +194,84 @@ async def list_sessions(
     )
 
 
+def _matched_snippet(content: str, query: str, width: int = 120) -> str:
+    """Context window around the first case-insensitive match in content."""
+    text = " ".join(content.split())
+    idx = text.lower().find(query.lower())
+    if idx < 0:
+        return text[:width]
+    start = max(0, idx - (width - len(query)) // 2)
+    end = min(len(text), start + width)
+    start = max(0, end - width)
+    snippet = text[start:end]
+    if start > 0:
+        snippet = "…" + snippet
+    if end < len(text):
+        snippet += "…"
+    return snippet
+
+
+def _search_snippet(query: str, *candidates: str | None) -> str | None:
+    """First candidate that actually contains the query, windowed."""
+    for text in candidates:
+        if text and query.lower() in " ".join(text.split()).lower():
+            return _matched_snippet(text, query)
+    return None
+
+
+def _brief_text(state: dict | None) -> str | None:
+    brief = _brief_from_state(state)
+    if not brief:
+        return None
+    parts = [brief.summary, *brief.can_do, *brief.cannot_do, *brief.angles]
+    if brief.persona:
+        parts.append(brief.persona)
+    return " ".join(p for p in parts if p) or None
+
+
+def _draft_text(copy: dict | None) -> str | None:
+    if not isinstance(copy, dict):
+        return None
+    parts: list[str] = []
+    caption = copy.get("caption")
+    hashtags = copy.get("hashtags")
+    cta = copy.get("cta")
+    if isinstance(caption, str):
+        parts.append(caption)
+    if isinstance(hashtags, list):
+        parts.extend(h for h in hashtags if isinstance(h, str))
+    if isinstance(cta, str):
+        parts.append(cta)
+    return " ".join(parts) or None
+
+
 def _display_title(session: Session, preview: str | None) -> str | None:
     if isinstance(session.title, str) and session.title.strip():
         return session.title.strip()[:120]
     if isinstance(preview, str) and preview.strip():
         return preview.strip()[:120]
     return None
+
+
+_FORK_TITLE_PREFIX = re.compile(r"^\(\d+\)\s*")
+
+
+async def _fork_origin(db: AsyncSession, session: Session) -> ForkOrigin | None:
+    """Live source title when the source session survives; snapshot otherwise (ADR 0017)."""
+    if session.forked_from_message_id is None:
+        return None
+    title = session.forked_from_title
+    if session.forked_from_session_id is not None:
+        source = await repos.get_session(db, session.forked_from_session_id)
+        if source is not None:
+            src_msgs = await repos.list_session_messages(db, source.id)
+            preview = next((m.content for m in src_msgs if m.role == "user"), None)
+            title = _display_title(source, preview) or title
+    return ForkOrigin(
+        session_id=session.forked_from_session_id,
+        message_id=session.forked_from_message_id,
+        title=title,
+    )
 
 
 @router.post("", response_model=SessionResponse, status_code=201)
@@ -321,21 +442,108 @@ async def stop_session(
     )
 
 
+@router.post("/{session_id}/fork", response_model=ForkSessionResponse, status_code=201)
+async def fork_session(
+    session_id: uuid.UUID,
+    body: ForkSessionRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ForkSessionResponse:
+    """Branch this chat at a message into a new session (ADR 0017).
+
+    Copies the transcript up to and including the fork message plus the preview
+    draft/media as it existed at that message (time-aligned, fresh
+    approval_token). Lineage is recorded on the new session; the fork-point
+    copy carries ``metadata.fork_point`` so the client can place the divider.
+    ``preview_note`` flags the surprising cases so the client can toast.
+    """
+    session = await _require_owned_session(db, session_id, user)
+    msgs = await repos.list_session_messages(db, session.id)
+    fork_idx = next((i for i, m in enumerate(msgs) if m.id == body.message_id), None)
+    if fork_idx is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    copied = msgs[: fork_idx + 1]
+
+    first_user = next((m.content for m in msgs if m.role == "user"), None)
+    display = _display_title(session, first_user)
+    base = _FORK_TITLE_PREFIX.sub("", display or "").strip()
+    n = await repos.count_session_forks(db, session.id) + 1
+    title = f"({n}) {base}"[:200] if base else None
+
+    fork = await repos.create_session(db, user_id=user.id, company_id=session.company_id)
+    fork.title = title
+    fork.forked_from_session_id = session.id
+    fork.forked_from_message_id = body.message_id
+    fork.forked_from_title = display
+
+    for i, m in enumerate(copied):
+        meta = dict(m.metadata_ or {})
+        if i == fork_idx:
+            meta["fork_point"] = True
+        await repos.add_session_message(
+            db,
+            session_id=fork.id,
+            role=m.role,
+            content=m.content,
+            metadata=meta,
+            created_at=m.created_at,
+        )
+
+    fork_msg = msgs[fork_idx]
+    preview = await copy_session_preview(db, session, fork, as_of=fork_msg.created_at)
+    await db.commit()
+    await db.refresh(fork)
+
+    preview_note: ForkPreviewNote | None = None
+    if preview.copied and preview.latest_revision != preview.copied_revision:
+        preview_note = "carried_stale"
+    elif not preview.copied and preview.latest_revision is not None:
+        preview_note = "not_carried_later"
+
+    new_msgs = await repos.list_session_messages(db, fork.id)
+    return ForkSessionResponse(
+        session=_session_response(fork),
+        messages=[_message_response(m) for m in new_msgs],
+        forked_from=ForkOrigin(
+            session_id=session.id,
+            message_id=body.message_id,
+            title=display,
+        ),
+        preview_note=preview_note,
+    )
+
+
 @router.get("/{session_id}/messages", response_model=SessionMessagesResponse)
 async def get_session_messages(
     session_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SessionMessagesResponse:
-    """Hydrate chat transcript for an owned session."""
+    """Hydrate chat transcript for an owned session (with fork lineage, ADR 0017)."""
     session = await _require_owned_session(db, session_id, user)
     msgs = await repos.list_session_messages(db, session.id)
     state = session.state or {}
+
+    forks = await repos.list_forks_for_messages(db, [m.id for m in msgs])
+    forks_by_message: dict[uuid.UUID, list[Session]] = {}
+    for f in forks:
+        if f.forked_from_message_id is not None:
+            forks_by_message.setdefault(f.forked_from_message_id, []).append(f)
+    messages: list[MessageResponse] = []
+    for m in msgs:
+        resp = _message_response(m)
+        resp.forks = [
+            ForkRef(session_id=f.id, title=f.title, created_at=f.created_at)
+            for f in forks_by_message.get(m.id, [])
+        ]
+        messages.append(resp)
+
     return SessionMessagesResponse(
         session=_session_response(session),
-        messages=[_message_response(m) for m in msgs],
+        messages=messages,
         brief=_brief_from_state(state),
         awaiting_image_ok=bool(state.get("awaiting_image_ok")),
+        forked_from=await _fork_origin(db, session),
     )
 
 
@@ -355,13 +563,13 @@ async def session_events(
     platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
     media_items = await list_latest_session_media(db, session)
 
-    interrupted = bool(state.get("awaiting_image_ok"))
+    interrupted = _image_interrupt_from_snapshot(state, ())
     try:
         from internal.session.graph import get_session_graph
 
         graph = get_session_graph()
         snap = await graph.aget_state({"configurable": {"thread_id": str(session.id)}})
-        interrupted = bool(snap.next)
+        interrupted = _image_interrupt_from_snapshot(state, snap.next)
     except Exception:
         # Graph/checkpointer may be unavailable in tests / early boot.
         logger.debug("session events: could not read graph interrupt state", exc_info=True)

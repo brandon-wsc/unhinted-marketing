@@ -7,7 +7,10 @@ import contextlib
 import copy
 import logging
 import secrets
+import time
 import uuid
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,6 +55,29 @@ def _extract_llm_provider_error(exc: BaseException) -> LlmProviderError | None:
 
 def _session_config(session_id: uuid.UUID) -> dict[str, Any]:
     return {"configurable": {"thread_id": str(session_id)}}
+
+
+def user_turn_metadata(
+    existing: dict[str, Any] | None,
+    progress_events: list[dict[str, Any]],
+    duration_ms: int | None,
+) -> dict[str, Any] | None:
+    """Merge agent.progress trail + turn wall-clock into user-message metadata.
+
+    Returns None when there is nothing to persist (no user-facing progress).
+    """
+    actions = [
+        ev.get("data") or {}
+        for ev in progress_events
+        if ev.get("type") == "agent.progress" and isinstance(ev.get("data"), dict)
+    ]
+    if not actions:
+        return None
+    meta = dict(existing or {})
+    meta["agent_actions"] = actions
+    if duration_ms is not None and duration_ms >= 0:
+        meta["duration_ms"] = int(duration_ms)
+    return meta
 
 
 def normalize_draft_copy(copy: dict[str, Any] | None) -> dict[str, Any]:
@@ -191,6 +217,95 @@ def _strip_discard_meta(state: dict[str, Any] | None) -> dict[str, Any]:
     return out
 
 
+@dataclass
+class ForkPreviewCopy:
+    """Facts about a fork's preview copy, for the route to derive preview_note."""
+
+    copied: bool
+    copied_revision: int | None
+    latest_revision: int | None
+
+
+async def copy_session_preview(
+    db: AsyncSession,
+    source: Session,
+    target: Session,
+    *,
+    as_of: datetime | None = None,
+) -> ForkPreviewCopy:
+    """Copy the source's preview draft + media into a forked session (ADR 0017).
+
+    With ``as_of`` (the fork-point message's created_at) the copy is
+    time-aligned: the revision that existed at that moment, or nothing when the
+    preview postdates the fork point. The fork restarts at revision=1 with a
+    freshly minted approval_token — tokens are never shared across sessions
+    (ADR 0003). preview_images rows are duplicated into the target session
+    (append-only per ADR 0008; same asset URLs) and media_ids are remapped to
+    the new row ids. The copied draft keeps the source row's created_at so the
+    timeline stays aligned for fork-of-fork.
+    """
+    latest = await repos.get_latest_preview_draft(db, source.id)
+    draft = (
+        await repos.get_preview_draft_as_of(db, source.id, as_of)
+        if as_of is not None
+        else latest
+    )
+    latest_revision = latest.revision if latest is not None else None
+    if draft is None:
+        return ForkPreviewCopy(
+            copied=False, copied_revision=None, latest_revision=latest_revision
+        )
+
+    id_map: dict[uuid.UUID, uuid.UUID] = {}
+    for img in await repos.get_preview_images_by_ids(db, list(draft.media_ids or [])):
+        row = await repos.insert_preview_image(
+            db,
+            session_id=target.id,
+            url=img.url,
+            plan=img.plan,
+            format=img.format,
+            role=img.role,
+            seq=img.seq,
+            status=img.status,
+        )
+        id_map[img.id] = row.id
+    media_ids = [id_map[i] for i in (draft.media_ids or []) if i in id_map]
+
+    token = secrets.token_urlsafe(24)
+    await repos.upsert_preview_draft(
+        db,
+        session_id=target.id,
+        revision=1,
+        copy=copy.deepcopy(draft.copy or {}),
+        image_url=draft.image_url,
+        image_plan=copy.deepcopy(draft.image_plan) if draft.image_plan else None,
+        source_signal_ids=list(draft.source_signal_ids or []),
+        approval_token=token,
+        platform=draft.platform,
+        media_ids=media_ids,
+        created_at=draft.created_at,
+    )
+
+    state: dict[str, Any] = {
+        "draft": copy.deepcopy(draft.copy or {}),
+        "revision": 1,
+        "approval_token": token,
+        "image_url": draft.image_url,
+        "media_ids": [str(i) for i in media_ids],
+        "pending_confirm": False,
+        "need_image": False,
+        "awaiting_image_ok": False,
+    }
+    if draft.image_plan is not None:
+        state["image_plan"] = copy.deepcopy(draft.image_plan)
+    target.state = state
+    if source.mode == MODE_PREVIEW:
+        target.mode = MODE_PREVIEW
+    return ForkPreviewCopy(
+        copied=True, copied_revision=draft.revision, latest_revision=latest_revision
+    )
+
+
 async def graph_is_parked(session_id: uuid.UUID) -> bool:
     graph = get_session_graph()
     snapshot = await graph.aget_state(_session_config(session_id))
@@ -309,16 +424,11 @@ async def _persist_after_invoke(
     user_content: str,
     pre_state: dict[str, Any],
     entry: TurnEntry | None,
+    duration_ms: int | None = None,
 ) -> dict[str, Any]:
     if user_msg is not None:
-        agent_actions = [
-            ev.get("data") or {}
-            for ev in progress_events
-            if ev.get("type") == "agent.progress" and isinstance(ev.get("data"), dict)
-        ]
-        if agent_actions:
-            meta = dict(user_msg.metadata_ or {})
-            meta["agent_actions"] = agent_actions
+        meta = user_turn_metadata(user_msg.metadata_ or {}, progress_events, duration_ms)
+        if meta is not None:
             user_msg.metadata_ = meta
             flag_modified(user_msg, "metadata_")
 
@@ -483,6 +593,7 @@ async def _persist_after_invoke(
             }
         )
 
+    repos.touch_session(session)
     await db.flush()
     await session_event_bus.publish_many(session.id, events)
     return {
@@ -501,13 +612,14 @@ async def _invoke_graph(
     graph_input: dict[str, Any] | None,
     user_content: str,
     message_dicts: list[dict[str, Any]],
-) -> tuple[dict[str, Any], bool, LlmProviderError | None, list[dict[str, Any]]]:
+) -> tuple[dict[str, Any], bool, LlmProviderError | None, list[dict[str, Any]], int]:
     graph = get_session_graph()
     config = _session_config(session.id)
     provider_error: LlmProviderError | None = None
     values: dict[str, Any] = {}
     still_interrupted = False
     progress_events: list[dict[str, Any]] = []
+    started = time.perf_counter()
 
     with (
         session_db(db),
@@ -561,7 +673,8 @@ async def _invoke_graph(
             if not progress_events:
                 progress_events = session_event_bus.end_turn_progress(session.id)
 
-    return values, still_interrupted, provider_error, progress_events
+    duration_ms = max(0, int((time.perf_counter() - started) * 1000))
+    return values, still_interrupted, provider_error, progress_events, duration_ms
 
 
 async def run_session_turn(
@@ -583,6 +696,7 @@ async def run_session_turn(
     user_msg = await repos.add_session_message(
         db, session_id=session.id, role="user", content=user_content
     )
+    repos.touch_session(session)
     existing = await repos.list_session_messages(db, session.id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
 
@@ -597,7 +711,13 @@ async def run_session_turn(
     )
 
     try:
-        values, still_interrupted, provider_error, progress_events = await _invoke_graph(
+        (
+            values,
+            still_interrupted,
+            provider_error,
+            progress_events,
+            duration_ms,
+        ) = await _invoke_graph(
             db,
             session,
             graph_input=_graph_values(session, message_dicts),
@@ -616,6 +736,7 @@ async def run_session_turn(
             user_content=user_content,
             pre_state=pre_state,
             entry=entry,
+            duration_ms=duration_ms,
         )
     except asyncio.CancelledError:
         await _discard_turn_state(
@@ -648,6 +769,7 @@ async def resume_image_turn(
     # Snapshot full parked UI state so Stop mid-image can restore the CTA.
     parked_restore = copy.deepcopy(dict(session.state or {}))
     parked_restore["awaiting_image_ok"] = True
+    repos.touch_session(session)
 
     existing = await repos.list_session_messages(db, session.id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
@@ -681,7 +803,13 @@ async def resume_image_turn(
             session.state = st
             await db.flush()
 
-        values, still_interrupted, provider_error, progress_events = await _invoke_graph(
+        (
+            values,
+            still_interrupted,
+            provider_error,
+            progress_events,
+            duration_ms,
+        ) = await _invoke_graph(
             db,
             session,
             graph_input=None,
@@ -700,6 +828,7 @@ async def resume_image_turn(
             user_content="",
             pre_state=_strip_discard_meta(parked_restore),
             entry=entry,
+            duration_ms=duration_ms,
         )
         return result
     except asyncio.CancelledError:

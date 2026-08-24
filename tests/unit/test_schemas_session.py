@@ -8,6 +8,9 @@ from schemas.session import (
     ConfirmSessionRequest,
     ConfirmSessionResponse,
     CreateSessionRequest,
+    ForkOrigin,
+    ForkRef,
+    ForkSessionRequest,
     MessageResponse,
     PostMessageRequest,
     PostMessageResponse,
@@ -145,3 +148,41 @@ def test_confirm_and_draft_responses() -> None:
 def test_session_event() -> None:
     ev = SessionEvent(type="session.snapshot")
     assert ev.data == {}
+
+
+def test_fork_schemas() -> None:
+    now = _now()
+    sid = uuid.uuid4()
+    req = ForkSessionRequest(message_id=uuid.uuid4())
+    assert req.message_id is not None
+
+    ref = ForkRef(session_id=uuid.uuid4(), title="(1) test", created_at=now)
+    msg = MessageResponse(
+        id=uuid.uuid4(),
+        session_id=sid,
+        role="assistant",
+        content="hi",
+        created_at=now,
+        forks=[ref],
+    )
+    assert msg.forks[0].title == "(1) test"
+    # Defaults: no forks, no origin.
+    plain = MessageResponse(
+        id=uuid.uuid4(), session_id=sid, role="user", content="yo", created_at=now
+    )
+    assert plain.forks == []
+
+    session = SessionResponse(
+        id=sid,
+        company_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        mode="CHAT",
+        status="active",
+        created_at=now,
+        updated_at=now,
+    )
+    origin = ForkOrigin(session_id=uuid.uuid4(), message_id=uuid.uuid4(), title="test")
+    hydrated = SessionMessagesResponse(session=session, messages=[msg], forked_from=origin)
+    assert hydrated.forked_from is not None
+    assert hydrated.forked_from.title == "test"
+    assert SessionMessagesResponse(session=session, messages=[]).forked_from is None

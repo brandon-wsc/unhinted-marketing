@@ -1508,7 +1508,7 @@
           "sessions"
         ],
         "summary": "List Sessions",
-        "description": "List the current user's sessions (newest first), optionally by company.",
+        "description": "List the current user's sessions (newest first), optionally by company.\n\nWith ``q``, searches session titles and message content across all of the\nuser's history (flat newest-first) and includes a matched snippet.",
         "operationId": "list_sessions_api_sessions_get",
         "security": [
           {
@@ -1543,6 +1543,23 @@
               "minimum": 1,
               "default": 40,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
             }
           }
         ],
@@ -1774,7 +1791,7 @@
           "sessions"
         ],
         "summary": "Get Session Messages",
-        "description": "Hydrate chat transcript for an owned session.",
+        "description": "Hydrate chat transcript for an owned session (with fork lineage, ADR 0017).",
         "operationId": "get_session_messages_api_sessions__session_id__messages_get",
         "security": [
           {
@@ -1908,6 +1925,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StopSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/fork": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Fork Session",
+        "description": "Branch this chat at a message into a new session (ADR 0017).\n\nCopies the transcript up to and including the fork message plus the preview\ndraft/media as it existed at that message (time-aligned, fresh\napproval_token). Lineage is recorded on the new session; the fork-point\ncopy carries ``metadata.fork_point`` so the client can place the divider.\n``preview_note`` flags the surprising cases so the client can toast.",
+        "operationId": "fork_session_api_sessions__session_id__fork_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForkSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForkSessionResponse"
                 }
               }
             }
@@ -3460,6 +3536,151 @@
           "added"
         ],
         "title": "ExemplarPromoteResponse"
+      },
+      "ForkOrigin": {
+        "properties": {
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Message Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id"
+        ],
+        "title": "ForkOrigin",
+        "description": "Where this session was forked from (None for non-forked sessions)."
+      },
+      "ForkRef": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "created_at"
+        ],
+        "title": "ForkRef",
+        "description": "One fork of a message — the chat it went to."
+      },
+      "ForkSessionRequest": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id"
+        ],
+        "title": "ForkSessionRequest",
+        "description": "Fork this session at a message (ADR 0017). The message must belong to the session."
+      },
+      "ForkSessionResponse": {
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/SessionResponse"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/schemas__session__MessageResponse"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionBriefData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "awaiting_image_ok": {
+            "type": "boolean",
+            "title": "Awaiting Image Ok",
+            "default": false
+          },
+          "forked_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForkOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preview_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "carried_stale",
+                  "not_carried_later"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session",
+          "messages"
+        ],
+        "title": "ForkSessionResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -5476,6 +5697,17 @@
             "type": "boolean",
             "title": "Pinned",
             "default": false
+          },
+          "matched_snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Snippet"
           }
         },
         "type": "object",
@@ -5545,6 +5777,16 @@
             "type": "boolean",
             "title": "Awaiting Image Ok",
             "default": false
+          },
+          "forked_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForkOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -6306,6 +6548,13 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
+          },
+          "forks": {
+            "items": {
+              "$ref": "#/components/schemas/ForkRef"
+            },
+            "type": "array",
+            "title": "Forks"
           }
         },
         "type": "object",

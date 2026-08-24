@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-23  
+> **Last updated:** 2026-08-24  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -25,7 +25,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | LangGraph session / preview / confirm API | ✅ Soft-complete — enough for Phase 3 UI |
 | Chat UI shell (`useSession` + Streamdown) | ✅ Done |
 | Chat token stream (`message.delta`) | ✅ Done — live deltas via SSE, batched in node |
-| Agent Mode UI (`agent.progress` + cards) | ✅ Done — action trail persisted on user-message metadata; interrupt CTA survives fail / refresh |
+| Agent Mode UI (`agent.progress` + cards) | ✅ Done — action trail persisted on user-message metadata; in-flight header `幫緊你幫緊你` / `Working` (no live seconds, chevron stays clickable); done header `做咗x秒` / `Worked for`; interrupt CTA survives fail / refresh |
 | Landing recommended-question cards | ✅ Done — empty-state cards → `sendMessage` |
 | Preview Mode (IG mock + draft editor) | ✅ Done — Edit Copy / Edit Image dialogs; multi-image carousel; mobile push pages; Confirm auto-flush |
 | Manual draft API `POST …/draft` | ✅ Done — no LLM; revision + approval_token |
@@ -34,6 +34,15 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
 **Decision (2026-08-19) — Queue send while turn in-flight:** → [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md) (supersedes ADR 0004 composer lock). Composer stays open; Send enqueues in the SPA (max 3); Stop discards the running turn only; drain after idle unless parked at image OK.
+
+**Decision (2026-08-23) — Session switch isolation + composer drafts:** Leave ≠ Stop. In-flight REST apply / `sending` / agent trail are bound to the session on screen. Queue + textarea (incl. mid-edit) save/restore per session in SPA memory; still lost on refresh.
+
+**Decision (2026-08-24) — Session fork (Gemini-style):** → [ADR 0017](./adr/0017-session-fork.md)
+
+- **`POST /api/sessions/{id}/fork`** — copies messages up to the forked assistant message + preview draft/media **as of the fork-point message** (time-aligned by `created_at`; later edits / later-created previews don't travel) into a new session; **fresh `approval_token`** minted (never shared); fork starts `active`, unpinned; `preview_note` in the response flags surprising outcomes (`carried_stale` / `not_carried_later`) for an info toast
+- **Lineage** — `sessions.forked_from_session_id` / `forked_from_message_id` / `forked_from_title` snapshot; `GET …/messages` returns session `forked_from` + per-message `forks[]`
+- **Naming** — `"(n) base"`, `n` = forks of the direct source + 1, existing `"(n) "` prefix stripped
+- **UI** — fork button on assistant messages (copy → fork → time); new chat divider "Forked from {source}"; source message chip "Forked to {title}" / "Forked to {n} chats" → jump menu
 
 **Decision (2026-08-08) — Chat research gate + Tavily∪PG:** → [ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)
 
@@ -252,13 +261,13 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Auth pages + protected shell | ✅ | Login / register; `/` is now the chat workspace |
 | Chat UI shell | ✅ | `web/src/features/session/` — `useSession` + message list / composer; Streamdown + `@streamdown/cjk`; Vite proxies `/api` → API |
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
-| Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen); optimistic `route_intent` while POST/SSE catch up; hide `fast_rule_checker` / `persist_preview`; brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer open while in-flight with FE send queue (max 3) and Stop beside Send ([ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md)); Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
+| Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen) plus turn `duration_ms`. In-flight header is `幫緊你幫緊你` / `Working` (no ticking seconds; chevron stays enabled). Completed header is `做咗x秒` / `Worked for`. Node labels: running present-tense + `…`, done past tense. Optimistic `route_intent` while POST/SSE catch up; hide `fast_rule_checker` / `persist_preview`; brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer open while in-flight with FE send queue (max 3) and Stop beside Send ([ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md)); Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
 | Landing: recommended questions cards | ✅ | Empty-state cards from `GET /api/companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
 | Preview Mode (left chat / right preview) | ✅ | Split: IG mock + **Edit Copy dialog** + multi-image carousel; **hover/tap image → Edit image**. Paged: Preview push page with **上一頁** (content-width shell, not `lg`) |
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |
 | Manual draft API `POST …/draft` | ✅ | No LLM; bump revision + `approval_token`; caption-only reuses `media_ids` ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
 | Preview media APIs | ✅ | `GET/POST …/media`, `PATCH …/media/{id}/plan`, `POST …/media/{id}/regen`, `POST …/media/{id}/remove`, `POST …/media/{id}/upload` — append-only image rows + new draft |
-| Chat history hydrate + list | ✅ | `GET /api/sessions`, `GET …/messages`, `PATCH/DELETE …/{id}` (`title`/`pinned`); localStorage last session; desktop Gemini-style sidebar; mobile Record page (history icon → full list; **上一頁** back to Chat) |
+| Chat history hydrate + list | ✅ | `GET /api/sessions`, `GET …/messages`, `PATCH/DELETE …/{id}` (`title`/`pinned`); localStorage last session; desktop Gemini-style sidebar; mobile Record page (history icon → full list; **上一頁** back to Chat). **History search:** `GET /api/sessions?q=` matches everything user-visible — title, message content, brief + current draft (`sessions.state`), all draft revisions (`preview_drafts.copy`) — server-side (ILIKE, user-scoped, flat newest-first) with `matched_snippet` (message → brief → draft fallback); sidebar search box debounces into it (search mode replaces pinned/date groups; clear restores browse list) |
 | LLM call records + System page | ✅ | [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — `llm_call_records` + platform levels; `/api/admin/llm-calls` API + web `/system` |
 | API `/api` path prefix | ✅ | [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md) — hard cut; SPA `/system` (legacy `/admin` redirect) |
 | Admin Trace viewer (node-steps + session) | ✅ | [ADR 0007](./adr/0007-admin-trace-viewer.md) — `session_node_steps` + `turn_id`; admin tabs Node steps / Session Trace |
@@ -354,7 +363,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 - **Auth:** Access token in memory; refresh via cookie; auto-refresh on app load
 - **Phase 3 (shipped):** Chat workspace at `/` — `useSession` REST-first + SSE; Streamdown + `@streamdown/cjk`; live `message.delta`; Agent Mode UI (`agent.progress` trail persisted on user-message `metadata.agent_actions`; brief / `draft.awaiting_image_ok` interrupt; snapshot `interrupted` rehydrates Generate-image CTA); landing recommended-question cards; IG Preview + Confirm; Gemini-style history; **content-based shell** (`split` vs `paged` from pane min-widths, not viewport `lg`); paged Chat primary with history icon + Preview via ready banner / **上一頁**; `llm.failed` inline error + Retry; shell fits `h-dvh` with per-pane scroll; no `useChat`
 - **Session client:** `web/src/features/session/` — `api.ts` (REST), `sse.ts` (`@microsoft/fetch-event-source` with Bearer), `use-session.ts` + `session-helpers.ts` + `session-layout.ts`, `session-storage.ts` (per-company last session id), `use-recommended-questions.ts`, `components/chat-panel.tsx` + `session-history.tsx` + `preview-panel.tsx` + `ig-preview-mock.tsx` + `recommended-questions.tsx`
-- **Chat persistence:** Backend writes `session_messages` (user always; assistant for `chat` / `ack_confirm` / LLM failure / review exhausted). Agent turns often **do not** append assistant chat rows — brief/draft live in `sessions.state` + `preview_drafts`. **Agent action trail:** after each turn, `agent.progress` payloads are stored on that turn’s **user** message as `metadata.agent_actions` (`[{node, model_tier, model}, …]`); `GET …/messages` returns `metadata` so refresh rebuilds the trail. **Interrupt hydrate:** `sessions.state.awaiting_image_ok` + SSE `session.snapshot.interrupted` (graph `next`) restore the Generate-image card after reopen / API drop. **Hydrate:** `GET /sessions/{id}/messages` + remembered session id in `localStorage`. **History:** split mode left sidebar lists `GET /sessions?company_id=` (pinned group + date groups + search); paged mode opens the same list as a full-page Record view; `PATCH` rename/pin, `DELETE` removes session (+ cascades).
+- **Chat persistence:** Backend writes `session_messages` (user always; assistant for `chat` / `ack_confirm` / LLM failure / review exhausted). Agent turns often **do not** append assistant chat rows — brief/draft live in `sessions.state` + `preview_drafts`. **Agent action trail:** after each turn, `agent.progress` payloads are stored on that turn’s **user** message as `metadata.agent_actions` (`[{node, model_tier, model}, …]`) plus turn wall-clock `metadata.duration_ms`; `GET …/messages` returns `metadata` so refresh rebuilds the trail. In-flight header is `幫緊你幫緊你` / `Working` (static; chevron clickable). After the turn, header is `做咗x秒` / `Worked for`. Chat bubbles themselves have no worked-for row. **Interrupt hydrate:** `sessions.state.awaiting_image_ok` restores the Generate-image card after reopen / switch / API drop. SSE `session.snapshot.interrupted` is parked at `executor_image_plan`, not any in-flight graph `next`. **Hydrate:** `GET /sessions/{id}/messages` + remembered session id in `localStorage`. **History:** split mode left sidebar lists `GET /sessions?company_id=` (pinned group + date groups + search); paged mode opens the same list as a full-page Record view; `PATCH` rename/pin, `DELETE` removes session (+ cascades).
 
 **Run:**
 
@@ -439,7 +448,7 @@ See `.env.example`. Local `.env` is gitignored.
 |----|------|--------|
 | **H1** | Auth rate limit + known-default / weak `JWT_SECRET` | ✅ **Mitigated on this branch** — in-memory limit on register/login/refresh; `APP_ENV=production` refuses insecure JWT |
 | **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ✅ **Mitigated** — [ADR 0004](./adr/0004-stop-discard-and-image-resume.md) + [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md): Stop discards; FE queue while in-flight; `POST /resume-image` only; `/messages` 409 while busy/parked; chat/JSON completions stream + `aclose` on cancel (best-effort upstream abort) |
-| **H3** | `use-session.ts` correctness concentrated & untested | ✅ **Mitigated** — pure helpers in `session-helpers.ts` (+ Tier 1 cov gate); `use-session.test.ts` covers restore / send / queue-while-in-flight / optimistic `route_intent` / confirm / SSE merge |
+| **H3** | `use-session.ts` correctness concentrated & untested | ✅ **Mitigated** — pure helpers in `session-helpers.ts` (+ Tier 1 cov gate); `use-session.test.ts` covers restore / send / queue-while-in-flight / optimistic `route_intent` / confirm / SSE merge / switch isolation + composer draft save/restore |
 | **I1** | Confirm idempotency key global (cross-user receipt leak) | ✅ **Mitigated** — foreign key → 409; same session/user only replays |
 
 ### Other gaps

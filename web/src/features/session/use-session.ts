@@ -5,6 +5,7 @@ import {
   apiConfirmSession,
   apiCreateSession,
   apiDeleteSession,
+  apiForkSession,
   apiGetSessionMessages,
   apiListSessions,
   apiPostSessionMessage,
@@ -19,6 +20,8 @@ import {
 } from "./api";
 import {
   agentActionsFromMessages,
+  bumpSessionInHistory,
+  EMPTY_COMPOSER_DRAFT,
   isUserFacingAgentNode,
   MAX_QUEUED_SESSION_MESSAGES,
   mergePreviewDraft,
@@ -30,6 +33,9 @@ import {
   parseDraftCopy,
   parseMediaItems,
   previewAnchorFromActions,
+  readComposerDraft,
+  sortSessionHistory,
+  stashComposerDraft,
   waitForSseReady,
 } from "./session-helpers";
 import { getRememberedSessionId, setRememberedSessionId } from "./session-storage";
@@ -38,8 +44,11 @@ import type {
   AgentActionRecord,
   AgentProgress,
   ChatMessage,
+  ComposerDraft,
   ConfirmSessionResponse,
   DraftCopy,
+  ForkOrigin,
+  ForkPreviewNote,
   PreviewDraft,
   PreviewMediaMutationResponse,
   QueuedChatMessage,
@@ -51,6 +60,23 @@ import type {
 export { parseBrief } from "./session-helpers";
 
 type SseReadyHandle = { promise: Promise<void>; resolve: () => void };
+
+type LiveChatSnapshot = {
+  messages: ChatMessage[];
+  agentActions: AgentActionRecord[];
+  streamingText: string | null;
+  agentProgress: AgentProgress | null;
+  brief: SessionBrief | null;
+  briefAfterMessageId: string | null;
+  interruptAfterMessageId: string | null;
+  previewAfterMessageId: string | null;
+  awaitingImageOk: boolean;
+  draft: PreviewDraft | null;
+  confirmReceipt: ConfirmSessionResponse | null;
+  llmError: string | null;
+  mode: string;
+  turnAnchor: string | null;
+};
 
 // REST is the source of truth: POST /messages returns the full transcript plus
 // turn events. SSE is an enhancement layer (live assistant messages, mode
@@ -78,6 +104,8 @@ export function useSession(companyId: string | undefined) {
   // True while the graph sits at interrupt_before executor_image_plan.
   const [awaitingImageOk, setAwaitingImageOk] = useState(false);
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatMessage[]>([]);
+  const [composerInput, setComposerInputState] = useState("");
+  const [editInsertAt, setEditInsertAtState] = useState<number | null>(null);
   const [draft, setDraft] = useState<PreviewDraft | null>(null);
   const [confirmReceipt, setConfirmReceipt] = useState<ConfirmSessionResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
@@ -86,6 +114,13 @@ export function useSession(companyId: string | undefined) {
   const [history, setHistory] = useState<SessionListItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
+  // Where this session was forked from (ADR 0017); null for non-forked chats.
+  const [forkedFrom, setForkedFrom] = useState<ForkOrigin | null>(null);
+  const [forking, setForking] = useState(false);
+  // Guards against out-of-order history list/search responses.
+  const historyReqSeq = useRef(0);
+  // Guards against out-of-order openSession / startNewChat hydrates.
+  const sessionNavSeq = useRef(0);
 
   const sessionId = session?.id ?? null;
   const sseReadyRef = useRef<SseReadyHandle | null>(null);
@@ -95,10 +130,19 @@ export function useSession(companyId: string | undefined) {
   // does not race React's async setMessages / messagesRef update.
   const turnAnchorRef = useRef<string | null>(null);
   const restoreAttemptedRef = useRef<string | null>(null);
-  const sendAbortRef = useRef<AbortController | null>(null);
-  // Bumped on Stop / turn.cancelled so late POST responses cannot re-apply a
-  // discarded turn. suppressLiveTurnEventsRef drops late SSE until the next send.
-  const turnEpochRef = useRef(0);
+  // Current session id for apply-gating (set synchronously on navigate, before paint).
+  const sessionIdRef = useRef<string | null>(null);
+  const inFlightBySessionRef = useRef(new Map<string, AbortController>());
+  const turnEpochBySessionRef = useRef(new Map<string, number>());
+  const composerDraftsRef = useRef(new Map<string, ComposerDraft>());
+  const liveChatBySessionRef = useRef(new Map<string, LiveChatSnapshot>());
+  const liveUiRef = useRef<LiveChatSnapshot | null>(null);
+  const sseAbortRef = useRef<AbortController | null>(null);
+  const composerInputRef = useRef("");
+  const editInsertAtRef = useRef<number | null>(null);
+  // Bumped per session on Stop / turn.cancelled so late POST responses cannot
+  // re-apply a discarded turn. suppressLiveTurnEventsRef drops late SSE until
+  // the next send on the session now on screen.
   const suppressLiveTurnEventsRef = useRef(false);
   const sendingRef = useRef(false);
   const stoppingRef = useRef(false);
@@ -109,8 +153,142 @@ export function useSession(companyId: string | undefined) {
   sendingRef.current = sending;
   stoppingRef.current = stopping;
   awaitingImageOkRef.current = awaitingImageOk;
+  liveUiRef.current = {
+    messages,
+    agentActions,
+    streamingText,
+    agentProgress,
+    brief,
+    briefAfterMessageId,
+    interruptAfterMessageId,
+    previewAfterMessageId,
+    awaitingImageOk,
+    draft,
+    confirmReceipt,
+    llmError,
+    mode,
+    turnAnchor: turnAnchorRef.current,
+  };
+
+  const setComposerInput = useCallback((value: string) => {
+    composerInputRef.current = value;
+    setComposerInputState(value);
+  }, []);
+
+  const setEditInsertAt = useCallback((value: number | null) => {
+    editInsertAtRef.current = value;
+    setEditInsertAtState(value);
+  }, []);
+
+  const currentComposerDraft = useCallback(
+    (): ComposerDraft => ({
+      queued: queuedRef.current,
+      input: composerInputRef.current,
+      editInsertAt: editInsertAtRef.current,
+    }),
+    [],
+  );
+
+  const applyComposerDraft = useCallback((draft: ComposerDraft) => {
+    queuedRef.current = draft.queued;
+    setQueuedMessages(draft.queued);
+    composerInputRef.current = draft.input;
+    setComposerInputState(draft.input);
+    editInsertAtRef.current = draft.editInsertAt;
+    setEditInsertAtState(draft.editInsertAt);
+  }, []);
+
+  const captureLiveChat = useCallback((id: string | null) => {
+    if (!id || !liveUiRef.current) return;
+    liveChatBySessionRef.current.set(id, {
+      ...liveUiRef.current,
+      messages: [...messagesRef.current],
+      agentActions: [...liveUiRef.current.agentActions],
+      turnAnchor: turnAnchorRef.current,
+      awaitingImageOk: awaitingImageOkRef.current,
+    });
+  }, []);
+
+  const restoreLiveChat = useCallback((snap: LiveChatSnapshot) => {
+    turnAnchorRef.current = snap.turnAnchor;
+    suppressLiveTurnEventsRef.current = false;
+    stoppingRef.current = false;
+    setStopping(false);
+    messagesRef.current = snap.messages;
+    setMessages(snap.messages);
+    setAgentActions(snap.agentActions);
+    setStreamingText(snap.streamingText);
+    setAgentProgress(snap.agentProgress);
+    setBrief(snap.brief);
+    setBriefAfterMessageId(snap.briefAfterMessageId);
+    setInterruptAfterMessageId(snap.interruptAfterMessageId);
+    setPreviewAfterMessageId(snap.previewAfterMessageId);
+    awaitingImageOkRef.current = snap.awaitingImageOk;
+    setAwaitingImageOk(snap.awaitingImageOk);
+    setDraft(snap.draft);
+    setConfirmReceipt(snap.confirmReceipt);
+    setLlmError(snap.llmError);
+    setMode(snap.mode);
+    setDraftSaving(false);
+    setConfirming(false);
+  }, []);
+
+  const disconnectSse = useCallback(() => {
+    sseAbortRef.current?.abort();
+    sseAbortRef.current = null;
+    sseReadyRef.current = null;
+    setSseConnected(false);
+  }, []);
+
+  const syncSendingForCurrent = useCallback(() => {
+    const id = sessionIdRef.current;
+    const inflight = !!(id && inFlightBySessionRef.current.has(id));
+    sendingRef.current = inflight;
+    setSending(inflight);
+  }, []);
+
+  const bumpEpoch = useCallback((id: string) => {
+    const next = (turnEpochBySessionRef.current.get(id) ?? 0) + 1;
+    turnEpochBySessionRef.current.set(id, next);
+    return next;
+  }, []);
+
+  const epochOf = useCallback((id: string) => turnEpochBySessionRef.current.get(id) ?? 0, []);
+
+  const stillOn = useCallback((id: string | null | undefined) => {
+    return !!id && sessionIdRef.current === id;
+  }, []);
+
+  const dropInFlight = useCallback((id: string | null | undefined) => {
+    if (!id) return;
+    inFlightBySessionRef.current.delete(id);
+    if (sessionIdRef.current === id) {
+      sendingRef.current = false;
+      setSending(false);
+    }
+  }, []);
+
+  const registerInFlight = useCallback((id: string, abort: AbortController) => {
+    inFlightBySessionRef.current.set(id, abort);
+    if (sessionIdRef.current === id) {
+      sendingRef.current = true;
+      setSending(true);
+    }
+  }, []);
+
+  const forgetSessionLocal = useCallback((id: string) => {
+    composerDraftsRef.current.delete(id);
+    liveChatBySessionRef.current.delete(id);
+    inFlightBySessionRef.current.get(id)?.abort();
+    inFlightBySessionRef.current.delete(id);
+    turnEpochBySessionRef.current.delete(id);
+  }, []);
 
   const resetTransientUi = useCallback(() => {
+    turnAnchorRef.current = null;
+    suppressLiveTurnEventsRef.current = false;
+    stoppingRef.current = false;
+    setStopping(false);
     setStreamingText(null);
     setAgentProgress(null);
     setAgentActions([]);
@@ -122,8 +300,9 @@ export function useSession(companyId: string | undefined) {
     setDraft(null);
     setConfirmReceipt(null);
     setLlmError(null);
-    queuedRef.current = [];
-    setQueuedMessages([]);
+    setDraftSaving(false);
+    setConfirming(false);
+    setForkedFrom(null);
     awaitingImageOkRef.current = false;
   }, []);
 
@@ -260,7 +439,8 @@ export function useSession(companyId: string | undefined) {
     (type: string, data: Record<string, unknown>) => {
       if (type === "turn.cancelled") {
         // Invalidate any in-flight send/resume apply + late SSE progress.
-        turnEpochRef.current += 1;
+        const currentId = sessionIdRef.current;
+        if (currentId) bumpEpoch(currentId);
         suppressLiveTurnEventsRef.current = true;
         const discardedAnchor = turnAnchorRef.current;
         turnAnchorRef.current = null;
@@ -291,9 +471,8 @@ export function useSession(companyId: string | undefined) {
             finishRunningActions();
           }
         }
-        sendingRef.current = false;
+        dropInFlight(currentId);
         stoppingRef.current = false;
-        setSending(false);
         setStopping(false);
         return;
       }
@@ -384,7 +563,7 @@ export function useSession(companyId: string | undefined) {
         finishRunningActions();
       }
     },
-    [lastUserMessageId, appendAgentAction, finishRunningActions],
+    [lastUserMessageId, appendAgentAction, finishRunningActions, bumpEpoch, dropInFlight],
   );
 
   useEffect(() => {
@@ -395,17 +574,19 @@ export function useSession(companyId: string | undefined) {
       resolveReady = resolve;
     });
     sseReadyRef.current = { promise: readyPromise, resolve: resolveReady };
+    sseAbortRef.current = abort;
     subscribeSessionEvents({
       sessionId,
       accessToken,
       signal: abort.signal,
       onOpen: () => {
-        if (!abort.signal.aborted) {
+        if (!abort.signal.aborted && sessionIdRef.current === sessionId) {
           setSseConnected(true);
           resolveReady();
         }
       },
       onEvent: (type, data) => {
+        if (abort.signal.aborted || sessionIdRef.current !== sessionId) return;
         if (type === "session.snapshot") {
           if (typeof data.mode === "string") setMode(data.mode);
           if (typeof data.status === "string" && data.status === "confirmed") {
@@ -457,12 +638,12 @@ export function useSession(companyId: string | undefined) {
               );
             });
           }
-          const interrupted = data.interrupted === true || state?.awaiting_image_ok === true;
-          if (interrupted) {
+          const parkedAtImage = state?.awaiting_image_ok === true;
+          if (parkedAtImage) {
             setAwaitingImageOk(true);
             const anchor = lastUserMessageId();
             if (anchor) setInterruptAfterMessageId(anchor);
-          } else if (data.interrupted === false) {
+          } else {
             setAwaitingImageOk(false);
             setInterruptAfterMessageId(null);
           }
@@ -506,44 +687,82 @@ export function useSession(companyId: string | undefined) {
       if (err instanceof SseAuthError) void refreshAccessToken();
     });
     return () => {
+      if (sseAbortRef.current === abort) sseAbortRef.current = null;
       sseReadyRef.current = null;
       setSseConnected(false);
       abort.abort();
     };
   }, [sessionId, accessToken, refreshAccessToken, applyTurnEvent, lastUserMessageId]);
 
-  const refreshHistory = useCallback(async () => {
-    if (!accessToken || !companyId) {
-      setHistory([]);
-      return;
-    }
-    setHistoryLoading(true);
-    try {
-      const rows = await apiListSessions(accessToken, companyId);
-      setHistory(rows);
-    } catch {
-      setHistory([]);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [accessToken, companyId]);
+  // Active server-side history search ("" = browse mode). Ref so that
+  // refreshHistory re-applies it — opening a result must not drop the
+  // sidebar back to the plain list.
+  const historyQueryRef = useRef("");
 
-  const openSession = useCallback(
-    async (targetSessionId: string) => {
-      if (!accessToken || !companyId) return;
-      const res = await apiGetSessionMessages(accessToken, targetSessionId);
+  const fetchHistory = useCallback(
+    async (q: string, { keepOnError = false }: { keepOnError?: boolean } = {}) => {
+      const seq = ++historyReqSeq.current;
+      if (!accessToken || !companyId) {
+        setHistory([]);
+        return;
+      }
+      setHistoryLoading(true);
+      try {
+        const rows = q
+          ? await apiListSessions(accessToken, companyId, q)
+          : await apiListSessions(accessToken, companyId);
+        if (seq === historyReqSeq.current) setHistory(rows);
+      } catch {
+        // Search failure keeps the previous list — a transient error should
+        // not blank out the sidebar mid-typing.
+        if (!keepOnError && seq === historyReqSeq.current) setHistory([]);
+      } finally {
+        if (seq === historyReqSeq.current) setHistoryLoading(false);
+      }
+    },
+    [accessToken, companyId],
+  );
+
+  const refreshHistory = useCallback(() => fetchHistory(historyQueryRef.current), [fetchHistory]);
+
+  const bumpHistoryRecency = useCallback((targetSessionId: string) => {
+    const now = new Date().toISOString();
+    setHistory((prev) => bumpSessionInHistory(prev, targetSessionId, now));
+  }, []);
+
+  const searchHistory = useCallback(
+    async (query: string) => {
+      historyQueryRef.current = query.trim();
+      await fetchHistory(historyQueryRef.current, { keepOnError: true });
+    },
+    [fetchHistory],
+  );
+
+  const applyHydratedSession = useCallback(
+    (res: {
+      session: Session;
+      messages: ChatMessage[];
+      brief?: unknown;
+      awaiting_image_ok?: boolean;
+      forked_from?: ForkOrigin | null;
+    }) => {
+      disconnectSse();
+      sessionIdRef.current = res.session.id;
       resetTransientUi();
+      applyComposerDraft(readComposerDraft(composerDraftsRef.current, res.session.id));
+      syncSendingForCurrent();
       setMessages(res.messages);
       messagesRef.current = res.messages;
       setSession(res.session);
       setMode(res.session.mode);
+      setForkedFrom(res.forked_from ?? null);
       setAgentActions(agentActionsFromMessages(res.messages));
-      setRememberedSessionId(companyId, res.session.id);
       const lastUser = [...res.messages].reverse().find((m) => m.role === "user");
       const parsedBrief = parseBrief(res.brief);
       setBrief(parsedBrief);
       setBriefAfterMessageId(parsedBrief && lastUser ? lastUser.id : null);
       const parked = res.awaiting_image_ok === true;
+      awaitingImageOkRef.current = parked;
       setAwaitingImageOk(parked);
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
       if (res.session.mode === "PREVIEW") {
@@ -553,9 +772,71 @@ export function useSession(companyId: string | undefined) {
       } else {
         setPreviewAfterMessageId(null);
       }
+      if (!sendingRef.current && !stoppingRef.current && !parked) {
+        drainQueueRef.current();
+      }
+    },
+    [resetTransientUi, applyComposerDraft, syncSendingForCurrent, disconnectSse],
+  );
+
+  const openSession = useCallback(
+    async (targetSessionId: string) => {
+      if (!accessToken || !companyId) return;
+      if (sessionIdRef.current === targetSessionId) return;
+      captureLiveChat(sessionIdRef.current);
+      stashComposerDraft(composerDraftsRef.current, sessionIdRef.current, currentComposerDraft());
+      const seq = ++sessionNavSeq.current;
+      const res = await apiGetSessionMessages(accessToken, targetSessionId);
+      if (seq !== sessionNavSeq.current) return;
+      captureLiveChat(sessionIdRef.current);
+      stashComposerDraft(composerDraftsRef.current, sessionIdRef.current, currentComposerDraft());
+      const live = liveChatBySessionRef.current.get(targetSessionId);
+      const lastLiveId = live?.messages[live.messages.length - 1]?.id;
+      const getMissedLive =
+        !!live && !!lastLiveId && !res.messages.some((m) => m.id === lastLiveId);
+      if (live && (inFlightBySessionRef.current.has(targetSessionId) || getMissedLive)) {
+        disconnectSse();
+        sessionIdRef.current = res.session.id;
+        applyComposerDraft(readComposerDraft(composerDraftsRef.current, targetSessionId));
+        restoreLiveChat(live);
+        setSession(res.session);
+        setForkedFrom(res.forked_from ?? null);
+        syncSendingForCurrent();
+      } else {
+        applyHydratedSession(res);
+      }
+      setRememberedSessionId(companyId, res.session.id);
       void refreshHistory();
     },
-    [accessToken, companyId, resetTransientUi, refreshHistory],
+    [
+      accessToken,
+      companyId,
+      currentComposerDraft,
+      captureLiveChat,
+      restoreLiveChat,
+      applyComposerDraft,
+      applyHydratedSession,
+      disconnectSse,
+      syncSendingForCurrent,
+      refreshHistory,
+    ],
+  );
+
+  const forkSession = useCallback(
+    async (messageId: string): Promise<ForkPreviewNote> => {
+      if (!accessToken || !sessionId || forking) return null;
+      setForking(true);
+      try {
+        const res = await apiForkSession(accessToken, sessionId, messageId);
+        // Reuse the open path so composer stash / live capture / remembered id
+        // stay consistent with a manual session switch.
+        await openSession(res.session.id);
+        return res.preview_note ?? null;
+      } finally {
+        setForking(false);
+      }
+    },
+    [accessToken, sessionId, forking, openSession],
   );
 
   const startNewChat = useCallback(async () => {
@@ -579,25 +860,52 @@ export function useSession(companyId: string | undefined) {
       });
     };
 
+    stashComposerDraft(composerDraftsRef.current, sessionIdRef.current, currentComposerDraft());
+    captureLiveChat(sessionIdRef.current);
+
     // Already on an empty draft session — just clear chrome, don't spawn another row.
     if (session && messagesRef.current.length === 0) {
       resetTransientUi();
+      applyComposerDraft(readComposerDraft(composerDraftsRef.current, session.id));
+      syncSendingForCurrent();
       setMode("CHAT");
       upsertHistoryRow(session);
       return;
     }
+
+    const seq = ++sessionNavSeq.current;
+    disconnectSse();
     resetTransientUi();
     setMessages([]);
     messagesRef.current = [];
     setMode("CHAT");
+    applyComposerDraft(EMPTY_COMPOSER_DRAFT);
+    sessionIdRef.current = null;
+    setSession(null);
+    syncSendingForCurrent();
     const active = await apiCreateSession(accessToken, companyId);
+    if (seq !== sessionNavSeq.current) return;
+    sessionIdRef.current = active.id;
+    applyComposerDraft(readComposerDraft(composerDraftsRef.current, active.id));
+    syncSendingForCurrent();
     setSession(active);
     setRememberedSessionId(companyId, active.id);
     // Optimistic sidebar row — don't wait on SSE before the list updates.
     upsertHistoryRow(active);
     void refreshHistory();
     void waitForSseReady(sseReadyRef);
-  }, [accessToken, companyId, session, resetTransientUi, refreshHistory]);
+  }, [
+    accessToken,
+    companyId,
+    session,
+    resetTransientUi,
+    applyComposerDraft,
+    currentComposerDraft,
+    captureLiveChat,
+    disconnectSse,
+    syncSendingForCurrent,
+    refreshHistory,
+  ]);
 
   const renameSession = useCallback(
     async (targetSessionId: string, title: string) => {
@@ -609,13 +917,7 @@ export function useSession(companyId: string | undefined) {
         cleaned ? { title: cleaned } : { clear_title: true },
       );
       setHistory((prev) =>
-        prev
-          .map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
-          .sort((a, b) => {
-            const pin = Number(!!b.pinned) - Number(!!a.pinned);
-            if (pin !== 0) return pin;
-            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-          }),
+        sortSessionHistory(prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))),
       );
       return updated;
     },
@@ -627,13 +929,7 @@ export function useSession(companyId: string | undefined) {
       if (!accessToken) return;
       const updated = await apiUpdateSession(accessToken, targetSessionId, { pinned });
       setHistory((prev) =>
-        prev
-          .map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
-          .sort((a, b) => {
-            const pin = Number(!!b.pinned) - Number(!!a.pinned);
-            if (pin !== 0) return pin;
-            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-          }),
+        sortSessionHistory(prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))),
       );
       return updated;
     },
@@ -644,14 +940,15 @@ export function useSession(companyId: string | undefined) {
     async (targetSessionId: string) => {
       if (!accessToken || !companyId) return;
       await apiDeleteSession(accessToken, targetSessionId);
+      forgetSessionLocal(targetSessionId);
       setHistory((prev) => prev.filter((s) => s.id !== targetSessionId));
-      if (session?.id === targetSessionId) {
+      if (sessionIdRef.current === targetSessionId) {
         void startNewChat();
       } else if (getRememberedSessionId(companyId) === targetSessionId) {
         setRememberedSessionId(companyId, null);
       }
     },
-    [accessToken, companyId, session?.id, startNewChat],
+    [accessToken, companyId, startNewChat, forgetSessionLocal],
   );
 
   useEffect(() => {
@@ -685,14 +982,16 @@ export function useSession(companyId: string | undefined) {
     stoppingRef.current = true;
     setStopping(true);
     // Invalidate in-flight send/resume before abort so late resolves are dropped.
-    turnEpochRef.current += 1;
+    bumpEpoch(sessionId);
     suppressLiveTurnEventsRef.current = true;
-    sendAbortRef.current?.abort();
+    inFlightBySessionRef.current.get(sessionId)?.abort();
     try {
       const stopped = await apiStopSessionTurn(accessToken, sessionId);
+      if (!stillOn(sessionId)) return;
       const stillParked = stopped.awaiting_image_ok === true;
       // Reload transcript after discard (user message / draft may be gone).
       const hydrated = await apiGetSessionMessages(accessToken, sessionId);
+      if (!stillOn(sessionId)) return;
       messagesRef.current = hydrated.messages;
       setMessages(hydrated.messages);
       setMode(hydrated.session.mode);
@@ -721,13 +1020,22 @@ export function useSession(companyId: string | undefined) {
       finishRunningActions();
       void refreshHistory();
     } finally {
-      stoppingRef.current = false;
-      sendingRef.current = false;
-      setStopping(false);
-      setSending(false);
-      drainQueueRef.current();
+      dropInFlight(sessionId);
+      if (stillOn(sessionId)) {
+        stoppingRef.current = false;
+        setStopping(false);
+        drainQueueRef.current();
+      }
     }
-  }, [accessToken, sessionId, finishRunningActions, refreshHistory]);
+  }, [
+    accessToken,
+    sessionId,
+    finishRunningActions,
+    refreshHistory,
+    bumpEpoch,
+    stillOn,
+    dropInFlight,
+  ]);
 
   const enqueueQueuedAt = useCallback((content: string, index?: number): boolean => {
     const text = content.trim();
@@ -761,46 +1069,85 @@ export function useSession(companyId: string | undefined) {
         await stopTurn();
         if (stoppingRef.current || !accessToken) return;
       }
-      sendingRef.current = true;
-      setSending(true);
-      setStreamingText(null);
-      setAgentProgress(null);
-      setLlmError(null);
-
-      const epoch = ++turnEpochRef.current;
-      suppressLiveTurnEventsRef.current = false;
-      const abort = new AbortController();
-      sendAbortRef.current = abort;
 
       let optimistic: ChatMessage | null = null;
+      let boundId: string | null = null;
+      let abort: AbortController | null = null;
+      let epoch = 0;
       try {
         let active = session;
         if (!active) {
           active = await apiCreateSession(accessToken, companyId);
-          setSession(active);
-          setRememberedSessionId(companyId, active.id);
-          await waitForSseReady(sseReadyRef);
-          void refreshHistory();
+          if (sessionIdRef.current && sessionIdRef.current !== active.id) {
+            // Switched away while creating — still run the turn bound to the new
+            // session, but do not steal the UI.
+          } else {
+            sessionIdRef.current = active.id;
+            setSession(active);
+            setRememberedSessionId(companyId, active.id);
+            await waitForSseReady(sseReadyRef);
+            void refreshHistory();
+          }
         }
+        boundId = active.id;
+        epoch = bumpEpoch(active.id);
+        abort = new AbortController();
+        registerInFlight(active.id, abort);
+        suppressLiveTurnEventsRef.current = stillOn(active.id)
+          ? false
+          : suppressLiveTurnEventsRef.current;
+        bumpHistoryRecency(active.id);
 
-        optimistic = {
-          id: `local-${Date.now()}`,
-          session_id: active.id,
-          role: "user",
-          content: text,
-          created_at: new Date().toISOString(),
-        };
-        const pending = optimistic;
-        turnAnchorRef.current = pending.id;
-        messagesRef.current = [...messagesRef.current, pending];
-        setMessages(messagesRef.current);
-        appendAgentAction({ node: "route_intent", model_tier: null, model: null }, pending.id);
+        if (stillOn(active.id)) {
+          setStreamingText(null);
+          setAgentProgress(null);
+          setLlmError(null);
+          optimistic = {
+            id: `local-${Date.now()}`,
+            session_id: active.id,
+            role: "user",
+            content: text,
+            created_at: new Date().toISOString(),
+          };
+          const pending = optimistic;
+          turnAnchorRef.current = pending.id;
+          messagesRef.current = [...messagesRef.current, pending];
+          setMessages(messagesRef.current);
+          appendAgentAction({ node: "route_intent", model_tier: null, model: null }, pending.id);
+        }
 
         const res = await apiPostSessionMessage(accessToken, active.id, text, {
           signal: abort.signal,
         });
-        // Stop (or a newer turn) won the race — do not re-apply discarded payload.
-        if (abort.signal.aborted || epoch !== turnEpochRef.current) {
+        // Stop won the race — do not re-apply discarded payload.
+        if (abort.signal.aborted || epoch !== epochOf(active.id)) {
+          return;
+        }
+        // Switched away — keep the completed transcript for this session; do
+        // not paint it onto the session now on screen.
+        if (!stillOn(active.id)) {
+          liveChatBySessionRef.current.set(active.id, {
+            messages: res.messages,
+            agentActions: agentActionsFromMessages(res.messages),
+            streamingText: null,
+            agentProgress: null,
+            brief: parseBrief(res.events?.find((ev) => ev.type === "brief.updated")?.data),
+            briefAfterMessageId:
+              [...res.messages].reverse().find((m) => m.role === "user")?.id ?? null,
+            interruptAfterMessageId: res.interrupted
+              ? ([...res.messages].reverse().find((m) => m.role === "user")?.id ?? null)
+              : null,
+            previewAfterMessageId: res.events?.some((ev) => ev.type === "preview.updated")
+              ? ([...res.messages].reverse().find((m) => m.role === "user")?.id ?? null)
+              : null,
+            awaitingImageOk: res.interrupted,
+            draft: null,
+            confirmReceipt: null,
+            llmError: null,
+            mode: res.mode,
+            turnAnchor: null,
+          });
+          void refreshHistory();
           return;
         }
         messagesRef.current = res.messages;
@@ -811,16 +1158,19 @@ export function useSession(companyId: string | undefined) {
         setAwaitingImageOk(res.interrupted);
         if (!res.interrupted) setInterruptAfterMessageId(null);
 
+        const pending = optimistic;
         const serverLastUser = [...res.messages].reverse().find((m) => m.role === "user");
         if (serverLastUser) {
           turnAnchorRef.current = serverLastUser.id;
-          setAgentActions((prev) =>
-            prev.map((a) =>
-              a.afterMessageId === pending.id || a.afterMessageId?.startsWith("local-")
-                ? { ...a, afterMessageId: serverLastUser.id }
-                : a,
-            ),
-          );
+          if (pending) {
+            setAgentActions((prev) =>
+              prev.map((a) =>
+                a.afterMessageId === pending.id || a.afterMessageId?.startsWith("local-")
+                  ? { ...a, afterMessageId: serverLastUser.id }
+                  : a,
+              ),
+            );
+          }
         }
 
         for (const ev of res.events ?? []) {
@@ -867,10 +1217,11 @@ export function useSession(companyId: string | undefined) {
         turnAnchorRef.current = null;
         void refreshHistory();
       } catch (err) {
-        if (abort.signal.aborted || epoch !== turnEpochRef.current) {
+        if (abort?.signal.aborted || (boundId && epoch !== epochOf(boundId))) {
           // Stop path owns UI reset via turn.cancelled / stopTurn refresh.
           return;
         }
+        if (!stillOn(boundId)) return;
         if (optimistic) {
           const failed = optimistic;
           setMessages((prev) => prev.filter((m) => m.id !== failed.id));
@@ -882,10 +1233,8 @@ export function useSession(companyId: string | undefined) {
         turnAnchorRef.current = null;
         throw err;
       } finally {
-        if (sendAbortRef.current === abort) sendAbortRef.current = null;
-        sendingRef.current = false;
-        setSending(false);
-        drainQueueRef.current();
+        dropInFlight(boundId);
+        if (stillOn(boundId)) drainQueueRef.current();
       }
     },
     [
@@ -899,6 +1248,12 @@ export function useSession(companyId: string | undefined) {
       refreshHistory,
       appendAgentAction,
       enqueueQueuedAt,
+      bumpEpoch,
+      epochOf,
+      stillOn,
+      registerInFlight,
+      dropInFlight,
+      bumpHistoryRecency,
     ],
   );
 
@@ -981,137 +1336,162 @@ export function useSession(companyId: string | undefined) {
       ) {
         return;
       }
-      sendingRef.current = true;
-      setSending(true);
-      setLlmError(null);
-      const epoch = ++turnEpochRef.current;
+      const boundId = sessionId;
+      const epoch = bumpEpoch(boundId);
       suppressLiveTurnEventsRef.current = false;
       const abort = new AbortController();
-      sendAbortRef.current = abort;
+      registerInFlight(boundId, abort);
+      setLlmError(null);
+      bumpHistoryRecency(boundId);
       try {
-        const res = await apiResumeSessionImage(accessToken, sessionId, {
+        const res = await apiResumeSessionImage(accessToken, boundId, {
           signal: abort.signal,
           imageFormat,
         });
-        if (abort.signal.aborted || epoch !== turnEpochRef.current) {
+        if (abort.signal.aborted || epoch !== epochOf(boundId)) {
+          return;
+        }
+        if (!stillOn(boundId)) {
+          void refreshHistory();
           return;
         }
         applyTurnResponse(res);
         void refreshHistory();
       } catch (err) {
-        if (abort.signal.aborted || epoch !== turnEpochRef.current) return;
+        if (abort.signal.aborted || epoch !== epochOf(boundId)) return;
+        if (!stillOn(boundId)) return;
         throw err;
       } finally {
-        if (sendAbortRef.current === abort) sendAbortRef.current = null;
-        sendingRef.current = false;
-        setSending(false);
-        drainQueueRef.current();
+        dropInFlight(boundId);
+        if (stillOn(boundId)) drainQueueRef.current();
       }
     },
-    [accessToken, sessionId, applyTurnResponse, refreshHistory],
+    [
+      accessToken,
+      sessionId,
+      applyTurnResponse,
+      refreshHistory,
+      bumpEpoch,
+      epochOf,
+      stillOn,
+      registerInFlight,
+      dropInFlight,
+      bumpHistoryRecency,
+    ],
   );
 
-  const applyMediaMutation = useCallback((res: PreviewMediaMutationResponse) => {
-    const next: PreviewDraft = {
-      copy: res.copy,
-      image_url: res.image_url,
-      media: res.media ?? [],
-      revision: res.revision,
-      approval_token: res.approval_token,
-      platform: res.platform,
-    };
-    setDraft(next);
-    setMode(res.mode);
-    return next;
-  }, []);
+  const applyMediaMutation = useCallback(
+    (res: PreviewMediaMutationResponse, boundId?: string | null) => {
+      if (boundId && !stillOn(boundId)) return null;
+      const next: PreviewDraft = {
+        copy: res.copy,
+        image_url: res.image_url,
+        media: res.media ?? [],
+        revision: res.revision,
+        approval_token: res.approval_token,
+        platform: res.platform,
+      };
+      setDraft(next);
+      setMode(res.mode);
+      return next;
+    },
+    [stillOn],
+  );
 
   const updateDraft = useCallback(
     async (copy: DraftCopy) => {
       if (!accessToken || !sessionId || draftSaving) return null;
+      const boundId = sessionId;
       setDraftSaving(true);
       try {
-        const res = await apiUpdateSessionDraft(accessToken, sessionId, copy);
-        return applyMediaMutation(res);
+        const res = await apiUpdateSessionDraft(accessToken, boundId, copy);
+        return applyMediaMutation(res, boundId);
       } finally {
-        setDraftSaving(false);
+        if (stillOn(boundId)) setDraftSaving(false);
       }
     },
-    [accessToken, sessionId, draftSaving, applyMediaMutation],
+    [accessToken, sessionId, draftSaving, applyMediaMutation, stillOn],
   );
 
   const saveImagePlan = useCallback(
     async (imageId: string, plan: Record<string, unknown>) => {
       if (!accessToken || !sessionId || draftSaving) return null;
+      const boundId = sessionId;
       setDraftSaving(true);
       try {
-        const res = await apiUpdateImagePlan(accessToken, sessionId, imageId, plan);
-        return applyMediaMutation(res);
+        const res = await apiUpdateImagePlan(accessToken, boundId, imageId, plan);
+        return applyMediaMutation(res, boundId);
       } finally {
-        setDraftSaving(false);
+        if (stillOn(boundId)) setDraftSaving(false);
       }
     },
-    [accessToken, sessionId, draftSaving, applyMediaMutation],
+    [accessToken, sessionId, draftSaving, applyMediaMutation, stillOn],
   );
 
   const regenImage = useCallback(
     async (imageId: string) => {
       if (!accessToken || !sessionId || draftSaving) return null;
+      const boundId = sessionId;
       setDraftSaving(true);
       try {
-        const res = await apiRegenImage(accessToken, sessionId, imageId);
-        return applyMediaMutation(res);
+        const res = await apiRegenImage(accessToken, boundId, imageId);
+        return applyMediaMutation(res, boundId);
       } finally {
-        setDraftSaving(false);
+        if (stillOn(boundId)) setDraftSaving(false);
       }
     },
-    [accessToken, sessionId, draftSaving, applyMediaMutation],
+    [accessToken, sessionId, draftSaving, applyMediaMutation, stillOn],
   );
 
   const addImage = useCallback(
     async (format: "single" | "comic_4panel" = "single") => {
       if (!accessToken || !sessionId || draftSaving) return null;
+      const boundId = sessionId;
       setDraftSaving(true);
       try {
-        const res = await apiAddSessionImage(accessToken, sessionId, { format });
-        return applyMediaMutation(res);
+        const res = await apiAddSessionImage(accessToken, boundId, { format });
+        return applyMediaMutation(res, boundId);
       } finally {
-        setDraftSaving(false);
+        if (stillOn(boundId)) setDraftSaving(false);
       }
     },
-    [accessToken, sessionId, draftSaving, applyMediaMutation],
+    [accessToken, sessionId, draftSaving, applyMediaMutation, stillOn],
   );
 
   const removeImage = useCallback(
     async (imageId: string) => {
       if (!accessToken || !sessionId || draftSaving) return null;
+      const boundId = sessionId;
       setDraftSaving(true);
       try {
-        const res = await apiRemoveImage(accessToken, sessionId, imageId);
-        return applyMediaMutation(res);
+        const res = await apiRemoveImage(accessToken, boundId, imageId);
+        return applyMediaMutation(res, boundId);
       } finally {
-        setDraftSaving(false);
+        if (stillOn(boundId)) setDraftSaving(false);
       }
     },
-    [accessToken, sessionId, draftSaving, applyMediaMutation],
+    [accessToken, sessionId, draftSaving, applyMediaMutation, stillOn],
   );
 
   const uploadImage = useCallback(
     async (imageId: string, file: File) => {
       if (!accessToken || !sessionId || draftSaving) return null;
+      const boundId = sessionId;
       setDraftSaving(true);
       try {
-        const res = await apiUploadImage(accessToken, sessionId, imageId, file);
-        return applyMediaMutation(res);
+        const res = await apiUploadImage(accessToken, boundId, imageId, file);
+        return applyMediaMutation(res, boundId);
       } finally {
-        setDraftSaving(false);
+        if (stillOn(boundId)) setDraftSaving(false);
       }
     },
-    [accessToken, sessionId, draftSaving, applyMediaMutation],
+    [accessToken, sessionId, draftSaving, applyMediaMutation, stillOn],
   );
 
   const confirmPost = useCallback(
     async (localCopy?: DraftCopy | null) => {
       if (!accessToken || !sessionId || confirming) return null;
+      const boundId = sessionId;
       setConfirming(true);
       try {
         let token = draft?.approval_token ?? null;
@@ -1125,10 +1505,10 @@ export function useSession(companyId: string | undefined) {
 
         // Confirm auto-flushes dirty local fields before binding approval_token.
         if (dirty && localCopy) {
-          const saved = await apiUpdateSessionDraft(accessToken, sessionId, localCopy);
+          const saved = await apiUpdateSessionDraft(accessToken, boundId, localCopy);
           token = saved.approval_token;
           platform = saved.platform;
-          applyMediaMutation(saved);
+          applyMediaMutation(saved, boundId);
         }
         if (!token) throw new Error("Missing approval_token");
 
@@ -1137,19 +1517,20 @@ export function useSession(companyId: string | undefined) {
             ? crypto.randomUUID()
             : `confirm-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-        const receipt = await apiConfirmSession(accessToken, sessionId, {
+        const receipt = await apiConfirmSession(accessToken, boundId, {
           approval_token: token,
           idempotency_key,
           platform,
         });
+        if (!stillOn(boundId)) return receipt;
         setConfirmReceipt(receipt);
         setSession((prev) => (prev ? { ...prev, status: "confirmed" } : prev));
         return receipt;
       } finally {
-        setConfirming(false);
+        if (stillOn(boundId)) setConfirming(false);
       }
     },
-    [accessToken, sessionId, confirming, draft, applyMediaMutation],
+    [accessToken, sessionId, confirming, draft, applyMediaMutation, stillOn],
   );
 
   return {
@@ -1161,6 +1542,10 @@ export function useSession(companyId: string | undefined) {
     composerLocked: stopping,
     queueFull: queuedMessages.length >= MAX_QUEUED_SESSION_MESSAGES,
     queuedMessages,
+    composerInput,
+    setComposerInput,
+    editInsertAt,
+    setEditInsertAt,
     sseConnected,
     streamingText,
     agentProgress,
@@ -1178,6 +1563,9 @@ export function useSession(companyId: string | undefined) {
     history,
     historyLoading,
     restoring,
+    forkedFrom,
+    forking,
+    forkSession,
     sendMessage,
     enqueueQueuedMessage: enqueueQueuedAt,
     dequeueQueuedMessage,
@@ -1196,5 +1584,6 @@ export function useSession(companyId: string | undefined) {
     pinSession,
     deleteSession,
     refreshHistory,
+    searchHistory,
   };
 }

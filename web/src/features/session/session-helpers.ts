@@ -2,11 +2,13 @@ import type {
   AgentActionRecord,
   AgentProgress,
   ChatMessage,
+  ComposerDraft,
   DraftCopy,
   PreviewDraft,
   PreviewMediaItem,
   QueuedChatMessage,
   SessionBrief,
+  SessionListItem,
 } from "./types";
 
 export function asStringList(value: unknown): string[] {
@@ -56,6 +58,29 @@ export function isUserFacingAgentNode(node: string): boolean {
   return !INTERNAL_AGENT_NODES.has(node);
 }
 
+/** i18n key for a trail row — running keeps “…”, done is past tense. */
+export function agentNodeLabelKey(node: string, status: AgentActionRecord["status"]): string {
+  return `chat.agent.nodes.${status}.${node}`;
+}
+
+export function agentNodeFallbackKey(status: AgentActionRecord["status"]): string {
+  return `chat.agent.nodes.${status}.working`;
+}
+
+/** In-flight trail header is a static spitball line — duration only after the turn ends. */
+export type AgentTrailHeader = { kind: "working" } | { kind: "workedFor"; durationMs: number };
+
+export function agentTrailHeader(
+  running: boolean,
+  elapsedMs: number | null,
+): AgentTrailHeader | null {
+  if (running) return { kind: "working" };
+  if (elapsedMs != null && elapsedMs >= 1000) {
+    return { kind: "workedFor", durationMs: elapsedMs };
+  }
+  return null;
+}
+
 /** SPA-only follow-up Sends while a turn is in flight (ADR 0016). */
 export const MAX_QUEUED_SESSION_MESSAGES = 3;
 
@@ -67,6 +92,59 @@ export function newQueuedChatMessage(content: string): QueuedChatMessage {
     id: `local-q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     content: content.trim(),
   };
+}
+
+export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
+  queued: [],
+  input: "",
+  editInsertAt: null,
+};
+
+/** Pinned first, then newest ``updated_at`` — same order as ``GET /api/sessions``. */
+export function sortSessionHistory(rows: SessionListItem[]): SessionListItem[] {
+  return [...rows].sort((a, b) => {
+    const pin = Number(!!b.pinned) - Number(!!a.pinned);
+    if (pin !== 0) return pin;
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+  });
+}
+
+/** Optimistic recency bump so an old thread jumps back to the top on send. */
+export function bumpSessionInHistory(
+  rows: SessionListItem[],
+  sessionId: string,
+  updatedAt: string,
+): SessionListItem[] {
+  if (!rows.some((s) => s.id === sessionId)) return rows;
+  return sortSessionHistory(
+    rows.map((s) => (s.id === sessionId ? { ...s, updated_at: updatedAt } : s)),
+  );
+}
+
+export function snapshotComposerDraft(current: ComposerDraft): ComposerDraft {
+  return {
+    queued: [...current.queued],
+    input: current.input,
+    editInsertAt: current.editInsertAt,
+  };
+}
+
+export function stashComposerDraft(
+  drafts: Map<string, ComposerDraft>,
+  sessionId: string | null,
+  current: ComposerDraft,
+): void {
+  if (!sessionId) return;
+  drafts.set(sessionId, snapshotComposerDraft(current));
+}
+
+export function readComposerDraft(
+  drafts: Map<string, ComposerDraft>,
+  sessionId: string | null,
+): ComposerDraft {
+  if (!sessionId) return snapshotComposerDraft(EMPTY_COMPOSER_DRAFT);
+  const found = drafts.get(sessionId);
+  return found ? snapshotComposerDraft(found) : snapshotComposerDraft(EMPTY_COMPOSER_DRAFT);
 }
 
 /** Outcome events → node names, used when SSE missed live agent.progress. */
@@ -81,6 +159,12 @@ export const OUTCOME_NODE: Record<string, string> = {
 
 export function newActionId(node: string): string {
   return `action-${Date.now()}-${node}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function parseTurnDurationMs(metadata?: Record<string, unknown>): number | null {
+  const raw = metadata?.duration_ms;
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) return null;
+  return Math.floor(raw);
 }
 
 /** Rebuild Cursor-style action trail from persisted user-message metadata. */

@@ -81,6 +81,7 @@
     "message": {
       "copy": "複製",
       "copied": "複製咗",
+      "fork": "複製對話",
       "time": {
         "s": "{{n}}秒前",
         "m": "{{n}}分鐘前",
@@ -88,24 +89,53 @@
         "d": "{{n}}日前"
       }
     },
+    "fork": {
+      "divider": "複製自「{{title}}」",
+      "toOne": "複製咗去「{{title}}」",
+      "toMany": "複製咗去 {{n}} 個對話",
+      "failed": "複製唔到呢個對話",
+      "noteStale": "新對話帶嘅係嗰個訊息嗰陣嘅草稿，之後嘅修改冇跟到",
+      "noteLater": "預覽係嗰個訊息之後先出，所以新對話冇草稿"
+    },
     "agent": {
       "actions": "進度",
+      "working": "幫緊你幫緊你",
+      "workedFor": "做咗{{duration}}",
       "nodes": {
-        "working": "處理緊…",
-        "route_intent": "分析緊要求…",
-        "query_generator": "搵緊料…",
-        "research_ingest": "執緊市場資料…",
-        "load_context": "load緊公司資料…",
-        "product_matcher": "對緊產品…",
-        "chat": "覆緊…",
-        "trend_searcher": "掃緊香港熱話…",
-        "brainstormer": "諗緊角度…",
-        "executor_post": "寫緊帖文…",
-        "grounding_check": "Fact Check緊…",
-        "reviewer": "睇緊稿…",
-        "edit_copy": "執緊script…",
-        "executor_image_plan": "諗緊圖點畫…",
-        "executor_image_gen": "出緊圖…"
+        "running": {
+          "working": "處理緊…",
+          "route_intent": "分析緊要求…",
+          "query_generator": "搵緊料…",
+          "research_ingest": "執緊市場資料…",
+          "load_context": "load緊公司資料…",
+          "product_matcher": "對緊產品…",
+          "chat": "覆緊…",
+          "trend_searcher": "掃緊香港熱話…",
+          "brainstormer": "諗緊角度…",
+          "executor_post": "寫緊帖文…",
+          "grounding_check": "Fact Check緊…",
+          "reviewer": "睇緊稿…",
+          "edit_copy": "執緊script…",
+          "executor_image_plan": "諗緊圖點畫…",
+          "executor_image_gen": "出緊圖…"
+        },
+        "done": {
+          "working": "處理咗",
+          "route_intent": "分析咗要求",
+          "query_generator": "搵咗料",
+          "research_ingest": "執咗市場資料",
+          "load_context": "load咗公司資料",
+          "product_matcher": "對咗產品",
+          "chat": "覆咗",
+          "trend_searcher": "掃咗香港熱話",
+          "brainstormer": "諗咗角度",
+          "executor_post": "寫咗帖文",
+          "grounding_check": "Fact Check咗",
+          "reviewer": "睇咗稿",
+          "edit_copy": "執咗script",
+          "executor_image_plan": "諗咗圖點畫",
+          "executor_image_gen": "出咗圖"
+        }
       },
       "brief": {
         "title": "內容 Brief",
@@ -137,9 +167,11 @@
       "close": "關閉",
       "new": "新對話",
       "search": "搜尋對話…",
+      "clearSearch": "清除搜尋",
       "refresh": "重新整理",
       "loading": "載入緊紀錄…",
       "empty": "暫時未有對話",
+      "noResults": "搵唔到相關對話",
       "untitled": "未命名對話",
       "restoring": "恢復緊對話…",
       "openFailed": "打唔開呢個對話喎",

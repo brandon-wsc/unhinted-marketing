@@ -2,7 +2,7 @@ import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, desc, func, or_, select
+from sqlalchemy import Text, cast, delete, desc, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -517,6 +517,97 @@ async def list_user_sessions(
     return [(row[0], row[1]) for row in rows]
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+async def search_user_sessions(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    q: str,
+    company_id: uuid.UUID | None = None,
+    limit: int = 40,
+) -> list[tuple[Session, str | None, str | None, dict | None]]:
+    """Search everything the user can see in a session (case-insensitive):
+    title, chat messages, brief + current draft (``sessions.state`` JSONB),
+    and all draft revisions (``preview_drafts.copy`` JSONB).
+
+    Returns (session, first-user preview, first matching message content,
+    latest matching draft copy). Flat newest-first order — pinned grouping
+    is a browse-mode concern.
+    """
+    pattern = f"%{_escape_like(q)}%"
+    first_user = (
+        select(SessionMessage.content)
+        .where(
+            SessionMessage.session_id == Session.id,
+            SessionMessage.role == "user",
+        )
+        .order_by(SessionMessage.created_at.asc())
+        .limit(1)
+        .correlate(Session)
+        .scalar_subquery()
+    )
+    content_match = SessionMessage.content.ilike(pattern, escape="\\")
+    first_match = (
+        select(SessionMessage.content)
+        .where(SessionMessage.session_id == Session.id, content_match)
+        .order_by(SessionMessage.created_at.asc())
+        .limit(1)
+        .correlate(Session)
+        .scalar_subquery()
+    )
+    state_match = cast(Session.state, Text).ilike(pattern, escape="\\")
+    draft_copy_match = cast(PreviewDraft.copy, Text).ilike(pattern, escape="\\")
+    latest_matching_draft = (
+        select(PreviewDraft.copy)
+        .where(PreviewDraft.session_id == Session.id, draft_copy_match)
+        .order_by(PreviewDraft.revision.desc())
+        .limit(1)
+        .correlate(Session)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(Session, first_user, first_match, latest_matching_draft)
+        .where(Session.user_id == user_id)
+        .where(
+            or_(
+                Session.title.ilike(pattern, escape="\\"),
+                exists(
+                    select(SessionMessage.id).where(
+                        SessionMessage.session_id == Session.id,
+                        content_match,
+                    )
+                ),
+                state_match,
+                exists(
+                    select(PreviewDraft.id).where(
+                        PreviewDraft.session_id == Session.id,
+                        draft_copy_match,
+                    )
+                ),
+            )
+        )
+        .order_by(desc(Session.updated_at))
+        .limit(limit)
+    )
+    if company_id is not None:
+        stmt = stmt.where(Session.company_id == company_id)
+    rows = (await db.execute(stmt)).all()
+    return [(row[0], row[1], row[2], row[3]) for row in rows]
+
+
+def touch_session(session: Session) -> None:
+    """Bump recency so history lists reorder after a turn.
+
+    ``updated_at`` uses SQLAlchemy ``onupdate``, which only fires when the ORM
+    row is dirty. A follow-up chat turn often writes an equal JSONB ``state``,
+    so the row is skipped and an old session stays buried.
+    """
+    session.updated_at = datetime.now(UTC)
+
+
 async def update_session_meta(
     db: AsyncSession,
     session: Session,
@@ -548,6 +639,7 @@ async def add_session_message(
     role: str,
     content: str,
     metadata: dict | None = None,
+    created_at: datetime | None = None,
 ) -> SessionMessage:
     row = SessionMessage(
         session_id=session_id,
@@ -555,6 +647,10 @@ async def add_session_message(
         content=content,
         metadata_=metadata or {},
     )
+    if created_at is not None:
+        # Fork copies keep the original timeline (ADR 0017); without this every
+        # copied row shares one transaction timestamp and ordering is unstable.
+        row.created_at = created_at
     db.add(row)
     await db.flush()
     return row
@@ -569,6 +665,30 @@ async def list_session_messages(
         .order_by(SessionMessage.created_at)
     )
     return list(result.all())
+
+
+async def count_session_forks(db: AsyncSession, session_id: uuid.UUID) -> int:
+    """How many sessions were forked directly from this session (ADR 0017)."""
+    return int(
+        await db.scalar(
+            select(func.count(Session.id)).where(Session.forked_from_session_id == session_id)
+        )
+        or 0
+    )
+
+
+async def list_forks_for_messages(
+    db: AsyncSession, message_ids: list[uuid.UUID]
+) -> list[Session]:
+    """Sessions forked from any of these messages, oldest first (ADR 0017)."""
+    if not message_ids:
+        return []
+    rows = await db.scalars(
+        select(Session)
+        .where(Session.forked_from_message_id.in_(message_ids))
+        .order_by(Session.created_at)
+    )
+    return list(rows.all())
 
 
 async def delete_session_messages_by_ids(
@@ -645,6 +765,7 @@ async def upsert_preview_draft(
     approval_token: str,
     platform: str | None = None,
     media_ids: list[uuid.UUID] | None = None,
+    created_at: datetime | None = None,
 ) -> PreviewDraft:
     row = PreviewDraft(
         session_id=session_id,
@@ -657,6 +778,8 @@ async def upsert_preview_draft(
         approval_token=approval_token,
         platform=platform,
     )
+    if created_at is not None:
+        row.created_at = created_at
     db.add(row)
     await db.flush()
     return row
@@ -668,6 +791,21 @@ async def get_latest_preview_draft(
     return await db.scalar(
         select(PreviewDraft)
         .where(PreviewDraft.session_id == session_id)
+        .order_by(desc(PreviewDraft.revision))
+        .limit(1)
+    )
+
+
+async def get_preview_draft_as_of(
+    db: AsyncSession, session_id: uuid.UUID, as_of: datetime
+) -> PreviewDraft | None:
+    """Latest draft revision that existed at `as_of` (ADR 0017 time-aligned fork)."""
+    return await db.scalar(
+        select(PreviewDraft)
+        .where(
+            PreviewDraft.session_id == session_id,
+            PreviewDraft.created_at <= as_of,
+        )
         .order_by(desc(PreviewDraft.revision))
         .limit(1)
     )

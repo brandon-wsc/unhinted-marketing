@@ -81,6 +81,7 @@
     "message": {
       "copy": "Copy",
       "copied": "Copied",
+      "fork": "Fork chat",
       "time": {
         "s": "{{n}}s ago",
         "m": "{{n}}m ago",
@@ -88,24 +89,53 @@
         "d": "{{n}}d ago"
       }
     },
+    "fork": {
+      "divider": "Forked from {{title}}",
+      "toOne": "Forked to {{title}}",
+      "toMany": "Forked to {{n}} chats",
+      "failed": "Could not fork this chat",
+      "noteStale": "Forked chat carries the draft as of that message; later edits not included",
+      "noteLater": "Preview was created after that message, so the forked chat has no draft"
+    },
     "agent": {
       "actions": "Agent steps",
+      "working": "Working",
+      "workedFor": "Worked for {{duration}}",
       "nodes": {
-        "working": "Working…",
-        "route_intent": "Understanding your request…",
-        "query_generator": "Looking up information…",
-        "research_ingest": "Gathering market context…",
-        "load_context": "Loading company context…",
-        "product_matcher": "Matching products…",
-        "chat": "Replying…",
-        "trend_searcher": "Searching HK trends…",
-        "brainstormer": "Brainstorming angles…",
-        "executor_post": "Drafting post copy…",
-        "grounding_check": "Checking signal grounding…",
-        "reviewer": "Reviewing draft…",
-        "edit_copy": "Revising copy…",
-        "executor_image_plan": "Planning the image…",
-        "executor_image_gen": "Generating the image…"
+        "running": {
+          "working": "Working…",
+          "route_intent": "Understanding your request…",
+          "query_generator": "Looking up information…",
+          "research_ingest": "Gathering market context…",
+          "load_context": "Loading company context…",
+          "product_matcher": "Matching products…",
+          "chat": "Replying…",
+          "trend_searcher": "Searching HK trends…",
+          "brainstormer": "Brainstorming angles…",
+          "executor_post": "Drafting post copy…",
+          "grounding_check": "Checking signal grounding…",
+          "reviewer": "Reviewing draft…",
+          "edit_copy": "Revising copy…",
+          "executor_image_plan": "Planning the image…",
+          "executor_image_gen": "Generating the image…"
+        },
+        "done": {
+          "working": "Worked",
+          "route_intent": "Understood your request",
+          "query_generator": "Looked up information",
+          "research_ingest": "Gathered market context",
+          "load_context": "Loaded company context",
+          "product_matcher": "Matched products",
+          "chat": "Replied",
+          "trend_searcher": "Searched HK trends",
+          "brainstormer": "Brainstormed angles",
+          "executor_post": "Drafted post copy",
+          "grounding_check": "Checked signal grounding",
+          "reviewer": "Reviewed draft",
+          "edit_copy": "Revised copy",
+          "executor_image_plan": "Planned the image",
+          "executor_image_gen": "Generated the image"
+        }
       },
       "brief": {
         "title": "Content brief",
@@ -137,9 +167,11 @@
       "close": "Close",
       "new": "New chat",
       "search": "Search chats…",
+      "clearSearch": "Clear search",
       "refresh": "Refresh",
       "loading": "Loading history…",
       "empty": "No chats yet",
+      "noResults": "No chats match your search",
       "untitled": "Untitled chat",
       "restoring": "Restoring chat…",
       "openFailed": "Could not open that chat",

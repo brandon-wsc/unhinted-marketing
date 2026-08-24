@@ -19,6 +19,10 @@ export type RecommendedQuestion = components["schemas"]["RecommendedQuestionItem
 export type RecommendedQuestionsResponse = components["schemas"]["RecommendedQuestionsResponse"];
 export type DraftCopy = components["schemas"]["DraftCopy"];
 export type PreviewMediaItem = components["schemas"]["PreviewMediaItem"];
+export type ForkRef = components["schemas"]["ForkRef"];
+export type ForkOrigin = components["schemas"]["ForkOrigin"];
+export type ForkSessionResponse = components["schemas"]["ForkSessionResponse"];
+export type ForkPreviewNote = ForkSessionResponse["preview_note"];
 
 // --- Generated from JSON Schema mirrors (schemas/ → docs/contracts) ---
 export type AgentProgress = import("./generated/agent-progress").AgentProgressData;
@@ -34,6 +38,8 @@ export type ChatMessage = {
   content: string;
   created_at: string;
   metadata?: Record<string, unknown>;
+  /** Chats forked from this message (ADR 0017). Absent/empty for most messages. */
+  forks?: ForkRef[];
 };
 export type SessionEventData = Record<string, unknown>;
 export type SessionEvent = {
@@ -51,6 +57,12 @@ export type AgentActionRecord = {
 export type QueuedChatMessage = {
   id: string;
   content: string;
+};
+/** SPA-only composer snapshot — save/restore on session switch (ADR 0016). */
+export type ComposerDraft = {
+  queued: QueuedChatMessage[];
+  input: string;
+  editInsertAt: number | null;
 };
 export type SessionSnapshot = {
   session_id: string;
