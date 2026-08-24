@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -89,6 +90,7 @@ async def seed_preview_session(
     company_id: uuid.UUID,
     approval_token: str = "test-approval-token-001",
     revision: int = 1,
+    draft_created_at: datetime | None = None,
 ) -> uuid.UUID:
     """Insert a PREVIEW-mode session + draft without LangGraph."""
     session = Session(
@@ -126,6 +128,7 @@ async def seed_preview_session(
         source_signal_ids=[],
         approval_token=approval_token,
         platform="instagram",
+        created_at=draft_created_at,
     )
     await db_session.commit()
     return session.id

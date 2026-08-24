@@ -437,11 +437,7 @@ describe("waitForSseReady", () => {
 });
 
 describe("session history recency", () => {
-  const row = (
-    id: string,
-    updated_at: string,
-    pinned = false,
-  ): SessionListItem => ({
+  const row = (id: string, updated_at: string, pinned = false): SessionListItem => ({
     id,
     company_id: "co-1",
     user_id: "u-1",

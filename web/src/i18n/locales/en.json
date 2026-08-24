@@ -81,12 +81,21 @@
     "message": {
       "copy": "Copy",
       "copied": "Copied",
+      "fork": "Fork chat",
       "time": {
         "s": "{{n}}s ago",
         "m": "{{n}}m ago",
         "h": "{{n}}h ago",
         "d": "{{n}}d ago"
       }
+    },
+    "fork": {
+      "divider": "Forked from {{title}}",
+      "toOne": "Forked to {{title}}",
+      "toMany": "Forked to {{n}} chats",
+      "failed": "Could not fork this chat",
+      "noteStale": "Forked chat carries the draft as of that message; later edits not included",
+      "noteLater": "Preview was created after that message, so the forked chat has no draft"
     },
     "agent": {
       "actions": "Agent steps",

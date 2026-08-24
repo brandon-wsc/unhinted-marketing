@@ -9,6 +9,8 @@ import logging
 import secrets
 import time
 import uuid
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -213,6 +215,95 @@ def _strip_discard_meta(state: dict[str, Any] | None) -> dict[str, Any]:
     out.pop("turn_discard", None)
     out.pop("awaiting_image_ok", None)
     return out
+
+
+@dataclass
+class ForkPreviewCopy:
+    """Facts about a fork's preview copy, for the route to derive preview_note."""
+
+    copied: bool
+    copied_revision: int | None
+    latest_revision: int | None
+
+
+async def copy_session_preview(
+    db: AsyncSession,
+    source: Session,
+    target: Session,
+    *,
+    as_of: datetime | None = None,
+) -> ForkPreviewCopy:
+    """Copy the source's preview draft + media into a forked session (ADR 0017).
+
+    With ``as_of`` (the fork-point message's created_at) the copy is
+    time-aligned: the revision that existed at that moment, or nothing when the
+    preview postdates the fork point. The fork restarts at revision=1 with a
+    freshly minted approval_token — tokens are never shared across sessions
+    (ADR 0003). preview_images rows are duplicated into the target session
+    (append-only per ADR 0008; same asset URLs) and media_ids are remapped to
+    the new row ids. The copied draft keeps the source row's created_at so the
+    timeline stays aligned for fork-of-fork.
+    """
+    latest = await repos.get_latest_preview_draft(db, source.id)
+    draft = (
+        await repos.get_preview_draft_as_of(db, source.id, as_of)
+        if as_of is not None
+        else latest
+    )
+    latest_revision = latest.revision if latest is not None else None
+    if draft is None:
+        return ForkPreviewCopy(
+            copied=False, copied_revision=None, latest_revision=latest_revision
+        )
+
+    id_map: dict[uuid.UUID, uuid.UUID] = {}
+    for img in await repos.get_preview_images_by_ids(db, list(draft.media_ids or [])):
+        row = await repos.insert_preview_image(
+            db,
+            session_id=target.id,
+            url=img.url,
+            plan=img.plan,
+            format=img.format,
+            role=img.role,
+            seq=img.seq,
+            status=img.status,
+        )
+        id_map[img.id] = row.id
+    media_ids = [id_map[i] for i in (draft.media_ids or []) if i in id_map]
+
+    token = secrets.token_urlsafe(24)
+    await repos.upsert_preview_draft(
+        db,
+        session_id=target.id,
+        revision=1,
+        copy=copy.deepcopy(draft.copy or {}),
+        image_url=draft.image_url,
+        image_plan=copy.deepcopy(draft.image_plan) if draft.image_plan else None,
+        source_signal_ids=list(draft.source_signal_ids or []),
+        approval_token=token,
+        platform=draft.platform,
+        media_ids=media_ids,
+        created_at=draft.created_at,
+    )
+
+    state: dict[str, Any] = {
+        "draft": copy.deepcopy(draft.copy or {}),
+        "revision": 1,
+        "approval_token": token,
+        "image_url": draft.image_url,
+        "media_ids": [str(i) for i in media_ids],
+        "pending_confirm": False,
+        "need_image": False,
+        "awaiting_image_ok": False,
+    }
+    if draft.image_plan is not None:
+        state["image_plan"] = copy.deepcopy(draft.image_plan)
+    target.state = state
+    if source.mode == MODE_PREVIEW:
+        target.mode = MODE_PREVIEW
+    return ForkPreviewCopy(
+        copied=True, copied_revision=draft.revision, latest_revision=latest_revision
+    )
 
 
 async def graph_is_parked(session_id: uuid.UUID) -> bool:

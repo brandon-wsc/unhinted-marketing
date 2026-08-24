@@ -493,7 +493,7 @@ export type paths = {
         };
         /**
          * Get Session Messages
-         * @description Hydrate chat transcript for an owned session.
+         * @description Hydrate chat transcript for an owned session (with fork lineage, ADR 0017).
          */
         get: operations["get_session_messages_api_sessions__session_id__messages_get"];
         put?: never;
@@ -539,6 +539,32 @@ export type paths = {
          * @description Discard in-flight or parked turn (ADR 0004).
          */
         post: operations["stop_session_api_sessions__session_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/fork": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fork Session
+         * @description Branch this chat at a message into a new session (ADR 0017).
+         *
+         *     Copies the transcript up to and including the fork message plus the preview
+         *     draft/media as it existed at that message (time-aligned, fresh
+         *     approval_token). Lineage is recorded on the new session; the fork-point
+         *     copy carries ``metadata.fork_point`` so the client can place the divider.
+         *     ``preview_note`` flags the surprising cases so the client can toast.
+         */
+        post: operations["fork_session_api_sessions__session_id__fork_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1032,6 +1058,65 @@ export type components = {
             exemplar_captions: string[];
             /** Added */
             added: boolean;
+        };
+        /**
+         * ForkOrigin
+         * @description Where this session was forked from (None for non-forked sessions).
+         */
+        ForkOrigin: {
+            /** Session Id */
+            session_id?: string | null;
+            /**
+             * Message Id
+             * Format: uuid
+             */
+            message_id: string;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * ForkRef
+         * @description One fork of a message — the chat it went to.
+         */
+        ForkRef: {
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Title */
+            title?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * ForkSessionRequest
+         * @description Fork this session at a message (ADR 0017). The message must belong to the session.
+         */
+        ForkSessionRequest: {
+            /**
+             * Message Id
+             * Format: uuid
+             */
+            message_id: string;
+        };
+        /** ForkSessionResponse */
+        ForkSessionResponse: {
+            session: components["schemas"]["SessionResponse"];
+            /** Messages */
+            messages: components["schemas"]["schemas__session__MessageResponse"][];
+            brief?: components["schemas"]["SessionBriefData"] | null;
+            /**
+             * Awaiting Image Ok
+             * @default false
+             */
+            awaiting_image_ok: boolean;
+            forked_from?: components["schemas"]["ForkOrigin"] | null;
+            /** Preview Note */
+            preview_note?: ("carried_stale" | "not_carried_later") | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1806,6 +1891,7 @@ export type components = {
              * @default false
              */
             awaiting_image_ok: boolean;
+            forked_from?: components["schemas"]["ForkOrigin"] | null;
         };
         /** SessionResearch */
         SessionResearch: {
@@ -2142,6 +2228,8 @@ export type components = {
             metadata?: {
                 [key: string]: unknown;
             };
+            /** Forks */
+            forks?: components["schemas"]["ForkRef"][];
         };
     };
     responses: never;
@@ -3317,6 +3405,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StopSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fork_session_api_sessions__session_id__fork_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForkSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForkSessionResponse"];
                 };
             };
             /** @description Validation Error */

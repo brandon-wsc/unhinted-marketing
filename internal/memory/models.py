@@ -173,14 +173,34 @@ class Session(Base):
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     state: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # Fork lineage (ADR 0017). forked_from_message_id has no FK: messages
+    # cascade-delete with their session, and the lineage label must survive that.
+    forked_from_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    forked_from_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    forked_from_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    messages: Mapped[list["SessionMessage"]] = relationship(back_populates="session")
-    drafts: Mapped[list["PreviewDraft"]] = relationship(back_populates="session")
-    images: Mapped[list["PreviewImage"]] = relationship(back_populates="session")
+    # passive_deletes: rely on the FK ON DELETE CASCADE; ORM nullification would
+    # violate the NOT NULL session_id on child rows.
+    messages: Mapped[list["SessionMessage"]] = relationship(
+        back_populates="session", passive_deletes=True
+    )
+    drafts: Mapped[list["PreviewDraft"]] = relationship(
+        back_populates="session", passive_deletes=True
+    )
+    images: Mapped[list["PreviewImage"]] = relationship(
+        back_populates="session", passive_deletes=True
+    )
 
 
 class SessionMessage(Base):

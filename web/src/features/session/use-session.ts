@@ -5,6 +5,7 @@ import {
   apiConfirmSession,
   apiCreateSession,
   apiDeleteSession,
+  apiForkSession,
   apiGetSessionMessages,
   apiListSessions,
   apiPostSessionMessage,
@@ -46,6 +47,8 @@ import type {
   ComposerDraft,
   ConfirmSessionResponse,
   DraftCopy,
+  ForkOrigin,
+  ForkPreviewNote,
   PreviewDraft,
   PreviewMediaMutationResponse,
   QueuedChatMessage,
@@ -111,6 +114,9 @@ export function useSession(companyId: string | undefined) {
   const [history, setHistory] = useState<SessionListItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
+  // Where this session was forked from (ADR 0017); null for non-forked chats.
+  const [forkedFrom, setForkedFrom] = useState<ForkOrigin | null>(null);
+  const [forking, setForking] = useState(false);
   // Guards against out-of-order history list/search responses.
   const historyReqSeq = useRef(0);
   // Guards against out-of-order openSession / startNewChat hydrates.
@@ -296,6 +302,7 @@ export function useSession(companyId: string | undefined) {
     setLlmError(null);
     setDraftSaving(false);
     setConfirming(false);
+    setForkedFrom(null);
     awaitingImageOkRef.current = false;
   }, []);
 
@@ -737,6 +744,7 @@ export function useSession(companyId: string | undefined) {
       messages: ChatMessage[];
       brief?: unknown;
       awaiting_image_ok?: boolean;
+      forked_from?: ForkOrigin | null;
     }) => {
       disconnectSse();
       sessionIdRef.current = res.session.id;
@@ -747,6 +755,7 @@ export function useSession(companyId: string | undefined) {
       messagesRef.current = res.messages;
       setSession(res.session);
       setMode(res.session.mode);
+      setForkedFrom(res.forked_from ?? null);
       setAgentActions(agentActionsFromMessages(res.messages));
       const lastUser = [...res.messages].reverse().find((m) => m.role === "user");
       const parsedBrief = parseBrief(res.brief);
@@ -791,6 +800,7 @@ export function useSession(companyId: string | undefined) {
         applyComposerDraft(readComposerDraft(composerDraftsRef.current, targetSessionId));
         restoreLiveChat(live);
         setSession(res.session);
+        setForkedFrom(res.forked_from ?? null);
         syncSendingForCurrent();
       } else {
         applyHydratedSession(res);
@@ -810,6 +820,23 @@ export function useSession(companyId: string | undefined) {
       syncSendingForCurrent,
       refreshHistory,
     ],
+  );
+
+  const forkSession = useCallback(
+    async (messageId: string): Promise<ForkPreviewNote> => {
+      if (!accessToken || !sessionId || forking) return null;
+      setForking(true);
+      try {
+        const res = await apiForkSession(accessToken, sessionId, messageId);
+        // Reuse the open path so composer stash / live capture / remembered id
+        // stay consistent with a manual session switch.
+        await openSession(res.session.id);
+        return res.preview_note ?? null;
+      } finally {
+        setForking(false);
+      }
+    },
+    [accessToken, sessionId, forking, openSession],
   );
 
   const startNewChat = useCallback(async () => {
@@ -1536,6 +1563,9 @@ export function useSession(companyId: string | undefined) {
     history,
     historyLoading,
     restoring,
+    forkedFrom,
+    forking,
+    forkSession,
     sendMessage,
     enqueueQueuedMessage: enqueueQueuedAt,
     dequeueQueuedMessage,

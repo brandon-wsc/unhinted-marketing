@@ -639,6 +639,7 @@ async def add_session_message(
     role: str,
     content: str,
     metadata: dict | None = None,
+    created_at: datetime | None = None,
 ) -> SessionMessage:
     row = SessionMessage(
         session_id=session_id,
@@ -646,6 +647,10 @@ async def add_session_message(
         content=content,
         metadata_=metadata or {},
     )
+    if created_at is not None:
+        # Fork copies keep the original timeline (ADR 0017); without this every
+        # copied row shares one transaction timestamp and ordering is unstable.
+        row.created_at = created_at
     db.add(row)
     await db.flush()
     return row
@@ -660,6 +665,30 @@ async def list_session_messages(
         .order_by(SessionMessage.created_at)
     )
     return list(result.all())
+
+
+async def count_session_forks(db: AsyncSession, session_id: uuid.UUID) -> int:
+    """How many sessions were forked directly from this session (ADR 0017)."""
+    return int(
+        await db.scalar(
+            select(func.count(Session.id)).where(Session.forked_from_session_id == session_id)
+        )
+        or 0
+    )
+
+
+async def list_forks_for_messages(
+    db: AsyncSession, message_ids: list[uuid.UUID]
+) -> list[Session]:
+    """Sessions forked from any of these messages, oldest first (ADR 0017)."""
+    if not message_ids:
+        return []
+    rows = await db.scalars(
+        select(Session)
+        .where(Session.forked_from_message_id.in_(message_ids))
+        .order_by(Session.created_at)
+    )
+    return list(rows.all())
 
 
 async def delete_session_messages_by_ids(
@@ -736,6 +765,7 @@ async def upsert_preview_draft(
     approval_token: str,
     platform: str | None = None,
     media_ids: list[uuid.UUID] | None = None,
+    created_at: datetime | None = None,
 ) -> PreviewDraft:
     row = PreviewDraft(
         session_id=session_id,
@@ -748,6 +778,8 @@ async def upsert_preview_draft(
         approval_token=approval_token,
         platform=platform,
     )
+    if created_at is not None:
+        row.created_at = created_at
     db.add(row)
     await db.flush()
     return row
@@ -759,6 +791,21 @@ async def get_latest_preview_draft(
     return await db.scalar(
         select(PreviewDraft)
         .where(PreviewDraft.session_id == session_id)
+        .order_by(desc(PreviewDraft.revision))
+        .limit(1)
+    )
+
+
+async def get_preview_draft_as_of(
+    db: AsyncSession, session_id: uuid.UUID, as_of: datetime
+) -> PreviewDraft | None:
+    """Latest draft revision that existed at `as_of` (ADR 0017 time-aligned fork)."""
+    return await db.scalar(
+        select(PreviewDraft)
+        .where(
+            PreviewDraft.session_id == session_id,
+            PreviewDraft.created_at <= as_of,
+        )
         .order_by(desc(PreviewDraft.revision))
         .limit(1)
     )

@@ -5,6 +5,7 @@ import {
   Copy,
   CornerDownRight,
   Ellipsis,
+  GitFork,
   Pencil,
   Square,
   Trash2,
@@ -12,6 +13,7 @@ import {
 import {
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -48,6 +50,7 @@ import type {
   AgentActionRecord,
   ChatMessage,
   DraftCopy,
+  ForkRef,
   RecommendedQuestion,
   SessionBrief,
 } from "@/features/session/types";
@@ -77,7 +80,7 @@ function overlayStackHeight(el: HTMLElement): number {
 export function ChatPanel() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { showError } = useToast();
+  const { showError, showInfo } = useToast();
   const companyId = user?.organizations[0]?.id;
   const canPromoteExemplar =
     user?.organizations[0]?.role === "owner" || user?.organizations[0]?.role === "admin";
@@ -104,6 +107,9 @@ export function ChatPanel() {
     history,
     historyLoading,
     restoring,
+    forkedFrom,
+    forking,
+    forkSession,
     sendMessage,
     enqueueQueuedMessage,
     dequeueQueuedMessage,
@@ -295,6 +301,17 @@ export function ChatPanel() {
       await sendMessage(content);
     } catch {
       showError(t("chat.error.sendFailed"));
+    }
+  }
+
+  async function onForkMessage(messageId: string) {
+    try {
+      const note = await forkSession(messageId);
+      goToChat();
+      if (note === "carried_stale") showInfo(t("chat.fork.noteStale"));
+      else if (note === "not_carried_later") showInfo(t("chat.fork.noteLater"));
+    } catch {
+      showError(t("chat.fork.failed"));
     }
   }
 
@@ -494,7 +511,20 @@ export function ChatPanel() {
                       retryContent={prevUser}
                       retryDisabled={stopping || (sending && queueFull)}
                       onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
+                      onFork={() => void onForkMessage(m.id)}
+                      forkDisabled={forking || stopping || sending}
+                      onOpenFork={(id) => handleSelectSession(id)}
                     />
+                    {m.metadata?.fork_point === true && forkedFrom && (
+                      <ForkDivider
+                        title={forkedFrom.title}
+                        onOpen={
+                          forkedFrom.session_id
+                            ? () => handleSelectSession(forkedFrom.session_id!)
+                            : undefined
+                        }
+                      />
+                    )}
                     {turnActions.length > 0 && (
                       <AgentActionList
                         actions={turnActions}
@@ -1003,12 +1033,18 @@ function ChatMessageItem({
   onRetry,
   retryContent,
   retryDisabled,
+  onFork,
+  forkDisabled,
+  onOpenFork,
 }: {
   message: ChatMessage;
   now: Date;
   onRetry?: () => void;
   retryContent?: string | null;
   retryDisabled?: boolean;
+  onFork?: () => void;
+  forkDisabled?: boolean;
+  onOpenFork?: (sessionId: string) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -1046,7 +1082,84 @@ function ChatMessageItem({
         content={message.content}
         createdAt={message.created_at}
         now={now}
+        onFork={onFork}
+        forkDisabled={forkDisabled}
       />
+      {message.forks && message.forks.length > 0 && onOpenFork && (
+        <ForksChip forks={message.forks} onOpen={onOpenFork} />
+      )}
+    </div>
+  );
+}
+
+function ForkDividerRow({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex w-full min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+      <div className="h-px min-w-4 flex-1 bg-border" aria-hidden />
+      {children}
+      <div className="h-px min-w-4 flex-1 bg-border" aria-hidden />
+    </div>
+  );
+}
+
+function ForkDivider({ title, onOpen }: { title?: string | null; onOpen?: () => void }) {
+  const { t } = useTranslation();
+  const label = t("chat.fork.divider", { title: title || t("chat.history.untitled") });
+  return (
+    <ForkDividerRow>
+      {onOpen ? (
+        <button
+          type="button"
+          onClick={onOpen}
+          title={label}
+          className="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          <GitFork className="size-3 shrink-0" aria-hidden />
+          <span className="min-w-0 truncate">{label}</span>
+        </button>
+      ) : (
+        <>
+          <GitFork className="size-3 shrink-0" aria-hidden />
+          <span className="min-w-0 truncate" title={label}>
+            {label}
+          </span>
+        </>
+      )}
+    </ForkDividerRow>
+  );
+}
+
+function ForksChip({ forks, onOpen }: { forks: ForkRef[]; onOpen: (sessionId: string) => void }) {
+  const { t } = useTranslation();
+  const untitled = t("chat.history.untitled");
+  const label =
+    forks.length === 1
+      ? t("chat.fork.toOne", { title: forks[0]!.title || untitled })
+      : t("chat.fork.toMany", { n: forks.length });
+  return (
+    <div className="mt-1">
+      <ForkDividerRow>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title={label}
+              className="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <GitFork className="size-3 shrink-0" aria-hidden />
+              <span className="min-w-0 truncate">{label}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" className="w-56">
+            {forks.map((f) => (
+              <DropdownMenuItem key={f.session_id} onSelect={() => onOpen(f.session_id)}>
+                <GitFork className="size-3.5 shrink-0" aria-hidden />
+                <span className="truncate">{f.title || untitled}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ForkDividerRow>
     </div>
   );
 }
@@ -1056,11 +1169,15 @@ function MessageMeta({
   content,
   createdAt,
   now,
+  onFork,
+  forkDisabled,
 }: {
   align: "user" | "assistant";
   content: string;
   createdAt: string;
   now: Date;
+  onFork?: () => void;
+  forkDisabled?: boolean;
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -1107,6 +1224,23 @@ function MessageMeta({
     </Tooltip>
   );
 
+  const forkButton = onFork ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <IconButton
+          type="button"
+          className="h-6 w-6"
+          aria-label={t("chat.message.fork")}
+          disabled={forkDisabled}
+          onClick={onFork}
+        >
+          <GitFork className="size-3.5" />
+        </IconButton>
+      </TooltipTrigger>
+      <TooltipContent side="top">{t("chat.message.fork")}</TooltipContent>
+    </Tooltip>
+  ) : null;
+
   const timeLabelNode =
     timeLabel && absolute ? (
       <Tooltip>
@@ -1137,6 +1271,7 @@ function MessageMeta({
       ) : (
         <>
           {copyButton}
+          {forkButton}
           {timeLabelNode}
         </>
       )}

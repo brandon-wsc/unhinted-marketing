@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-23  
+> **Last updated:** 2026-08-24  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -36,6 +36,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 **Decision (2026-08-19) — Queue send while turn in-flight:** → [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md) (supersedes ADR 0004 composer lock). Composer stays open; Send enqueues in the SPA (max 3); Stop discards the running turn only; drain after idle unless parked at image OK.
 
 **Decision (2026-08-23) — Session switch isolation + composer drafts:** Leave ≠ Stop. In-flight REST apply / `sending` / agent trail are bound to the session on screen. Queue + textarea (incl. mid-edit) save/restore per session in SPA memory; still lost on refresh.
+
+**Decision (2026-08-24) — Session fork (Gemini-style):** → [ADR 0017](./adr/0017-session-fork.md)
+
+- **`POST /api/sessions/{id}/fork`** — copies messages up to the forked assistant message + preview draft/media **as of the fork-point message** (time-aligned by `created_at`; later edits / later-created previews don't travel) into a new session; **fresh `approval_token`** minted (never shared); fork starts `active`, unpinned; `preview_note` in the response flags surprising outcomes (`carried_stale` / `not_carried_later`) for an info toast
+- **Lineage** — `sessions.forked_from_session_id` / `forked_from_message_id` / `forked_from_title` snapshot; `GET …/messages` returns session `forked_from` + per-message `forks[]`
+- **Naming** — `"(n) base"`, `n` = forks of the direct source + 1, existing `"(n) "` prefix stripped
+- **UI** — fork button on assistant messages (copy → fork → time); new chat divider "Forked from {source}"; source message chip "Forked to {title}" / "Forked to {n} chats" → jump menu
 
 **Decision (2026-08-08) — Chat research gate + Tavily∪PG:** → [ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)
 

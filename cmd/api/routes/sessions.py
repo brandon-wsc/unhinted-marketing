@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import uuid
 from collections.abc import AsyncIterator
 from typing import Annotated
@@ -28,6 +29,7 @@ from internal.session.service import (
     DEFAULT_PLATFORM,
     SessionTurnConflict,
     add_session_image,
+    copy_session_preview,
     list_latest_session_media,
     normalize_draft_copy,
     regen_session_image,
@@ -45,6 +47,11 @@ from schemas.session import (
     ConfirmSessionRequest,
     ConfirmSessionResponse,
     CreateSessionRequest,
+    ForkOrigin,
+    ForkPreviewNote,
+    ForkRef,
+    ForkSessionRequest,
+    ForkSessionResponse,
     MessageResponse,
     PostMessageRequest,
     PostMessageResponse,
@@ -246,6 +253,27 @@ def _display_title(session: Session, preview: str | None) -> str | None:
     return None
 
 
+_FORK_TITLE_PREFIX = re.compile(r"^\(\d+\)\s*")
+
+
+async def _fork_origin(db: AsyncSession, session: Session) -> ForkOrigin | None:
+    """Live source title when the source session survives; snapshot otherwise (ADR 0017)."""
+    if session.forked_from_message_id is None:
+        return None
+    title = session.forked_from_title
+    if session.forked_from_session_id is not None:
+        source = await repos.get_session(db, session.forked_from_session_id)
+        if source is not None:
+            src_msgs = await repos.list_session_messages(db, source.id)
+            preview = next((m.content for m in src_msgs if m.role == "user"), None)
+            title = _display_title(source, preview) or title
+    return ForkOrigin(
+        session_id=session.forked_from_session_id,
+        message_id=session.forked_from_message_id,
+        title=title,
+    )
+
+
 @router.post("", response_model=SessionResponse, status_code=201)
 async def create_session(
     body: CreateSessionRequest,
@@ -414,21 +442,108 @@ async def stop_session(
     )
 
 
+@router.post("/{session_id}/fork", response_model=ForkSessionResponse, status_code=201)
+async def fork_session(
+    session_id: uuid.UUID,
+    body: ForkSessionRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ForkSessionResponse:
+    """Branch this chat at a message into a new session (ADR 0017).
+
+    Copies the transcript up to and including the fork message plus the preview
+    draft/media as it existed at that message (time-aligned, fresh
+    approval_token). Lineage is recorded on the new session; the fork-point
+    copy carries ``metadata.fork_point`` so the client can place the divider.
+    ``preview_note`` flags the surprising cases so the client can toast.
+    """
+    session = await _require_owned_session(db, session_id, user)
+    msgs = await repos.list_session_messages(db, session.id)
+    fork_idx = next((i for i, m in enumerate(msgs) if m.id == body.message_id), None)
+    if fork_idx is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    copied = msgs[: fork_idx + 1]
+
+    first_user = next((m.content for m in msgs if m.role == "user"), None)
+    display = _display_title(session, first_user)
+    base = _FORK_TITLE_PREFIX.sub("", display or "").strip()
+    n = await repos.count_session_forks(db, session.id) + 1
+    title = f"({n}) {base}"[:200] if base else None
+
+    fork = await repos.create_session(db, user_id=user.id, company_id=session.company_id)
+    fork.title = title
+    fork.forked_from_session_id = session.id
+    fork.forked_from_message_id = body.message_id
+    fork.forked_from_title = display
+
+    for i, m in enumerate(copied):
+        meta = dict(m.metadata_ or {})
+        if i == fork_idx:
+            meta["fork_point"] = True
+        await repos.add_session_message(
+            db,
+            session_id=fork.id,
+            role=m.role,
+            content=m.content,
+            metadata=meta,
+            created_at=m.created_at,
+        )
+
+    fork_msg = msgs[fork_idx]
+    preview = await copy_session_preview(db, session, fork, as_of=fork_msg.created_at)
+    await db.commit()
+    await db.refresh(fork)
+
+    preview_note: ForkPreviewNote | None = None
+    if preview.copied and preview.latest_revision != preview.copied_revision:
+        preview_note = "carried_stale"
+    elif not preview.copied and preview.latest_revision is not None:
+        preview_note = "not_carried_later"
+
+    new_msgs = await repos.list_session_messages(db, fork.id)
+    return ForkSessionResponse(
+        session=_session_response(fork),
+        messages=[_message_response(m) for m in new_msgs],
+        forked_from=ForkOrigin(
+            session_id=session.id,
+            message_id=body.message_id,
+            title=display,
+        ),
+        preview_note=preview_note,
+    )
+
+
 @router.get("/{session_id}/messages", response_model=SessionMessagesResponse)
 async def get_session_messages(
     session_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SessionMessagesResponse:
-    """Hydrate chat transcript for an owned session."""
+    """Hydrate chat transcript for an owned session (with fork lineage, ADR 0017)."""
     session = await _require_owned_session(db, session_id, user)
     msgs = await repos.list_session_messages(db, session.id)
     state = session.state or {}
+
+    forks = await repos.list_forks_for_messages(db, [m.id for m in msgs])
+    forks_by_message: dict[uuid.UUID, list[Session]] = {}
+    for f in forks:
+        if f.forked_from_message_id is not None:
+            forks_by_message.setdefault(f.forked_from_message_id, []).append(f)
+    messages: list[MessageResponse] = []
+    for m in msgs:
+        resp = _message_response(m)
+        resp.forks = [
+            ForkRef(session_id=f.id, title=f.title, created_at=f.created_at)
+            for f in forks_by_message.get(m.id, [])
+        ]
+        messages.append(resp)
+
     return SessionMessagesResponse(
         session=_session_response(session),
-        messages=[_message_response(m) for m in msgs],
+        messages=messages,
         brief=_brief_from_state(state),
         awaiting_image_ok=bool(state.get("awaiting_image_ok")),
+        forked_from=await _fork_origin(db, session),
     )
 
 

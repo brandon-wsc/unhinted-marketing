@@ -50,6 +50,28 @@ class PostMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
 
 
+class ForkSessionRequest(BaseModel):
+    """Fork this session at a message (ADR 0017). The message must belong to the session."""
+
+    message_id: uuid.UUID
+
+
+class ForkRef(BaseModel):
+    """One fork of a message — the chat it went to."""
+
+    session_id: uuid.UUID
+    title: str | None = None
+    created_at: datetime
+
+
+class ForkOrigin(BaseModel):
+    """Where this session was forked from (None for non-forked sessions)."""
+
+    session_id: uuid.UUID | None = None
+    message_id: uuid.UUID
+    title: str | None = None
+
+
 class MessageResponse(BaseModel):
     id: uuid.UUID
     session_id: uuid.UUID
@@ -57,6 +79,8 @@ class MessageResponse(BaseModel):
     content: str
     created_at: datetime
     metadata: dict = Field(default_factory=dict)
+    # Chats forked from this message (ADR 0017). Empty for most messages.
+    forks: list[ForkRef] = Field(default_factory=list)
 
 
 class SessionMessagesResponse(BaseModel):
@@ -65,6 +89,18 @@ class SessionMessagesResponse(BaseModel):
     # From sessions.state — so Stop/openSession can restore BriefCard without SSE.
     brief: SessionBriefData | None = None
     awaiting_image_ok: bool = False
+    # Set when this session is itself a fork (ADR 0017).
+    forked_from: ForkOrigin | None = None
+
+
+# Why the fork's preview may surprise the user (ADR 0017 time-aligned copy):
+# carried_stale = fork kept the fork-point revision; source has newer edits.
+# not_carried_later = source has a preview, but it postdates the fork point.
+ForkPreviewNote = Literal["carried_stale", "not_carried_later"]
+
+
+class ForkSessionResponse(SessionMessagesResponse):
+    preview_note: ForkPreviewNote | None = None
 
 
 class PostMessageResponse(BaseModel):
