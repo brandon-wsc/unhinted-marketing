@@ -83,6 +83,12 @@ def test_post_message_requires_content() -> None:
         PostMessageRequest(content="")
 
 
+def test_post_message_optional_source_question_id() -> None:
+    body = PostMessageRequest(content="幫我出稿", source_question_id="q1")
+    assert body.source_question_id == "q1"
+    assert PostMessageRequest(content="幫我出稿").source_question_id is None
+
+
 def test_message_and_post_response() -> None:
     now = _now()
     sid = uuid.uuid4()

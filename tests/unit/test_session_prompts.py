@@ -48,3 +48,11 @@ def test_downstream_prompts_respect_signals_trusted() -> None:
     assert "signals_trusted" in BRAINSTORM
     assert "signals_trusted" in EXECUTOR_POST
     assert "signals_trusted" in REVIEWER
+
+
+def test_craft_bans_mainland_traffic_jargon() -> None:
+    assert "流量" in EXECUTOR_POST
+    assert "衝流量" in EXECUTOR_POST
+    assert "種草" in EXECUTOR_POST
+    assert "流量" in REVIEWER
+    assert "like" in EXECUTOR_POST

@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from schemas.perception import (
     RecommendedQuestionItem,
+    RecommendedQuestionsGenerating,
     RecommendedQuestionsResponse,
     SignalMetrics,
     SignalResponse,
@@ -59,9 +60,21 @@ def test_recommended_questions_response() -> None:
         expires_at=now,
     )
     assert body.is_stale is False
+    assert body.run_status == "idle"
     assert body.company_id == company_id
 
 
 def test_recommended_question_requires_text() -> None:
     with pytest.raises(ValidationError):
         RecommendedQuestionItem(id="q1")
+
+
+def test_recommended_questions_generating() -> None:
+    company_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    body = RecommendedQuestionsGenerating(
+        company_id=company_id, run_id=run_id, status="running"
+    )
+    assert body.retry_after_seconds == 3
+    failed = RecommendedQuestionsGenerating(company_id=company_id, status="failed")
+    assert failed.run_id is None

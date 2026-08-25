@@ -44,6 +44,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Naming** — `"(n) base"`, `n` = forks of the direct source + 1, existing `"(n) "` prefix stripped
 - **UI** — fork button on assistant messages (copy → fork → time); new chat divider "Forked from {source}"; source message chip "Forked to {title}" / "Forked to {n} chats" → jump menu
 
+**Decision (2026-08-24) — Recommended questions worker graph + fill:** → [ADR 0018](./adr/0018-recommended-questions-worker-graph.md)
+
+- **Not the session graph** — dedicated worker LangGraph; must not `start` / Confirm / upsert org catalog. Clicking a card stays `sendMessage` (optional `source_question_id` handoff warms first-turn research)
+- **GET miss fills** — no row: start or join per-company run as a background task, answer **202 generating immediately** (`run_id` + `status`; no in-request wait; join = poll `question_runs` in PG, multi-worker safe); last run `failed` → 202 `status: failed` for a retry CTA. Expired cache stays 200 + `is_stale` (no auto-run, no landing refresh). **POST `…/recommended-questions/refresh`** is the empty-state retry after `failed` (and CLI `--force`); scheduler does routine replacement. GET 200 adds `run_status` (`idle` / `running` / `failed`). A `running` row with no live worker (uvicorn reload / crash) is **abandoned** instead of joined. Cache TTL (13h) outlives the 12h tick
+- **Pipeline** — `ensure_signals` → `cheap_screen` → `shallow_research` → `filter` → `deep_research` → `product_match` (read-only) → `compose_questions` (voice + roast, real signal refs, text + trend-combo dedupe vs last N days). Timing corpus is **Trends + RSS only** (Tavily still persists for research, but is not next-run recency fuel). `cheap_screen` cluster-caps one topic per IP/entity and does **not** recency-top-up rejected citywide trends. `filter` drops no-bridge Latin-IP / celebrity-gossip titles unless the fingerprint matches. Cold-start ladder unchanged (fingerprint → `profile.inferred_category` → diversity fallback, also cluster-capped)
+- **Trace** — `question_runs` (status `running|succeeded|failed`) + `question_node_steps`; do not overload Session Trace; admin run list aggregates per-run tokens/cost from `llm_call_records`
+
 **Decision (2026-08-08) — Chat research gate + Tavily∪PG:** → [ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)
 
 - **Unified `route_intent`** — one structured call: `graph_intent` + `research` (`need_facts` / `ambiguous` / `ask_clarify` / `entity_surface`); no separate graph-routing classifier
@@ -222,13 +229,13 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | Item | Status | Notes |
 |------|--------|-------|
 | Alembic `5dae474953cd` (signals) | ✅ | `raw_news_events`, `edges`, `recommended_questions` |
-| Hot search worker | ✅ | `python -m cmd.worker hot-search` (Google Trends HK) |
-| Question generator | ✅ | LiteLLM + 12h cache; template fallback without API key |
+| Hot search worker | ✅ | `python -m cmd.worker hot-search` (Google Trends HK + RSS news) |
+| Question generator | ✅ | Worker LangGraph (ADR 0018); 13h cache; GET-miss fill; RSS + Trends ingest |
 | News promoter | ✅ | Top trends → topic `entities` + `edges` in PG |
 | LiteLLM BYOK loader | ✅ | Env-based (`OPENAI_API_KEY`, model tiers); `LLM_API_BASE` → `openai/<model>` prefix |
 | Default personas | ✅ | Seeded in `entities` (type=persona) on first question run |
 | Signals API | ✅ | `GET /api/signals/top` |
-| Questions API | ✅ | `GET /api/companies/{id}/recommended-questions` |
+| Questions API | ✅ | `GET /api/companies/{id}/recommended-questions` (200 cache / 202 fill); `POST …/refresh` |
 | Scheduler | ✅ | `python -m cmd.scheduler` |
 | CLI signals | ✅ | `python -m cmd.worker signals` |
 
@@ -262,7 +269,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Chat UI shell | ✅ | `web/src/features/session/` — `useSession` + message list / composer; Streamdown + `@streamdown/cjk`; Vite proxies `/api` → API |
 | Chat token stream (`message.delta`) | ✅ | `chat` node streams LiteLLM → batched live deltas via event bus; first message waits for SSE open before POST |
 | Agent Mode UI | ✅ | `agent.progress` live inside each graph node; Cursor-style action-record trail persisted on the triggering user row as `session_messages.metadata.agent_actions` (hydrate on reopen) plus turn `duration_ms`. In-flight header is `幫緊你幫緊你` / `Working` (no ticking seconds; chevron stays enabled). Completed header is `做咗x秒` / `Worked for`. Node labels: running present-tense + `…`, done past tense. Optimistic `route_intent` while POST/SSE catch up; hide `fast_rule_checker` / `persist_preview`; brief card + interrupt card (`draft.awaiting_image_ok` / snapshot `interrupted`); resume via `POST /resume-image`; composer open while in-flight with FE send queue (max 3) and Stop beside Send ([ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md)); Stop mid-image re-parks Generate-image CTA; Stop while parked discards turn ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
-| Landing: recommended questions cards | ✅ | Empty-state cards from `GET /api/companies/{id}/recommended-questions`; click → `sendMessage` (start intent); soft-fail on 404 / network |
+| Landing: recommended questions cards | ✅ | Empty-state cards from `GET /api/companies/{id}/recommended-questions`; 202 poll on miss; click → `sendMessage` (+ optional `source_question_id`); failed empty → POST refresh retry; scheduler replaces cache |
 | Preview Mode (left chat / right preview) | ✅ | Split: IG mock + **Edit Copy dialog** + multi-image carousel; **hover/tap image → Edit image**. Paged: Preview push page with **上一頁** (content-width shell, not `lg`) |
 | Confirm button → `/confirm` | ✅ | Dirty auto-flush → draft then confirm; stub receipt in panel |
 | Manual draft API `POST …/draft` | ✅ | No LLM; bump revision + `approval_token`; caption-only reuses `media_ids` ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
@@ -284,7 +291,8 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 - **Health:** `GET /api/health` → `{"status":"ok"}`
 - **Auth:** Full email/password flow with JWT access token (15 min) + refresh token (7 days, httpOnly cookie on `/api/auth`)
 - **Signals:** `GET /api/signals/top` — latest HK market signals from PostgreSQL
-- **Questions:** `GET /api/companies/{id}/recommended-questions` — cached 12h question batch
+- **Questions:** `GET /api/companies/{id}/recommended-questions` — 200 cache / 202 generating (ADR 0018 fill); `POST …/refresh` failed-empty retry (CLI `--force` / scheduler for routine fill)
+
 - **Sessions:** `GET /api/sessions`, `POST /api/sessions`, `PATCH /api/sessions/{id}` (title / pinned), `DELETE /api/sessions/{id}`, `POST /api/sessions/{id}/messages`, `GET /api/sessions/{id}/messages`, `POST /api/sessions/{id}/resume-image`, `POST /api/sessions/{id}/stop`, `POST /api/sessions/{id}/draft`, `GET/POST /api/sessions/{id}/media`, `PATCH /api/sessions/{id}/media/{image_id}/plan`, `POST /api/sessions/{id}/media/{image_id}/regen`, `POST /api/sessions/{id}/media/{image_id}/remove`, `POST /api/sessions/{id}/media/{image_id}/upload`, `GET /api/sessions/{id}/events` (SSE), `POST /api/sessions/{id}/confirm`
 - **LangGraph:** Session nodes + Postgres checkpointer; image URL still placeholder
 - **Security:** Argon2 password hashing, refresh token rotation + revoke on logout
@@ -327,9 +335,11 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `entities` | Companies (and future entity types) |
 | `organization_members` | User ↔ company RBAC |
 | `refresh_tokens` | Hashed refresh token families |
-| `raw_news_events` | Ingested HK signals (Google Trends HK; Meta API later in Phase 3) |
+| `raw_news_events` | Ingested HK signals (Google Trends HK + RSS news; Meta API later in Phase 3) |
 | `edges` | Graph links (signal → topic entities) |
-| `recommended_questions` | 12h cached landing question JSON |
+| `recommended_questions` | 13h cached landing question JSON |
+| `question_runs` | Worker graph run status (ADR 0018) |
+| `question_node_steps` | Per-node I/O for question runs |
 | `sessions` | Chat session (mode, user_id, company_id, title, pinned, state JSONB) |
 | `session_messages` | Chat log (user always; assistant for chat / ack / LLM errors — not every Agent node) |
 | `preview_drafts` | Revision chain + approval_token + `media_ids` |

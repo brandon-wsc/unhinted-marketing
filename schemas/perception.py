@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,3 +47,17 @@ class RecommendedQuestionsResponse(BaseModel):
     generated_at: datetime
     expires_at: datetime
     is_stale: bool = False
+    # Present when a run is in-flight or just failed; landing ignores this if a
+    # cache row exists (scheduler / CLI refresh). SPA polls GET only on miss.
+    run_status: Literal["idle", "running", "failed"] = "idle"
+
+
+class RecommendedQuestionsGenerating(BaseModel):
+    """202 body for the ADR 0018 fill contract — SPA polls GET with backoff."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    company_id: uuid.UUID
+    run_id: uuid.UUID | None = None
+    status: str = "running"  # running | failed (a fresh spawn is always running)
+    retry_after_seconds: int = 3

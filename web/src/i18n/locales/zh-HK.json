@@ -60,7 +60,9 @@
     "questions": {
       "title": "試下問呢啲",
       "loading": "諗緊問題…",
-      "stale": "就快換新"
+      "generating": "揀緊題目…",
+      "failed": "建議出唔到。",
+      "retry": "再試"
     },
     "input": {
       "placeholder": "打句嘢…"

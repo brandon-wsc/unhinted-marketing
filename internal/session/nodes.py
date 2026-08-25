@@ -594,6 +594,11 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
         return out
 
     signals = await list_top_signals(db, limit=20, region="HK")
+    handoff_ids = [str(sid) for sid in (state.get("handoff_signal_ids") or []) if sid]
+    if handoff_ids:
+        handoff = await get_signals_by_ids(db, handoff_ids)
+        if handoff:
+            signals = handoff + [s for s in signals if s.signal_id not in set(handoff_ids)]
     if not signals:
         return {"source_signal_ids": [], "ranked_signals": [], "trend_notes": ""}
 

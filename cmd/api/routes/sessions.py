@@ -358,7 +358,12 @@ async def post_message(
 ) -> PostMessageResponse:
     session = await _require_owned_session(db, session_id, user)
     try:
-        result = await run_session_turn(db, session, user_content=body.content)
+        result = await run_session_turn(
+            db,
+            session,
+            user_content=body.content,
+            source_question_id=body.source_question_id,
+        )
     except SessionTurnConflict as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

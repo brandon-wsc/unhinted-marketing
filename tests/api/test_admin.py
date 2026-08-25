@@ -376,3 +376,45 @@ async def test_session_research(client, db_session) -> None:
 
     res = await client.get(f"/api/admin/sessions/{uuid.uuid4()}/research", headers=headers)
     assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_question_runs_admin_lists_with_cost(client, db_session) -> None:
+    data = await register_user(client)
+    await _grant_platform_level(db_session, data["user"]["id"], 6)
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    run = await repos.create_question_run(db_session, company_id=company_id, trigger="get_miss")
+    db_session.add(
+        _record(
+            caller="node:question_compose_questions",
+            node="compose_questions",
+            company_id=company_id,
+            prompt_tokens=20,
+            completion_tokens=10,
+            total_tokens=30,
+        )
+    )
+    await db_session.flush()
+    await repos.finish_question_run(db_session, run, status="succeeded", quality_flags=["screen_topup"])
+    await repos.save_question_node_step(
+        db_session,
+        run_id=run.id,
+        seq=1,
+        node="ensure_signals",
+        input={"signals": 3},
+        output={"signals": ["s1"]},
+    )
+    await db_session.commit()
+    headers = auth_header(data["access_token"])
+
+    res = await client.get(f"/api/admin/companies/{company_id}/question-runs", headers=headers)
+    assert res.status_code == 200, res.text
+    items = res.json()["items"]
+    assert items[0]["id"] == str(run.id)
+    assert items[0]["status"] == "succeeded"
+    assert items[0]["total_tokens"] == 30
+    assert items[0]["llm_calls"] == 1
+
+    steps = await client.get(f"/api/admin/question-runs/{run.id}/steps", headers=headers)
+    assert steps.status_code == 200, steps.text
+    assert steps.json()["items"][0]["node"] == "ensure_signals"

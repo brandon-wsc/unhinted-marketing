@@ -27,6 +27,8 @@ TRUNCATE_TABLES = (
     "preview_images",
     "session_messages",
     "session_node_steps",
+    "question_node_steps",
+    "question_runs",
     "sessions",
     "llm_call_records",
     "recommended_questions",

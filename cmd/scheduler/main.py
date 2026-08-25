@@ -2,15 +2,18 @@
 
 import argparse
 import asyncio
+import hashlib
 import logging
 import signal
 
 from internal.config import settings
 from internal.llm.recorder import drain as drain_llm_records
 from internal.memory.database import SessionLocal
+from internal.memory.repos import list_companies
 from internal.perception.hot_search import ingest_hot_search
 from internal.perception.news_promoter import promote_signals
-from internal.perception.question_generator import generate_questions_all_companies
+from internal.perception.question_graph.runner import TRIGGER_SCHEDULER, run_company_now
+from internal.perception.rss_news import ingest_rss_news
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -27,14 +30,45 @@ async def _run_hot_search_cycle() -> None:
     async with SessionLocal() as db:
         counts = await ingest_hot_search(db)
         logger.info("hot-search: %s", counts)
+        rss = await ingest_rss_news(db)
+        logger.info("rss-news: %s", rss)
         promo = await promote_signals(db)
         logger.info("promote: %s", promo)
 
 
+def _company_jitter_seconds(company_id) -> int:
+    """Stable per-company stagger so the 12h tick does not fire all runs at once."""
+    digest = hashlib.sha256(f"question-jitter:{company_id}".encode()).hexdigest()
+    return int(digest, 16) % 1800
+
+
 async def _run_questions_cycle(force: bool = False) -> None:
     async with SessionLocal() as db:
-        results = await generate_questions_all_companies(db, force=force)
-        logger.info("questions generated for %d companies", len(results))
+        companies = await list_companies(db)
+    # Same graph + runner as the HTTP fill path (ADR 0018); the runner's global
+    # semaphore caps concurrency across the fan-out.
+    results = await asyncio.gather(
+        *(
+            run_company_now(
+                company,
+                trigger=TRIGGER_SCHEDULER,
+                jitter_seconds=0 if force else _company_jitter_seconds(company.id),
+            )
+            for company in companies
+        ),
+        return_exceptions=True,
+    )
+    ok = 0
+    failed = 0
+    for company, result in zip(companies, results, strict=True):
+        if isinstance(result, Exception):
+            failed += 1
+            logger.exception("questions cycle failed for %s", company.id, exc_info=result)
+        elif getattr(result, "status", None) == "succeeded":
+            ok += 1
+        else:
+            failed += 1
+    logger.info("questions: %d succeeded, %d failed/skipped", ok, failed)
     # Flush pending LLM call records before the next sleep (ADR 0005).
     await drain_llm_records()
 

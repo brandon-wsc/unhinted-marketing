@@ -471,6 +471,21 @@ async def test_trend_searcher_empty_signals(no_llm: None, mock_db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_trend_searcher_prefers_handoff_signals(
+    no_llm: None, mock_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    handoff = fake_signal("sig_q", title="咖啡節")
+    monkeypatch.setattr(N, "get_signals_by_ids", AsyncMock(return_value=[handoff]))
+    monkeypatch.setattr(N, "list_top_signals", AsyncMock(return_value=[]))
+    with session_db(mock_db):
+        out = await N.trend_searcher(
+            _base_state(handoff_signal_ids=["sig_q"], company_context={"name": "Acme"})
+        )
+    assert out["source_signal_ids"] == ["sig_q"]
+    assert out["ranked_signals"][0]["signal_id"] == "sig_q"
+
+
+@pytest.mark.asyncio
 async def test_trend_searcher_ranks_with_mock_llm(
     monkeypatch: pytest.MonkeyPatch, mock_db
 ) -> None:

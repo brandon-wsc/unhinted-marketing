@@ -17,6 +17,8 @@ export type PreviewMediaMutationResponse = components["schemas"]["PreviewMediaMu
 export type ConfirmSessionResponse = components["schemas"]["ConfirmSessionResponse"];
 export type RecommendedQuestion = components["schemas"]["RecommendedQuestionItem"];
 export type RecommendedQuestionsResponse = components["schemas"]["RecommendedQuestionsResponse"];
+export type RecommendedQuestionsGenerating =
+  components["schemas"]["RecommendedQuestionsGenerating"];
 export type DraftCopy = components["schemas"]["DraftCopy"];
 export type PreviewMediaItem = components["schemas"]["PreviewMediaItem"];
 export type ForkRef = components["schemas"]["ForkRef"];

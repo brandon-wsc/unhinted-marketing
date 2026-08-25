@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import asc, desc, select
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.roles import PlatformLevel, require_platform_level
@@ -14,6 +14,7 @@ from internal.memory.database import get_db
 from internal.memory.models import (
     LlmCallRecord,
     PreviewDraft,
+    QuestionRun,
     Session,
     SessionMessage,
     SessionNodeStep,
@@ -26,6 +27,10 @@ from schemas.admin import (
     NodeStepDetail,
     NodeStepList,
     NodeStepSummary,
+    QuestionNodeStepList,
+    QuestionNodeStepSummary,
+    QuestionRunList,
+    QuestionRunSummary,
     ResearchSignalHit,
     ResearchTurn,
     SessionResearch,
@@ -385,6 +390,58 @@ async def get_session_research(
     return SessionResearch(
         session_id=session_id,
         turns=[turns_map[tid] for tid in turn_order],
+    )
+
+
+async def _question_run_cost(db: AsyncSession, run: QuestionRun) -> dict[str, int]:
+    stmt = select(
+        func.count(LlmCallRecord.id),
+        func.coalesce(func.sum(LlmCallRecord.prompt_tokens), 0),
+        func.coalesce(func.sum(LlmCallRecord.completion_tokens), 0),
+        func.coalesce(func.sum(LlmCallRecord.total_tokens), 0),
+    ).where(
+        LlmCallRecord.company_id == run.company_id,
+        LlmCallRecord.caller.like("node:question_%"),
+        LlmCallRecord.created_at >= run.started_at,
+    )
+    if run.finished_at is not None:
+        stmt = stmt.where(LlmCallRecord.created_at <= run.finished_at)
+    row = (await db.execute(stmt)).one()
+    return {
+        "llm_calls": int(row[0] or 0),
+        "prompt_tokens": int(row[1] or 0),
+        "completion_tokens": int(row[2] or 0),
+        "total_tokens": int(row[3] or 0),
+    }
+
+
+@router.get("/companies/{company_id}/question-runs", response_model=QuestionRunList)
+async def list_question_runs(
+    company_id: uuid.UUID,
+    _admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> QuestionRunList:
+    runs = await repos.list_question_runs(db, company_id, limit=limit)
+    items: list[QuestionRunSummary] = []
+    for run in runs:
+        cost = await _question_run_cost(db, run)
+        items.append(QuestionRunSummary.model_validate(run).model_copy(update=cost))
+    return QuestionRunList(items=items, limit=limit)
+
+
+@router.get("/question-runs/{run_id}/steps", response_model=QuestionNodeStepList)
+async def list_question_run_steps(
+    run_id: uuid.UUID,
+    _admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> QuestionNodeStepList:
+    run = await db.get(QuestionRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    steps = await repos.list_question_node_steps(db, run_id)
+    return QuestionNodeStepList(
+        items=[QuestionNodeStepSummary.model_validate(s) for s in steps]
     )
 
 

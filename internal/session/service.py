@@ -682,6 +682,7 @@ async def run_session_turn(
     session: Session,
     *,
     user_content: str,
+    source_question_id: str | None = None,
 ) -> dict[str, Any]:
     """Append user message, invoke graph (never blind-resume), persist side-effects."""
     if session_turn_registry.is_busy(session.id):
@@ -699,6 +700,13 @@ async def run_session_turn(
     repos.touch_session(session)
     existing = await repos.list_session_messages(db, session.id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
+    graph_input = _graph_values(session, message_dicts)
+    if source_question_id:
+        item = await repos.get_question_item(db, session.company_id, source_question_id)
+        refs = [str(sid) for sid in (item or {}).get("source_signal_ids") or [] if sid]
+        if refs:
+            graph_input["source_signal_ids"] = refs
+            graph_input["handoff_signal_ids"] = refs
 
     task = asyncio.current_task()
     if task is None:
@@ -720,7 +728,7 @@ async def run_session_turn(
         ) = await _invoke_graph(
             db,
             session,
-            graph_input=_graph_values(session, message_dicts),
+            graph_input=graph_input,
             user_content=user_content,
             message_dicts=message_dicts,
         )

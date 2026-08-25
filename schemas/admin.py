@@ -161,3 +161,44 @@ class SessionTrace(BaseModel):
     draft_revisions: list[TraceDraftRevision] = Field(default_factory=list)
     signals: list[TraceSignal] = Field(default_factory=list)
     turns: list[TraceTurn] = Field(default_factory=list)
+
+
+class QuestionRunSummary(BaseModel):
+    """One recommended-questions worker run (ADR 0018) plus LLM token totals."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    company_id: uuid.UUID
+    status: str
+    trigger: str
+    quality_flags: list[Any] = Field(default_factory=list)
+    error: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None
+    llm_calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+class QuestionRunList(BaseModel):
+    items: list[QuestionRunSummary]
+    limit: int
+
+
+class QuestionNodeStepSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    run_id: uuid.UUID
+    seq: int
+    node: str
+    input: dict[str, Any] = Field(default_factory=dict)
+    output: dict[str, Any] = Field(default_factory=dict)
+    started_at: datetime
+    finished_at: datetime | None = None
+
+
+class QuestionNodeStepList(BaseModel):
+    items: list[QuestionNodeStepSummary]

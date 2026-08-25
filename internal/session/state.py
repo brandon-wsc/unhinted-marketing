@@ -59,3 +59,5 @@ class SessionState(TypedDict, total=False):
     error: NotRequired[str]
     # Visual format for executor_image_plan (default single). Set via resume-image body or revise.
     image_format: NotRequired[Literal["single", "comic_4panel"]]
+    # Landing-card handoff (ADR 0018) — warm trend_searcher with question signal refs.
+    handoff_signal_ids: NotRequired[list[str]]
