@@ -170,6 +170,59 @@ def test_question_graph_compiles() -> None:
     assert graph is not None
 
 
+@pytest.mark.asyncio
+async def test_execute_guarded_rolls_back_before_marking_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from internal.perception.question_graph import runner as R
+
+    fake_db = SimpleNamespace(rolled_back=False)
+    finished: dict = {}
+
+    async def fake_rollback() -> None:
+        fake_db.rolled_back = True
+
+    async def fake_get(_cls, run_id):
+        assert fake_db.rolled_back
+        return SimpleNamespace(id=run_id, status="running")
+
+    async def fake_commit() -> None:
+        pass
+
+    fake_db.rollback = fake_rollback
+    fake_db.get = fake_get
+    fake_db.commit = fake_commit
+
+    class _SessionCM:
+        async def __aenter__(self):
+            return fake_db
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    class _SemCM:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    async def boom(*_a, **_k):
+        raise RuntimeError("ingest boom")
+
+    async def fake_finish(_db, _run, **kwargs):
+        finished.update(kwargs)
+
+    monkeypatch.setattr(R, "SessionLocal", lambda: _SessionCM())
+    monkeypatch.setattr(R, "_get_semaphore", lambda: _SemCM())
+    monkeypatch.setattr(R, "_execute", boom)
+    monkeypatch.setattr(R, "finish_question_run", fake_finish)
+    await R._execute_guarded(run_id=uuid.uuid4(), company_id=uuid.uuid4())
+    assert fake_db.rolled_back
+    assert finished["status"] == "failed"
+    assert "ingest boom" in finished["error"]
+
+
 def test_refresh_abandons_run_without_live_worker() -> None:
     from datetime import UTC, datetime, timedelta
     from types import SimpleNamespace
@@ -194,6 +247,53 @@ def test_compose_prompt_bans_mainland_traffic_jargon() -> None:
     assert "衝流量" in COMPOSE_SYSTEM
     assert "包裝成 IG Carousel" in COMPOSE_SYSTEM
     assert "like / follow" in COMPOSE_SYSTEM
+
+
+def test_compose_prompt_keeps_voice_light_on_serious_topics() -> None:
+    assert "Topic vs voice" in COMPOSE_SYSTEM
+    assert "時事節目" in COMPOSE_SYSTEM
+    assert "政策評論" in COMPOSE_SYSTEM
+    assert "你覺得呢個制度公唔公平" in COMPOSE_SYSTEM
+    assert "輕鬆小編" in COMPOSE_SYSTEM
+    assert "政府通告" in COMPOSE_SYSTEM
+
+
+def test_fallback_templates_are_unhinted_voice() -> None:
+    joined = " ".join(Q.FALLBACK_TEMPLATES)
+    assert "針對香港市場" not in joined
+    assert "利用" not in joined
+    assert "有畫面" in joined
+    assert "板起塊面" in joined
+
+
+@pytest.mark.asyncio
+async def test_compose_passes_scene_emotion_to_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(Q, "has_llm_credentials", lambda: True)
+    seen: dict = {}
+
+    async def fake_complete_json(**kwargs):
+        seen.update(kwargs)
+        return json.dumps(
+            {
+                "questions": [
+                    {
+                        "id": "q-ok",
+                        "text": "香港咖啡節排隊等到心急，點出 post 先有畫面？",
+                        "source_signal_ids": ["s-coffee"],
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr(Q, "complete_json", fake_complete_json)
+    cand = _sig("s-coffee", "香港咖啡節")
+    cand["scene"] = "排隊買手沖"
+    cand["emotion"] = "等到心急"
+    cand["products"] = ["燕麥拿鐵"]
+    await Q.compose_questions(_state(deep=[cand]))
+    assert "排隊買手沖" in seen["user"]
+    assert "等到心急" in seen["user"]
+    assert "燕麥拿鐵" in seen["user"]
 
 
 def test_topic_key_collapses_ip_variants() -> None:
@@ -273,6 +373,31 @@ async def test_cheap_screen_does_not_restore_dropped_chiikawa(
     ids = {s["signal_id"] for s in out["shortlisted"]}
     assert "s-coffee" in ids
     assert not any(Q.topic_key(s["title"]) == "chiikawa" for s in out["shortlisted"])
+
+
+@pytest.mark.asyncio
+async def test_cheap_screen_llm_empty_keep_does_not_wipe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(Q, "has_llm_credentials", lambda: True)
+
+    async def fake_complete_json(**_kwargs):
+        return json.dumps({"keep": []})
+
+    monkeypatch.setattr(Q, "complete_json", fake_complete_json)
+    out = await Q.cheap_screen(
+        _state(
+            signals=[
+                _sig("s-a", "破邊洲預約"),
+                _sig("s-b", "颱風訊號"),
+                _sig("s-c", "加息"),
+            ]
+        )
+    )
+    ids = {s["signal_id"] for s in out["shortlisted"]}
+    assert {"s-a", "s-b", "s-c"} <= ids
+    assert "screen_llm_empty" in out["quality_flags"]
+    assert "screen_empty_fallback" in out["quality_flags"]
 
 
 @pytest.mark.asyncio

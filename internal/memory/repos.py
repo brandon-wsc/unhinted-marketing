@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Text, cast, delete, desc, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,6 +35,23 @@ def url_hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def _signal_update_fields(
+    *,
+    title: str,
+    url: str | None,
+    excerpt: str | None,
+    metrics: dict,
+    ingested_at: datetime,
+) -> dict:
+    return {
+        "title": title,
+        "url": url,
+        "excerpt": excerpt,
+        "metrics": metrics,
+        "ingested_at": ingested_at,
+    }
+
+
 async def upsert_signal(
     db: AsyncSession,
     *,
@@ -46,37 +64,54 @@ async def upsert_signal(
     region: str = "HK",
     ingested_at: datetime | None = None,
 ) -> RawNewsEvent:
+    """Insert or refresh a signal.
+
+    ``signal_id`` and ``url_hash`` are both unique. RSS + Tavily often share a
+    URL with different ids — collide on ``url_hash`` must not abort the outer
+    transaction. Keep the first ``signal_id`` so existing refs stay stable.
+    """
     dedupe_key = url or signal_id
+    hash_val = url_hash(dedupe_key)
     now = ingested_at or datetime.now(UTC)
+    fields = _signal_update_fields(
+        title=title, url=url, excerpt=excerpt, metrics=metrics, ingested_at=now
+    )
     stmt = (
         insert(RawNewsEvent)
         .values(
             id=uuid.uuid4(),
             signal_id=signal_id,
             source=source,
-            title=title,
-            url=url,
-            excerpt=excerpt,
-            url_hash=url_hash(dedupe_key),
+            url_hash=hash_val,
             region=region,
-            metrics=metrics,
-            ingested_at=now,
+            **fields,
         )
         .on_conflict_do_update(
             index_elements=["signal_id"],
-            set_={
-                "title": title,
-                "url": url,
-                "excerpt": excerpt,
-                "metrics": metrics,
-                "ingested_at": now,
-            },
+            set_=fields,
         )
         .returning(RawNewsEvent)
     )
-    row = await db.scalar(stmt)
-    assert row is not None
-    return row
+    try:
+        async with db.begin_nested():
+            row = await db.scalar(stmt)
+            assert row is not None
+            return row
+    except IntegrityError:
+        existing = await db.scalar(
+            select(RawNewsEvent).where(
+                or_(RawNewsEvent.signal_id == signal_id, RawNewsEvent.url_hash == hash_val)
+            )
+        )
+        if existing is None:
+            raise
+        existing.title = title
+        existing.url = url
+        existing.excerpt = excerpt
+        existing.metrics = metrics
+        existing.ingested_at = now
+        await db.flush()
+        return existing
 
 
 async def list_top_signals(

@@ -180,6 +180,7 @@ async def _execute_guarded(*, run_id: uuid.UUID, company_id: uuid.UUID) -> None:
             except Exception as exc:
                 logger.exception("question run %s failed", run_id)
                 try:
+                    await db.rollback()
                     run = await db.get(QuestionRun, run_id)
                     if run is not None and run.status == "running":
                         await finish_question_run(

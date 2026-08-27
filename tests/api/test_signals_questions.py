@@ -7,8 +7,10 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import select
 
 from internal.memory import repos
+from internal.memory.models import RawNewsEvent
 from tests.api.helpers import auth_header, register_user
 
 
@@ -43,6 +45,40 @@ async def test_signals_top_with_rows(client, db_session) -> None:
     body = res.json()
     assert body["count"] >= 1
     assert body["signals"][0]["title"] == "HK typhoon"
+
+
+@pytest.mark.asyncio
+async def test_upsert_signal_url_hash_collision_keeps_existing(db_session) -> None:
+    """RSS + Tavily often share a URL; url_hash unique must not abort the txn."""
+    url = "https://example.com/same-article"
+    first = await repos.upsert_signal(
+        db_session,
+        signal_id="google_news_hk:abc",
+        source="google_news_hk",
+        title="RSS title",
+        url=url,
+        excerpt="rss",
+        metrics={"rank": 1},
+    )
+    await db_session.flush()
+    second = await repos.upsert_signal(
+        db_session,
+        signal_id="tavily:xyz",
+        source="tavily",
+        title="Tavily title",
+        url=url,
+        excerpt="tavily excerpt",
+        metrics={"query": "foo"},
+    )
+    await db_session.commit()
+    assert second.signal_id == first.signal_id == "google_news_hk:abc"
+    rows = (
+        await db_session.scalars(
+            select(RawNewsEvent).where(RawNewsEvent.url_hash == repos.url_hash(url))
+        )
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].excerpt == "tavily excerpt"
 
 
 @pytest.mark.asyncio

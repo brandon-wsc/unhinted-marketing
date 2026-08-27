@@ -84,11 +84,11 @@ _TOPIC_STOP = frozenset(
 _CELEB_MARKERS = ("緋聞", "戀情", "撻著", "離婚", "分手", "出軌", "約會")
 
 FALLBACK_TEMPLATES = [
-    "我哋可以點樣利用「{title}」呢個熱話做社交媒體內容？",
-    "針對香港市場，「{title}」有咩內容角度值得試？",
-    "可唔可以幫我寫一個關於「{title}」嘅 post 草稿？",
-    "「{title}」同我哋品牌有咩關聯？應唔應該跟？",
-    "有咩 hashtag 同發文時間建議，配合「{title}」？",
+    "「{title}」呢單，點出 post 先有畫面、又唔好似新聞稿？",
+    "幫我用「{title}」寫個 post，輕鬆啲，唔好板起塊面。",
+    "「{title}」抽返個人性出嚟，我哋可以點入戲？",
+    "「{title}」呢個熱話，點講先似朋友講、唔似公關？",
+    "「{title}」可以點橋去我哋產品，一句有畫面？",
 ]
 
 
@@ -200,6 +200,10 @@ def _candidates_brief(candidates: list[dict[str, Any]], *, with_research: bool =
         }
         if with_research and c.get("research"):
             row["research"] = [r[:200] for r in c["research"][:2]]
+        for key in ("scene", "emotion", "constraints", "products"):
+            val = c.get(key)
+            if val:
+                row[key] = val
         rows.append(row)
     return json.dumps(rows, ensure_ascii=False, indent=2)
 
@@ -336,20 +340,18 @@ async def cheap_screen(state: QuestionGraphState) -> dict[str, Any]:
     else:
         flags.append("screen_heuristic_only")
 
-    if llm_kept is not None:
+    rejected_keys: set[str] = set()
+    if llm_kept:
         shortlisted = _cluster_cap(llm_kept)
         rejected_keys = {topic_key(s["title"]) for s in preselected} - {
             topic_key(s["title"]) for s in shortlisted
         }
     else:
+        if llm_kept is not None:
+            flags.append("screen_llm_empty")
         shortlisted = _cluster_cap(
             [s for s in preselected if _keyword_score(s["title"], keywords) > 0]
         )
-        rejected_keys = {
-            topic_key(s["title"])
-            for s in signals
-            if _keyword_score(s["title"], keywords) <= 0
-        }
 
     kept_keys = {topic_key(s["title"]) for s in shortlisted}
     if len(shortlisted) < SHORTLIST_MIN:
@@ -369,6 +371,20 @@ async def cheap_screen(state: QuestionGraphState) -> dict[str, Any]:
             flags.append("screen_topup")
         if len(shortlisted) < SHORTLIST_MIN:
             flags.append("screen_thin")
+
+    # Empty keep / zero keyword overlap must not wipe the landing (ADR 0018:
+    # prefer cards). Do not restore LLM-rejected IP clusters or no-bridge celeb.
+    if not shortlisted and signals:
+        flags.append("screen_empty_fallback")
+        for s in _cluster_cap(scored, limit=SHORTLIST_MAX):
+            key = topic_key(s["title"])
+            if key in rejected_keys:
+                continue
+            if _looks_like_ip_or_celeb(s["title"]) and _keyword_score(s["title"], keywords) <= 0:
+                continue
+            shortlisted.append(s)
+            if len(shortlisted) >= SHORTLIST_MIN:
+                break
 
     return {
         "shortlisted": shortlisted[:SHORTLIST_MAX],
