@@ -134,7 +134,7 @@ export type paths = {
         put?: never;
         /**
          * Refresh Recommended Questions
-         * @description Force a new run even if the cache is valid; dedupes against in-flight runs.
+         * @description Force a new run even if the cache is valid. Landing uses this only after a failed empty fill.
          */
         post: operations["refresh_recommended_questions_api_companies__company_id__recommended_questions_refresh_post"];
         delete?: never;
