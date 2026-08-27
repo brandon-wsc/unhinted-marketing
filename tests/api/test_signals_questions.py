@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import select
 
 from internal.memory import repos
+from internal.memory.models import RawNewsEvent
 from tests.api.helpers import auth_header, register_user
 
 
@@ -45,15 +48,96 @@ async def test_signals_top_with_rows(client, db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_recommended_questions_not_ready(client) -> None:
+async def test_upsert_signal_url_hash_collision_keeps_existing(db_session) -> None:
+    """RSS + Tavily often share a URL; url_hash unique must not abort the txn."""
+    url = "https://example.com/same-article"
+    first = await repos.upsert_signal(
+        db_session,
+        signal_id="google_news_hk:abc",
+        source="google_news_hk",
+        title="RSS title",
+        url=url,
+        excerpt="rss",
+        metrics={"rank": 1},
+    )
+    await db_session.flush()
+    second = await repos.upsert_signal(
+        db_session,
+        signal_id="tavily:xyz",
+        source="tavily",
+        title="Tavily title",
+        url=url,
+        excerpt="tavily excerpt",
+        metrics={"query": "foo"},
+    )
+    await db_session.commit()
+    assert second.signal_id == first.signal_id == "google_news_hk:abc"
+    rows = (
+        await db_session.scalars(
+            select(RawNewsEvent).where(RawNewsEvent.url_hash == repos.url_hash(url))
+        )
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].excerpt == "tavily excerpt"
+
+
+@pytest.mark.asyncio
+async def test_recommended_questions_miss_returns_202(client, monkeypatch) -> None:
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
+    run_id = uuid.uuid4()
+
+    async def fake_start(*, company_id, trigger):
+        assert trigger == "get_miss"
+        return SimpleNamespace(id=run_id, status="running"), True
+
+    monkeypatch.setattr("cmd.api.routes.questions.start_or_join_run", fake_start)
     res = await client.get(
         f"/api/companies/{company_id}/recommended-questions",
         headers=auth_header(data["access_token"]),
     )
-    assert res.status_code == 404
-    assert "question-generator" in res.json()["detail"]
+    assert res.status_code == 202, res.text
+    body = res.json()
+    assert body["status"] == "running"
+    assert body["run_id"] == str(run_id)
+    assert body["company_id"] == company_id
+
+
+@pytest.mark.asyncio
+async def test_recommended_questions_failed_run_surfaced(client, db_session) -> None:
+    data = await register_user(client)
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    run = await repos.create_question_run(db_session, company_id=company_id, trigger="get_miss")
+    await repos.finish_question_run(db_session, run, status="failed", error="llm down")
+    await db_session.commit()
+
+    res = await client.get(
+        f"/api/companies/{company_id}/recommended-questions",
+        headers=auth_header(data["access_token"]),
+    )
+    assert res.status_code == 202, res.text
+    body = res.json()
+    assert body["status"] == "failed"
+    assert body["run_id"] == str(run.id)
+
+
+@pytest.mark.asyncio
+async def test_recommended_questions_refresh_force_runs(client, monkeypatch) -> None:
+    data = await register_user(client)
+    company_id = data["user"]["organizations"][0]["id"]
+    run_id = uuid.uuid4()
+
+    async def fake_start(*, company_id, trigger):
+        assert trigger == "refresh"
+        return SimpleNamespace(id=run_id, status="running"), True
+
+    monkeypatch.setattr("cmd.api.routes.questions.start_or_join_run", fake_start)
+    res = await client.post(
+        f"/api/companies/{company_id}/recommended-questions/refresh",
+        headers=auth_header(data["access_token"]),
+    )
+    assert res.status_code == 202, res.text
+    assert res.json()["run_id"] == str(run_id)
 
 
 @pytest.mark.asyncio
@@ -85,6 +169,7 @@ async def test_recommended_questions_happy_path(client, db_session) -> None:
     body = res.json()
     assert body["company_id"] == str(company_id)
     assert body["is_stale"] is False
+    assert body["run_status"] == "idle"
     assert body["questions"][0]["id"] == "q1"
     assert body["source_signal_ids"] == ["s1"]
 
@@ -109,3 +194,51 @@ async def test_recommended_questions_stale(client, db_session) -> None:
     )
     assert res.status_code == 200
     assert res.json()["is_stale"] is True
+    assert res.json()["run_status"] == "idle"
+
+
+@pytest.mark.asyncio
+async def test_recommended_questions_run_status_running(client, db_session) -> None:
+    data = await register_user(client)
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    await repos.save_recommended_questions(
+        db_session,
+        company_id=company_id,
+        questions=[{"id": "q1", "text": "Old?"}],
+        source_signal_ids=["s1"],
+        ttl_hours=12,
+    )
+    await repos.create_question_run(db_session, company_id=company_id, trigger="refresh")
+    await db_session.commit()
+
+    res = await client.get(
+        f"/api/companies/{company_id}/recommended-questions",
+        headers=auth_header(data["access_token"]),
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["questions"][0]["id"] == "q1"
+    assert body["run_status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_recommended_questions_run_status_failed_after_cache(client, db_session) -> None:
+    data = await register_user(client)
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    await repos.save_recommended_questions(
+        db_session,
+        company_id=company_id,
+        questions=[{"id": "q1", "text": "Old?"}],
+        source_signal_ids=["s1"],
+        ttl_hours=12,
+    )
+    run = await repos.create_question_run(db_session, company_id=company_id, trigger="refresh")
+    await repos.finish_question_run(db_session, run, status="failed", error="no questions")
+    await db_session.commit()
+
+    res = await client.get(
+        f"/api/companies/{company_id}/recommended-questions",
+        headers=auth_header(data["access_token"]),
+    )
+    assert res.status_code == 200
+    assert res.json()["run_status"] == "failed"

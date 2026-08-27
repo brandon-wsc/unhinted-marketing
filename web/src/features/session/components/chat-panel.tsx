@@ -133,7 +133,13 @@ export function ChatPanel() {
     editInsertAt,
     setEditInsertAt,
   } = useSession(companyId);
-  const { questions, loading: questionsLoading, isStale } = useRecommendedQuestions(companyId);
+  const {
+    questions,
+    loading: questionsLoading,
+    generating: questionsGenerating,
+    failed: questionsFailed,
+    refresh: refreshQuestions,
+  } = useRecommendedQuestions(companyId);
   const now = useNow();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [historyCollapsed, setHistoryCollapsed] = useState(() => {
@@ -319,7 +325,7 @@ export function ChatPanel() {
     if (stopping) return;
     if (sending && queueFull) return;
     try {
-      await sendMessage(question.text);
+      await sendMessage(question.text, { sourceQuestionId: question.id });
     } catch {
       showError(t("chat.error.sendFailed"));
     }
@@ -494,9 +500,11 @@ export function ChatPanel() {
                 <RecommendedQuestions
                   questions={questions}
                   loading={questionsLoading}
-                  isStale={isStale}
+                  generating={questionsGenerating}
+                  failed={questionsFailed}
                   disabled={stopping || (sending && queueFull)}
                   onSelect={(q) => void onPickQuestion(q)}
+                  onRetry={() => void refreshQuestions()}
                 />
               </div>
             ) : (

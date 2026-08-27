@@ -1054,7 +1054,7 @@ export function useSession(companyId: string | undefined) {
   }, []);
 
   const sendMessage = useCallback(
-    async (content: string, options?: { queueIndex?: number }) => {
+    async (content: string, options?: { queueIndex?: number; sourceQuestionId?: string }) => {
       const text = content.trim();
       if (!text || !accessToken || !companyId || stoppingRef.current) {
         return;
@@ -1118,6 +1118,7 @@ export function useSession(companyId: string | undefined) {
 
         const res = await apiPostSessionMessage(accessToken, active.id, text, {
           signal: abort.signal,
+          sourceQuestionId: options?.sourceQuestionId,
         });
         // Stop won the race — do not re-apply discarded payload.
         if (abort.signal.aborted || epoch !== epochOf(active.id)) {

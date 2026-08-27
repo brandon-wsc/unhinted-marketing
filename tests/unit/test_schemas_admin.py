@@ -131,3 +131,24 @@ def test_session_trace_payload_assembles() -> None:
     assert trace.messages[0].content == "hi"
     assert trace.turns[0].steps[0].node == "chat"
     assert trace.signals[0].signal_id == "sig-1"
+
+
+def test_question_run_summary_defaults() -> None:
+    from schemas.admin import QuestionRunList, QuestionRunSummary
+
+    run_id = uuid.uuid4()
+    row = SimpleNamespace(
+        id=run_id,
+        company_id=uuid.uuid4(),
+        status="succeeded",
+        trigger="get_miss",
+        quality_flags=["screen_topup"],
+        error=None,
+        started_at=_now(),
+        finished_at=_now(),
+    )
+    summary = QuestionRunSummary.model_validate(row)
+    assert summary.id == run_id
+    assert summary.total_tokens == 0
+    listed = QuestionRunList(items=[summary], limit=20)
+    assert listed.limit == 20

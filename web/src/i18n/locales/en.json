@@ -60,7 +60,9 @@
     "questions": {
       "title": "Suggested prompts",
       "loading": "Loading suggestions…",
-      "stale": "Refreshing soon"
+      "generating": "Picking prompts…",
+      "failed": "Couldn't load suggestions.",
+      "retry": "Try again"
     },
     "input": {
       "placeholder": "Type a message…"

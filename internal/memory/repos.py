@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Text, cast, delete, desc, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,6 +18,8 @@ from internal.memory.models import (
     PreviewImage,
     Product,
     ProductProposal,
+    QuestionNodeStep,
+    QuestionRun,
     RawNewsEvent,
     RecommendedQuestions,
     Session,
@@ -32,6 +35,23 @@ def url_hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def _signal_update_fields(
+    *,
+    title: str,
+    url: str | None,
+    excerpt: str | None,
+    metrics: dict,
+    ingested_at: datetime,
+) -> dict:
+    return {
+        "title": title,
+        "url": url,
+        "excerpt": excerpt,
+        "metrics": metrics,
+        "ingested_at": ingested_at,
+    }
+
+
 async def upsert_signal(
     db: AsyncSession,
     *,
@@ -44,37 +64,54 @@ async def upsert_signal(
     region: str = "HK",
     ingested_at: datetime | None = None,
 ) -> RawNewsEvent:
+    """Insert or refresh a signal.
+
+    ``signal_id`` and ``url_hash`` are both unique. RSS + Tavily often share a
+    URL with different ids — collide on ``url_hash`` must not abort the outer
+    transaction. Keep the first ``signal_id`` so existing refs stay stable.
+    """
     dedupe_key = url or signal_id
+    hash_val = url_hash(dedupe_key)
     now = ingested_at or datetime.now(UTC)
+    fields = _signal_update_fields(
+        title=title, url=url, excerpt=excerpt, metrics=metrics, ingested_at=now
+    )
     stmt = (
         insert(RawNewsEvent)
         .values(
             id=uuid.uuid4(),
             signal_id=signal_id,
             source=source,
-            title=title,
-            url=url,
-            excerpt=excerpt,
-            url_hash=url_hash(dedupe_key),
+            url_hash=hash_val,
             region=region,
-            metrics=metrics,
-            ingested_at=now,
+            **fields,
         )
         .on_conflict_do_update(
             index_elements=["signal_id"],
-            set_={
-                "title": title,
-                "url": url,
-                "excerpt": excerpt,
-                "metrics": metrics,
-                "ingested_at": now,
-            },
+            set_=fields,
         )
         .returning(RawNewsEvent)
     )
-    row = await db.scalar(stmt)
-    assert row is not None
-    return row
+    try:
+        async with db.begin_nested():
+            row = await db.scalar(stmt)
+            assert row is not None
+            return row
+    except IntegrityError:
+        existing = await db.scalar(
+            select(RawNewsEvent).where(
+                or_(RawNewsEvent.signal_id == signal_id, RawNewsEvent.url_hash == hash_val)
+            )
+        )
+        if existing is None:
+            raise
+        existing.title = title
+        existing.url = url
+        existing.excerpt = excerpt
+        existing.metrics = metrics
+        existing.ingested_at = now
+        await db.flush()
+        return existing
 
 
 async def list_top_signals(
@@ -83,10 +120,13 @@ async def list_top_signals(
     limit: int = 20,
     region: str = "HK",
     since: datetime | None = None,
+    sources: list[str] | None = None,
 ) -> list[RawNewsEvent]:
     q = select(RawNewsEvent).where(RawNewsEvent.region == region)
     if since:
         q = q.where(RawNewsEvent.ingested_at >= since)
+    if sources:
+        q = q.where(RawNewsEvent.source.in_(sources))
     q = q.order_by(desc(RawNewsEvent.ingested_at)).limit(limit)
     result = await db.scalars(q)
     return list(result.all())
@@ -427,6 +467,140 @@ async def get_latest_questions(
         .order_by(desc(RecommendedQuestions.generated_at))
         .limit(1)
     )
+
+
+async def list_recent_question_history(
+    db: AsyncSession, company_id: uuid.UUID, *, days: int, skip_latest: bool = False
+) -> dict[str, list[str]]:
+    """Recently served question texts + signal ids (text + trend-combo dedupe)."""
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    result = await db.scalars(
+        select(RecommendedQuestions.questions)
+        .where(
+            RecommendedQuestions.company_id == company_id,
+            RecommendedQuestions.generated_at >= cutoff,
+        )
+        .order_by(desc(RecommendedQuestions.generated_at))
+        .limit(20)
+    )
+    batches = list(result.all())
+    if skip_latest and batches:
+        batches = batches[1:]
+    texts: list[str] = []
+    signal_ids: list[str] = []
+    for batch in batches:
+        for q in batch or []:
+            if not isinstance(q, dict):
+                continue
+            text = (q.get("text") or "").strip()
+            if text:
+                texts.append(text)
+            for sid in q.get("source_signal_ids") or []:
+                if sid and str(sid) not in signal_ids:
+                    signal_ids.append(str(sid))
+    return {"texts": texts, "signal_ids": signal_ids}
+
+
+async def list_recent_question_texts(
+    db: AsyncSession, company_id: uuid.UUID, *, days: int
+) -> list[str]:
+    """Question texts served to this company in the last N days (dedupe input)."""
+    return (await list_recent_question_history(db, company_id, days=days))["texts"]
+
+
+async def get_question_item(
+    db: AsyncSession, company_id: uuid.UUID, question_id: str
+) -> dict | None:
+    """Look up one landing-card question in the company's latest cache (handoff)."""
+    row = await get_latest_questions(db, company_id)
+    if row is None:
+        return None
+    for q in row.questions or []:
+        if isinstance(q, dict) and str(q.get("id") or "") == question_id:
+            return q
+    return None
+
+
+async def create_question_run(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    trigger: str,
+) -> QuestionRun:
+    run = QuestionRun(company_id=company_id, status="running", trigger=trigger)
+    db.add(run)
+    await db.flush()
+    return run
+
+
+async def finish_question_run(
+    db: AsyncSession,
+    run: QuestionRun,
+    *,
+    status: str,
+    quality_flags: list[str] | None = None,
+    error: str | None = None,
+) -> QuestionRun:
+    run.status = status
+    run.quality_flags = quality_flags or []
+    run.error = error
+    run.finished_at = datetime.now(UTC)
+    await db.flush()
+    return run
+
+
+async def get_active_question_run(db: AsyncSession, company_id: uuid.UUID) -> QuestionRun | None:
+    return await db.scalar(
+        select(QuestionRun)
+        .where(QuestionRun.company_id == company_id, QuestionRun.status == "running")
+        .order_by(desc(QuestionRun.started_at))
+        .limit(1)
+    )
+
+
+async def get_latest_question_run(db: AsyncSession, company_id: uuid.UUID) -> QuestionRun | None:
+    return await db.scalar(
+        select(QuestionRun)
+        .where(QuestionRun.company_id == company_id)
+        .order_by(desc(QuestionRun.started_at))
+        .limit(1)
+    )
+
+
+async def list_question_runs(
+    db: AsyncSession, company_id: uuid.UUID, *, limit: int = 20
+) -> list[QuestionRun]:
+    result = await db.scalars(
+        select(QuestionRun)
+        .where(QuestionRun.company_id == company_id)
+        .order_by(desc(QuestionRun.started_at))
+        .limit(limit)
+    )
+    return list(result.all())
+
+
+async def save_question_node_step(
+    db: AsyncSession,
+    *,
+    run_id: uuid.UUID,
+    seq: int,
+    node: str,
+    input: dict,
+    output: dict,
+) -> QuestionNodeStep:
+    step = QuestionNodeStep(run_id=run_id, seq=seq, node=node, input=input, output=output)
+    db.add(step)
+    await db.flush()
+    return step
+
+
+async def list_question_node_steps(db: AsyncSession, run_id: uuid.UUID) -> list[QuestionNodeStep]:
+    result = await db.scalars(
+        select(QuestionNodeStep)
+        .where(QuestionNodeStep.run_id == run_id)
+        .order_by(QuestionNodeStep.seq)
+    )
+    return list(result.all())
 
 
 async def get_or_create_topic_entity(

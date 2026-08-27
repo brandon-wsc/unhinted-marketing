@@ -48,6 +48,7 @@ class UpdateSessionRequest(BaseModel):
 
 class PostMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
+    source_question_id: str | None = Field(default=None, max_length=80)
 
 
 class ForkSessionRequest(BaseModel):

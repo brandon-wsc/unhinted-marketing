@@ -64,7 +64,13 @@ class Settings(BaseSettings):
     s3_public_base_url: str | None = None
 
     # Perception / workers
-    question_cache_ttl_hours: int = 12
+    # ADR 0018: TTL must outlive the 12h scheduler tick so cache does not
+    # expire just before the next run.
+    question_cache_ttl_hours: int = 13
+    # Question worker graph (ADR 0018)
+    question_dedupe_days: int = 7
+    question_run_max_concurrency: int = 2
+    question_run_stale_minutes: int = 8
     news_promote_trends_rank_max: int = 10
     news_promote_window_hours: int = 24
     scheduler_hot_search_interval_minutes: int = 60

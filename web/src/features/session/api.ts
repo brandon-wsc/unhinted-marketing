@@ -7,6 +7,7 @@ import type {
   ForkSessionResponse,
   PostMessageResponse,
   PreviewMediaMutationResponse,
+  RecommendedQuestionsGenerating,
   RecommendedQuestionsResponse,
   Session,
   SessionListItem,
@@ -92,12 +93,15 @@ export async function apiPostSessionMessage(
   accessToken: string | null,
   sessionId: string,
   content: string,
-  init?: { signal?: AbortSignal },
+  init?: { signal?: AbortSignal; sourceQuestionId?: string },
 ): Promise<PostMessageResponse> {
   const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({
+      content,
+      ...(init?.sourceQuestionId ? { source_question_id: init.sourceQuestionId } : {}),
+    }),
     signal: init?.signal,
   });
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
@@ -253,16 +257,37 @@ export async function apiConfirmSession(
   return res.json();
 }
 
+export type RecommendedQuestionsFetch =
+  | { kind: "ready"; data: RecommendedQuestionsResponse }
+  | { kind: "generating"; data: RecommendedQuestionsGenerating }
+  | { kind: "failed"; data: RecommendedQuestionsGenerating };
+
 export async function apiGetRecommendedQuestions(
   accessToken: string | null,
   companyId: string,
-): Promise<RecommendedQuestionsResponse | null> {
+): Promise<RecommendedQuestionsFetch | null> {
   const res = await fetchWithAuth(
     accessToken,
     `${API_BASE}/companies/${companyId}/recommended-questions`,
   );
-  // 404 = worker has not generated a batch yet — empty landing, not an error toast.
   if (res.status === 404) return null;
+  if (res.status === 202) {
+    const data = (await res.json()) as RecommendedQuestionsGenerating;
+    return { kind: data.status === "failed" ? "failed" : "generating", data };
+  }
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return { kind: "ready", data: await res.json() };
+}
+
+export async function apiRefreshRecommendedQuestions(
+  accessToken: string | null,
+  companyId: string,
+): Promise<RecommendedQuestionsGenerating> {
+  const res = await fetchWithAuth(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/recommended-questions/refresh`,
+    { method: "POST" },
+  );
+  if (!res.ok && res.status !== 202) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }

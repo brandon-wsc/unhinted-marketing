@@ -123,6 +123,26 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/companies/{company_id}/recommended-questions/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Recommended Questions
+         * @description Force a new run even if the cache is valid. Landing uses this only after a failed empty fill.
+         */
+        post: operations["refresh_recommended_questions_api_companies__company_id__recommended_questions_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/companies/{company_id}": {
         parameters: {
             query?: never;
@@ -840,6 +860,40 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/companies/{company_id}/question-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Question Runs */
+        get: operations["list_question_runs_api_admin_companies__company_id__question_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/question-runs/{run_id}/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Question Run Steps */
+        get: operations["list_question_run_steps_api_admin_question_runs__run_id__steps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1436,6 +1490,8 @@ export type components = {
         PostMessageRequest: {
             /** Content */
             content: string;
+            /** Source Question Id */
+            source_question_id?: string | null;
         };
         /** PostMessageResponse */
         PostMessageResponse: {
@@ -1665,6 +1721,101 @@ export type components = {
             /** Items */
             items: components["schemas"]["ProductProposalItem"][];
         };
+        /** QuestionNodeStepList */
+        QuestionNodeStepList: {
+            /** Items */
+            items: components["schemas"]["QuestionNodeStepSummary"][];
+        };
+        /** QuestionNodeStepSummary */
+        QuestionNodeStepSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Seq */
+            seq: number;
+            /** Node */
+            node: string;
+            /** Input */
+            input?: {
+                [key: string]: unknown;
+            };
+            /** Output */
+            output?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at?: string | null;
+        };
+        /** QuestionRunList */
+        QuestionRunList: {
+            /** Items */
+            items: components["schemas"]["QuestionRunSummary"][];
+            /** Limit */
+            limit: number;
+        };
+        /**
+         * QuestionRunSummary
+         * @description One recommended-questions worker run (ADR 0018) plus LLM token totals.
+         */
+        QuestionRunSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /** Status */
+            status: string;
+            /** Trigger */
+            trigger: string;
+            /** Quality Flags */
+            quality_flags?: unknown[];
+            /** Error */
+            error?: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at?: string | null;
+            /**
+             * Llm Calls
+             * @default 0
+             */
+            llm_calls: number;
+            /**
+             * Prompt Tokens
+             * @default 0
+             */
+            prompt_tokens: number;
+            /**
+             * Completion Tokens
+             * @default 0
+             */
+            completion_tokens: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+        };
         /** RecommendedQuestionItem */
         RecommendedQuestionItem: {
             /** Id */
@@ -1677,6 +1828,29 @@ export type components = {
             source_signal_ids: string[];
             /** Persona Slug */
             persona_slug: string | null;
+        };
+        /**
+         * RecommendedQuestionsGenerating
+         * @description 202 body for the ADR 0018 fill contract — SPA polls GET with backoff.
+         */
+        RecommendedQuestionsGenerating: {
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /** Run Id */
+            run_id: string | null;
+            /**
+             * Status
+             * @default running
+             */
+            status: string;
+            /**
+             * Retry After Seconds
+             * @default 3
+             */
+            retry_after_seconds: number;
         };
         /** RecommendedQuestionsResponse */
         RecommendedQuestionsResponse: {
@@ -1704,6 +1878,12 @@ export type components = {
              * @default false
              */
             is_stale: boolean;
+            /**
+             * Run Status
+             * @default idle
+             * @enum {string}
+             */
+            run_status: "idle" | "running" | "failed";
         };
         /** RegisterRequest */
         RegisterRequest: {
@@ -2416,6 +2596,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecommendedQuestionsResponse"];
+                };
+            };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedQuestionsGenerating"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_recommended_questions_api_companies__company_id__recommended_questions_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedQuestionsGenerating"];
                 };
             };
             /** @description Validation Error */
@@ -3945,6 +4165,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResearch"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_question_runs_api_admin_companies__company_id__question_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionRunList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_question_run_steps_api_admin_question_runs__run_id__steps_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionNodeStepList"];
                 };
             };
             /** @description Validation Error */

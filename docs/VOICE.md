@@ -45,8 +45,11 @@ Must write in authentic **Hong Kong Traditional Chinese**, defaulting to the spo
 
 ### Forbidden Words (DO NOT USE)
 - **Mainland/Corporate Buzzwords:** 賦能, 閉環, 沉浸式, 拿捏, 雙向奔赴, 賽道, 深度鏈接, 抓手.
+- **Mainland growth-hacking (小紅書／運營腔):** 流量, 衝流量, 做流量, 漲粉, 吸粉, 引流, 種草, 破圈, 出圈, 私域, 公域, 帶貨, 爆款, 人設. 粉絲 → `fans`. 運營（social ops）→ 打理／營運.
 - **Mandarin Syntax:** 這 (use 呢), 我們 (use 我哋), 的 (use 嘅), 了 (use 咗/啦), 沒有 (use 冇), 不 (use 唔).
 - **Corporate PR Openings:** 「今日想同大家分享…」、「驚喜登場！」、「大家準備好未？」
+
+> **流量:** 大陸互聯網用語（曝光／reach）。HK 講 **like、follow、曝光、人氣、有人睇**. 實體擠擁用「人流」OK；唔好寫「衝流量」「做流量」「漲粉」.
 
 > 註：以上**文言標語字**（行人止步、嚴禁、非禮勿視、小心地滑…）喺「地層 ③」用法唔受上述禁令限制——佢哋係**效果性標題／反差**，唔係公務書面語正文。禁令針對嘅係當正文用嘅硬梆梆公務腔。
 
@@ -54,7 +57,7 @@ Must write in authentic **Hong Kong Traditional Chinese**, defaulting to the spo
 - Use natural HK sentence connectors: 咁, 呀, 喎, 呢, 𠲲, 啦.
 - Use everyday lifestyle scenes: 追巴士, 返工等放工, OT 崩潰, OT 叫外賣, 信用卡卡數.
 - **HK slang（口語變體，用字貼地）:** 腦細／老細, 打工仔, 返工, 收工, 頂唔順, 搞掂, 見工, 出糧, 秒, 夾硬.
-- **中英夾雜係身份，唔係懶音** — 關鍵字用返 English：Growth、deadline、OT、workload、meeting、offer、秒 Post；句子重心中文，英文抽起做重點。
+- **中英夾雜係身份，唔係懶音** — 關鍵字用返 English：like、follow、reach、OT、workload、meeting、offer、秒 Post；句子重心中文，英文抽起做重點。唔好用大陸「流量」代替 like／曝光.
 
 ---
 

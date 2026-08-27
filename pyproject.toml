@@ -16,6 +16,7 @@ dependencies = [
     "passlib[argon2]>=1.7.4",
     "python-multipart>=0.0.17",
     "pytrends>=4.9.2",
+    "feedparser>=6.0.11",
     "litellm>=1.55.0",
     "langgraph>=0.2.0",
     "langgraph-checkpoint-postgres>=2.0.0",

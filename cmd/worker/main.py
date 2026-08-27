@@ -19,6 +19,7 @@ from internal.perception.question_generator import (
     generate_questions_all_companies,
     generate_questions_for_company,
 )
+from internal.perception.rss_news import ingest_rss_news
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -27,8 +28,11 @@ logger = logging.getLogger(__name__)
 async def _cmd_hot_search() -> int:
     async with SessionLocal() as db:
         counts = await ingest_hot_search(db)
-    print(json.dumps(counts, indent=2))
-    return 0 if counts.get("errors", 0) == 0 or sum(v for k, v in counts.items() if k != "errors") else 1
+        rss = await ingest_rss_news(db)
+    print(json.dumps({"trends": counts, "rss": rss}, indent=2))
+    errors = counts.get("errors", 0) + rss.get("errors", 0)
+    ingested = sum(v for k, v in {**counts, **rss}.items() if k != "errors")
+    return 0 if errors == 0 or ingested else 1
 
 
 async def _cmd_questions(force: bool, company_id: str | None) -> int:
@@ -125,7 +129,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Unhinted marketing workers")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("hot-search", help="Ingest Google Trends HK")
+    sub.add_parser("hot-search", help="Ingest Google Trends HK + RSS news")
     q = sub.add_parser("questions", help="Generate recommended questions (12h cache)")
     q.add_argument("--force", action="store_true", help="Ignore cache TTL")
     q.add_argument("--company-id", help="Single company UUID")

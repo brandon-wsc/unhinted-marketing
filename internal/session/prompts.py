@@ -105,7 +105,7 @@ Grounding:
 
 _CRAFT_BLOCK = """
 Default craft (HK social editor — IKEA feel × Duolingo short/sharp):
-- 貼地: spoken zh-HK; no mainland marketingese (賦能/生態/深度鏈接) or stiff PR
+- 貼地: spoken zh-HK; no mainland marketingese (賦能/生態/深度鏈接/流量/衝流量/漲粉/種草/破圈/私域/帶貨) or stiff PR. Social metrics in HK English or 口語: like、follow、曝光、人氣、有人睇 — never 流量 as “traffic”. 人流 (physical crowd) is fine.
 - 有鉤: open on a lived scene — never「今日想同大家分享」
 - 有畫面: one line that feels「講緊我就」
 - 短: IG-length caption; clever in quick doses; few hashtags; one CTA
@@ -166,7 +166,7 @@ Writing Rules for Authentic HK Vibe:
 Few-shot Examples (Do not copy verbatim, learn the rhythm):
 
 Example A — roast_level 1 (Signal: 夏天好熱 / WFH) — emotion=焗促攰, hook=冷氣對比, bridge=通風椅
-BAD: 「炎炎夏日，為提升居家辦公體驗，本公司誠意推出舒適座椅...」
+BAD: 「炎炎夏日，為提升居家辦公體驗，本公司誠意推出舒適座椅...」 / 「幫品牌衝流量、種草破圈」
 GOOD: 「辦公室冷氣凍到要著羽絨，返到屋企反而熱過焗爐？🫠 坐低想開工，背脊已經出晒汗... 其實 WFH 都可以對自己好啲。換張通風又撐腰嘅靚椅，起碼唔使身水身汗先諗到橋。」
 CTA: 「留言話我哋知你屋企邊個位最熱」
 
@@ -203,7 +203,7 @@ Return JSON only:
 Fail if any of:
 - ungrounded claims, missing/invalid citations, or grounding_ok is false
 - offensive, discriminatory, or crisis-jacking humour
-- stiff PR / mainland marketingese / 「今日想同大家分享」 openings
+- stiff PR / mainland marketingese (流量/衝流量/漲粉/種草/破圈/賦能) / 「今日想同大家分享」 openings
 - roast_level mismatch (e.g. aggressive meme tone when roast_level is 0–1)
 - caption too long-winded or brochure-like with no scene hook (unless roast_level 0 and still clear)
 - punchline targets a named institution/event instead of a human emotion
