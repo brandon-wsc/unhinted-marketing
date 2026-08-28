@@ -1,0 +1,62 @@
+# Origin nginx — same-origin SPA + /api proxy (ADR 0006)
+#
+# Install: copy to /etc/nginx/sites-available/unhinted.conf, symlink sites-enabled,
+# set root to your web/dist build, then reload nginx.
+#
+# cloudflared (or another reverse proxy) should forward to listen port below.
+
+upstream unhinted_api {
+    server 127.0.0.1:8000;
+    keepalive 32;
+}
+
+server {
+    listen 8080;
+    server_name app.example.com;
+
+    root /var/www/unhinted/web/dist;
+    index index.html;
+
+    # Security headers (complement Cloudflare edge)
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    # API + SSE — never cache; pass through buffering disable for SSE
+    location /api/ {
+        proxy_pass http://unhinted_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # Vite hashed assets — long cache (Cloudflare CDN will respect these)
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location ~* \.(js|css|woff2?|ttf|eot|svg|ico|png|jpg|jpeg|webp|gif)$ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # SPA shell — short cache so deploys propagate quickly
+    location = /index.html {
+        add_header Cache-Control "no-cache, must-revalidate";
+        try_files $uri =404;
+    }
+
+    # Client-side routes
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

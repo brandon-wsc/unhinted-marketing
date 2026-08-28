@@ -24,6 +24,7 @@ FastAPI · PostgreSQL (pgvector) · React · LangGraph + LiteLLM (Phase 2+)
 | [docs/contracts/](docs/contracts/) | JSON Schema mirrors + SSE event catalog |
 | [docs/openapi.json](docs/openapi.json) | Generated OpenAPI (refresh via `python -m scripts.export_contracts`) |
 | [docs/TESTING.md](docs/TESTING.md) | Test tiers + path coverage gates (utils / API / UI) |
+| [docs/infra/cloudflare.md](docs/infra/cloudflare.md) | Production Cloudflare (Tunnel, R2, WAF, Turnstile) |
 
 ## Quick start
 

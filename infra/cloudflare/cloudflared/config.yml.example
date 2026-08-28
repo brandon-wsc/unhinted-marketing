@@ -1,0 +1,25 @@
+# Cloudflare Tunnel — Option A (same-origin via origin nginx)
+#
+# 1. Create tunnel: cloudflared tunnel create unhinted
+# 2. Copy tunnel UUID into tunnel: below
+# 3. Place origin certificate at /etc/cloudflared/cert.pem (from `cloudflared tunnel login`)
+# 4. Point DNS CNAME app.example.com → <tunnel-id>.cfargotunnel.com (proxied)
+#
+# See docs/infra/cloudflare.md for full setup.
+
+tunnel: <TUNNEL_UUID>
+credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
+
+# Route all traffic to origin nginx (serves SPA + proxies /api → uvicorn).
+ingress:
+  - hostname: app.example.com
+    service: http://127.0.0.1:8080
+    originRequest:
+      # SSE: allow long-lived connections (session events heartbeat = 15s).
+      noTLSVerify: false
+      connectTimeout: 30s
+      tcpKeepAlive: 30s
+      keepAliveTimeout: 90s
+      keepAliveConnections: 100
+      httpHostHeader: app.example.com
+  - service: http_status:404

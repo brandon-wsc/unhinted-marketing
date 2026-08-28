@@ -1,0 +1,42 @@
+{
+  "description": "Example Cloudflare WAF custom rules + rate limits for Unhinted Marketing. Import via Dashboard → Security → WAF, or Terraform cloudflare_ruleset. Adjust hostnames and thresholds for your deployment.",
+  "rules": [
+    {
+      "name": "Bypass cache — session SSE",
+      "description": "Ensure /api/sessions/*/events is never cached at edge. Prefer Cache Rules (see docs/infra/cloudflare.md); this documents the path pattern.",
+      "expression": "(http.request.uri.path matches \"^/api/sessions/[^/]+/events$\")",
+      "action": "log"
+    },
+    {
+      "name": "Rate limit — auth register/login/refresh",
+      "description": "Edge protection for auth endpoints; complements in-memory AUTH_RATE_LIMIT_*.",
+      "expression": "(http.request.uri.path matches \"^/api/auth/(register|login|refresh)$\" and http.request.method eq \"POST\")",
+      "action": "rate_limit",
+      "ratelimit": {
+        "requests_per_period": 10,
+        "period": 60,
+        "mitigation_timeout": 60,
+        "characteristics": ["ip.src"]
+      }
+    },
+    {
+      "name": "Rate limit — session messages (LLM cost)",
+      "description": "Throttle POST /api/sessions/{id}/messages per IP.",
+      "expression": "(http.request.uri.path matches \"^/api/sessions/[^/]+/messages$\" and http.request.method eq \"POST\")",
+      "action": "rate_limit",
+      "ratelimit": {
+        "requests_per_period": 30,
+        "period": 60,
+        "mitigation_timeout": 120,
+        "characteristics": ["ip.src"]
+      }
+    },
+    {
+      "name": "Block missing Turnstile on auth (optional)",
+      "description": "When Turnstile is enabled, require cf-turnstile-response header on auth POSTs. Enable only after frontend ships Turnstile widget and TURNSTILE_ENABLED=true on API.",
+      "expression": "(http.request.uri.path matches \"^/api/auth/(register|login)$\" and http.request.method eq \"POST\" and not http.request.headers[\"cf-turnstile-response\"][0] ne \"\")",
+      "action": "block",
+      "enabled": false
+    }
+  ]
+}

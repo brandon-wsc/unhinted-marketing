@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
 import { FormField } from "@/components/form-field";
 import { PasswordBox } from "@/components/password-box";
+import { TurnstileWidget, turnstileEnabled } from "@/components/turnstile-widget";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
@@ -30,6 +31,7 @@ export function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -52,6 +54,11 @@ export function RegisterPage() {
       return;
     }
 
+    if (turnstileEnabled() && !turnstileToken) {
+      showError(t("errors.turnstileRequired"));
+      return;
+    }
+
     setSubmitting(true);
     try {
       await register({
@@ -59,6 +66,7 @@ export function RegisterPage() {
         password,
         display_name: displayName,
         organization_name: emailLocked ? undefined : organizationName || undefined,
+        turnstile_token: turnstileToken ?? undefined,
       });
       navigate(nextPath, { replace: true });
     } catch (err) {
@@ -138,6 +146,7 @@ export function RegisterPage() {
           autoComplete="new-password"
           required
         />
+        <TurnstileWidget onToken={setTurnstileToken} />
         <Button type="submit" disabled={submitting || invitePending} className="w-full">
           {submitting ? t("auth.register.submitting") : t("auth.register.submit")}
         </Button>

@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth-layout";
 import { FormField } from "@/components/form-field";
 import { PasswordBox } from "@/components/password-box";
+import { TurnstileWidget, turnstileEnabled } from "@/components/turnstile-widget";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ export function LoginPage() {
     nextPath === "/" ? "/register" : `/register?next=${encodeURIComponent(nextPath)}`;
   const [email, setEmail] = useState(() => (inviteToken ? "" : (getRememberedUser()?.email ?? "")));
   const [password, setPassword] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -45,10 +47,18 @@ export function LoginPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (invitePending) return;
+    if (turnstileEnabled() && !turnstileToken) {
+      setError(t("errors.turnstileRequired"));
+      return;
+    }
     setError("");
     setSubmitting(true);
     try {
-      await login(emailLocked && preview ? preview.email : email, password);
+      await login(
+        emailLocked && preview ? preview.email : email,
+        password,
+        turnstileToken ?? undefined,
+      );
       navigate(nextPath, { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : t("errors.loginFailed");
@@ -105,6 +115,7 @@ export function LoginPage() {
           autoComplete="current-password"
           required
         />
+        <TurnstileWidget onToken={setTurnstileToken} />
         <Button type="submit" disabled={submitting || invitePending} className="w-full">
           {submitting ? t("auth.login.submitting") : t("auth.login.submit")}
         </Button>

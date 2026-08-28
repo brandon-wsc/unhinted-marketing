@@ -585,6 +585,7 @@
     "invalidCredentials": "Incorrect email or password",
     "accountDisabled": "This account has been disabled",
     "invalidRefreshToken": "Session expired. Please sign in again",
+    "turnstileRequired": "Complete the security check before continuing",
     "requestFailed": "Request failed ({{status}})"
   }
 }

@@ -1,0 +1,18 @@
+/**
+ * Wrangler config for r2-signed-urls Worker — copy and edit zone_name / routes.
+ *
+ *   wrangler secret put MEDIA_SIGNING_SECRET
+ *   wrangler deploy
+ */
+export default {
+  name: "unhinted-r2-signed-urls",
+  main: "r2-signed-urls.js",
+  compatibility_date: "2024-01-01",
+  r2_buckets: [
+    {
+      binding: "MEDIA_BUCKET",
+      bucket_name: "unhinted-media",
+    },
+  ],
+  // routes: [{ pattern: "media.example.com/*", zone_name: "example.com" }],
+};

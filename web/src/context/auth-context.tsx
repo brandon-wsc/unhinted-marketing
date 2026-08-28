@@ -21,12 +21,13 @@ type AuthContextValue = {
   user: User | null;
   accessToken: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, turnstileToken?: string) => Promise<void>;
   register: (input: {
     email: string;
     password: string;
     display_name: string;
     organization_name?: string;
+    turnstile_token?: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
   refreshAccessToken: () => Promise<string | null>;
@@ -69,8 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const data = await apiLogin({ email, password });
+  const login = useCallback(async (email: string, password: string, turnstileToken?: string) => {
+    const data = await apiLogin({ email, password, turnstile_token: turnstileToken });
     applySession(setAccessToken, setUser, data);
   }, []);
 
@@ -80,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string;
       display_name: string;
       organization_name?: string;
+      turnstile_token?: string;
     }) => {
       const data = await apiRegister(input);
       applySession(setAccessToken, setUser, data);

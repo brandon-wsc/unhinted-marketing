@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
 from internal.auth.rate_limit import enforce_auth_rate_limit
+from internal.auth.turnstile import enforce_turnstile
 from internal.auth.service import (
     AuthError,
     get_user_with_memberships,
@@ -88,6 +89,7 @@ async def register(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     enforce_auth_rate_limit(request, bucket="register")
+    await enforce_turnstile(request, body.turnstile_token)
     try:
         user, access, refresh = await register_user(
             db,
@@ -111,6 +113,7 @@ async def login(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     enforce_auth_rate_limit(request, bucket="login")
+    await enforce_turnstile(request, body.turnstile_token)
     try:
         user, access, refresh = await login_user(db, email=body.email, password=body.password)
     except AuthError as exc:

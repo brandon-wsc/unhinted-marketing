@@ -438,8 +438,9 @@ unhinted-marketing/
 | `ANTHROPIC_API_KEY` | Optional alternate provider |
 | `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `gpt-4o-mini`, `deepseek-chat`) |
 | `LLM_IMAGE_MODEL` | Image-capable id (e.g. `dall-e-3` / OpenRouter image model). Unset with credentials → error on gen; `placeholder` = mock URL |
-| `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |
+| `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO local; Cloudflare R2 production — [infra/cloudflare.md](./infra/cloudflare.md)). Empty endpoint → skip upload |
 | `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`) |
+| `TURNSTILE_ENABLED` / `TURNSTILE_SECRET_KEY` | Optional Cloudflare Turnstile on register/login (default off). Frontend: `VITE_TURNSTILE_SITE_KEY` |
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |
 | `LLM_RECORD_ENABLED` | Persist every LLM call to `llm_call_records` (default true; [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | `QUESTION_CACHE_TTL_HOURS` | Recommended questions cache (default 12) |

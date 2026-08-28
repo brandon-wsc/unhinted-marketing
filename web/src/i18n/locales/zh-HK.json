@@ -585,6 +585,7 @@
     "invalidCredentials": "電郵或密碼不正確",
     "accountDisabled": "呢個帳戶已被停用",
     "invalidRefreshToken": "登入已過期，請重新登入",
+    "turnstileRequired": "請先完成安全驗證",
     "requestFailed": "請求失敗（{{status}}）"
   }
 }

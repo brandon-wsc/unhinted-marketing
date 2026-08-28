@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     refresh_cookie_secure: bool = False
     refresh_cookie_samesite: str = "lax"
 
+    # Cloudflare Turnstile (optional bot protection on register/login)
+    turnstile_enabled: bool = False
+    turnstile_secret_key: str | None = None
+
     # Auth rate limit (in-memory sliding window per client IP; Redis later)
     auth_rate_limit_enabled: bool = True
     auth_rate_limit_max: int = 30
