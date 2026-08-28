@@ -21,6 +21,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0016](./0016-queue-send-while-turn-in-flight.md) | Queue send while a turn is in flight | Accepted |
 | [0017](./0017-session-fork.md) | Session fork (branch a chat at an assistant message) | Accepted |
 | [0018](./0018-recommended-questions-worker-graph.md) | Recommended questions worker graph + fill contract | Accepted |
+| [0019](./0019-pydantic-ai-inner-harness.md) | Pydantic AI inner harness; session graph narrows to mode/lifecycle | Accepted |
 
 ## Format
 
