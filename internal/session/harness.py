@@ -1,0 +1,210 @@
+"""Pydantic AI inner loop for session nodes (ADR 0019).
+
+Agents are built per call and discarded — never stored on graph state or FastAPI.
+Chat tools are read-only; publish-class names are never registered.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
+
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, RunCancelled
+from pydantic_ai.models import Model
+
+from internal.config import settings
+from internal.llm.router import LlmProviderError, ModelTier, resolve_model
+from internal.memory.repos import list_top_signals
+from internal.session import prompts
+from internal.session.context import get_db
+from internal.session.events import session_event_bus
+from internal.session.tiers import NODE_MODEL_TIERS
+from schemas.tools import QueryMarketTrendsResponse, QueryMarketTrendsSignal
+
+logger = logging.getLogger(__name__)
+
+PUBLISH_TOOL_NAMES = frozenset({"publish_social_post"})
+CHAT_TOOL_NAMES = frozenset({"query_market_trends"})
+
+# Match nodes._DELTA_FLUSH_CHARS — long replies must not overflow SSE queues.
+_DELTA_FLUSH_CHARS = 24
+
+_model_override: Model | None = None
+
+
+@dataclass
+class ChatDeps:
+    company_id: uuid.UUID | None = None
+
+
+def set_chat_model_override(model: Model | None) -> None:
+    """Test hook: inject TestModel / FunctionModel. Pass None to restore live."""
+    global _model_override
+    _model_override = model
+
+
+def live_chat_model() -> Model:
+    """OpenAI-compatible BYOK model (LLM_API_BASE or OpenAI key)."""
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    raw = resolve_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
+    model_id = raw.split("/")[-1]
+    lowered = raw.lower()
+    if settings.llm_api_base:
+        return OpenAIChatModel(
+            model_id,
+            provider=OpenAIProvider(
+                base_url=settings.llm_api_base,
+                api_key=settings.openai_api_key or "not-set",
+            ),
+        )
+    if "claude" in lowered or lowered.startswith("anthropic"):
+        try:
+            from pydantic_ai.models.anthropic import AnthropicModel
+        except ImportError as exc:
+            raise LlmProviderError(
+                "Anthropic chat harness needs the anthropic extra "
+                '(pip install "pydantic-ai-slim[anthropic]").',
+                model=raw,
+                kind="unsupported",
+            ) from exc
+        return AnthropicModel(model_id)
+    if not settings.openai_api_key:
+        raise LlmProviderError(
+            "No OpenAI-compatible key for the chat harness.",
+            model=raw,
+            kind="auth",
+        )
+    return OpenAIChatModel(
+        model_id,
+        provider=OpenAIProvider(api_key=settings.openai_api_key),
+    )
+
+
+async def query_market_trends(
+    ctx: RunContext[ChatDeps],
+    region: str = "HK",
+    limit: int = 20,
+) -> QueryMarketTrendsResponse:
+    """Read-only lookup of recent Hong Kong market signals from PostgreSQL."""
+    del ctx  # company_id reserved; corpus is still HK-wide (same as trend_searcher)
+    try:
+        db = get_db()
+    except RuntimeError:
+        return QueryMarketTrendsResponse(region=region, notes="no session db")
+    capped = max(1, min(int(limit), 50))
+    rows = await list_top_signals(db, limit=capped, region=region)
+    signals = [
+        QueryMarketTrendsSignal(
+            signal_id=row.signal_id,
+            source=row.source,
+            title=row.title,
+            url=row.url,
+            excerpt=row.excerpt,
+            region=row.region,
+            metrics=row.metrics or {},
+        )
+        for row in rows
+    ]
+    return QueryMarketTrendsResponse(
+        region=region,
+        signals=signals,
+        ranked_signal_ids=[s.signal_id for s in signals],
+    )
+
+
+async def slow_probe(ctx: RunContext[ChatDeps]) -> str:
+    """Test-only: sleep so Stop/cancel can be observed mid-tool. Never register in prod."""
+    del ctx
+    await asyncio.sleep(10)
+    return "slept"
+
+
+def build_chat_agent(
+    *,
+    model: Model,
+    extra_tools: Sequence[Any] = (),
+) -> Agent[ChatDeps, str]:
+    tools: list[Any] = [query_market_trends, *extra_tools]
+    return Agent(
+        model,
+        deps_type=ChatDeps,
+        output_type=str,
+        system_prompt=prompts.CHAT,
+        tools=tools,
+        name="session_chat",
+        end_strategy="exhaustive",
+    )
+
+
+def registered_function_tool_names(agent: Agent[Any, Any]) -> set[str]:
+    names: set[str] = set()
+    for toolset in agent.toolsets or []:
+        tools = getattr(toolset, "tools", None)
+        if isinstance(tools, dict):
+            names.update(str(name) for name in tools)
+    return names
+
+
+async def _publish_deltas(
+    session_id: uuid.UUID, pending: list[str], *, force: bool = False
+) -> None:
+    text = "".join(pending)
+    if not text or (not force and len(text) < _DELTA_FLUSH_CHARS):
+        return
+    pending.clear()
+    try:
+        await session_event_bus.publish(session_id, "message.delta", {"content": text})
+    except Exception:
+        logger.exception("failed to publish message.delta")
+
+
+def _wrap_provider_error(exc: BaseException) -> LlmProviderError:
+    if isinstance(exc, LlmProviderError):
+        return exc
+    kind = "provider"
+    if isinstance(exc, ModelHTTPError):
+        kind = "provider"
+    return LlmProviderError(str(exc) or exc.__class__.__name__, kind=kind)
+
+
+async def stream_chat_reply(
+    *,
+    user_prompt: str,
+    session_id: uuid.UUID | None,
+    deps: ChatDeps,
+    extra_tools: Sequence[Any] = (),
+) -> str | None:
+    """Run the chat agent, fan out message.delta, return the final text."""
+    model = _model_override or live_chat_model()
+    agent = build_chat_agent(model=model, extra_tools=extra_tools)
+    parts: list[str] = []
+    pending: list[str] = []
+    try:
+        async with agent.run_stream(user_prompt, deps=deps) as result:
+            async for chunk in result.stream_text(delta=True):
+                parts.append(chunk)
+                pending.append(chunk)
+                if session_id:
+                    await _publish_deltas(session_id, pending)
+            if session_id:
+                await _publish_deltas(session_id, pending, force=True)
+            output = await result.get_output()
+    except asyncio.CancelledError:
+        raise
+    except RunCancelled:
+        raise
+    except (ModelHTTPError, ModelAPIError) as exc:
+        raise _wrap_provider_error(exc) from exc
+    except LlmProviderError:
+        raise
+    except Exception as exc:
+        raise _wrap_provider_error(exc) from exc
+    text = (output if isinstance(output, str) else "".join(parts)).strip()
+    return text or None

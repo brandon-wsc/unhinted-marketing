@@ -18,7 +18,6 @@ from internal.llm.recorder import mark_last_call
 from internal.llm.router import (
     LlmProviderError,
     ModelTier,
-    astream_text,
     complete_json,
     complete_text,
     generate_image,
@@ -50,6 +49,7 @@ from internal.session.fast_rules import (
     polish_search_queries,
     research_rule_pass,
 )
+from internal.session.harness import ChatDeps, stream_chat_reply
 from internal.session.image_format import (
     compose_generation_prompt,
     image_format_from_text,
@@ -634,26 +634,8 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
     return out
 
 
-# Batch streamed pieces so a long reply cannot overflow the per-subscriber
-# SSE queue (events are put_nowait; full queues drop events).
-_DELTA_FLUSH_CHARS = 24
-
-
-async def _publish_deltas(
-    session_id: uuid.UUID, pending: list[str], *, force: bool = False
-) -> None:
-    text = "".join(pending)
-    if not text or (not force and len(text) < _DELTA_FLUSH_CHARS):
-        return
-    pending.clear()
-    try:
-        await session_event_bus.publish(session_id, "message.delta", {"content": text})
-    except Exception:
-        logger.exception("failed to publish message.delta")
-
-
 async def _chat_stream(state: SessionState, user: str) -> str | None:
-    """Stream the chat reply, publishing message.delta events live per turn."""
+    """Stream the chat reply via the Pydantic AI harness (ADR 0019)."""
     history = (state.get("messages") or [])[-8:]
     research = state.get("research") or {}
     pack = _voice_pack(state)
@@ -675,19 +657,18 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
         },
         ensure_ascii=False,
     )
-    tier = NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP
-    session_id = _thread_uuid(state)
-
-    parts: list[str] = []
-    pending: list[str] = []
-    async for piece in astream_text(tier=tier, system=prompts.CHAT, user=payload):
-        parts.append(piece)
-        pending.append(piece)
-        if session_id:
-            await _publish_deltas(session_id, pending)
-    if session_id:
-        await _publish_deltas(session_id, pending, force=True)
-    return "".join(parts).strip() or None
+    company_id: uuid.UUID | None = None
+    raw_company = state.get("company_id")
+    if raw_company:
+        try:
+            company_id = uuid.UUID(str(raw_company))
+        except ValueError:
+            company_id = None
+    return await stream_chat_reply(
+        user_prompt=payload,
+        session_id=_thread_uuid(state),
+        deps=ChatDeps(company_id=company_id),
+    )
 
 
 async def chat(state: SessionState) -> dict[str, Any]:

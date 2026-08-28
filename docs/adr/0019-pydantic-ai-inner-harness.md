@@ -75,16 +75,18 @@ Rejected: LangChain `create_agent` (a second, nested graph semantics inside our 
 
 ### 5. Migration is incremental, spike first
 
-Per-node adoption, starting with a spike before any broader rollout:
+Per-node adoption, starting with the `chat` node on the same change set as this ADR:
 
-- **Scope:** the `chat` node only — one narrow agent with `query_market_trends` plus a mock slow tool (`asyncio.sleep`).
+- **Scope:** the `chat` node only — one narrow agent with `query_market_trends` plus a test-only mock slow tool (`asyncio.sleep`).
 - **Four seams to validate:** (a) harness event stream → existing SSE delta contract with dedupe behaviour unchanged ([ADR 0002](./0002-rest-source-of-truth-sse-enhancement.md)); (b) Stop → `aclose()` → LiteLLM connection teardown, no half-written session state when cancelled mid-tool (same best-effort abort semantics as [ADR 0004](./0004-stop-discard-and-image-resume.md)); (c) CI runs with `TestModel`, no live key, coverage gates in [docs/TESTING.md](../TESTING.md) do not drop; (d) allowlist isolation — the chat agent cannot see publish-class tools because they are never registered.
 - **Convergence bar:** if the SSE adapter cannot converge within roughly 200 lines, fall back to the reduced variant (harness on research only; chat stays single-shot) and record the outcome in a follow-up ADR.
 
 ## Consequences
 
 - Agent objects are constructed and disposed **inside node functions only**; they must not leak into FastAPI handlers or graph state (keeps the lock-in surface at the tool-signature + `output_type` pattern shared by all Python harnesses).
+- Chat LLM calls go through Pydantic AI, not `internal.llm.router.track`. Wiring usage into `llm_call_records` ([ADR 0005](./0005-platform-levels-and-llm-records.md)) is a follow-up; remaining `complete_json` / `complete_text` / `astream_text` nodes stay recorded.
 - New API/SSE fields introduced by the event-stream adapter extend [`schemas/`](../../schemas/) per convention; no ad-hoc dict payloads.
 - Explicitly out of scope: removing or replacing the checkpointer; introducing an MCP-server control plane; any publish-class tool; a document RAG store; harness tool-approval in v1 (future need → park → HTTP → resume per §3).
 - `ROADMAP` and per-node prompt internals may tune without a superseding ADR; changing the layer boundaries, the no-publish-tool rule, or the approval shape requires one.
-- The spike is a separate PR (including the `pydantic-ai` dependency); this ADR locks direction and boundaries, not schedule.
+- This ADR locks direction and boundaries, not a two-PR split: the `chat` spike (including the `pydantic-ai` dependency) lands with the decision.
+- `pydantic-ai-slim` is installed **without** the `openai` extra: that extra wants `openai>=3`, which conflicts with LiteLLM's `openai<3`. Live chat uses `OpenAIChatModel` + `OpenAIProvider` on the openai 2.x client already pulled by LiteLLM.
