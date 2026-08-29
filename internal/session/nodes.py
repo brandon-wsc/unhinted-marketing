@@ -997,12 +997,12 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
         "signals": _ranked_signals(state)[:8],
         "allowed_signal_ids": signal_ids,
     }
-    parsed = await _parse_llm_json(
-        NODE_MODEL_TIERS["edit_copy"] or ModelTier.MEDIUM,
-        prompts.EDIT_COPY,
-        json.dumps(payload, ensure_ascii=False),
-        EditOut,
-    )
+    parsed: EditOut | None = None
+    if has_llm_credentials():
+        parsed = await EH.run_edit_copy_agent(
+            json.dumps(payload, ensure_ascii=False),
+            EH.ExecuteDeps(),
+        )
     allowed = set(signal_ids)
     if parsed:
         refs = [sid for sid in parsed.source_signal_ids if sid in allowed] or signal_ids

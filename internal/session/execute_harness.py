@@ -1,6 +1,6 @@
-"""Pydantic AI inner loop for executor_post (ADR 0019).
+"""Pydantic AI inner loop for executor_post and edit_copy (ADR 0019).
 
-Narrow agent: typed DraftOut. Publish-class tools are never registered.
+Narrow agents: typed DraftOut / EditOut. Publish-class tools are never registered.
 Graph vertices stay unchanged; Confirm remains HTTP.
 """
 
@@ -21,7 +21,7 @@ from internal.llm.recorder import mark_last_call, track
 from internal.llm.router import LlmProviderError, ModelTier
 from internal.session import harness as H
 from internal.session import prompts
-from internal.session.io import DraftOut, omit_nulls
+from internal.session.io import DraftOut, EditOut, omit_nulls
 from internal.session.tiers import NODE_MODEL_TIERS
 from schemas.tools import QueryMarketTrendsResponse
 
@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 EXECUTE_TOOL_NAMES = frozenset({"query_market_trends"})
 
 _model_override: Model | None = None
+_edit_model_override: Model | None = None
 
 
 @dataclass
@@ -41,6 +42,12 @@ def set_execute_model_override(model: Model | None) -> None:
     """Test hook: inject TestModel / FunctionModel. Pass None to restore live."""
     global _model_override
     _model_override = model
+
+
+def set_edit_model_override(model: Model | None) -> None:
+    """Test hook for edit_copy. Pass None to restore live."""
+    global _edit_model_override
+    _edit_model_override = model
 
 
 async def query_market_trends(
@@ -114,6 +121,70 @@ async def run_executor_post_agent(
         except Exception:
             mark_last_call(parse_ok=False, fallback_used=True)
             logger.exception("executor_post agent failed")
+            return None
+        if not (parsed.caption or "").strip():
+            mark_last_call(parse_ok=False, fallback_used=True)
+            return None
+        mark_last_call(parse_ok=True)
+        return parsed
+
+
+def build_edit_agent(
+    *,
+    model: Model,
+    extra_tools: Sequence[Any] = (),
+) -> Agent[ExecuteDeps, EditOut]:
+    tools: list[Any] = [query_market_trends, *extra_tools]
+    return Agent(
+        model,
+        deps_type=ExecuteDeps,
+        output_type=EditOut,
+        system_prompt=prompts.EDIT_COPY,
+        tools=tools,
+        name="session_edit",
+        end_strategy="exhaustive",
+    )
+
+
+async def run_edit_copy_agent(
+    user_prompt: str,
+    deps: ExecuteDeps,
+) -> EditOut | None:
+    """Run the edit agent; return EditOut or None on parse miss."""
+    model = _edit_model_override or H.live_harness_model(
+        NODE_MODEL_TIERS["edit_copy"] or ModelTier.MEDIUM
+    )
+    agent = build_edit_agent(model=model)
+    parsed: EditOut | None = None
+    with track(
+        kind="chat_json",
+        tier=NODE_MODEL_TIERS["edit_copy"],
+        model=H._model_label(model),
+        system=prompts.EDIT_COPY,
+        user=user_prompt,
+    ) as rec:
+        try:
+            result = await agent.run(user_prompt, deps=deps)
+            rec.set_usage(_usage_of(result))
+            output = result.output
+            if isinstance(output, EditOut):
+                parsed = EditOut.model_validate(omit_nulls(output.model_dump()))
+            elif isinstance(output, dict):
+                parsed = EditOut.model_validate(omit_nulls(output))
+            else:
+                parsed = EditOut.model_validate(omit_nulls({"caption": str(output)}))
+            rec.response_text = parsed.model_dump_json()
+        except asyncio.CancelledError:
+            raise
+        except RunCancelled as exc:
+            raise asyncio.CancelledError from exc
+        except (ModelHTTPError, ModelAPIError) as exc:
+            raise H._wrap_provider_error(exc) from exc
+        except LlmProviderError:
+            raise
+        except Exception:
+            mark_last_call(parse_ok=False, fallback_used=True)
+            logger.exception("edit_copy agent failed")
             return None
         if not (parsed.caption or "").strip():
             mark_last_call(parse_ok=False, fallback_used=True)

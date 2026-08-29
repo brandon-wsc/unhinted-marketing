@@ -59,6 +59,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Chat `llm_call_records`** — harness wraps `recorder.track` (`kind=chat_text`); one row per chat turn (tool-loop usage aggregated). Correlation still `call_context(node:chat)`
 - **Research `query_generator` inner harness** — Pydantic AI agent (`output_type=QueryGenOut`, tools `ingest_web_search` / `query_market_trends`); `research_ingest` still PG persist (agent only calls the existing Tavily∪PG adapter) and skips Tavily when the agent already ingested. Recorder `kind=chat_json`, caller still `node:query_generator`. Graph vertices unchanged.
 - **Execute `executor_post` inner harness** — Pydantic AI agent (`output_type=DraftOut`, tool `query_market_trends` only); typed draft only — publish / Confirm stay HTTP. Recorder `kind=chat_json`, caller still `node:executor_post`. Graph vertices unchanged.
+- **Revise `edit_copy` inner harness** — Pydantic AI agent (`output_type=EditOut`, tool `query_market_trends` only); typed draft only — publish / Confirm stay HTTP. Recorder `kind=chat_json`, caller still `node:edit_copy`. Graph vertices unchanged.
 
 **Decision (2026-08-08) — Chat research gate + Tavily∪PG:** → [ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)
 
