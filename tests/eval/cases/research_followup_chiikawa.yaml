@@ -1,0 +1,25 @@
+id: research_followup_chiikawa
+suites: [smoke, research]
+node: query_generator
+state:
+  mode: CHAT
+  research_rule_pass: true
+  research:
+    need_facts: true
+    entity_surface: Chiikawa Usagi
+  messages:
+    - role: user
+      content: usagi想食嘅兔糧
+    - role: assistant
+      content: 你想睇 Chiikawa 嘅 Usagi，定係真兔？
+    - role: user
+      content: Chiikawa
+expect:
+  query_source: llm
+  min_queries: 1
+  max_queries: 3
+  queries_forbid_cjk: true
+  queries_forbid_mixed_script: true
+  queries_forbid_substrings:
+    - Chiikawa Hong Kong
+    - "usagi 兔糧"

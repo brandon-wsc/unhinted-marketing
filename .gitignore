@@ -46,6 +46,9 @@ designs/
 .cache/
 uploads/
 
+# Live eval reports (may contain prompts / model output)
+reports/eval/
+
 # Logs
 *.log
 logs/

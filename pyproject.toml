@@ -36,6 +36,7 @@ dev = [
     "httpx>=0.28.0",
     "ruff>=0.8.0",
     "greenlet>=3.0.0",
+    "pyyaml>=6.0.0",
 ]
 
 [build-system]
@@ -80,7 +81,7 @@ ignore = [
 "cmd/api/routes/sessions.py" = ["BLE001"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["cmd", "internal", "schemas"]
+known-first-party = ["cmd", "internal", "schemas", "tests"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1,0 +1,22 @@
+{
+  "signals": [
+    {
+      "signal_id": "cassette:ot",
+      "source": "tavily",
+      "title": "Hong Kong overtime culture",
+      "url": "https://example.com/ot",
+      "excerpt": "Office workers talk about weekday OT and late MTR rides home.",
+      "region": "HK",
+      "metrics": {}
+    },
+    {
+      "signal_id": "cassette:usagi",
+      "source": "tavily",
+      "title": "Chiikawa Usagi merch and snacks",
+      "url": "https://example.com/usagi",
+      "excerpt": "Usagi character snacks and rabbit-themed treats trending in HK shops.",
+      "region": "HK",
+      "metrics": {}
+    }
+  ]
+}

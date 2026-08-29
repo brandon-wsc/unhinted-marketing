@@ -1,0 +1,14 @@
+id: confirm_intent_preview
+suites: [smoke]
+node: route_intent
+state:
+  mode: PREVIEW
+  research_rule_pass: false
+  draft:
+    caption: 星期五 OT 完飲罐嘢先走。
+  messages:
+    - role: user
+      content: 可以出
+expect:
+  parse_ok: true
+  intent: confirm_intent

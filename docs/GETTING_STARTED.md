@@ -160,6 +160,13 @@ pnpm run test:coverage
 pnpm run build
 ```
 
+On-demand live agent eval (same `OPENAI_API_KEY` as session nodes; not CI):
+
+```bash
+python -m scripts.eval_agent
+# report: reports/eval/latest.md
+```
+
 API fixtures run `alembic upgrade head` against `TEST_DATABASE_URL` and truncate tables between tests. Do **not** point `TEST_DATABASE_URL` at your main `unhinted` dev database if you care about its data.
 
 Frontend component tests mock i18n / auth / theme; see [TESTING.md](./TESTING.md).

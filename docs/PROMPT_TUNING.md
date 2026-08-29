@@ -73,11 +73,18 @@ Success criteria after a prompt change: fewer parse/fallback flags, stabler turn
 1. Collect **5–10 bad cases** for the *same* node (don’t tune from a single fluke).
 2. **Cluster** failures: JSON/schema, language (spoken Cantonese vs written Chinese), weak grounding, verbosity, wrong `route_intent`.
 3. Edit **only that node’s** prompt (or its JSON schema instructions) — not the whole graph.
-4. Re-run similar sessions; compare in admin:
+4. Freeze a representative case as YAML under [`tests/eval/cases/`](../tests/eval/cases/) (`id`, `suites`, `node`, `state`, `expect`) and re-run:
+
+   ```bash
+   python -m scripts.eval_agent --suite research   # or smoke / all
+   ```
+
+   Compare `reports/eval/latest.md` (gitignored). Admin Trace still helps on live sessions; the CLI is the repeatable pack.
+5. Re-run similar sessions; compare in admin:
    - `parse_ok` / `fallback_used` rate
    - turn path length / flapping
    - draft revision quality in Session Trace
-5. Only then move to the next node.
+6. Only then move to the next node.
 
 ### Signals worth watching
 
@@ -121,6 +128,7 @@ A retention policy would typically decide:
 ## Related
 
 - [VOICE.md](./VOICE.md) — default HK editor-voice craft + `roast_level` (tune `EXECUTOR_POST` / `BRAINSTORM` / `REVIEWER` against this)
+- Live eval pack: `python -m scripts.eval_agent` · cases in [`tests/eval/cases/`](../tests/eval/cases/) · report `reports/eval/latest.md`
 - [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — platform levels + LLM call records  
 - [ADR 0007](./adr/0007-admin-trace-viewer.md) — node steps + Session Trace  
 - Bootstrap admin: `python -m cmd.worker set-platform-role --email … --level superadmin`  

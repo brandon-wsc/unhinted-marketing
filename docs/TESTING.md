@@ -31,7 +31,7 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 | **2 — API** | `cmd/api/routes/**` | **70–80%** | **Fail** — happy path per public endpoint + 401/403 + confirm invalid token / idempotency |
 | **3 — Domain** | `internal/auth/service.py` · `deps.py` · `org.py` · non-LLM parts of `internal/session/service.py` | **60–75%** | Soft / follow API tests |
 | **4 — Memory glue** | `internal/memory/repos.py` | Covered via API integration | Soft |
-| **5 — Omit / smoke** | `internal/session/graph.py` · `prompts.py` · `internal/llm/**` (except focused router unit tests) · `internal/perception/**` · `cmd/worker/**` · `cmd/scheduler/**` · `migrations/**` · `internal/config.py` | **Not in gate** | Live LLM eval = manual / nightly only; `tests/unit/test_llm_router.py` covers provider wrap + stream `aclose` / streamed `complete_json` (no live network) |
+| **5 — Omit / smoke** | `internal/session/graph.py` · `prompts.py` · `internal/llm/**` (except focused router unit tests) · `internal/perception/**` · `cmd/worker/**` · `cmd/scheduler/**` · `migrations/**` · `internal/config.py` | **Not in gate** | Live LLM eval = on-demand CLI (`python -m scripts.eval_agent`); never a PR required check. `tests/unit/test_llm_router.py` covers provider wrap + stream `aclose` / streamed `complete_json` (no live network). Graders: `tests/unit/test_eval_graders.py` |
 
 **API test priorities (behavior, not %)**:
 
@@ -127,6 +127,14 @@ pnpm run test:coverage # vitest run --coverage (path-tiered thresholds)
 pnpm run build
 ```
 
+On-demand live LLM eval (not CI). Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Writes `reports/eval/latest.md` + `latest.json` (gitignored):
+
+```bash
+python -m scripts.eval_agent              # suite=smoke
+python -m scripts.eval_agent --suite research
+python -m scripts.eval_agent --suite all
+```
+
 If `TEST_DATABASE_URL` is unset, `tests/api` is **skipped**; `tests/unit` still runs.
 
 Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.toml`.
@@ -141,7 +149,7 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
 3. ~~**Frontend Vitest**~~ — Tier 1 `web/src/lib/**` + Tier 2 PasswordBox / UserMenuDropdown
 4. ~~**CI/CD**~~ — `.github/workflows/ci.yml` (ruff + pytest unit/API + Biome + Vitest + build)
-5. Hold: SSE E2E, Playwright chat→preview→confirm; live LLM eval = manual/nightly only (`@pytest.mark.live_llm` — not yet wired). **Branch rules:** configured on GitHub but **Not enforced** (account-plan limit) — CI still runs on PRs; merge is not blocked by required checks until enforcement is available.
+5. Hold: SSE E2E, Playwright chat→preview→confirm. **Live LLM eval CLI landed** — `python -m scripts.eval_agent` (on-demand; not a PR job). `@pytest.mark.live_llm` remains unused. **Branch rules:** configured on GitHub but **Not enforced** (account-plan limit) — CI still runs on PRs; merge is not blocked by required checks until enforcement is available.
 6. ~~**Contracts SSOT**~~ — `AGENTS.md`, ADRs, `schemas/contracts.py` / `tools.py`, `docs/contracts/` + OpenAPI export
 7. ~~**Graph mock-LLM node tests + CI**~~ — `tests/unit/test_session_nodes.py` + routing; opt-in `node_trace_recording()`; CI Tier 1b ≥70%
 
