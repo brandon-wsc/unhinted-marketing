@@ -40,7 +40,9 @@ from internal.memory.repos import (
     upsert_signal,
 )
 from internal.perception.tavily import search_tavily
+from internal.session import ingest as ingest_mod
 from internal.session import prompts
+from internal.session import research_harness as RH
 from internal.session.context import get_db
 from internal.session.events import session_event_bus
 from internal.session.fast_rules import (
@@ -392,15 +394,21 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
         "entity_surface": entity,
         "company": _slim_company(state).get("name"),
     }
-    parsed = await _parse_llm_json(
-        NODE_MODEL_TIERS["query_generator"] or ModelTier.CHEAP,
-        prompts.QUERY_GENERATOR,
-        json.dumps(payload, ensure_ascii=False),
-        QueryGenOut,
-    )
+    parsed: QueryGenOut | None = None
+    deps = RH.ResearchDeps()
+    if has_llm_credentials():
+        parsed = await RH.run_query_generator_agent(
+            json.dumps(payload, ensure_ascii=False),
+            deps,
+        )
     if parsed:
         queries = polish_search_queries(parsed.atomic_queries())
         if queries:
+            via_agent = bool(deps.queries_run)
+            extra: dict[str, Any] = {}
+            if via_agent:
+                extra["ingest_via_agent"] = True
+                extra["tavily_items"] = list(deps.ingested)
             return {
                 "search_query": queries[0],
                 "research": {
@@ -409,6 +417,7 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
                     "tavily_topic": parsed.topic,
                     "tavily_time_range": parsed.time_range,
                     "query_source": QUERY_SOURCE_LLM,
+                    **extra,
                 },
             }
     # Fallback: gloss entity/user — never paste mixed-script entity_surface
@@ -440,88 +449,41 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
     primary = (state.get("search_query") or "").strip()
     if primary and primary not in queries:
         queries.insert(0, primary)
-    queries = queries[:3]
+    queries = queries[: ingest_mod.MAX_QUERIES]
 
-    topic = str(research.get("tavily_topic") or "news")
-    time_range = research.get("tavily_time_range") or "week"
-    if time_range not in ("day", "week", "month", "year"):
-        time_range = "week"
-    topic_s = topic if topic in ("general", "news", "finance") else "news"
+    topic_s = ingest_mod.normalize_tavily_topic(str(research.get("tavily_topic") or "news"))
+    time_range = ingest_mod.normalize_tavily_time_range(research.get("tavily_time_range"))
 
-    tavily_items: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
-    for query in queries:
-        batch = await search_tavily(
-            query,
-            max_results=5,
+    if research.get("ingest_via_agent"):
+        tavily_items = [
+            item
+            for item in (research.get("tavily_items") or [])
+            if isinstance(item, dict) and item.get("signal_id")
+        ]
+    else:
+        tavily_items = await ingest_mod.fetch_and_upsert_tavily(
+            db,
+            queries,
             topic=topic_s,
             time_range=time_range,
+            max_results=ingest_mod.MAX_HITS_PER_QUERY,
+            search=search_tavily,
+            upsert=upsert_signal,
         )
-        for item in batch:
-            sid = item.get("signal_id")
-            if not sid or sid in seen_ids:
-                continue
-            seen_ids.add(sid)
-            # Annotate which atomic query produced the hit
-            metrics = dict(item.get("metrics") or {})
-            metrics["query"] = query[:200]
-            item = {**item, "metrics": metrics}
-            tavily_items.append(item)
-
-    for item in tavily_items:
-        try:
-            await upsert_signal(
-                db,
-                signal_id=item["signal_id"],
-                source=item["source"],
-                title=item["title"],
-                url=item.get("url"),
-                excerpt=item.get("excerpt"),
-                metrics=item.get("metrics") or {},
-            )
-        except Exception:
-            logger.exception("failed to upsert Tavily signal %s", item.get("signal_id"))
-    if tavily_items:
-        try:
-            await db.commit()
-        except Exception:
-            logger.exception("commit after Tavily upsert failed")
-            await db.rollback()
 
     pg_signals = await list_top_signals(db, limit=20, region="HK")
     pg_rows = _signals_payload(pg_signals)
-    by_id = {row["signal_id"]: row for row in pg_rows}
-    # Prefer freshly ingested Tavily rows at the front.
-    merged: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for item in tavily_items:
-        sid = item["signal_id"]
-        if sid in seen:
-            continue
-        seen.add(sid)
-        merged.append(
-            {
-                "signal_id": sid,
-                "source": item["source"],
-                "title": item["title"],
-                "excerpt": item.get("excerpt"),
-                "metrics": item.get("metrics") or {},
-            }
-        )
-    for sid, row in by_id.items():
-        if sid in seen:
-            continue
-        seen.add(sid)
-        merged.append(row)
+    merged = ingest_mod.merge_pg_and_tavily(tavily_items, pg_rows)
 
     query_source = str(research.get("query_source") or "")
     signals_trusted = query_source != QUERY_SOURCE_FALLBACK and bool(tavily_items)
+    research_out = {k: v for k, v in research.items() if k != "tavily_items"}
     return {
         "research_signals": merged[:20],
         "search_query": queries[0] if queries else primary,
         "source_signal_ids": [r["signal_id"] for r in merged[:8]],
         "research": {
-            **research,
+            **research_out,
             "search_queries": queries,
             "signals_trusted": signals_trusted,
         },

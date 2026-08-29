@@ -85,6 +85,7 @@ Per-node adoption, starting with the `chat` node on the same change set as this 
 
 - Agent objects are constructed and disposed **inside node functions only**; they must not leak into FastAPI handlers or graph state (keeps the lock-in surface at the tool-signature + `output_type` pattern shared by all Python harnesses).
 - Chat harness turns are recorded with `recorder.track` around the agent run ([ADR 0005](./0005-platform-levels-and-llm-records.md)): one `chat_text` row per turn covering the whole tool loop (inner completions are not separate rows). Correlation still comes from `graph.py` `call_context(caller=node:chat)`. Remaining `complete_json` / `complete_text` / `astream_text` nodes stay on the router choke point.
+- Research ingest remains PostgreSQL persist; the `query_generator` agent only calls the existing Tavily∪PG adapter (`ingest_web_search`). `research_ingest` still merges PG and sets `signals_trusted`; it skips a second Tavily fetch when the agent already ingested this turn.
 - New API/SSE fields introduced by the event-stream adapter extend [`schemas/`](../../schemas/) per convention; no ad-hoc dict payloads.
 - Explicitly out of scope: removing or replacing the checkpointer; introducing an MCP-server control plane; any publish-class tool; a document RAG store; harness tool-approval in v1 (future need → park → HTTP → resume per §3).
 - `ROADMAP` and per-node prompt internals may tune without a superseding ADR; changing the layer boundaries, the no-publish-tool rule, or the approval shape requires one.

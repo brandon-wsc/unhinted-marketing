@@ -42,9 +42,12 @@ jobs:
         run: >
           pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py
           tests/unit/test_session_trace.py tests/unit/test_session_harness.py
+          tests/unit/test_session_research_harness.py
           --cov=internal.session.nodes
           --cov=internal.session.trace
           --cov=internal.session.harness
+          --cov=internal.session.research_harness
+          --cov=internal.session.ingest
           --cov-report=term-missing
           --cov-fail-under=70
 

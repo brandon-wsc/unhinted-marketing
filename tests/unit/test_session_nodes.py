@@ -6,8 +6,10 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic_ai.models.test import TestModel
 
 from internal.session import nodes as N
+from internal.session import research_harness as RH
 from internal.session.context import session_db
 from internal.session.io import (
     BriefOut,
@@ -22,6 +24,13 @@ from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW
 from internal.session.trace import get_node_trace, node_trace_recording
 from schemas.contracts import DraftCopy, SessionBriefData
 from tests.unit.session_fakes import fake_signal
+
+
+@pytest.fixture(autouse=True)
+def _clear_research_model_override() -> None:
+    RH.set_research_model_override(None)
+    yield
+    RH.set_research_model_override(None)
 
 
 @pytest.fixture
@@ -133,15 +142,16 @@ async def test_query_generator_colloquial_uses_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
-
-    async def fake_complete_json(**_kwargs):
-        return QueryGenOut(
-            search_queries=["usagi", "Usagi favorite food", "rabbit feed"],
-            topic="general",
-            time_range="month",
-        ).model_dump_json()
-
-    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    RH.set_research_model_override(
+        TestModel(
+            call_tools=[],
+            custom_output_args={
+                "search_queries": ["usagi", "Usagi favorite food", "rabbit feed"],
+                "topic": "general",
+                "time_range": "month",
+            },
+        )
+    )
     out = await N.query_generator(
         _base_state(
             messages=[{"role": "user", "content": "usagi想食嘅兔糧"}],
@@ -155,26 +165,24 @@ async def test_query_generator_colloquial_uses_llm(
         "Usagi favorite food",
         "rabbit feed",
     ]
+    assert out["research"].get("ingest_via_agent") is not True
 
 
 @pytest.mark.asyncio
 async def test_query_generator_accepts_null_optional_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """search_query/time_range null must keep LLM search_queries, not gloss fallback."""
+    """Optional fields omitted must keep LLM search_queries, not gloss fallback."""
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
-
-    async def fake_complete_json(**_kwargs):
-        return """
-        {
-          "search_queries": ["Usagi food preferences", "Usagi rabbit diet"],
-          "search_query": null,
-          "topic": "general",
-          "time_range": null
-        }
-        """
-
-    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    RH.set_research_model_override(
+        TestModel(
+            call_tools=[],
+            custom_output_args={
+                "search_queries": ["Usagi food preferences", "Usagi rabbit diet"],
+                "topic": "general",
+            },
+        )
+    )
     out = await N.query_generator(
         _base_state(
             messages=[{"role": "user", "content": "Usagi鍾意食嘅"}],
@@ -196,15 +204,22 @@ async def test_query_generator_follow_up_skips_cheap_hk_path(
 ) -> None:
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     captured: dict[str, str] = {}
+    orig = RH.run_query_generator_agent
 
-    async def fake_complete_json(**kwargs):
-        captured["user"] = kwargs["user"]
-        return QueryGenOut(
-            search_queries=["Chiikawa Usagi", "Chiikawa Usagi favorite food"],
-            topic="general",
-        ).model_dump_json()
+    async def wrapped(user_prompt: str, deps: RH.ResearchDeps) -> QueryGenOut | None:
+        captured["user"] = user_prompt
+        return await orig(user_prompt, deps)
 
-    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    monkeypatch.setattr(RH, "run_query_generator_agent", wrapped)
+    RH.set_research_model_override(
+        TestModel(
+            call_tools=[],
+            custom_output_args={
+                "search_queries": ["Chiikawa Usagi", "Chiikawa Usagi favorite food"],
+                "topic": "general",
+            },
+        )
+    )
     out = await N.query_generator(
         _base_state(
             messages=[
@@ -389,6 +404,46 @@ async def test_research_ingest_untrusted_when_query_fallback(
         )
     assert out["research"]["signals_trusted"] is False
     assert out["research_signals"][0]["signal_id"] == "tavily:abc"
+
+
+@pytest.mark.asyncio
+async def test_research_ingest_skips_tavily_when_agent_ingested(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    tavily = AsyncMock()
+    monkeypatch.setattr(N, "search_tavily", tavily)
+    monkeypatch.setattr(N, "upsert_signal", AsyncMock())
+    monkeypatch.setattr(
+        N,
+        "list_top_signals",
+        AsyncMock(return_value=[fake_signal(signal_id="google_trends_hk:1", title="PG")]),
+    )
+    with session_db(mock_db):
+        out = await N.research_ingest(
+            _base_state(
+                search_query="Hong Kong overtime",
+                research={
+                    "search_queries": ["Hong Kong overtime"],
+                    "query_source": "llm",
+                    "ingest_via_agent": True,
+                    "tavily_items": [
+                        {
+                            "signal_id": "tavily:abc",
+                            "source": "tavily",
+                            "title": "HK trend",
+                            "excerpt": "hello",
+                            "metrics": {"query": "Hong Kong overtime"},
+                        }
+                    ],
+                },
+            )
+        )
+    tavily.assert_not_awaited()
+    N.upsert_signal.assert_not_awaited()
+    assert out["research_signals"][0]["signal_id"] == "tavily:abc"
+    assert out["research"]["signals_trusted"] is True
+    assert "tavily_items" not in out["research"]
+    assert any(s["signal_id"] == "google_trends_hk:1" for s in out["research_signals"])
 
 
 @pytest.mark.asyncio
