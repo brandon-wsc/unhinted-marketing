@@ -163,6 +163,7 @@ Writing Rules for Authentic HK Vibe:
 - If voice_pack.exemplar_captions are provided, match their rhythm and spoken feel — do not copy them verbatim.
 - Constraints: `source_signal_ids` must be a subset of allowed_signal_ids from the user payload. Never claim the post is already published.
 - If signals_trusted is false: do not present signal titles as current news/stats; write a scene without invented market claims.
+- You may call query_market_trends to peek at existing PG signals. Return structured DraftOut. Never publish.
 
 Few-shot Examples (Do not copy verbatim, learn the rhythm):
 

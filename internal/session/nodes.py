@@ -40,6 +40,7 @@ from internal.memory.repos import (
     upsert_signal,
 )
 from internal.perception.tavily import search_tavily
+from internal.session import execute_harness as EH
 from internal.session import ingest as ingest_mod
 from internal.session import prompts
 from internal.session import research_harness as RH
@@ -840,12 +841,12 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "primary_product": state.get("primary_product"),
         "related_products": (state.get("related_products") or [])[:2],
     }
-    parsed = await _parse_llm_json(
-        NODE_MODEL_TIERS["executor_post"] or ModelTier.MEDIUM,
-        prompts.EXECUTOR_POST,
-        json.dumps(payload, ensure_ascii=False),
-        DraftOut,
-    )
+    parsed: DraftOut | None = None
+    if has_llm_credentials():
+        parsed = await EH.run_executor_post_agent(
+            json.dumps(payload, ensure_ascii=False),
+            EH.ExecuteDeps(),
+        )
     allowed = set(signal_ids)
     if parsed:
         refs = [sid for sid in parsed.source_signal_ids if sid in allowed] or signal_ids[:3]

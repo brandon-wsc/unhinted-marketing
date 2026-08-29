@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic_ai.models.test import TestModel
 
+from internal.session import execute_harness as EH
 from internal.session import nodes as N
 from internal.session import research_harness as RH
 from internal.session.context import session_db
 from internal.session.io import (
     BriefOut,
-    DraftOut,
     IntentRoute,
     QueryGenOut,
     ResearchFlags,
@@ -27,10 +27,12 @@ from tests.unit.session_fakes import fake_signal
 
 
 @pytest.fixture(autouse=True)
-def _clear_research_model_override() -> None:
+def _clear_harness_model_overrides() -> None:
     RH.set_research_model_override(None)
+    EH.set_execute_model_override(None)
     yield
     RH.set_research_model_override(None)
+    EH.set_execute_model_override(None)
 
 
 @pytest.fixture
@@ -604,16 +606,17 @@ async def test_executor_post_filters_citations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
-
-    async def fake_complete_json(**_kwargs):
-        return DraftOut(
-            caption="Hello HK",
-            hashtags=["#HK"],
-            cta="了解更多",
-            source_signal_ids=["sig_a", "sig_evil"],
-        ).model_dump_json()
-
-    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    EH.set_execute_model_override(
+        TestModel(
+            call_tools=[],
+            custom_output_args={
+                "caption": "Hello HK",
+                "hashtags": ["#HK"],
+                "cta": "了解更多",
+                "source_signal_ids": ["sig_a", "sig_evil"],
+            },
+        )
+    )
     out = await N.executor_post(
         _base_state(
             source_signal_ids=["sig_a", "sig_b"],
@@ -623,6 +626,22 @@ async def test_executor_post_filters_citations(
         )
     )
     DraftCopy.model_validate(out["draft"])
+    assert out["source_signal_ids"] == ["sig_a"]
+    assert out["need_image"] is True
+
+
+@pytest.mark.asyncio
+async def test_executor_post_fallback_without_llm(no_llm: None) -> None:
+    out = await N.executor_post(
+        _base_state(
+            source_signal_ids=["sig_a"],
+            company_context={"name": "Acme"},
+            ranked_signals=[{"title": "奶茶"}],
+            brief={"summary": "x"},
+        )
+    )
+    assert "奶茶" in out["draft"]["caption"]
+    assert "Acme" in out["draft"]["caption"]
     assert out["source_signal_ids"] == ["sig_a"]
     assert out["need_image"] is True
 

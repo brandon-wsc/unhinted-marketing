@@ -27,7 +27,7 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 | Tier | Paths | Target | Gate |
 |------|-------|--------|------|
 | **1 — Utils** | `internal/auth/jwt.py` · `schemas/**` · pure helpers in `internal/session/service.py` (`normalize_draft_copy`, `preview_updated_payload`, …) · `internal/session/checkpointer.py` (`checkpoint_conninfo`) · `internal/session/tiers.py` · `internal/session/io.py` / `state.py` (pure bits) | **85–95%** | **Fail** |
-| **1b — Session nodes (mock LLM)** | `internal/session/nodes.py` · `internal/session/trace.py` · `internal/session/harness.py` · `internal/session/research_harness.py` · `internal/session/ingest.py` | **≥70%** | **Fail** — no live LLM; monkeypatch `complete_json` / repos / `TestModel` |
+| **1b — Session nodes (mock LLM)** | `internal/session/nodes.py` · `internal/session/trace.py` · `internal/session/harness.py` · `internal/session/research_harness.py` · `internal/session/execute_harness.py` · `internal/session/ingest.py` | **≥70%** | **Fail** — no live LLM; monkeypatch `complete_json` / repos / `TestModel` |
 | **2 — API** | `cmd/api/routes/**` | **70–80%** | **Fail** — happy path per public endpoint + 401/403 + confirm invalid token / idempotency |
 | **3 — Domain** | `internal/auth/service.py` · `deps.py` · `org.py` · non-LLM parts of `internal/session/service.py` | **60–75%** | Soft / follow API tests |
 | **4 — Memory glue** | `internal/memory/repos.py` | Covered via API integration | Soft |
@@ -82,9 +82,10 @@ pytest tests/unit --cov=internal.auth.jwt --cov=schemas --cov-fail-under=85
 pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
  tests/unit/test_session_trace.py tests/unit/test_session_harness.py \
  tests/unit/test_session_research_harness.py \
+ tests/unit/test_session_execute_harness.py \
  --cov=internal.session.nodes --cov=internal.session.trace \
  --cov=internal.session.harness --cov=internal.session.research_harness \
- --cov=internal.session.ingest --cov-fail-under=70
+ --cov=internal.session.execute_harness --cov=internal.session.ingest --cov-fail-under=70
 
 # Tier 2 API routes (needs TEST_DATABASE_URL)
 pytest tests/api --cov=cmd.api.routes --cov-fail-under=70
