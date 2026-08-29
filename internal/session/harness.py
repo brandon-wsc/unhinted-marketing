@@ -18,6 +18,7 @@ from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, RunCancelled
 from pydantic_ai.models import Model
 
 from internal.config import settings
+from internal.llm.recorder import LlmCallRecordBuilder, track
 from internal.llm.router import LlmProviderError, ModelTier, resolve_model
 from internal.memory.repos import list_top_signals
 from internal.session import prompts
@@ -174,6 +175,15 @@ def _wrap_provider_error(exc: BaseException) -> LlmProviderError:
     return LlmProviderError(str(exc) or exc.__class__.__name__, kind=kind)
 
 
+def _model_label(model: Model) -> str:
+    name = getattr(model, "model_name", None)
+    return str(name) if name else "pydantic-ai"
+
+
+def _stash_partial(rec: LlmCallRecordBuilder, parts: list[str]) -> None:
+    rec.response_text = "".join(parts).strip() or None
+
+
 async def stream_chat_reply(
     *,
     user_prompt: str,
@@ -186,25 +196,40 @@ async def stream_chat_reply(
     agent = build_chat_agent(model=model, extra_tools=extra_tools)
     parts: list[str] = []
     pending: list[str] = []
-    try:
-        async with agent.run_stream(user_prompt, deps=deps) as result:
-            async for chunk in result.stream_text(delta=True):
-                parts.append(chunk)
-                pending.append(chunk)
+    output: str | None = None
+    with track(
+        kind="chat_text",
+        tier=NODE_MODEL_TIERS["chat"],
+        model=_model_label(model),
+        system=prompts.CHAT,
+        user=user_prompt,
+    ) as rec:
+        try:
+            async with agent.run_stream(user_prompt, deps=deps) as result:
+                async for chunk in result.stream_text(delta=True):
+                    parts.append(chunk)
+                    pending.append(chunk)
+                    if session_id:
+                        await _publish_deltas(session_id, pending)
                 if session_id:
-                    await _publish_deltas(session_id, pending)
-            if session_id:
-                await _publish_deltas(session_id, pending, force=True)
-            output = await result.get_output()
-    except asyncio.CancelledError:
-        raise
-    except RunCancelled:
-        raise
-    except (ModelHTTPError, ModelAPIError) as exc:
-        raise _wrap_provider_error(exc) from exc
-    except LlmProviderError:
-        raise
-    except Exception as exc:
-        raise _wrap_provider_error(exc) from exc
-    text = (output if isinstance(output, str) else "".join(parts)).strip()
+                    await _publish_deltas(session_id, pending, force=True)
+                output = await result.get_output()
+                rec.set_usage(result.usage)
+        except asyncio.CancelledError:
+            _stash_partial(rec, parts)
+            raise
+        except RunCancelled as exc:
+            _stash_partial(rec, parts)
+            raise asyncio.CancelledError from exc
+        except (ModelHTTPError, ModelAPIError) as exc:
+            _stash_partial(rec, parts)
+            raise _wrap_provider_error(exc) from exc
+        except LlmProviderError:
+            _stash_partial(rec, parts)
+            raise
+        except Exception as exc:
+            _stash_partial(rec, parts)
+            raise _wrap_provider_error(exc) from exc
+        text = (output if isinstance(output, str) else "".join(parts)).strip()
+        rec.response_text = text or None
     return text or None

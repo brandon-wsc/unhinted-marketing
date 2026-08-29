@@ -79,7 +79,9 @@ async def test_query_market_trends_runs_without_db() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stream_chat_reply_cancels_mid_slow_tool() -> None:
+async def test_stream_chat_reply_cancels_mid_slow_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list = []
+    monkeypatch.setattr("internal.llm.recorder.submit", sent.append)
     started = asyncio.Event()
 
     async def slow_probe(_ctx: RunContext[H.ChatDeps]) -> str:
@@ -100,6 +102,37 @@ async def test_stream_chat_reply_cancels_mid_slow_tool() -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+    assert len(sent) == 1
+    assert sent[0].status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_reply_records_call_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    from internal.llm import recorder
+
+    sent: list = []
+    monkeypatch.setattr(recorder, "submit", sent.append)
+    H.set_chat_model_override(TestModel(call_tools=[], custom_output_text="hello from test"))
+    sid = uuid.uuid4()
+    with recorder.call_context(caller="node:chat", node="chat", session_id=str(sid)):
+        text = await H.stream_chat_reply(
+            user_prompt="hi",
+            session_id=None,
+            deps=H.ChatDeps(),
+        )
+    assert text == "hello from test"
+    assert len(sent) == 1
+    rec = sent[0]
+    assert rec.kind == "chat_text"
+    assert rec.status == "ok"
+    assert rec.caller == "node:chat"
+    assert rec.node == "chat"
+    assert rec.session_id == sid
+    assert rec.response_text == "hello from test"
+    assert rec.user_prompt == "hi"
+    assert rec.system_prompt
+    assert rec.prompt_tokens is not None
+    assert rec.completion_tokens is not None
 
 
 def test_live_chat_model_uses_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:

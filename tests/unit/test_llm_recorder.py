@@ -144,8 +144,12 @@ def test_set_usage_from_object_and_dict() -> None:
     assert rec2.total_tokens == 14  # summed when total missing
 
     rec3 = recorder.LlmCallRecordBuilder(kind="chat_json")
-    rec3.set_usage(None)
-    assert rec3.total_tokens is None
+    rec3.set_usage(SimpleNamespace(input_tokens=7, output_tokens=2))
+    assert (rec3.prompt_tokens, rec3.completion_tokens, rec3.total_tokens) == (7, 2, 9)
+
+    rec4 = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec4.set_usage(None)
+    assert rec4.total_tokens is None
 
 
 def test_to_model_caps_long_text() -> None:

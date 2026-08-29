@@ -56,6 +56,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Buy the inner loop, keep the graph** — node-internal LLM calls that need a tool loop (chat / research / execute) adopt Pydantic AI (narrow per-stage agents, `output_type` on `schemas/` models, LiteLLM BYOK unchanged); LangGraph is narrowed but **kept** for mode routing, checkpointer, image interrupt, turn lifecycle. Grounding / reviewer stay single-shot
 - **Boundaries unchanged** — Confirm / publish / catalog upsert stay HTTP and are never registered as tools; approval stays outside the loop (v1: no harness tool-approval — all in-loop tools are read-only; future gated tool → park → HTTP approve/deny → resume, zero-LLM decision path); documents (later) are `attachment_id` tools returning slices, full text into the existing PG ingest plane
 - **Chat spike on this change set** — `chat` node only; validates SSE event mapping (dedupe unchanged), Stop → `aclose` teardown, `TestModel` CI with no live key, allowlist isolation. This ADR locks direction, not a two-PR split
+- **Chat `llm_call_records`** — harness wraps `recorder.track` (`kind=chat_text`); one row per chat turn (tool-loop usage aggregated). Correlation still `call_context(node:chat)`
 
 **Decision (2026-08-08) — Chat research gate + Tavily∪PG:** → [ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)
 

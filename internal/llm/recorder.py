@@ -89,11 +89,15 @@ class LlmCallRecordBuilder:
         self.error = error
 
     def set_usage(self, usage: Any) -> None:
-        """Accept a LiteLLM usage object or dict (final stream chunk / response)."""
+        """Accept LiteLLM or Pydantic AI usage (object or dict)."""
         if usage is None:
             return
         prompt = _usage_int(usage, "prompt_tokens")
+        if prompt is None:
+            prompt = _usage_int(usage, "input_tokens")
         completion = _usage_int(usage, "completion_tokens")
+        if completion is None:
+            completion = _usage_int(usage, "output_tokens")
         total = _usage_int(usage, "total_tokens")
         if prompt is not None:
             self.prompt_tokens = prompt
