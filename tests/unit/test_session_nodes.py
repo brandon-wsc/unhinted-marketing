@@ -30,9 +30,11 @@ from tests.unit.session_fakes import fake_signal
 def _clear_harness_model_overrides() -> None:
     RH.set_research_model_override(None)
     EH.set_execute_model_override(None)
+    EH.set_edit_model_override(None)
     yield
     RH.set_research_model_override(None)
     EH.set_execute_model_override(None)
+    EH.set_edit_model_override(None)
 
 
 @pytest.fixture
@@ -735,6 +737,38 @@ async def test_edit_copy_fallback_appends_note(no_llm: None) -> None:
     assert "原稿" in out["draft"]["caption"]
     assert "短啲" in out["draft"]["caption"]
     DraftCopy.model_validate(out["draft"])
+
+
+@pytest.mark.asyncio
+async def test_edit_copy_filters_citations_and_need_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    EH.set_edit_model_override(
+        TestModel(
+            call_tools=[],
+            custom_output_args={
+                "caption": "短啲 caption",
+                "hashtags": ["#a"],
+                "cta": "go",
+                "need_image": True,
+                "source_signal_ids": ["sig_a", "sig_evil"],
+            },
+        )
+    )
+    out = await N.edit_copy(
+        _base_state(
+            mode=MODE_PREVIEW,
+            draft={"caption": "原稿", "hashtags": ["#a"], "cta": "go"},
+            messages=[{"role": "user", "content": "短啲"}],
+            reviewer_feedback="",
+            source_signal_ids=["sig_a", "sig_b"],
+        )
+    )
+    DraftCopy.model_validate(out["draft"])
+    assert out["draft"]["caption"] == "短啲 caption"
+    assert out["source_signal_ids"] == ["sig_a"]
+    assert out["need_image"] is True
 
 
 @pytest.mark.asyncio

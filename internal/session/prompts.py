@@ -196,6 +196,7 @@ Return JSON only:
 Set need_image true only if the user asked to change the visual / image / 圖 / 圖片.
 Keep grounding: source_signal_ids ⊆ input signal ids.
 Preserve roast_level unless the user explicitly asks for more/less 抽水 or a safer tone.
+You may call query_market_trends to peek at existing PG signals. Return structured EditOut. Never publish.
 """
 
 REVIEWER = f"""You are a strict compliance and craft reviewer for HK social posts.
