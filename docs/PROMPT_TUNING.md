@@ -24,7 +24,7 @@ Paste `session_id` (or jump from LLM detail / Session Trace):
 
 - **semantic_route** / **rule_pass** — gate decision before `query_generator`
 - **search_queries** — one conjunct per query (`usagi` / `Usagi favorite food` / `rabbit feed`), **not** spoken Cantonese, **not** mixed pastes like `usagi 兔糧`, **not** glued `Usagi rabbit food`
-- **Follow-up** — after 「usagi想食嘅兔糧」then 「Chiikawa」, queries should look like `Chiikawa Usagi` / favorite food, **not** cheap-path `Chiikawa Hong Kong`. User prompt must include `recent_thread`.
+- **Follow-up** — after 「usagi想食嘅兔糧」then 「Chiikawa」, the **set** must keep the prior food/feed intent **and** the Chiikawa sense (`Chiikawa Usagi` and/or `ちいかわ うさぎ` as an entity query). **Not** cheap-path `Chiikawa Hong Kong` (entity-only, drops 兔糧). User prompt must include `recent_thread`.
 - **query_source** / **signals_trusted** — `llm` vs `normalize` vs `fallback`; untrusted means leftover PG/gloss hits are not this turn’s facts
 - **Signals** — Tavily∪PG hits with `source`, title, url; `metrics.query` shows which atomic query produced the hit. Chat must not merge entity-only hits with product-class hits into one fact
 
@@ -73,11 +73,18 @@ Success criteria after a prompt change: fewer parse/fallback flags, stabler turn
 1. Collect **5–10 bad cases** for the *same* node (don’t tune from a single fluke).
 2. **Cluster** failures: JSON/schema, language (spoken Cantonese vs written Chinese), weak grounding, verbosity, wrong `route_intent`.
 3. Edit **only that node’s** prompt (or its JSON schema instructions) — not the whole graph.
-4. Re-run similar sessions; compare in admin:
+4. Freeze a representative case as YAML under [`tests/eval/cases/`](../tests/eval/cases/) (`id`, `suites`, `node`, `state`, `expect`) and re-run:
+
+   ```bash
+   python -m scripts.eval_agent --suite research   # or smoke / all
+   ```
+
+   Compare `reports/eval/latest.md` (gitignored). Admin Trace still helps on live sessions; the CLI is the repeatable pack. If a frozen case goes red, **fix the node** (or accept a real regression) — do not loosen `expect` or rewrite the prompt example just to go green. Follow-up research cases use `queries_require_any` (set coverage), not a Latin-only / no-kana rule.
+5. Re-run similar sessions; compare in admin:
    - `parse_ok` / `fallback_used` rate
    - turn path length / flapping
    - draft revision quality in Session Trace
-5. Only then move to the next node.
+6. Only then move to the next node.
 
 ### Signals worth watching
 
@@ -121,6 +128,7 @@ A retention policy would typically decide:
 ## Related
 
 - [VOICE.md](./VOICE.md) — default HK editor-voice craft + `roast_level` (tune `EXECUTOR_POST` / `BRAINSTORM` / `REVIEWER` against this)
+- Live eval pack: `python -m scripts.eval_agent` · cases in [`tests/eval/cases/`](../tests/eval/cases/) · report `reports/eval/latest.md`
 - [ADR 0005](./adr/0005-platform-levels-and-llm-records.md) — platform levels + LLM call records  
 - [ADR 0007](./adr/0007-admin-trace-viewer.md) — node steps + Session Trace  
 - Bootstrap admin: `python -m cmd.worker set-platform-role --email … --level superadmin`  

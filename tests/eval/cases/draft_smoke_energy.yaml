@@ -1,0 +1,26 @@
+id: draft_smoke_energy
+suites: [smoke]
+node: executor_post
+state:
+  mode: AGENT
+  research_rule_pass: false
+  company_context:
+    name: Test Co
+  brief:
+    summary: OT 後能量飲，soft sell，唔好公關腔。
+  source_signal_ids:
+    - cassette:ot
+  ranked_signals:
+    - signal_id: cassette:ot
+      source: tavily
+      title: Hong Kong overtime culture
+      excerpt: Office workers talk about weekday OT.
+      metrics: {}
+  messages:
+    - role: user
+      content: 幫我寫一則能量飲 IG caption
+expect:
+  caption_nonempty: true
+  forbid_simplified: true
+  forbid_mainland_slang: true
+  min_voice: 0.55

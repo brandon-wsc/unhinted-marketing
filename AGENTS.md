@@ -51,7 +51,7 @@ Nested [`web/AGENTS.md`](web/AGENTS.md) and [`migrations/AGENTS.md`](migrations/
 
 - CI gates **mock** `complete_json` / repos — **no** `OPENAI_API_KEY` required on GitHub.
 - Opt-in step I/O buffer: `node_trace_recording()` in `internal/session/trace.py` (not persisted yet).
-- Live LLM evals stay optional / manual — never a required PR check.
+- Live LLM evals stay optional / on-demand (`python -m scripts.eval_agent`) — never a required PR check. Cases grade **set coverage** (`queries_require_any`); a red live case means fix the node, not a Latin-only / no-kana prompt patch.
 
 ## Quick commands
 
@@ -66,6 +66,7 @@ pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
  --cov=internal.session.harness --cov=internal.session.research_harness \
  --cov=internal.session.execute_harness --cov=internal.session.ingest --cov-fail-under=70
 python -m scripts.export_contracts   # OpenAPI + JSON Schema under docs/
+python -m scripts.eval_agent         # on-demand live LLM eval (needs OPENAI_API_KEY; not CI)
 cd scripts/typescript_gen && npm install && npm run generate  # session TS mirrors
 cd web && pnpm run lint && pnpm test && pnpm run build
 ```

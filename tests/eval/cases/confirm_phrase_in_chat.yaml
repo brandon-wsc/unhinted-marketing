@@ -1,0 +1,13 @@
+id: confirm_phrase_in_chat
+suites: [smoke]
+node: route_intent
+state:
+  mode: CHAT
+  research_rule_pass: false
+  messages:
+    - role: user
+      content: 可以出
+expect:
+  parse_ok: true
+  intent: chat
+  intent_not: start

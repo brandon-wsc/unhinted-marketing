@@ -1,0 +1,15 @@
+id: voice_pr_tone_negative
+suites: [smoke]
+node: voice_fixture
+state:
+  caption: |
+    本公司秉持以客為尊之理念，致力為廣大消費者提供優質能量補充飲品。
+    我們將持續提升服務質素，與您攜手共創美好未來。
+    歡迎蒞臨選購，詳情請參閱官方網站。
+  hashtags:
+    - "#品牌價值"
+    - "#企業社會責任"
+  cta: 歡迎蒞臨選購
+expect:
+  caption_nonempty: true
+  max_voice: 0.7
