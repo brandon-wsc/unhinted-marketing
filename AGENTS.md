@@ -51,7 +51,7 @@ Nested [`web/AGENTS.md`](web/AGENTS.md) and [`migrations/AGENTS.md`](migrations/
 
 - CI gates **mock** `complete_json` / repos — **no** `OPENAI_API_KEY` required on GitHub.
 - Opt-in step I/O buffer: `node_trace_recording()` in `internal/session/trace.py` (not persisted yet).
-- Live LLM evals stay optional / on-demand (`python -m scripts.eval_agent`) — never a required PR check.
+- Live LLM evals stay optional / on-demand (`python -m scripts.eval_agent`) — never a required PR check. Cases grade **set coverage** (`queries_require_any`); a red live case means fix the node, not a Latin-only / no-kana prompt patch.
 
 ## Quick commands
 

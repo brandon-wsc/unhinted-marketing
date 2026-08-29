@@ -8,6 +8,7 @@ Usage (repo root, after `pip install -e ".[dev]"` and OPENAI_API_KEY in .env):
     python -m scripts.eval_agent --suite smoke
     python -m scripts.eval_agent --suite research
     python -m scripts.eval_agent --suite all
+    python -m scripts.eval_agent --skip-judge   # no VOICE LLM call
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ from internal.session import nodes as N
 from internal.session.context import session_db
 from schemas.tools import QueryMarketTrendsResponse, QueryMarketTrendsSignal
 from tests.eval.graders import grade_case
+from tests.eval.voice_judge import apply_voice_gates, judge_draft
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CASES_DIR = REPO_ROOT / "tests" / "eval" / "cases"
@@ -177,7 +179,26 @@ async def _run_case(case: dict[str, Any]) -> dict[str, Any]:
         return await _run_route_intent(state)
     if node == "executor_post":
         return await _run_executor_post(state)
+    if node == "voice_fixture":
+        return {
+            "parsed": {
+                "caption": state.get("caption") or "",
+                "hashtags": list(state.get("hashtags") or []),
+                "cta": str(state.get("cta") or ""),
+            }
+        }
     raise ValueError(f"unknown node {node!r}")
+
+
+def _draft_caption(output: dict[str, Any]) -> str:
+    parsed = output.get("parsed") or {}
+    return str(parsed.get("caption") or "").strip()
+
+
+def _should_judge(node: str, output: dict[str, Any], *, skip_judge: bool) -> bool:
+    return (not skip_judge) and node in {"executor_post", "voice_fixture"} and bool(
+        _draft_caption(output)
+    )
 
 
 def _summarize_output(node: str, output: dict[str, Any]) -> dict[str, Any]:
@@ -193,7 +214,7 @@ def _summarize_output(node: str, output: dict[str, Any]) -> dict[str, Any]:
             "intent": output.get("intent"),
             "parse_ok": output.get("_eval_parse_ok"),
         }
-    if node == "executor_post":
+    if node in ("executor_post", "voice_fixture"):
         parsed = output.get("parsed") or {}
         caption = str(parsed.get("caption") or "")
         return {
@@ -218,35 +239,60 @@ def _write_reports(report: dict[str, Any]) -> tuple[Path, Path]:
         f"- when: {report['when']}",
         f"- ok: **{report['ok']}**",
         f"- cases: {report['passed']}/{report['total']} passed",
+        f"- mean_voice: {report['mean_voice'] if report.get('mean_voice') is not None else '—'}",
         "",
-        "| id | node | pass | reason |",
-        "|---|---|---|---|",
+        "| id | node | pass | voice | reason |",
+        "|---|---|---|---|---|",
     ]
     for row in report["cases"]:
         reason = "; ".join(row["reasons"]) if row["reasons"] else ""
         mark = "yes" if row["passed"] else "no"
-        lines.append(f"| `{row['id']}` | {row['node']} | {mark} | {reason} |")
-        if row.get("output"):
+        voice = _voice_cell(row)
+        lines.append(f"| `{row['id']}` | {row['node']} | {mark} | {voice} | {reason} |")
+        if row.get("output") or row.get("scores"):
             lines.append("")
-            lines.append(f"### `{row['id']}` output")
+            lines.append(f"### `{row['id']}`")
             lines.append("")
-            lines.append("```json")
-            lines.append(json.dumps(row["output"], indent=2, ensure_ascii=False))
-            lines.append("```")
+            if row.get("scores"):
+                lines.append("scores:")
+                lines.append("")
+                lines.append("```json")
+                lines.append(json.dumps(row["scores"], indent=2, ensure_ascii=False))
+                lines.append("```")
+                lines.append("")
+            if row.get("output"):
+                lines.append("output:")
+                lines.append("")
+                lines.append("```json")
+                lines.append(json.dumps(row["output"], indent=2, ensure_ascii=False))
+                lines.append("```")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return json_path, md_path
 
 
+def _voice_cell(row: dict[str, Any]) -> str:
+    overall = (row.get("scores") or {}).get("overall")
+    if overall is None:
+        return ""
+    return f"{float(overall):.2f}"
+
+
 def _print_table(rows: list[dict[str, Any]]) -> None:
-    print(f"{'id':<32} {'node':<18} {'pass':<6} reason")
-    print("-" * 88)
+    print(f"{'id':<32} {'node':<18} {'pass':<6} {'voice':<7} reason")
+    print("-" * 96)
     for row in rows:
         reason = "; ".join(row["reasons"]) if row["reasons"] else ""
         mark = "ok" if row["passed"] else "FAIL"
-        print(f"{row['id']:<32} {row['node']:<18} {mark:<6} {reason}")
+        print(f"{row['id']:<32} {row['node']:<18} {mark:<6} {_voice_cell(row):<7} {reason}")
 
 
-async def _eval_suite(suite: str, cases_dir: Path, cassette_path: Path) -> dict[str, Any]:
+async def _eval_suite(
+    suite: str,
+    cases_dir: Path,
+    cassette_path: Path,
+    *,
+    skip_judge: bool,
+) -> dict[str, Any]:
     _silence_recording()
     signals = _load_cassette(cassette_path)
     selected = [c for c in _load_cases(cases_dir) if _in_suite(c, suite)]
@@ -258,9 +304,29 @@ async def _eval_suite(suite: str, cases_dir: Path, cassette_path: Path) -> dict[
         for case in selected:
             cid = str(case.get("id") or "unnamed")
             node = str(case.get("node") or "")
+            scores: dict[str, Any] = {}
             try:
                 output = await _run_case(case)
                 reasons = grade_case(case, output)
+                if _should_judge(node, output, skip_judge=skip_judge):
+                    parsed = output.get("parsed") or {}
+                    brief_raw = (case.get("state") or {}).get("brief") or ""
+                    brief = (
+                        json.dumps(brief_raw, ensure_ascii=False)
+                        if isinstance(brief_raw, dict)
+                        else str(brief_raw)
+                    )
+                    judged = await judge_draft(
+                        caption=_draft_caption(output),
+                        hashtags=list(parsed.get("hashtags") or []),
+                        cta=str(parsed.get("cta") or ""),
+                        brief=brief,
+                    )
+                    if judged is None:
+                        reasons.append("voice judge parse missed")
+                    else:
+                        scores = judged.scores_payload()
+                        reasons.extend(apply_voice_gates(case.get("expect") or {}, scores))
             except LlmProviderError as exc:
                 output = {}
                 reasons = [f"provider: {exc}"]
@@ -274,17 +340,25 @@ async def _eval_suite(suite: str, cases_dir: Path, cassette_path: Path) -> dict[
                     "node": node,
                     "passed": not reasons,
                     "reasons": reasons,
+                    "scores": scores,
                     "output": _summarize_output(node, output),
                 }
             )
 
     passed = sum(1 for r in rows if r["passed"])
+    voice_vals = [
+        float(r["scores"]["overall"])
+        for r in rows
+        if (r.get("scores") or {}).get("overall") is not None
+    ]
+    mean_voice = round(sum(voice_vals) / len(voice_vals), 3) if voice_vals else None
     return {
         "suite": suite,
         "when": datetime.now(UTC).isoformat(),
         "ok": passed == len(rows),
         "passed": passed,
         "total": len(rows),
+        "mean_voice": mean_voice,
         "cases": rows,
     }
 
@@ -299,6 +373,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--cases-dir", type=Path, default=DEFAULT_CASES_DIR)
     parser.add_argument("--cassette", type=Path, default=DEFAULT_CASSETTE)
+    parser.add_argument(
+        "--skip-judge",
+        action="store_true",
+        help="Skip the VOICE LLM judge (code graders only)",
+    )
     args = parser.parse_args(argv)
 
     _silence_recording()
@@ -310,7 +389,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    report = asyncio.run(_eval_suite(args.suite, args.cases_dir, args.cassette))
+    report = asyncio.run(
+        _eval_suite(
+            args.suite,
+            args.cases_dir,
+            args.cassette,
+            skip_judge=args.skip_judge,
+        )
+    )
     json_path, md_path = _write_reports(report)
     _print_table(report["cases"])
     print()

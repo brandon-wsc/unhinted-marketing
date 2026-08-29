@@ -18,8 +18,11 @@ expect:
   query_source: llm
   min_queries: 1
   max_queries: 3
-  queries_forbid_cjk: true
   queries_forbid_mixed_script: true
   queries_forbid_substrings:
     - Chiikawa Hong Kong
     - "usagi 兔糧"
+  # Set must cover Chiikawa sense AND prior 兔糧 intent. JP entity query is OK.
+  queries_require_any:
+    - [Chiikawa, ちいかわ]
+    - ["favorite food", "rabbit feed", "rabbit food", 好物, 餌, エサ, 兔糧]

@@ -65,6 +65,11 @@ def grade_query_generator(output: dict[str, Any], expect: dict[str, Any]) -> lis
         for q in queries:
             if low in q.lower():
                 reasons.append(f"forbidden substring {needle!r} in {q!r}")
+    blob = " ".join(queries).lower()
+    for group in expect.get("queries_require_any") or []:
+        needles = group if isinstance(group, list) else [group]
+        if not any(str(n).lower() in blob for n in needles):
+            reasons.append(f"queries miss {needles!r}: {queries!r}")
     return reasons
 
 
@@ -111,6 +116,6 @@ def grade_case(case: dict[str, Any], output: dict[str, Any]) -> list[str]:
         return grade_query_generator(output, expect)
     if node == "route_intent":
         return grade_intent(output, expect)
-    if node == "executor_post":
+    if node in ("executor_post", "voice_fixture"):
         return grade_draft(output, expect)
     return [f"unknown node {node!r}"]

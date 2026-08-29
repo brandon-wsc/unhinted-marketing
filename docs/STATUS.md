@@ -65,7 +65,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 - **Unified `route_intent`** — one structured call: `graph_intent` + `research` (`need_facts` / `ambiguous` / `ask_clarify` / `entity_surface`); no separate graph-routing classifier
 - **`fast_rule_checker`** — semantic-router + FastEmbed (multilingual MiniLM; e5-small not in FastEmbed registry) with regex fallback; only `need_search` → `research_rule_pass`. Cold encoder load is **background** (API lifespan + first classify); a turn never waits on download. Until the router is ready, the gate uses regex. Chat shows optimistic `route_intent` progress — do not surface “downloading embedding” or `fast_rule_checker` / `persist_preview` in the action trail.
-- **`query_generator`** — 1–3 atomic `search_queries` (**one conjunct each** — do not glue `Usagi rabbit food`); follow-up sense-picks rewrite from `recent_thread` (do not cheap-path `Chiikawa` → `Chiikawa Hong Kong`); reject spoken clauses and mixed Latin+CJK entity pastes; gloss fallback splits entity vs `兔糧` → `rabbit food` when LLM unavailable
+- **`query_generator`** — 1–3 atomic `search_queries` (**one conjunct each** — do not glue `Usagi rabbit food`); follow-up sense-picks rewrite from `recent_thread` so the **set** keeps the prior intent **and** the new sense (do not cheap-path `Chiikawa` → `Chiikawa Hong Kong`, which drops 兔糧); JP entity queries (e.g. `ちいかわ うさぎ`) are OK alongside English food/feed queries; reject spoken clauses and mixed Latin+CJK entity pastes; gloss fallback splits entity vs `兔糧` → `rabbit food` when LLM unavailable
 - **Both sources** — research always uses PostgreSQL **and** Tavily; do not skip Tavily on PG hit; both land in `raw_news_events`
 - **Act ≠ search** — `start` / revise gated on clear intent (+ clarify if ambiguous), not on Tavily success; **ambiguity does not block research** — searchable phrases search best-effort first; ask_clarify is for drafting, not a quiz instead of search
 - **Search ≠ trusted** — soft-fail continues the turn; `research.query_source` (`llm` / `normalize` / `fallback`) + `research.signals_trusted` mark quality for chat/draft/reviewer. Gloss+Tavily still run on parse miss; untrusted signals must not be led as current facts. Reviewer parse miss is fail-closed.
@@ -127,7 +127,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-08-02) — Contracts SSOT entry:** `AGENTS.md` + [ADRs](./adr/) + `schemas/contracts.py` / `schemas/tools.py` + generated `docs/contracts/` + `docs/openapi.json`; FE session types mirror in `web/src/features/session/generated/` via `scripts/typescript_gen`. REST > SSE locked in [ADR 0002](./adr/0002-rest-source-of-truth-sse-enhancement.md); Confirm without LLM in [ADR 0003](./adr/0003-confirm-without-llm.md).
 
-**Decision (2026-08-02) — Graph mock-LLM CI:** Session node unit tests monkeypatch LLM/repos (no API key on GitHub). Opt-in `node_trace_recording()` for step I/O. CI Tier 1b ≥70% on `nodes` + `trace`. Live LLM eval stays manual/nightly.
+**Decision (2026-08-02) — Graph mock-LLM CI:** Session node unit tests monkeypatch LLM/repos (no API key on GitHub). Opt-in `node_trace_recording()` for step I/O. CI Tier 1b ≥70% on `nodes` + `trace`. Live LLM eval is on-demand (`python -m scripts.eval_agent`), not a PR job and not a nightly gate.
 
 **Decision (2026-08-03) — Platform levels + LLM call records:** → [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)
 

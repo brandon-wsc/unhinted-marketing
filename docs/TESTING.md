@@ -31,7 +31,7 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 | **2 — API** | `cmd/api/routes/**` | **70–80%** | **Fail** — happy path per public endpoint + 401/403 + confirm invalid token / idempotency |
 | **3 — Domain** | `internal/auth/service.py` · `deps.py` · `org.py` · non-LLM parts of `internal/session/service.py` | **60–75%** | Soft / follow API tests |
 | **4 — Memory glue** | `internal/memory/repos.py` | Covered via API integration | Soft |
-| **5 — Omit / smoke** | `internal/session/graph.py` · `prompts.py` · `internal/llm/**` (except focused router unit tests) · `internal/perception/**` · `cmd/worker/**` · `cmd/scheduler/**` · `migrations/**` · `internal/config.py` | **Not in gate** | Live LLM eval = on-demand CLI (`python -m scripts.eval_agent`); never a PR required check. `tests/unit/test_llm_router.py` covers provider wrap + stream `aclose` / streamed `complete_json` (no live network). Graders: `tests/unit/test_eval_graders.py` |
+| **5 — Omit / smoke** | `internal/session/graph.py` · `prompts.py` · `internal/llm/**` (except focused router unit tests) · `internal/perception/**` · `cmd/worker/**` · `cmd/scheduler/**` · `migrations/**` · `internal/config.py` | **Not in gate** | Live LLM eval = on-demand CLI (`python -m scripts.eval_agent`); never a PR required check. `tests/unit/test_llm_router.py` covers provider wrap + stream `aclose` / streamed `complete_json` (no live network). Graders: `tests/unit/test_eval_graders.py` · `tests/unit/test_eval_voice_judge.py` |
 
 **API test priorities (behavior, not %)**:
 
@@ -127,12 +127,15 @@ pnpm run test:coverage # vitest run --coverage (path-tiered thresholds)
 pnpm run build
 ```
 
-On-demand live LLM eval (not CI). Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Writes `reports/eval/latest.md` + `latest.json` (gitignored):
+On-demand live LLM eval (not CI). Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Writes `reports/eval/latest.md` + `latest.json` (gitignored). Draft cases get a cheap-model VOICE judge (`scene` / `layers` / `bridge` / `locale` → `overall` 0–1); YAML `expect.min_voice` / `max_voice` can fail a case (PR-tone fixture is `voice_pr_tone_negative`). `--skip-judge` runs code graders only.
+
+Query cases grade the **set**: `queries_require_any` (each group must match at least one query — follow-up must keep prior intent **and** the new sense). Do **not** ban kana/CJK globally. `queries_forbid_cjk` is only for cases that must gloss mixed `entity_surface` (e.g. first-turn `usagi 兔糧` → English). A red live case means fix the node, not the grader or prompt example. Graders: `tests/unit/test_eval_graders.py` · `tests/unit/test_eval_voice_judge.py`.
 
 ```bash
 python -m scripts.eval_agent              # suite=smoke
 python -m scripts.eval_agent --suite research
 python -m scripts.eval_agent --suite all
+python -m scripts.eval_agent --skip-judge
 ```
 
 If `TEST_DATABASE_URL` is unset, `tests/api` is **skipped**; `tests/unit` still runs.

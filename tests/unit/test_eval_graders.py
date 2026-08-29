@@ -21,7 +21,12 @@ def test_eval_cases_yaml_shape() -> None:
         cid = data.get("id")
         assert cid and cid not in ids, path.name
         ids.add(cid)
-        assert data.get("node") in {"query_generator", "route_intent", "executor_post"}
+        assert data.get("node") in {
+            "query_generator",
+            "route_intent",
+            "executor_post",
+            "voice_fixture",
+        }
         assert data.get("suites")
         assert data.get("state")
         assert data.get("expect")
@@ -66,6 +71,68 @@ def test_query_atomic_english_passes() -> None:
         "queries_forbid_substrings": ["Chiikawa Hong Kong", "usagi 兔糧"],
     }
     assert grade_query_generator(output, expect) == []
+
+
+_CHIIKAWA_EXPECT = {
+    "query_source": "llm",
+    "min_queries": 1,
+    "max_queries": 3,
+    "queries_forbid_mixed_script": True,
+    "queries_forbid_substrings": ["Chiikawa Hong Kong", "usagi 兔糧"],
+    "queries_require_any": [
+        ["Chiikawa", "ちいかわ"],
+        ["favorite food", "rabbit feed", "rabbit food", "好物", "餌", "エサ", "兔糧"],
+    ],
+}
+
+
+def test_query_set_covers_sense_and_prior_intent() -> None:
+    output = {
+        "search_query": "Chiikawa Usagi",
+        "research": {
+            "search_queries": [
+                "Chiikawa Usagi",
+                "Chiikawa Usagi favorite food",
+                "ちいかわ うさぎ",
+            ],
+            "query_source": "llm",
+        },
+    }
+    assert grade_query_generator(output, _CHIIKAWA_EXPECT) == []
+
+
+def test_query_set_entity_only_misses_food_intent() -> None:
+    output = {
+        "research": {
+            "search_queries": ["Chiikawa Usagi", "ちいかわ うさぎ"],
+            "query_source": "llm",
+        }
+    }
+    reasons = grade_query_generator(output, _CHIIKAWA_EXPECT)
+    assert any("miss" in r and "favorite food" in r for r in reasons)
+
+
+def test_query_set_food_only_misses_chiikawa_sense() -> None:
+    output = {
+        "research": {
+            "search_queries": ["usagi", "Usagi favorite food", "rabbit feed"],
+            "query_source": "llm",
+        }
+    }
+    reasons = grade_query_generator(output, _CHIIKAWA_EXPECT)
+    assert any("miss" in r and "Chiikawa" in r for r in reasons)
+
+
+def test_min_voice_floor() -> None:
+    from tests.eval.voice_judge import apply_max_voice, apply_min_voice
+
+    scores = {"overall": 0.4}
+    assert apply_min_voice({}, scores) == []
+    assert apply_min_voice({"min_voice": 0.55}, scores)[0].startswith("voice 0.40")
+    assert apply_min_voice({"min_voice": 0.55}, {"overall": 0.7}) == []
+    assert apply_min_voice({"min_voice": 0.55}, None) == ["voice score missing"]
+    assert apply_max_voice({"max_voice": 0.7}, {"overall": 0.95})[0].startswith("voice 0.95")
+    assert apply_max_voice({"max_voice": 0.7}, {"overall": 0.4}) == []
 
 
 def test_query_too_many() -> None:

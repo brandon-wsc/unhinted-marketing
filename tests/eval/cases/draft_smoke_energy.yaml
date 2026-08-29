@@ -23,3 +23,4 @@ expect:
   caption_nonempty: true
   forbid_simplified: true
   forbid_mainland_slang: true
+  min_voice: 0.55

@@ -160,11 +160,12 @@ pnpm run test:coverage
 pnpm run build
 ```
 
-On-demand live agent eval (same `OPENAI_API_KEY` as session nodes; not CI):
+On-demand live agent eval (same `OPENAI_API_KEY` as session nodes; not CI). Suites, VOICE judge, `--skip-judge`: [TESTING.md](./TESTING.md).
 
 ```bash
-python -m scripts.eval_agent
-# report: reports/eval/latest.md
+python -m scripts.eval_agent              # suite=smoke
+python -m scripts.eval_agent --suite all
+# report: reports/eval/latest.md (gitignored)
 ```
 
 API fixtures run `alembic upgrade head` against `TEST_DATABASE_URL` and truncate tables between tests. Do **not** point `TEST_DATABASE_URL` at your main `unhinted` dev database if you care about its data.

@@ -18,3 +18,5 @@ expect:
   queries_forbid_mixed_script: true
   queries_forbid_substrings:
     - "usagi 兔糧"
+  queries_require_any:
+    - ["favorite food", "rabbit feed", "rabbit food"]

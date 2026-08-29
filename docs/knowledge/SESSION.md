@@ -77,7 +77,7 @@ Same `research` dict, written later (not on `ResearchFlags`):
 | `query_source` | `llm` \| `normalize` \| `fallback` — set by `query_generator` |
 | `signals_trusted` | Consumer bit (set by `research_ingest`): `false` if fallback queries or no Tavily items this turn |
 
-Follow-up turns: `route_intent` / `query_generator` see `recent_thread`. A short sense pick after a fact question stays `chat`, skips the cheap `normalize` path (so `Chiikawa` does not become `Chiikawa Hong Kong`), and rewrites queries from the prior question. **One search hop per user turn** — no loop-until-enough.
+Follow-up turns: `route_intent` / `query_generator` see `recent_thread`. A short sense pick after a fact question stays `chat`, skips the cheap `normalize` path (so `Chiikawa` does not become `Chiikawa Hong Kong`), and rewrites queries from the prior question. The **set** must still cover that prior intent (e.g. 兔糧 / favorite food) plus the new sense; a JP entity query such as `ちいかわ うさぎ` may be one slot, not a substitute for the food/feed queries. **One search hop per user turn** — no loop-until-enough.
 
 Example (market-only turn — no catalog):
 
