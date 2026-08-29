@@ -61,9 +61,10 @@ pytest tests/unit
 pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
  tests/unit/test_session_trace.py tests/unit/test_session_harness.py \
  tests/unit/test_session_research_harness.py \
+ tests/unit/test_session_execute_harness.py \
  --cov=internal.session.nodes --cov=internal.session.trace \
  --cov=internal.session.harness --cov=internal.session.research_harness \
- --cov=internal.session.ingest --cov-fail-under=70
+ --cov=internal.session.execute_harness --cov=internal.session.ingest --cov-fail-under=70
 python -m scripts.export_contracts   # OpenAPI + JSON Schema under docs/
 cd scripts/typescript_gen && npm install && npm run generate  # session TS mirrors
 cd web && pnpm run lint && pnpm test && pnpm run build
