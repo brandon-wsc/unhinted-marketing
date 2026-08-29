@@ -49,12 +49,12 @@ def set_chat_model_override(model: Model | None) -> None:
     _model_override = model
 
 
-def live_chat_model() -> Model:
+def live_harness_model(tier: ModelTier) -> Model:
     """OpenAI-compatible BYOK model (LLM_API_BASE or OpenAI key)."""
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
 
-    raw = resolve_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
+    raw = resolve_model(tier)
     model_id = raw.split("/")[-1]
     lowered = raw.lower()
     if settings.llm_api_base:
@@ -70,7 +70,7 @@ def live_chat_model() -> Model:
             from pydantic_ai.models.anthropic import AnthropicModel
         except ImportError as exc:
             raise LlmProviderError(
-                "Anthropic chat harness needs the anthropic extra "
+                "Anthropic session harness needs the anthropic extra "
                 '(pip install "pydantic-ai-slim[anthropic]").',
                 model=raw,
                 kind="unsupported",
@@ -78,7 +78,7 @@ def live_chat_model() -> Model:
         return AnthropicModel(model_id)
     if not settings.openai_api_key:
         raise LlmProviderError(
-            "No OpenAI-compatible key for the chat harness.",
+            "No OpenAI-compatible key for the session harness.",
             model=raw,
             kind="auth",
         )
@@ -88,13 +88,16 @@ def live_chat_model() -> Model:
     )
 
 
-async def query_market_trends(
-    ctx: RunContext[ChatDeps],
+def live_chat_model() -> Model:
+    """Chat-tier BYOK model."""
+    return live_harness_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
+
+
+async def lookup_market_trends(
     region: str = "HK",
     limit: int = 20,
 ) -> QueryMarketTrendsResponse:
-    """Read-only lookup of recent Hong Kong market signals from PostgreSQL."""
-    del ctx  # company_id reserved; corpus is still HK-wide (same as trend_searcher)
+    """Read-only HK signal lookup from PostgreSQL (no second store)."""
     try:
         db = get_db()
     except RuntimeError:
@@ -118,6 +121,16 @@ async def query_market_trends(
         signals=signals,
         ranked_signal_ids=[s.signal_id for s in signals],
     )
+
+
+async def query_market_trends(
+    ctx: RunContext[ChatDeps],
+    region: str = "HK",
+    limit: int = 20,
+) -> QueryMarketTrendsResponse:
+    """Read-only lookup of recent Hong Kong market signals from PostgreSQL."""
+    del ctx  # company_id reserved; corpus is still HK-wide (same as trend_searcher)
+    return await lookup_market_trends(region, limit)
 
 
 async def slow_probe(ctx: RunContext[ChatDeps]) -> str:

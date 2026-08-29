@@ -74,6 +74,7 @@ Rules:
 - Each query: 1–8 words. Preserve brand/IP spelling. Product-class queries must not repeat the entity unless the user named a branded SKU.
 - Do not paste the raw chat dump; do not include "help me" / "write a post"
 - If ambiguous entity, still emit split best-effort queries (do not refuse)
+- You may call ingest_web_search (at most 3 queries this turn, 5 hits each) to persist web results into PostgreSQL, and query_market_trends to peek at existing signals. Return structured QueryGenOut. Never publish.
 """
 
 TREND_SEARCH = """You are a HK market signal ranker for social content.
