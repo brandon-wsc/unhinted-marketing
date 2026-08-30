@@ -306,7 +306,7 @@ admin-side later).
 
 - [x] P0-1 encryption helper + `BYOK_ENCRYPTION_KEY` + direct `cryptography` dep
 - [x] P0-1b SSRF guard helper for user-supplied base URLs (probes + model-list proxy)
-- [ ] P0-schema Alembic migration: `byok_providers` / `byok_models` / `byok_routing`
+- [x] P0-schema Alembic migration: `byok_providers` / `byok_models` / `byok_routing`
       (hex revision)
 - [ ] P0-2 resolver refactor (router + harness + contextvar scoping); env path
       bit-identical; unit tests with mocked resolution (no live key, per TESTING.md)
