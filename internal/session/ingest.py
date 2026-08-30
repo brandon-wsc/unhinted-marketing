@@ -102,11 +102,7 @@ async def fetch_and_upsert_tavily(
         except Exception:
             logger.exception("failed to upsert Tavily signal %s", item.get("signal_id"))
     if tavily_items:
-        try:
-            await db.commit()
-        except Exception:
-            logger.exception("commit after Tavily upsert failed")
-            await db.rollback()
+        await db.flush()
     return tavily_items
 
 
