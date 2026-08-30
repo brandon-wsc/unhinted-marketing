@@ -20,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -38,6 +37,7 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/context/auth-context";
 import {
+  apiCreateByokProvider,
   apiDeleteByokModel,
   apiDeleteByokProvider,
   apiGetByokRouting,
@@ -55,12 +55,16 @@ import {
   type ByokRoutingSlotName,
 } from "@/features/company-settings/api";
 import {
+  type ByokKeyFormValue,
+  EMPTY_BYOK_KEY_FORM,
   isByokPending,
   PLATFORM_SLOT_VALUE,
   routingToUpdate,
   slotUpdateField,
+  validateByokKeyForm,
 } from "@/features/company-settings/byok-helpers";
-import { AddModelWizard } from "@/features/company-settings/components/add-model-wizard";
+import { AddModelDialog } from "@/features/company-settings/components/add-model-dialog";
+import { KeyFormFields } from "@/features/company-settings/components/key-form-fields";
 import { mapApiError } from "@/lib/map-api-error";
 
 const ROUTING_SLOTS: ByokRoutingSlotName[] = ["cheap", "medium", "strong", "image"];
@@ -77,9 +81,7 @@ type PendingDelete =
 
 type EditKeyState = {
   item: ByokProviderItem;
-  label: string;
-  apiKey: string;
-  apiBase: string;
+  value: ByokKeyFormValue;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -128,13 +130,15 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
   const { accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ByokProviderItem[]>([]);
   const [models, setModels] = useState<ByokModelItem[]>([]);
   const [routing, setRouting] = useState<ByokRoutingSlot[]>([]);
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const [addModelOpen, setAddModelOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [editKey, setEditKey] = useState<EditKeyState | null>(null);
+  const [addKey, setAddKey] = useState<ByokKeyFormValue | null>(null);
   const [imageTest, setImageTest] = useState<ByokModelItem | null>(null);
 
   const apply = useCallback(
@@ -232,23 +236,63 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
     }
   }
 
+  function closeAddKey() {
+    setAddKey(null);
+    setDialogError(null);
+  }
+
+  function openAddKey() {
+    setDialogError(null);
+    setAddKey(EMPTY_BYOK_KEY_FORM);
+  }
+
+  async function onSaveAddKey() {
+    if (!addKey) return;
+    const invalid = validateByokKeyForm(addKey, { requireKey: true });
+    if (invalid) {
+      setDialogError(t(`settings.apiKeys.errors.${invalid}`));
+      return;
+    }
+    setBusyId("add-key");
+    setDialogError(null);
+    try {
+      await apiCreateByokProvider(accessToken, companyId, {
+        label: addKey.label.trim(),
+        provider_type: addKey.providerType,
+        api_key: addKey.apiKey.trim(),
+        api_base: addKey.providerType === "openai_compatible" ? addKey.apiBase.trim() : null,
+      });
+      setAddKey(null);
+      await refresh({ poll: true });
+    } catch (err) {
+      setDialogError(mapApiError(err instanceof Error ? err.message : String(err), t));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function onSaveEdit() {
     if (!editKey) return;
+    const invalid = validateByokKeyForm(editKey.value, { requireKey: false });
+    if (invalid) {
+      setDialogError(t(`settings.apiKeys.errors.${invalid}`));
+      return;
+    }
     setBusyId(editKey.item.id);
-    setError(null);
+    setDialogError(null);
     try {
       const patch: { label: string; api_key?: string; api_base?: string | null } = {
-        label: editKey.label.trim(),
+        label: editKey.value.label.trim(),
       };
-      if (editKey.apiKey.trim()) patch.api_key = editKey.apiKey.trim();
+      if (editKey.value.apiKey.trim()) patch.api_key = editKey.value.apiKey.trim();
       if (editKey.item.provider_type === "openai_compatible") {
-        patch.api_base = editKey.apiBase.trim() || null;
+        patch.api_base = editKey.value.apiBase.trim() || null;
       }
       await apiPatchByokProvider(accessToken, companyId, editKey.item.id, patch);
       setEditKey(null);
       await refresh({ poll: true });
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setDialogError(mapApiError(err instanceof Error ? err.message : String(err), t));
     } finally {
       setBusyId(null);
     }
@@ -308,16 +352,11 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {t("settings.apiKeys.title")}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("settings.apiKeys.subtitle")}</p>
-        </div>
-        <Button type="button" onClick={() => setWizardOpen(true)}>
-          {t("settings.apiKeys.addModel")}
-        </Button>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t("settings.apiKeys.title")}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t("settings.apiKeys.subtitle")}</p>
       </div>
 
       {error && (
@@ -331,9 +370,14 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       ) : (
         <>
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">
-              {t("settings.apiKeys.keys.title")}
-            </h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-foreground">
+                {t("settings.apiKeys.keys.title")}
+              </h2>
+              <Button type="button" variant="outline" size="sm" onClick={openAddKey}>
+                {t("settings.apiKeys.addKey")}
+              </Button>
+            </div>
             {providers.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("settings.apiKeys.keys.empty")}</p>
             ) : (
@@ -376,14 +420,18 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
                               type="button"
                               variant="outline"
                               size="sm"
-                              onClick={() =>
+                              onClick={() => {
+                                setDialogError(null);
                                 setEditKey({
                                   item,
-                                  label: item.label,
-                                  apiKey: "",
-                                  apiBase: item.api_base ?? "",
-                                })
-                              }
+                                  value: {
+                                    label: item.label,
+                                    providerType: item.provider_type,
+                                    apiKey: "",
+                                    apiBase: item.api_base ?? "",
+                                  },
+                                });
+                              }}
                             >
                               {t("settings.apiKeys.actions.edit")}
                             </Button>
@@ -408,11 +456,27 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">
-              {t("settings.apiKeys.models.title")}
-            </h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-foreground">
+                {t("settings.apiKeys.models.title")}
+              </h2>
+              <Button
+                type="button"
+                size="sm"
+                disabled={providers.length === 0}
+                onClick={() => setAddModelOpen(true)}
+              >
+                {t("settings.apiKeys.addModel")}
+              </Button>
+            </div>
             {models.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("settings.apiKeys.models.empty")}</p>
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  providers.length === 0
+                    ? "settings.apiKeys.models.emptyNeedsKey"
+                    : "settings.apiKeys.models.empty",
+                )}
+              </p>
             ) : (
               <div className="rounded-xl border border-border bg-card">
                 <Table>
@@ -531,12 +595,11 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
         </>
       )}
 
-      <AddModelWizard
-        open={wizardOpen}
-        onOpenChange={setWizardOpen}
+      <AddModelDialog
+        open={addModelOpen}
+        onOpenChange={setAddModelOpen}
         companyId={companyId}
         providers={providers}
-        routing={routing}
         onChanged={async () => {
           try {
             await refresh({ poll: true });
@@ -547,51 +610,87 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
         }}
       />
 
-      <Dialog open={editKey != null} onOpenChange={(open) => !open && setEditKey(null)}>
-        <DialogContent>
+      <Dialog open={addKey != null} onOpenChange={(open) => !open && closeAddKey()}>
+        <DialogContent
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+        >
           <DialogHeader>
-            <DialogTitle>{t("settings.apiKeys.edit.title")}</DialogTitle>
-            <DialogDescription>{t("settings.apiKeys.edit.apiKeyRotate")}</DialogDescription>
+            <DialogTitle>{t("settings.apiKeys.addKey")}</DialogTitle>
+            <DialogDescription>{t("settings.apiKeys.addKeyHint")}</DialogDescription>
           </DialogHeader>
-          {editKey && (
+          {addKey != null && dialogError && (
+            <Alert variant="destructive">
+              <AlertDescription>{dialogError}</AlertDescription>
+            </Alert>
+          )}
+          {addKey != null && (
             <div className="space-y-4">
-              <FormField id="byok-edit-label" label={t("settings.apiKeys.wizard.label")}>
-                <Input
-                  id="byok-edit-label"
-                  value={editKey.label}
-                  onChange={(e) => setEditKey({ ...editKey, label: e.target.value })}
-                  autoComplete="off"
-                />
-              </FormField>
-              <FormField id="byok-edit-key" label={t("settings.apiKeys.wizard.apiKey")}>
-                <Input
-                  id="byok-edit-key"
-                  type="password"
-                  value={editKey.apiKey}
-                  onChange={(e) => setEditKey({ ...editKey, apiKey: e.target.value })}
-                  autoComplete="new-password"
-                  placeholder={t("settings.apiKeys.edit.apiKeyPlaceholder")}
-                />
-              </FormField>
-              {editKey.item.provider_type === "openai_compatible" && (
-                <FormField id="byok-edit-base" label={t("settings.apiKeys.wizard.apiBase")}>
-                  <Input
-                    id="byok-edit-base"
-                    value={editKey.apiBase}
-                    onChange={(e) => setEditKey({ ...editKey, apiBase: e.target.value })}
-                    autoComplete="off"
-                  />
-                </FormField>
-              )}
+              <KeyFormFields idPrefix="byok-add" value={addKey} onChange={setAddKey} />
             </div>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setEditKey(null)}>
+            <Button type="button" variant="outline" onClick={closeAddKey}>
               {t("common.cancel")}
             </Button>
             <Button
               type="button"
-              disabled={!editKey?.label.trim() || busyId === editKey?.item.id}
+              disabled={busyId === "add-key"}
+              onClick={() => void onSaveAddKey()}
+            >
+              {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editKey != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditKey(null);
+            setDialogError(null);
+          }
+        }}
+      >
+        <DialogContent
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>{t("settings.apiKeys.edit.title")}</DialogTitle>
+            <DialogDescription>{t("settings.apiKeys.edit.apiKeyRotate")}</DialogDescription>
+          </DialogHeader>
+          {editKey != null && dialogError && (
+            <Alert variant="destructive">
+              <AlertDescription>{dialogError}</AlertDescription>
+            </Alert>
+          )}
+          {editKey && (
+            <div className="space-y-4">
+              <KeyFormFields
+                idPrefix="byok-edit"
+                value={editKey.value}
+                onChange={(value) => setEditKey({ ...editKey, value })}
+                showType={false}
+                keyRequired={false}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEditKey(null);
+                setDialogError(null);
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={busyId === editKey?.item.id}
               onClick={() => void onSaveEdit()}
             >
               {t("common.save")}

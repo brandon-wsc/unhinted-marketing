@@ -2,6 +2,7 @@ import type {
   ByokCapability,
   ByokCapabilitySource,
   ByokListedModel,
+  ByokProviderType,
   ByokRoutingSlot,
   ByokRoutingSlotName,
   ByokRoutingUpdate,
@@ -10,7 +11,36 @@ import type {
 const IMAGE_MARKERS = ["dall-e", "dalle", "seedream", "flux", "imagen"] as const;
 
 export const PLATFORM_SLOT_VALUE = "__platform__";
-export const NEW_PROVIDER_VALUE = "__new__";
+
+export const BYOK_PROVIDER_TYPES: ByokProviderType[] = ["openai", "anthropic", "openai_compatible"];
+
+export type ByokKeyFormValue = {
+  label: string;
+  providerType: ByokProviderType;
+  apiKey: string;
+  apiBase: string;
+};
+
+export const EMPTY_BYOK_KEY_FORM: ByokKeyFormValue = {
+  label: "",
+  providerType: "openai",
+  apiKey: "",
+  apiBase: "",
+};
+
+export type ByokKeyFormError = "labelRequired" | "keyRequired" | "apiBaseRequired";
+
+export function validateByokKeyForm(
+  value: ByokKeyFormValue,
+  opts: { requireKey: boolean },
+): ByokKeyFormError | null {
+  if (!value.label.trim()) return "labelRequired";
+  if (opts.requireKey && !value.apiKey.trim()) return "keyRequired";
+  if (value.providerType === "openai_compatible" && !value.apiBase.trim()) {
+    return "apiBaseRequired";
+  }
+  return null;
+}
 
 export function inferByokCapability(modelId: string): ByokCapability {
   const lowered = modelId.toLowerCase();

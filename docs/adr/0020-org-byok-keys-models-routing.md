@@ -88,9 +88,15 @@ Saving a key or model is non-blocking (shape validation only) and queues a backg
 
 `POST /models` with an existing `(provider_id, model_id)` updates that row (e.g. capability correction) instead of 409 or a duplicate.
 
-### 12. UI: wizard + three sections
+### 12. UI: three unmixed surfaces, no wizard
 
-Editor-only `?tab=api-keys` in company settings. An "Add model" wizard walks key → model id → capability (pre-filled) → slot assignment; three management sections (Keys / Models / Routing) handle day-to-day edits. Routing dropdowns are filtered by capability and show the effective source per slot ("Company: fable-5" vs "Platform default").
+Editor-only `?tab=api-keys` in company settings. Add key, Add model, and Routing are three unmixed surfaces. Each layer is its own action: save closes; nothing offers the next layer. There is no wizard, no page-header create chrome, and no row-level create.
+
+- **Add key** (Keys heading) — key-only dialog (label, type, secret, `api_base` when compatible). Save closes. No "add a model now".
+- **Add model** (Models heading) — single-page dialog: model id (provider-fetched dropdown, free text when unfetchable) + capability (pre-filled, overridable). Requires an existing key (button disabled until one exists). One key is used automatically; multiple keys show a Key field on the same form. Save closes. Never creates a key; never opens routing.
+- **Routing** — four slot dropdowns on the page, filtered by capability, showing effective source ("Company: fable-5" vs "Platform default"). Clearing a slot reverts that slot only. This is the only place slots are assigned.
+
+Credential dialogs (add key, add model, edit/rotate key): overlay click does not dismiss; X / Esc do. Validation and save errors render **inside** the dialog.
 
 ## Consequences
 

@@ -109,9 +109,12 @@ non-OpenAI org keys — that is a separate ADR, out of scope here.
    provider metadata when available**. Fetch unsupported/fails → free text + inference
    pre-fill (`dall-e` / `seedream` / `flux` / `imagen` → image, else chat) + manual
    override. Capability is never auto-probed with live calls (image probes cost money).
-8. **UI flow = wizard + sections** — "Add model" wizard walks key → model id →
-   capability (pre-filled) → slot assignment; three management sections (Keys / Models /
-   Routing) exist for day-to-day edits.
+8. **UI: three unmixed surfaces, no wizard** — Add key, Add model, and Routing are
+   each their own action; save closes; nothing offers the next layer. **Add key**
+   (Keys heading) is a key-only dialog. **Add model** (Models heading) is a
+   single-page dialog (model id + capability); it never creates a key and is disabled
+   until one exists. **Routing** is the four slot dropdowns on the page — the only
+   place slots are assigned.
 9. **SSRF guard on user-supplied base URLs** — `api_base` is user input and the server
    fetches it (model-list proxy, test probes). Block private/internal ranges
    (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, link-local /
@@ -283,19 +286,33 @@ New editor-only tab in `web/src/pages/company-settings.tsx` (`?tab=api-keys`, sa
 gating as `approvals`). New components under
 `web/src/features/company-settings/components/` + API functions in the existing `api.ts`.
 
-- **"Add model" wizard** (decision 8): pick existing key or add one inline → model id
-  via provider-fetched dropdown, free text when unfetchable → capability pre-filled from
-  metadata/inference, overridable → optional slot assignment. Built from `Dialog` +
-  `Select` + `Input` primitives.
-- **Keys section** — masked rows (`••••{last4}`, label, provider, verified Badge), test
-  button, edit (rotate key), delete with the two-phase confirm dialog listing dependents.
-- **Models section** — registry rows (model id, key label, capability Badge, verified),
-  test button (image test carries a cost warning), delete with slot-impact confirm.
-- **Routing section** — four dropdowns (cheap/medium/strong/image), filtered by
-  capability; each shows effective source ("Company: fable-5" vs "Platform default");
-  clearing a slot reverts to platform.
-- i18n: add keys to `zh-HK` + `en` catalogs; spoken-register zh-HK per VOICE decision.
-- Compose `ui/*` primitives + `FormField`; no parallel controls (AGENTS.md web rules).
+Section headings hold the matching create (do **not** put both on the page header):
+
+- **Add key** (Keys heading, `variant="outline"` `size="sm"`) — key-only dialog (label,
+  type, secret, `api_base` when compatible). Save closes. No follow-up into Add model.
+- **Add model** (Models heading, primary `size="sm"`) — disabled until a key exists.
+  Single-page dialog: model id via provider-fetched dropdown, free text when unfetchable
+  → capability pre-filled, overridable. One key is used automatically; multiple keys
+  show a Key field on the same form. Save closes. Never creates a key; never opens
+  routing.
+
+Both dialogs, plus **edit/rotate key**, are credential surfaces: overlay / outside click
+does not dismiss; X and Esc do. Close resets the form. Validation and save errors render
+**inside** the dialog. Built from `Dialog` + `Select` + `Input` + `FormField`.
+
+Sections are lists + row actions only:
+
+- **Keys** — masked rows (`••••{last4}`, label, provider, verified Badge), test, edit
+  (rotate), two-phase delete listing dependents.
+- **Models** — registry rows (model id, key label, capability Badge, verified), test
+  (image test carries a cost warning), delete with slot-impact confirm.
+- **Routing** — four dropdowns (cheap/medium/strong/image), filtered by capability;
+  each shows effective source ("Company: fable-5" vs "Platform default"); clearing a
+  slot reverts **that slot only** to platform. This is the only place slots are assigned.
+
+Empty copy points at the matching section action (`Add key` / `Add model`).
+i18n: `zh-HK` + `en`; spoken-register zh-HK per VOICE decision.
+Compose `ui/*` primitives; no parallel controls (AGENTS.md web rules).
 
 Out of scope for v1 UI: usage/cost display per key (records already carry `company_id` —
 admin-side later).
@@ -315,7 +332,7 @@ admin-side later).
 - [x] P0-4 recorder `key_source` / `key_last4`
 - [x] P1 BYOK routes (providers / models / routing / test / model-list proxy) + schemas +
       contract export + TS mirrors; route tests incl. two-phase delete
-- [x] P2 settings tab: wizard + three sections + i18n;
+- [x] P2 settings tab: three unmixed sections + i18n;
       `pnpm run lint && pnpm test && pnpm run build`
 - [x] ADR 0020 + STATUS decision entry; tick ROADMAP "BYOK settings page" (rename to
       match the three-table design); update `.env.example` (`BYOK_ENCRYPTION_KEY`)

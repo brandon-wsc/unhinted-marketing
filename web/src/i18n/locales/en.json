@@ -438,9 +438,12 @@
       "title": "API keys",
       "subtitle": "Use your own keys and models for cheap / medium / strong / image. Members never see this page.",
       "addModel": "Add model",
+      "addKey": "Add key",
+      "addKeyHint": "You can add models and routing later.",
+      "addModelHint": "Assign slots in Routing after you save.",
       "keys": {
         "title": "Keys",
-        "empty": "No keys yet. Use Add model to create the first one.",
+        "empty": "No keys yet. Add a key to get started.",
         "masked": "••••{{last4}}",
         "columns": {
           "label": "Label",
@@ -452,6 +455,7 @@
       "models": {
         "title": "Models",
         "empty": "No models yet. Use Add model to register one.",
+        "emptyNeedsKey": "Add a key first, then register a model.",
         "columns": {
           "model": "Model",
           "key": "Key",
@@ -495,15 +499,7 @@
         "delete": "Delete"
       },
       "wizard": {
-        "title": "Add model",
-        "stepKey": "Choose an existing key, or add a new one.",
-        "stepModel": "Pick or enter a model id. Capability is pre-filled and can be changed.",
-        "stepSlots": "Slots (optional)",
-        "next": "Next",
-        "back": "Back",
-        "save": "Save",
         "keyExisting": "Key",
-        "keyNew": "Add a new key",
         "label": "Label",
         "providerType": "Provider",
         "apiKey": "API key",
@@ -512,8 +508,7 @@
         "modelId": "Model id",
         "modelFetching": "Loading the model list…",
         "modelFreeText": "This key does not support a model list. Enter the model id.",
-        "capability": "Capability",
-        "slotsHint": "Assign slots now, or leave empty and set routing later."
+        "capability": "Capability"
       },
       "edit": {
         "title": "Edit key",

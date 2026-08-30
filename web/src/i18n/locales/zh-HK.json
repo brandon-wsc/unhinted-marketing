@@ -438,9 +438,12 @@
       "title": "API keys",
       "subtitle": "用自己嘅 key 同 model，設定 cheap / medium / strong / image。成員睇唔到呢頁。",
       "addModel": "新增 model",
+      "addKey": "新增 key",
+      "addKeyHint": "加完可以稍後先 set model 同 routing。",
+      "addModelHint": "儲存之後再喺 Routing 指派 slot。",
       "keys": {
         "title": "Keys",
-        "empty": "未有 key。撳「新增 model」加第一條。",
+        "empty": "未有 key。撳「新增 key」加第一條。",
         "masked": "••••{{last4}}",
         "columns": {
           "label": "名稱",
@@ -452,6 +455,7 @@
       "models": {
         "title": "Models",
         "empty": "未有 model。用「新增 model」加一條。",
+        "emptyNeedsKey": "先加 key，再註冊 model。",
         "columns": {
           "model": "Model",
           "key": "Key",
@@ -495,15 +499,7 @@
         "delete": "刪除"
       },
       "wizard": {
-        "title": "新增 model",
-        "stepKey": "揀現有 key，或者加一條新嘅。",
-        "stepModel": "揀或者輸入 model id，用途可以改。",
-        "stepSlots": "Slots（可選）",
-        "next": "下一步",
-        "back": "返回",
-        "save": "儲存",
         "keyExisting": "Key",
-        "keyNew": "加新 key",
         "label": "名稱",
         "providerType": "類型",
         "apiKey": "API key",
@@ -512,8 +508,7 @@
         "modelId": "Model id",
         "modelFetching": "攞緊 model 清單…",
         "modelFreeText": "呢個 key 唔支援自動清單，輸入 model id 就得。",
-        "capability": "用途",
-        "slotsHint": "可以而家指派 slot；唔使就留空，稍後再喺 Routing 設定。"
+        "capability": "用途"
       },
       "edit": {
         "title": "編輯 key",
