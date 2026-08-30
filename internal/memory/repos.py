@@ -10,6 +10,9 @@ from sqlalchemy.orm import selectinload
 
 from internal.memory.embeddings import embed_texts
 from internal.memory.models import (
+    ByokModel,
+    ByokProvider,
+    ByokRouting,
     Edge,
     Entity,
     OrganizationMember,
@@ -1360,3 +1363,37 @@ async def mark_proposal_reviewed(
     proposal.reviewed_at = datetime.now(UTC)
     await db.flush()
     return proposal
+
+
+async def get_byok_routing(db: AsyncSession, company_id: uuid.UUID) -> ByokRouting | None:
+    return await db.get(ByokRouting, company_id)
+
+
+async def list_byok_models_by_ids(
+    db: AsyncSession,
+    company_id: uuid.UUID,
+    model_ids: list[uuid.UUID],
+) -> list[ByokModel]:
+    if not model_ids:
+        return []
+    stmt = select(ByokModel).where(
+        ByokModel.company_id == company_id,
+        ByokModel.id.in_(model_ids),
+    )
+    result = await db.scalars(stmt)
+    return list(result.all())
+
+
+async def list_byok_providers_by_ids(
+    db: AsyncSession,
+    company_id: uuid.UUID,
+    provider_ids: list[uuid.UUID],
+) -> list[ByokProvider]:
+    if not provider_ids:
+        return []
+    stmt = select(ByokProvider).where(
+        ByokProvider.company_id == company_id,
+        ByokProvider.id.in_(provider_ids),
+    )
+    result = await db.scalars(stmt)
+    return list(result.all())

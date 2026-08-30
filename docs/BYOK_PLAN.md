@@ -308,7 +308,7 @@ admin-side later).
 - [x] P0-1b SSRF guard helper for user-supplied base URLs (probes + model-list proxy)
 - [x] P0-schema Alembic migration: `byok_providers` / `byok_models` / `byok_routing`
       (hex revision)
-- [ ] P0-2 resolver refactor (router + harness + contextvar scoping); env path
+- [x] P0-2 resolver refactor (router + harness + contextvar scoping); env path
       bit-identical; unit tests with mocked resolution (no live key, per TESTING.md)
 - [ ] P0-3 worker fan-out per-company resolution
 - [ ] P0-4 recorder `key_source` / `key_last4`

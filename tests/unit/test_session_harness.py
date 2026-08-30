@@ -136,7 +136,9 @@ async def test_stream_chat_reply_records_call_context(monkeypatch: pytest.Monkey
 
 
 def test_live_chat_model_uses_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(H.settings, "llm_api_base", "http://127.0.0.1:4000/v1")
-    monkeypatch.setattr(H.settings, "openai_api_key", "sk-test")
+    from internal import config
+
+    monkeypatch.setattr(config.settings, "llm_api_base", "http://127.0.0.1:4000/v1")
+    monkeypatch.setattr(config.settings, "openai_api_key", "sk-test")
     model = H.live_chat_model()
     assert getattr(model, "model_name", None)

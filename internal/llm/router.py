@@ -1,4 +1,4 @@
-"""LiteLLM routing with BYOK from environment (DB-backed keys in Phase 4)."""
+"""LiteLLM routing — credentials from the per-turn resolver (ADR 0020)."""
 
 from __future__ import annotations
 
@@ -25,6 +25,13 @@ from litellm.exceptions import (
 
 from internal.config import settings
 from internal.llm.recorder import track
+from internal.llm.resolve import (
+    bundle_has_credentials,
+    env_has_llm_credentials,
+    prefix_litellm_model,
+    resolve_image,
+    resolve_llm_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,58 +60,50 @@ class LlmProviderError(Exception):
 
 def configure_litellm() -> None:
     litellm.drop_params = True
-    if settings.openai_api_key:
-        litellm.openai_key = settings.openai_api_key
-    if settings.anthropic_api_key:
-        litellm.anthropic_key = settings.anthropic_api_key
 
 
 def has_llm_credentials() -> bool:
-    return bool(settings.openai_api_key or settings.anthropic_api_key)
+    return env_has_llm_credentials() or bundle_has_credentials()
 
 
 def resolve_model(tier: ModelTier) -> str:
-    mapping = {
-        ModelTier.CHEAP: settings.llm_cheap_model,
-        ModelTier.MEDIUM: settings.llm_medium_model,
-        ModelTier.STRONG: settings.llm_strong_model,
-    }
-    return mapping[tier]
+    return resolve_llm_model(tier).model_id
 
 
 def resolve_image_model() -> str | None:
     """Configured image-gen model, or None when unset / blank."""
-    raw = (settings.llm_image_model or "").strip()
+    resolved = resolve_image()
+    if resolved is None:
+        return None
+    raw = (resolved.model_id or "").strip()
     return raw or None
 
 
-def _litellm_model(model: str) -> str:
-    """When LLM_API_BASE is set, force the OpenAI-compatible provider.
+def _litellm_model(model: str, api_base: str | None = None) -> str:
+    """When a custom api_base is set, force the OpenAI-compatible provider.
 
     Bare ids like ``deepseek-chat`` make LiteLLM pick the native Deepseek
     provider and ignore (or mishandle) a custom api_base — which surfaces as
     an instant DeepseekException timeout. Prefix ``openai/`` so the request
-    goes through the OpenAI-compatible HTTP client against LLM_API_BASE.
+    goes through the OpenAI-compatible HTTP client against that base.
     """
-    if not settings.llm_api_base:
-        return model
-    if "/" in model:
-        return model
-    return f"openai/{model}"
+    return prefix_litellm_model(model, api_base)
 
 
 def _base_kwargs(tier: ModelTier, temperature: float) -> dict:
     configure_litellm()
-    model = _litellm_model(resolve_model(tier))
+    resolved = resolve_llm_model(tier)
+    raw = resolve_model(tier)
+    model = _litellm_model(raw, resolved.api_base)
     kwargs: dict = {
         "model": model,
         "temperature": temperature,
         "timeout": settings.llm_timeout_seconds,
     }
-    if settings.llm_api_base:
-        kwargs["api_base"] = settings.llm_api_base
-        if settings.openai_api_key:
-            kwargs["api_key"] = settings.openai_api_key
+    if resolved.api_base:
+        kwargs["api_base"] = resolved.api_base
+    if resolved.api_key:
+        kwargs["api_key"] = resolved.api_key
     return kwargs
 
 
@@ -408,17 +407,20 @@ async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
         )
 
     configure_litellm()
-    model = _litellm_model(raw)
+    resolved = resolve_image()
+    api_base = resolved.api_base if resolved is not None else None
+    api_key = resolved.api_key if resolved is not None else None
+    model = _litellm_model(raw, api_base)
     kwargs: dict = {
         "model": model,
         "prompt": prompt,
         "size": size,
         "timeout": settings.llm_timeout_seconds,
     }
-    if settings.llm_api_base:
-        kwargs["api_base"] = settings.llm_api_base
-        if settings.openai_api_key:
-            kwargs["api_key"] = settings.openai_api_key
+    if api_base:
+        kwargs["api_base"] = api_base
+    if api_key:
+        kwargs["api_key"] = api_key
 
     with track(kind="image", tier=None, model=model, temperature=None, system=None, user=prompt) as rec:
         try:
