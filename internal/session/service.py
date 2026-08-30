@@ -53,6 +53,36 @@ def _extract_llm_provider_error(exc: BaseException) -> LlmProviderError | None:
     return None
 
 
+def _uses_cjk(text: str) -> bool:
+    return any("\u4e00" <= c <= "\u9fff" for c in text)
+
+
+def _turn_failure_reply(user_content: str) -> str:
+    """User-facing copy when the graph dies for a non-LLM reason."""
+    if _uses_cjk(user_content):
+        return "呢輪處理失敗，請再試一次。"
+    return "This turn failed. Please try again."
+
+
+def _llm_failure_reply(user_content: str, err: LlmProviderError) -> str:
+    extra = f" · {err.model}" if err.model else ""
+    if _uses_cjk(user_content):
+        return f"AI 服務暫時唔可用（{err.kind}{extra}）：{err.message}"
+    return f"AI service unavailable ({err.kind}{extra}): {err.message}"
+
+
+async def _rollback_quietly(db: AsyncSession, *, session_id: uuid.UUID) -> None:
+    """Reset a poisoned request session so persist / HTTP teardown can proceed."""
+    try:
+        await db.rollback()
+    except Exception:
+        logger.warning(
+            "rollback after session turn failure failed (session=%s)",
+            session_id,
+            exc_info=True,
+        )
+
+
 def _session_config(session_id: uuid.UUID) -> dict[str, Any]:
     return {"configurable": {"thread_id": str(session_id)}}
 
@@ -613,8 +643,13 @@ async def _invoke_graph(
     user_content: str,
     message_dicts: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], bool, LlmProviderError | None, list[dict[str, Any]], int]:
+    # Capture PKs before invoke — a failed node can expire the ORM row, and
+    # lazy-loading session.id in except/finally then masks the original error.
+    session_id = session.id
+    user_id = session.user_id
+    company_id = session.company_id
     graph = get_session_graph()
-    config = _session_config(session.id)
+    config = _session_config(session_id)
     provider_error: LlmProviderError | None = None
     values: dict[str, Any] = {}
     still_interrupted = False
@@ -624,54 +659,62 @@ async def _invoke_graph(
     with (
         session_db(db),
         turn_trace(
-            session_id=session.id,
-            user_id=session.user_id,
-            company_id=session.company_id,
+            session_id=session_id,
+            user_id=user_id,
+            company_id=company_id,
         ),
     ):
-        session_event_bus.begin_turn_progress(session.id)
+        session_event_bus.begin_turn_progress(session_id)
         try:
             result = await graph.ainvoke(graph_input, config)
             snapshot = await graph.aget_state(config)
             values = dict(snapshot.values or result or {})
             still_interrupted = bool(snapshot.next)
         except asyncio.CancelledError:
-            progress_events = session_event_bus.end_turn_progress(session.id)
+            progress_events = session_event_bus.end_turn_progress(session_id)
             raise
         except Exception as exc:
             provider_error = _extract_llm_provider_error(exc)
             if provider_error is None:
-                progress_events = session_event_bus.end_turn_progress(session.id)
-                raise
-            logger.warning(
-                "LLM provider error during session turn (session=%s model=%s kind=%s): %s",
-                session.id,
-                provider_error.model,
-                provider_error.kind,
-                provider_error.message,
-            )
-            snapshot = await graph.aget_state(config)
-            values = dict(snapshot.values or {})
-            still_interrupted = bool(snapshot.next)
-            chinese = any("\u4e00" <= c <= "\u9fff" for c in user_content)
-            fail_msg = (
-                f"AI 服務暫時唔可用（{provider_error.kind}"
-                + (f" · {provider_error.model}" if provider_error.model else "")
-                + f"）：{provider_error.message}"
-                if chinese
-                else (
-                    f"AI service unavailable ({provider_error.kind}"
-                    + (f" · {provider_error.model}" if provider_error.model else "")
-                    + f"): {provider_error.message}"
+                logger.exception("Session turn failed (session=%s)", session_id)
+                await _rollback_quietly(db, session_id=session_id)
+                fail_msg = _turn_failure_reply(user_content)
+                values = {
+                    "error": fail_msg,
+                    "messages": list(message_dicts)
+                    + [{"role": "assistant", "content": fail_msg}],
+                }
+                still_interrupted = False
+            else:
+                logger.warning(
+                    "LLM provider error during session turn "
+                    "(session=%s model=%s kind=%s): %s",
+                    session_id,
+                    provider_error.model,
+                    provider_error.kind,
+                    provider_error.message,
                 )
-            )
-            values["error"] = provider_error.message
-            values["messages"] = list(values.get("messages") or message_dicts) + [
-                {"role": "assistant", "content": fail_msg}
-            ]
+                try:
+                    snapshot = await graph.aget_state(config)
+                    values = dict(snapshot.values or {})
+                    still_interrupted = bool(snapshot.next)
+                except Exception:
+                    logger.exception(
+                        "aget_state after LLM error failed (session=%s)",
+                        session_id,
+                    )
+                    values = {}
+                    still_interrupted = False
+                values["error"] = provider_error.message
+                values["messages"] = list(values.get("messages") or message_dicts) + [
+                    {
+                        "role": "assistant",
+                        "content": _llm_failure_reply(user_content, provider_error),
+                    }
+                ]
         finally:
             if not progress_events:
-                progress_events = session_event_bus.end_turn_progress(session.id)
+                progress_events = session_event_bus.end_turn_progress(session_id)
 
     duration_ms = max(0, int((time.perf_counter() - started) * 1000))
     return values, still_interrupted, provider_error, progress_events, duration_ms
@@ -685,7 +728,8 @@ async def run_session_turn(
     source_question_id: str | None = None,
 ) -> dict[str, Any]:
     """Append user message, invoke graph (never blind-resume), persist side-effects."""
-    if session_turn_registry.is_busy(session.id):
+    session_id = session.id
+    if session_turn_registry.is_busy(session_id):
         raise SessionTurnConflict("busy", "Session turn already in progress")
     if await session_is_parked(session):
         raise SessionTurnConflict(
@@ -695,10 +739,10 @@ async def run_session_turn(
 
     pre_state = _strip_discard_meta(session.state)
     user_msg = await repos.add_session_message(
-        db, session_id=session.id, role="user", content=user_content
+        db, session_id=session_id, role="user", content=user_content
     )
     repos.touch_session(session)
-    existing = await repos.list_session_messages(db, session.id)
+    existing = await repos.list_session_messages(db, session_id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
     graph_input = _graph_values(session, message_dicts)
     if source_question_id:
@@ -712,7 +756,7 @@ async def run_session_turn(
     if task is None:
         raise RuntimeError("run_session_turn requires a running asyncio task")
     entry = await session_turn_registry.begin(
-        session.id,
+        session_id,
         task=task,
         pre_state=pre_state,
         user_message_id=user_msg.id,
@@ -759,7 +803,7 @@ async def run_session_turn(
         raise
     finally:
         if not entry.cancelling:
-            await session_turn_registry.clear(session.id, entry=entry)
+            await session_turn_registry.clear(session_id, entry=entry)
 
 
 async def resume_image_turn(
@@ -769,7 +813,8 @@ async def resume_image_turn(
     image_format: str | None = None,
 ) -> dict[str, Any]:
     """Resume parked graph at interrupt_before executor_image_plan (ADR 0004)."""
-    if session_turn_registry.is_busy(session.id):
+    session_id = session.id
+    if session_turn_registry.is_busy(session_id):
         raise SessionTurnConflict("busy", "Session turn already in progress")
     if not await session_is_parked(session):
         raise SessionTurnConflict("not_parked", "Session is not awaiting image confirmation")
@@ -779,7 +824,7 @@ async def resume_image_turn(
     parked_restore["awaiting_image_ok"] = True
     repos.touch_session(session)
 
-    existing = await repos.list_session_messages(db, session.id)
+    existing = await repos.list_session_messages(db, session_id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
     # Synthetic id for registry bookkeeping (no new user row on resume).
     resume_msg_id = uuid.uuid4()
@@ -788,7 +833,7 @@ async def resume_image_turn(
     if task is None:
         raise RuntimeError("resume_image_turn requires a running asyncio task")
     entry = await session_turn_registry.begin(
-        session.id,
+        session_id,
         task=task,
         pre_state=_strip_discard_meta(parked_restore),
         user_message_id=resume_msg_id,
@@ -804,7 +849,7 @@ async def resume_image_turn(
 
             fmt = normalize_image_format(image_format)
             graph = get_session_graph()
-            config = _session_config(session.id)
+            config = _session_config(session_id)
             await graph.aupdate_state(config, {"image_format": fmt})
             st = dict(session.state or {})
             st["image_format"] = fmt
@@ -851,7 +896,7 @@ async def resume_image_turn(
         raise
     finally:
         if not entry.cancelling:
-            await session_turn_registry.clear(session.id, entry=entry)
+            await session_turn_registry.clear(session_id, entry=entry)
 
 
 async def stop_session_turn(

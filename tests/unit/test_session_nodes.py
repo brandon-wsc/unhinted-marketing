@@ -346,7 +346,8 @@ async def test_research_ingest_pg_and_tavily(
     assert any(s["signal_id"] == "google_trends_hk:1" for s in out["research_signals"])
     assert N.search_tavily.await_count == 2
     N.upsert_signal.assert_awaited()
-    mock_db.commit.assert_awaited()
+    mock_db.flush.assert_awaited()
+    mock_db.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
