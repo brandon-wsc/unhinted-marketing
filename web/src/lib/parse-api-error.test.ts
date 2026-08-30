@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseApiErrorBody, parseApiErrorResponse, parseSkuConflict } from "@/lib/parse-api-error";
+import {
+  parseApiErrorBody,
+  parseApiErrorResponse,
+  parseHasDependents,
+  parseSkuConflict,
+} from "@/lib/parse-api-error";
 
 describe("parseApiErrorBody", () => {
   it("returns detail string when present", () => {
@@ -117,5 +122,39 @@ describe("parseSkuConflict", () => {
 
   it("returns null for string detail", () => {
     expect(parseSkuConflict({ detail: "nope" })).toBeNull();
+  });
+});
+
+describe("parseHasDependents", () => {
+  it("reads FastAPI object detail", () => {
+    expect(
+      parseHasDependents({
+        detail: {
+          code: "has_dependents",
+          models: [{ id: "m1", model_id: "gpt-4o", slots: ["cheap", "medium"] }],
+          slots: ["cheap", "medium"],
+        },
+      }),
+    ).toEqual({
+      models: [{ id: "m1", model_id: "gpt-4o", slots: ["cheap", "medium"] }],
+      slots: ["cheap", "medium"],
+    });
+  });
+
+  it("reads model-only conflict with empty slots", () => {
+    expect(
+      parseHasDependents({
+        code: "has_dependents",
+        models: [{ id: "m1", model_id: "seedream", slots: [] }],
+        slots: [],
+      }),
+    ).toEqual({
+      models: [{ id: "m1", model_id: "seedream", slots: [] }],
+      slots: [],
+    });
+  });
+
+  it("returns null for string detail", () => {
+    expect(parseHasDependents({ detail: "nope" })).toBeNull();
   });
 });

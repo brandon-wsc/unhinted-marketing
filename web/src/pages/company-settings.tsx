@@ -3,16 +3,19 @@ import { useTranslation } from "react-i18next";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/app-header";
 import { useAuth } from "@/context/auth-context";
+import { ApiKeysPanel } from "@/features/company-settings/components/api-keys-panel";
 import { ApprovalsPanel } from "@/features/company-settings/components/approvals-panel";
 import { MembersPanel } from "@/features/company-settings/components/members-panel";
 import { ProductsPanel } from "@/features/company-settings/components/products-panel";
 import { VoiceForm } from "@/features/company-settings/components/voice-form";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "voice" | "products" | "members" | "approvals";
+type SettingsTab = "voice" | "products" | "members" | "approvals" | "api-keys";
 
 function parseTab(raw: string | null): SettingsTab {
-  if (raw === "products" || raw === "members" || raw === "approvals") return raw;
+  if (raw === "products" || raw === "members" || raw === "approvals" || raw === "api-keys") {
+    return raw;
+  }
   return "voice";
 }
 
@@ -76,9 +79,10 @@ export function CompanySettingsPage() {
 
   const editor = canManageTeam(org?.role);
   const nav: SettingsTab[] = editor
-    ? ["voice", "products", "members", "approvals"]
+    ? ["voice", "products", "members", "approvals", "api-keys"]
     : ["voice", "products", "members"];
-  const activeTab = tab === "approvals" && !editor ? "voice" : tab;
+  const editorOnly = tab === "approvals" || tab === "api-keys";
+  const activeTab = editorOnly && !editor ? "voice" : tab;
 
   return (
     <AppShell mainClassName="overflow-y-auto">
@@ -124,6 +128,7 @@ export function CompanySettingsPage() {
             />
           )}
           {activeTab === "approvals" && <ApprovalsPanel companyId={companyId} />}
+          {activeTab === "api-keys" && <ApiKeysPanel companyId={companyId} />}
         </div>
       </div>
     </AppShell>

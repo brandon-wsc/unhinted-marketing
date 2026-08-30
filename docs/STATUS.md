@@ -298,7 +298,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | API `/api` path prefix | ✅ | [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md) — hard cut; SPA `/system` (legacy `/admin` redirect) |
 | Admin Trace viewer (node-steps + session) | ✅ | [ADR 0007](./adr/0007-admin-trace-viewer.md) — `session_node_steps` + `turn_id`; admin tabs Node steps / Session Trace |
 | Meta Graph API hot search | ⏸ | Next after core UI |
-| BYOK settings page | ⏸ | After core UI |
+| BYOK settings page | ✅ | Editor-only keys / models / routing tab ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md)) |
 | Trace viewer | ✅ | Admin Session Trace tab ([ADR 0007](./adr/0007-admin-trace-viewer.md)) — not end-user UI |
 
 ---

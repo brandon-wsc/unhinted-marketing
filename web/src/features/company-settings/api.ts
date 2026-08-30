@@ -1,11 +1,16 @@
 import { fetchWithAuth } from "@/context/auth-context";
 import { API_BASE } from "@/lib/api-base";
 import {
+  type ByokHasDependents,
+  type ByokRoutingSlotName,
   type ProductSkuConflict,
   parseApiErrorBody,
   parseApiErrorResponse,
+  parseHasDependents,
   parseSkuConflict,
 } from "@/lib/parse-api-error";
+
+export type { ByokHasDependents, ByokRoutingSlotName } from "@/lib/parse-api-error";
 
 export type CompanyVoiceSettings = {
   company_id: string;
@@ -443,6 +448,268 @@ export async function apiAcceptInvite(
 ): Promise<OrgInviteAcceptResponse> {
   const res = await fetchWithAuth(accessToken, `${API_BASE}/invites/${token}/accept`, {
     method: "POST",
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export type ByokProviderType = "openai" | "anthropic" | "openai_compatible";
+export type ByokCapability = "chat" | "image";
+export type ByokCapabilitySource = "provider_metadata" | "inferred" | "manual";
+export type ByokKeySource = "org" | "env";
+
+export type ByokProviderItem = {
+  id: string;
+  label: string;
+  provider_type: ByokProviderType;
+  key_last4: string;
+  api_base: string | null;
+  last_verified_at: string | null;
+  last_error_kind: string | null;
+  verified: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ByokProviderCreate = {
+  label: string;
+  provider_type: ByokProviderType;
+  api_key: string;
+  api_base?: string | null;
+};
+
+export type ByokProviderPatch = {
+  label?: string;
+  api_key?: string | null;
+  api_base?: string | null;
+};
+
+export type ByokModelItem = {
+  id: string;
+  provider_id: string;
+  provider_label: string;
+  provider_key_last4: string;
+  model_id: string;
+  capability: ByokCapability;
+  capability_source: ByokCapabilitySource;
+  last_verified_at: string | null;
+  last_error_kind: string | null;
+  verified: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ByokModelCreate = {
+  provider_id: string;
+  model_id: string;
+  capability: ByokCapability;
+  capability_source: ByokCapabilitySource;
+};
+
+export type ByokListedModel = {
+  id: string;
+  capability?: ByokCapability | null;
+  capability_source?: ByokCapabilitySource | null;
+};
+
+export type ByokModelListProxy = {
+  fetchable: boolean;
+  models: ByokListedModel[];
+};
+
+export type ByokProbeResult = {
+  ok: boolean;
+  error_kind?: string | null;
+};
+
+export type ByokRoutingSlot = {
+  slot: ByokRoutingSlotName;
+  source: ByokKeySource;
+  registry_id: string | null;
+  model_id: string | null;
+};
+
+export type ByokRoutingResponse = {
+  slots: ByokRoutingSlot[];
+};
+
+export type ByokRoutingUpdate = {
+  cheap_model_id: string | null;
+  medium_model_id: string | null;
+  strong_model_id: string | null;
+  image_model_id: string | null;
+};
+
+export class ByokDependentsError extends Error {
+  readonly conflict: ByokHasDependents;
+  constructor(conflict: ByokHasDependents) {
+    super("This key or model is still in use");
+    this.name = "ByokDependentsError";
+    this.conflict = conflict;
+  }
+}
+
+async function throwByokError(res: Response): Promise<never> {
+  const body: unknown = await res.json().catch(() => null);
+  const conflict = parseHasDependents(body);
+  if (res.status === 409 && conflict) throw new ByokDependentsError(conflict);
+  throw new ApiStatusError(res.status, parseApiErrorBody(body ?? {}, res.status));
+}
+
+function byokPath(companyId: string, suffix: string): string {
+  return `${API_BASE}/companies/${companyId}/byok${suffix}`;
+}
+
+export async function apiListByokProviders(
+  accessToken: string | null,
+  companyId: string,
+): Promise<ByokProviderItem[]> {
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/providers"));
+  if (!res.ok) await throwApiError(res);
+  const body = (await res.json()) as { items: ByokProviderItem[] };
+  return body.items;
+}
+
+export async function apiCreateByokProvider(
+  accessToken: string | null,
+  companyId: string,
+  body: ByokProviderCreate,
+): Promise<ByokProviderItem> {
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/providers"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwByokError(res);
+  return res.json();
+}
+
+export async function apiPatchByokProvider(
+  accessToken: string | null,
+  companyId: string,
+  providerId: string,
+  body: ByokProviderPatch,
+): Promise<ByokProviderItem> {
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, `/providers/${providerId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwByokError(res);
+  return res.json();
+}
+
+export async function apiDeleteByokProvider(
+  accessToken: string | null,
+  companyId: string,
+  providerId: string,
+  force = false,
+): Promise<void> {
+  const suffix = force ? `/providers/${providerId}?force=true` : `/providers/${providerId}`;
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, suffix), {
+    method: "DELETE",
+  });
+  if (!res.ok) await throwByokError(res);
+}
+
+export async function apiTestByokProvider(
+  accessToken: string | null,
+  companyId: string,
+  providerId: string,
+): Promise<ByokProbeResult> {
+  const res = await fetchWithAuth(
+    accessToken,
+    byokPath(companyId, `/providers/${providerId}/test`),
+    { method: "POST" },
+  );
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiListByokProviderCatalog(
+  accessToken: string | null,
+  companyId: string,
+  providerId: string,
+): Promise<ByokModelListProxy> {
+  const res = await fetchWithAuth(
+    accessToken,
+    byokPath(companyId, `/providers/${providerId}/models`),
+  );
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiListByokModels(
+  accessToken: string | null,
+  companyId: string,
+): Promise<ByokModelItem[]> {
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/models"));
+  if (!res.ok) await throwApiError(res);
+  const body = (await res.json()) as { items: ByokModelItem[] };
+  return body.items;
+}
+
+export async function apiCreateByokModel(
+  accessToken: string | null,
+  companyId: string,
+  body: ByokModelCreate,
+): Promise<ByokModelItem> {
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/models"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwByokError(res);
+  return res.json();
+}
+
+export async function apiDeleteByokModel(
+  accessToken: string | null,
+  companyId: string,
+  modelPk: string,
+  force = false,
+): Promise<void> {
+  const suffix = force ? `/models/${modelPk}?force=true` : `/models/${modelPk}`;
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, suffix), {
+    method: "DELETE",
+  });
+  if (!res.ok) await throwByokError(res);
+}
+
+export async function apiTestByokModel(
+  accessToken: string | null,
+  companyId: string,
+  modelPk: string,
+  confirmPaid = false,
+): Promise<ByokProbeResult> {
+  const suffix = confirmPaid
+    ? `/models/${modelPk}/test?confirm_paid=true`
+    : `/models/${modelPk}/test`;
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, suffix), {
+    method: "POST",
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiGetByokRouting(
+  accessToken: string | null,
+  companyId: string,
+): Promise<ByokRoutingResponse> {
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/routing"));
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiPutByokRouting(
+  accessToken: string | null,
+  companyId: string,
+  body: ByokRoutingUpdate,
+): Promise<ByokRoutingResponse> {
+  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/routing"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
   if (!res.ok) await throwApiError(res);
   return res.json();

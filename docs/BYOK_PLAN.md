@@ -315,7 +315,7 @@ admin-side later).
 - [x] P0-4 recorder `key_source` / `key_last4`
 - [x] P1 BYOK routes (providers / models / routing / test / model-list proxy) + schemas +
       contract export + TS mirrors; route tests incl. two-phase delete
-- [ ] P2 settings tab: wizard + three sections + i18n;
+- [x] P2 settings tab: wizard + three sections + i18n;
       `pnpm run lint && pnpm test && pnpm run build`
-- [ ] ADR 0020 + STATUS decision entry; tick ROADMAP "BYOK settings page" (rename to
+- [x] ADR 0020 + STATUS decision entry; tick ROADMAP "BYOK settings page" (rename to
       match the three-table design); update `.env.example` (`BYOK_ENCRYPTION_KEY`)
