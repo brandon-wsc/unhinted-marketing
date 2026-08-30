@@ -11,6 +11,7 @@ from internal.llm.resolve import (
     bundle_has_credentials,
     env_has_llm_credentials,
     llm_bundle_scope,
+    openai_compat_model_id,
     prefix_litellm_model,
     resolve_image,
     resolve_llm_model,
@@ -89,6 +90,40 @@ def test_org_api_base_prefixes_bare_id() -> None:
     )
     already = _org("openai/foo")
     assert prefix_litellm_model(already.model_id, already.api_base) == "openai/foo"
+
+
+def test_openai_compat_model_id_keeps_openrouter_slug() -> None:
+    assert openai_compat_model_id("deepseek/deepseek-v4-flash-0731") == (
+        "deepseek/deepseek-v4-flash-0731"
+    )
+    assert openai_compat_model_id("openai/deepseek/deepseek-v4-flash-0731") == (
+        "deepseek/deepseek-v4-flash-0731"
+    )
+    assert openai_compat_model_id("openrouter/bytedance-seed/seedream-4.5") == (
+        "bytedance-seed/seedream-4.5"
+    )
+    assert openai_compat_model_id("anthropic/claude-sonnet-4") == "anthropic/claude-sonnet-4"
+    assert openai_compat_model_id("gpt-4o-mini") == "gpt-4o-mini"
+
+
+def test_prefix_litellm_model_keeps_slash_slug() -> None:
+    base = "https://openrouter.ai/api/v1"
+    assert prefix_litellm_model("deepseek/deepseek-v4-flash-0731", base) == (
+        "openai/deepseek/deepseek-v4-flash-0731"
+    )
+    assert prefix_litellm_model("openai/deepseek/deepseek-v4-flash-0731", base) == (
+        "openai/deepseek/deepseek-v4-flash-0731"
+    )
+    assert prefix_litellm_model("openrouter/bytedance-seed/seedream-4.5", base) == (
+        "openai/bytedance-seed/seedream-4.5"
+    )
+    assert prefix_litellm_model("anthropic/claude-sonnet-4", base) == (
+        "openai/anthropic/claude-sonnet-4"
+    )
+    assert prefix_litellm_model("gpt-4o-mini", base) == "openai/gpt-4o-mini"
+    assert prefix_litellm_model("deepseek/deepseek-v4-flash-0731", None) == (
+        "deepseek/deepseek-v4-flash-0731"
+    )
 
 
 def test_decrypt_failure_raises_auth_not_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:

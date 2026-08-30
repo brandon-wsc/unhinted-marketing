@@ -92,12 +92,46 @@ def bundle_has_credentials() -> bool:
     return bool(bundle is not None and bundle.has_provider())
 
 
+_LITELLM_OPENAI_PREFIX = "openai/"
+_LITELLM_OPENROUTER_PREFIX = "openrouter/"
+
+
+def openai_compat_model_id(model_id: str) -> str:
+    """Catalog id for an OpenAI-compatible base URL (keep OpenRouter org/model).
+
+    Strips LiteLLM's ``openai/`` and ``openrouter/`` provider prefixes. Slash
+    slugs such as ``deepseek/deepseek-v4-flash-0731`` stay intact so the proxy
+    receives the catalog id, not the last path segment. ``anthropic/…`` is
+    left alone — on OpenRouter that is the catalog prefix, not a LiteLLM
+    reason to drop the org.
+    """
+    lowered = model_id.lower()
+    if lowered.startswith(_LITELLM_OPENAI_PREFIX) or lowered.startswith(
+        _LITELLM_OPENROUTER_PREFIX
+    ):
+        return model_id.split("/", 1)[1]
+    return model_id
+
+
 def prefix_litellm_model(model_id: str, api_base: str | None) -> str:
-    """When a custom api_base is set, force the OpenAI-compatible LiteLLM client."""
+    """When a custom api_base is set, force the OpenAI-compatible LiteLLM client.
+
+    Bare ids like ``deepseek-chat`` make LiteLLM pick the native Deepseek
+    provider and ignore a custom api_base. Prefix ``openai/`` so the request
+    goes through the OpenAI-compatible HTTP client.
+
+    Slash slugs (OpenRouter ``org/model``) get the same prefix. ``openai/`` is
+    already the compat client; ``openrouter/org/model`` is rewritten to
+    ``openai/org/model`` so LiteLLM does not use the native OpenRouter
+    provider (which ignores api_base).
+    """
     if not (api_base or "").strip():
         return model_id
-    if "/" in model_id:
+    lowered = model_id.lower()
+    if lowered.startswith(_LITELLM_OPENAI_PREFIX):
         return model_id
+    if lowered.startswith(_LITELLM_OPENROUTER_PREFIX):
+        return f"openai/{model_id.split('/', 1)[1]}"
     return f"openai/{model_id}"
 
 

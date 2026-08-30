@@ -18,7 +18,7 @@ from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, RunCancelled
 from pydantic_ai.models import Model
 
 from internal.llm.recorder import LlmCallRecordBuilder, track
-from internal.llm.resolve import resolve_llm_model
+from internal.llm.resolve import openai_compat_model_id, resolve_llm_model
 from internal.llm.router import LlmProviderError, ModelTier
 from internal.memory.repos import list_top_signals
 from internal.session import prompts
@@ -56,10 +56,11 @@ def live_harness_model(tier: ModelTier) -> Model:
 
     resolved = resolve_llm_model(tier)
     raw = resolved.model_id
-    model_id = raw.split("/")[-1]
+    compat_id = openai_compat_model_id(raw)
+    leaf_id = compat_id.split("/")[-1]
     if resolved.provider_type == "openai_compatible" or resolved.api_base:
         return OpenAIChatModel(
-            model_id,
+            compat_id,
             provider=OpenAIProvider(
                 base_url=resolved.api_base,
                 api_key=resolved.api_key or "not-set",
@@ -80,7 +81,7 @@ def live_harness_model(tier: ModelTier) -> Model:
                 kind="unsupported",
             ) from exc
         return AnthropicModel(
-            model_id,
+            leaf_id,
             provider=AnthropicProvider(api_key=resolved.api_key),
         )
     if not resolved.api_key:
@@ -90,7 +91,7 @@ def live_harness_model(tier: ModelTier) -> Model:
             kind="auth",
         )
     return OpenAIChatModel(
-        model_id,
+        leaf_id,
         provider=OpenAIProvider(api_key=resolved.api_key),
     )
 

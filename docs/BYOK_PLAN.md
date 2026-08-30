@@ -28,7 +28,7 @@ Settings UI. Env keys stay as the platform-level fallback.
 
 1. `OPENAI_API_KEY` — native OpenAI.
 2. `ANTHROPIC_API_KEY` — Claude (router sets `litellm.anthropic_key`; harness builds `AnthropicModel` when the model id looks like Claude).
-3. `LLM_API_BASE` — any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Azure, local gateway); bare model ids get the `openai/` prefix so LiteLLM uses the compatible client.
+3. `LLM_API_BASE` — any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Azure, local gateway); model ids get the `openai/` prefix so LiteLLM uses the compatible client (OpenRouter `org/model` slugs kept).
 
 So DeepSeek / OpenRouter / Claude already work **via env**. Missing: Gemini/other native
 provider env vars, per-provider key map, and anything per-org.

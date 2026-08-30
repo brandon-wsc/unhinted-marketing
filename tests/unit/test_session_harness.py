@@ -142,3 +142,29 @@ def test_live_chat_model_uses_openai_compatible_provider(monkeypatch: pytest.Mon
     monkeypatch.setattr(config.settings, "openai_api_key", "sk-test")
     model = H.live_chat_model()
     assert getattr(model, "model_name", None)
+
+
+def test_live_harness_keeps_openrouter_slug(monkeypatch: pytest.MonkeyPatch) -> None:
+    from internal import config
+    from internal.llm.router import ModelTier
+
+    monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
+    monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
+    monkeypatch.setattr(config.settings, "llm_cheap_model", "deepseek/deepseek-v4-flash-0731")
+    model = H.live_harness_model(ModelTier.CHEAP)
+    assert getattr(model, "model_name", None) == "deepseek/deepseek-v4-flash-0731"
+
+
+def test_live_harness_strips_openrouter_provider_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from internal import config
+    from internal.llm.router import ModelTier
+
+    monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
+    monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
+    monkeypatch.setattr(
+        config.settings, "llm_cheap_model", "openrouter/bytedance-seed/seedream-4.5"
+    )
+    model = H.live_harness_model(ModelTier.CHEAP)
+    assert getattr(model, "model_name", None) == "bytedance-seed/seedream-4.5"

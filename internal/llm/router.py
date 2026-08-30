@@ -83,9 +83,9 @@ def _litellm_model(model: str, api_base: str | None = None) -> str:
     """When a custom api_base is set, force the OpenAI-compatible provider.
 
     Bare ids like ``deepseek-chat`` make LiteLLM pick the native Deepseek
-    provider and ignore (or mishandle) a custom api_base — which surfaces as
-    an instant DeepseekException timeout. Prefix ``openai/`` so the request
+    provider and ignore a custom api_base. Prefix ``openai/`` so the request
     goes through the OpenAI-compatible HTTP client against that base.
+    OpenRouter ``org/model`` slugs keep the catalog id (not the last segment).
     """
     return prefix_litellm_model(model, api_base)
 
