@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -321,6 +322,12 @@ class LlmCallRecord(Base):
     """One provider call (ADR 0005) — the debug unit for prompt/node fine-tuning."""
 
     __tablename__ = "llm_call_records"
+    __table_args__ = (
+        CheckConstraint(
+            "key_source IS NULL OR key_source IN ('env', 'org')",
+            name="ck_llm_call_records_key_source",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # Correlation: who/where. Nullable + SET NULL so records survive entity deletion.
@@ -355,6 +362,9 @@ class LlmCallRecord(Base):
     error: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     parse_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     fallback_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    # ADR 0020 — which key paid for this call. Never the raw key / ciphertext.
+    key_source: Mapped[str | None] = mapped_column(String(8), nullable=True)  # env | org
+    key_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

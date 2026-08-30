@@ -19,6 +19,8 @@ export type LlmCallRecordSummary = {
   total_tokens: number | null;
   parse_ok: boolean | null;
   fallback_used: boolean;
+  key_source?: "env" | "org" | null;
+  key_last4?: string | null;
 };
 
 export type LlmCallRecordDetail = LlmCallRecordSummary & {

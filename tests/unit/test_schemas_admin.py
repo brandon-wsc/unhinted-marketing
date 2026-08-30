@@ -44,6 +44,8 @@ def test_llm_call_summary_and_detail_from_attributes() -> None:
         total_tokens=3,
         parse_ok=True,
         fallback_used=False,
+        key_source="env",
+        key_last4="env1",
         user_id=uuid.uuid4(),
         company_id=uuid.uuid4(),
         temperature=0.2,
@@ -55,6 +57,7 @@ def test_llm_call_summary_and_detail_from_attributes() -> None:
     summary = LlmCallRecordSummary.model_validate(row)
     detail = LlmCallRecordDetail.model_validate(row)
     assert summary.id == rid and detail.system_prompt == "sys"
+    assert summary.key_source == "env" and summary.key_last4 == "env1"
     listed = LlmCallRecordList(items=[summary], limit=50, offset=0)
     assert listed.limit == 50 and len(listed.items) == 1
 
