@@ -41,7 +41,7 @@ flowchart LR
     M --> R
 ```
 
-A model is registered **once** against a key; tiers are pure pointers. One model may serve multiple slots (`cheap = medium = deepseek-v4-flash`) without re-entering credentials. Routing slots are **four fixed FK columns** matching `ModelTier` + image — a new tier is a code change anyway (`NODE_MODEL_TIERS`, prompts, cost profiles), so JSONB flexibility buys nothing and FK integrity is worth more. Chat slots must reference `capability=chat` rows; the image slot a `capability=image` row.
+A model is registered **once** against a key; tiers are pure pointers. One model may serve multiple slots (`cheap = medium = deepseek-v4-flash`) without re-entering credentials. Routing slots are **four fixed FK columns** matching `ModelTier` + image — a new tier is a code change anyway (`NODE_MODEL_TIERS`, prompts, cost profiles), so JSONB flexibility buys nothing and FK integrity is worth more. Chat slots must reference `capability=chat` rows; the image slot a `capability=image` row. **That capability match is app-level** (`PUT /routing` validation + resolver skip-to-env on mismatch in `_slot_from_model`). Postgres cannot put a constant in a foreign key without extra capability columns or a trigger; we do not add those. Enum-like columns (`provider_type`, `capability`, `capability_source`) and “`api_base` required when `openai_compatible`” **are** CHECK-constrained.
 
 ### 2. Encryption at rest
 

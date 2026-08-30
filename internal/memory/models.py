@@ -460,6 +460,15 @@ class ByokProvider(Base):
     __tablename__ = "byok_providers"
     __table_args__ = (
         UniqueConstraint("id", "company_id", name="uq_byok_providers_id_company"),
+        CheckConstraint(
+            "provider_type IN ('openai', 'anthropic', 'openai_compatible')",
+            name="ck_byok_providers_type",
+        ),
+        CheckConstraint(
+            "provider_type <> 'openai_compatible' OR "
+            "(api_base IS NOT NULL AND btrim(api_base) <> '')",
+            name="ck_byok_providers_api_base",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -494,6 +503,14 @@ class ByokModel(Base):
     __table_args__ = (
         UniqueConstraint("id", "company_id", name="uq_byok_models_id_company"),
         UniqueConstraint("provider_id", "model_id", name="uq_byok_models_provider_model"),
+        CheckConstraint(
+            "capability IN ('chat', 'image')",
+            name="ck_byok_models_capability",
+        ),
+        CheckConstraint(
+            "capability_source IN ('provider_metadata', 'inferred', 'manual')",
+            name="ck_byok_models_capability_source",
+        ),
         ForeignKeyConstraint(
             ["provider_id", "company_id"],
             ["byok_providers.id", "byok_providers.company_id"],

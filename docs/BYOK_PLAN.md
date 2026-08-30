@@ -160,12 +160,12 @@ Three tables, one Alembic hex revision (`alembic revision -m "byok"`). ROADMAP's
 | `id` | uuid PK |
 | `company_id` | FK → entities, index |
 | `label` | user-given, e.g. "OpenRouter main" |
-| `provider_type` | `openai` \| `anthropic` \| `openai_compatible` |
+| `provider_type` | `openai` \| `anthropic` \| `openai_compatible` (CHECK) |
 | `api_key_encrypted` | Fernet ciphertext; never logged, never serialized |
 | `key_last4` | masked display + ops correlation |
-| `api_base` | nullable; required when `provider_type=openai_compatible` |
+| `api_base` | nullable; required when `provider_type=openai_compatible` (CHECK: non-empty) |
 | `last_verified_at`, `last_error_kind` | filled by the key test endpoint |
-| `created_by` / `updated_by`, timestamps | audit |
+| `created_by` / `updated_by`, timestamps | audit (keys only — models have timestamps, no actor columns) |
 
 ### `byok_models` — registry
 
@@ -175,10 +175,10 @@ Three tables, one Alembic hex revision (`alembic revision -m "byok"`). ROADMAP's
 | `company_id` | FK → entities, index |
 | `provider_id` | FK → `byok_providers` |
 | `model_id` | id as the provider expects it |
-| `capability` | `chat` \| `image` |
-| `capability_source` | `provider_metadata` \| `inferred` \| `manual` (audit) |
+| `capability` | `chat` \| `image` (CHECK) |
+| `capability_source` | `provider_metadata` \| `inferred` \| `manual` (CHECK; audit of how capability was set) |
 | `last_verified_at`, `last_error_kind` | filled by the model test endpoint |
-| timestamps | |
+| timestamps | no `created_by` / `updated_by` — actor audit lives on the provider key |
 | | `unique(provider_id, model_id)` |
 
 ### `byok_routing` — per-company slot assignment
@@ -186,9 +186,9 @@ Three tables, one Alembic hex revision (`alembic revision -m "byok"`). ROADMAP's
 | Column | Notes |
 |--------|-------|
 | `company_id` | PK, FK → entities |
-| `cheap_model_id` / `medium_model_id` / `strong_model_id` | nullable FK → `byok_models`; must reference `capability=chat` rows |
-| `image_model_id` | nullable FK → `byok_models`; must reference `capability=image` row |
-| `updated_at` | |
+| `cheap_model_id` / `medium_model_id` / `strong_model_id` | nullable FK → `byok_models`; must reference `capability=chat` rows (**app-level**: `PUT /routing` + resolver skip-to-env; not a DB FK — PG cannot bind a constant in an FK without extra columns/triggers) |
+| `image_model_id` | nullable FK → `byok_models`; must reference `capability=image` row (same app-level rule) |
+| `updated_at` | no `created_at` — one row per company; insert time is not operationally useful |
 
 NULL slot (or no row) → env default for that tier (per-slot fallback, decision 4).
 
@@ -307,7 +307,8 @@ admin-side later).
 - [x] P0-1 encryption helper + `BYOK_ENCRYPTION_KEY` + direct `cryptography` dep
 - [x] P0-1b SSRF guard helper for user-supplied base URLs (probes + model-list proxy)
 - [x] P0-schema Alembic migration: `byok_providers` / `byok_models` / `byok_routing`
-      (hex revision)
+      (hex revision); CHECK on enums + `openai_compatible` requires `api_base`; slot
+      capability match is app-level (documented in ADR 0020)
 - [x] P0-2 resolver refactor (router + harness + contextvar scoping); env path
       bit-identical; unit tests with mocked resolution (no live key, per TESTING.md)
 - [x] P0-3 worker fan-out per-company resolution
