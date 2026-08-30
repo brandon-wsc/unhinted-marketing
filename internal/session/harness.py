@@ -19,7 +19,12 @@ from pydantic_ai.models import Model
 
 from internal.config import settings
 from internal.llm.recorder import LlmCallRecordBuilder, track
-from internal.llm.router import LlmProviderError, ModelTier, resolve_model
+from internal.llm.router import (
+    LlmProviderError,
+    ModelTier,
+    openai_compat_model_id,
+    resolve_model,
+)
 from internal.memory.repos import list_top_signals
 from internal.session import prompts
 from internal.session.context import get_db
@@ -55,11 +60,12 @@ def live_harness_model(tier: ModelTier) -> Model:
     from pydantic_ai.providers.openai import OpenAIProvider
 
     raw = resolve_model(tier)
-    model_id = raw.split("/")[-1]
+    compat_id = openai_compat_model_id(raw)
+    leaf_id = compat_id.split("/")[-1]
     lowered = raw.lower()
     if settings.llm_api_base:
         return OpenAIChatModel(
-            model_id,
+            compat_id,
             provider=OpenAIProvider(
                 base_url=settings.llm_api_base,
                 api_key=settings.openai_api_key or "not-set",
@@ -75,7 +81,7 @@ def live_harness_model(tier: ModelTier) -> Model:
                 model=raw,
                 kind="unsupported",
             ) from exc
-        return AnthropicModel(model_id)
+        return AnthropicModel(leaf_id)
     if not settings.openai_api_key:
         raise LlmProviderError(
             "No OpenAI-compatible key for the session harness.",
@@ -83,7 +89,7 @@ def live_harness_model(tier: ModelTier) -> Model:
             kind="auth",
         )
     return OpenAIChatModel(
-        model_id,
+        leaf_id,
         provider=OpenAIProvider(api_key=settings.openai_api_key),
     )
 

@@ -83,7 +83,7 @@ python -m cmd.scheduler --once
 python -m cmd.scheduler
 ```
 
-Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template fallbacks are used. Optional `LLM_API_BASE` (OpenRouter / DeepSeek / etc.): bare `LLM_*_MODEL` ids are routed as `openai/<id>` against that base — see `.env.example`.
+Set `OPENAI_API_KEY` in `.env` for LLM-generated questions; without it, template fallbacks are used. Optional `LLM_API_BASE` (OpenRouter default in `.env.example`: `https://openrouter.ai/api/v1`): model ids are sent via the OpenAI-compatible client against that base — put the OpenRouter key in `OPENAI_API_KEY`.
 
 ---
 

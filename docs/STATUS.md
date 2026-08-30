@@ -242,7 +242,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | Hot search worker | ✅ | `python -m cmd.worker hot-search` (Google Trends HK + RSS news) |
 | Question generator | ✅ | Worker LangGraph (ADR 0018); 13h cache; GET-miss fill; RSS + Trends ingest |
 | News promoter | ✅ | Top trends → topic `entities` + `edges` in PG |
-| LiteLLM BYOK loader | ✅ | Env-based (`OPENAI_API_KEY`, model tiers); `LLM_API_BASE` → `openai/<model>` prefix |
+| LiteLLM BYOK loader | ✅ | Env-based (`OPENAI_API_KEY`, model tiers); `LLM_API_BASE` → OpenAI-compatible client (slash slugs kept) |
 | Default personas | ✅ | Seeded in `entities` (type=persona) on first question run |
 | Signals API | ✅ | `GET /api/signals/top` |
 | Questions API | ✅ | `GET /api/companies/{id}/recommended-questions` (200 cache / 202 fill); `POST …/refresh` |
@@ -443,11 +443,11 @@ unhinted-marketing/
 | `AUTH_RATE_LIMIT_MAX` | Max requests per client IP per window (default 30) |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Sliding window length (default 60) |
 | `CORS_ORIGINS` | Default `http://localhost:5173` |
-| `OPENAI_API_KEY` | LLM for questions + session nodes + `python -m scripts.eval_agent` |
-| `LLM_API_BASE` | Optional OpenAI-compatible proxy base URL (OpenRouter, DeepSeek, Azure, …). When set, bare model ids are sent as `openai/<id>` so LiteLLM uses the OpenAI-compatible client against that base (avoids native Deepseek routing ignoring `api_base`) |
+| `OPENAI_API_KEY` | LLM key — OpenRouter key when `LLM_API_BASE` is OpenRouter |
+| `LLM_API_BASE` | Optional OpenAI-compatible proxy (default example: `https://openrouter.ai/api/v1`). When set, model ids go through the OpenAI-compatible client against that base |
 | `ANTHROPIC_API_KEY` | Optional alternate provider |
-| `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `gpt-4o-mini`, `deepseek-chat`) |
-| `LLM_IMAGE_MODEL` | Image-capable id (e.g. `dall-e-3` / OpenRouter image model). Unset with credentials → error on gen; `placeholder` = mock URL |
+| `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `deepseek/deepseek-v4-flash-0731`) |
+| `LLM_IMAGE_MODEL` | Image-capable id (e.g. `openrouter/bytedance-seed/seedream-4.5`). Unset with credentials → error on gen; `placeholder` = mock URL |
 | `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |
 | `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`) |
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |

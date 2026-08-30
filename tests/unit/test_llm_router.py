@@ -14,6 +14,44 @@ from internal.llm import recorder
 from internal.llm import router as R
 
 
+def test_openai_compat_model_id_keeps_openrouter_slug() -> None:
+    assert R.openai_compat_model_id("deepseek/deepseek-v4-flash-0731") == (
+        "deepseek/deepseek-v4-flash-0731"
+    )
+    assert R.openai_compat_model_id("openai/deepseek/deepseek-v4-flash-0731") == (
+        "deepseek/deepseek-v4-flash-0731"
+    )
+    assert R.openai_compat_model_id("openrouter/bytedance-seed/seedream-4.5") == (
+        "bytedance-seed/seedream-4.5"
+    )
+    assert R.openai_compat_model_id("gpt-4o-mini") == "gpt-4o-mini"
+
+
+def test_litellm_model_prefixes_slash_slug_when_api_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(R.settings, "llm_api_base", "https://openrouter.ai/api/v1")
+    assert R._litellm_model("deepseek/deepseek-v4-flash-0731") == (
+        "openai/deepseek/deepseek-v4-flash-0731"
+    )
+    assert R._litellm_model("openai/deepseek/deepseek-v4-flash-0731") == (
+        "openai/deepseek/deepseek-v4-flash-0731"
+    )
+    assert R._litellm_model("openrouter/bytedance-seed/seedream-4.5") == (
+        "openai/bytedance-seed/seedream-4.5"
+    )
+    assert R._litellm_model("gpt-4o-mini") == "openai/gpt-4o-mini"
+
+
+def test_litellm_model_passthrough_without_api_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    assert R._litellm_model("deepseek/deepseek-v4-flash-0731") == (
+        "deepseek/deepseek-v4-flash-0731"
+    )
+
+
 def test_wrap_unsupported_image_bad_request() -> None:
     exc = BadRequestError(
         message="model deepseek-v4-flash does not support image generation",

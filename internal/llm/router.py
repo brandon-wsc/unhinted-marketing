@@ -78,6 +78,23 @@ def resolve_image_model() -> str | None:
     return raw or None
 
 
+_LITELLM_PROVIDER_PREFIXES = ("openai/", "openrouter/", "anthropic/")
+
+
+def openai_compat_model_id(model: str) -> str:
+    """Model id for an OpenAI-compatible base URL (keep OpenRouter org/slug).
+
+    LiteLLM prefixes like ``openai/`` or ``openrouter/`` are stripped. Slash
+    slugs such as ``deepseek/deepseek-v4-flash-0731`` are kept intact so
+    OpenRouter receives the catalog id, not the last path segment.
+    """
+    lowered = model.lower()
+    for prefix in _LITELLM_PROVIDER_PREFIXES:
+        if lowered.startswith(prefix):
+            return model.split("/", 1)[1]
+    return model
+
+
 def _litellm_model(model: str) -> str:
     """When LLM_API_BASE is set, force the OpenAI-compatible provider.
 
@@ -85,10 +102,17 @@ def _litellm_model(model: str) -> str:
     provider and ignore (or mishandle) a custom api_base — which surfaces as
     an instant DeepseekException timeout. Prefix ``openai/`` so the request
     goes through the OpenAI-compatible HTTP client against LLM_API_BASE.
+    Slash slugs (OpenRouter ``org/model``) get the same prefix unless they
+    already name a LiteLLM provider.
     """
     if not settings.llm_api_base:
         return model
-    if "/" in model:
+    lowered = model.lower()
+    if lowered.startswith("openai/"):
+        return model
+    if lowered.startswith("openrouter/"):
+        return f"openai/{model.split('/', 1)[1]}"
+    if lowered.startswith("anthropic/"):
         return model
     return f"openai/{model}"
 
