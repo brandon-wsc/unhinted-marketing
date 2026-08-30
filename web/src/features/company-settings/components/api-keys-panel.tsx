@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { CirclePlay, Pencil, Trash2 } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
+import { IconButton } from "@/components/icon-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -35,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import {
   apiCreateByokProvider,
@@ -103,6 +106,38 @@ function VerifiedBadge({
     return <Badge variant="destructive">{t("settings.apiKeys.status.error")}</Badge>;
   }
   return <Badge variant="secondary">{t("settings.apiKeys.status.pending")}</Badge>;
+}
+
+function RowIconAction({
+  label,
+  onClick,
+  disabled,
+  loading,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <IconButton
+          type="button"
+          className="size-8"
+          disabled={disabled}
+          loading={loading}
+          aria-label={label}
+          onClick={onClick}
+        >
+          {loading ? null : children}
+        </IconButton>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function dependentsSummary(
@@ -374,7 +409,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
               <h2 className="text-sm font-semibold text-foreground">
                 {t("settings.apiKeys.keys.title")}
               </h2>
-              <Button type="button" variant="outline" size="sm" onClick={openAddKey}>
+              <Button type="button" size="sm" onClick={openAddKey}>
                 {t("settings.apiKeys.addKey")}
               </Button>
             </div>
@@ -407,19 +442,15 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={busyId === item.id}
+                            <RowIconAction
+                              label={t("settings.apiKeys.actions.test")}
+                              loading={busyId === item.id}
                               onClick={() => void onTestProvider(item)}
                             >
-                              {t("settings.apiKeys.actions.test")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
+                              <CirclePlay />
+                            </RowIconAction>
+                            <RowIconAction
+                              label={t("settings.apiKeys.actions.edit")}
                               onClick={() => {
                                 setDialogError(null);
                                 setEditKey({
@@ -433,18 +464,16 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
                                 });
                               }}
                             >
-                              {t("settings.apiKeys.actions.edit")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
+                              <Pencil />
+                            </RowIconAction>
+                            <RowIconAction
+                              label={t("settings.apiKeys.actions.delete")}
                               onClick={() =>
                                 setPendingDelete({ kind: "provider", item, conflict: null })
                               }
                             >
-                              {t("settings.apiKeys.actions.delete")}
-                            </Button>
+                              <Trash2 />
+                            </RowIconAction>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -462,6 +491,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
               </h2>
               <Button
                 type="button"
+                variant="outline"
                 size="sm"
                 disabled={providers.length === 0}
                 onClick={() => setAddModelOpen(true)}
@@ -507,28 +537,24 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={busyId === item.id}
+                            <RowIconAction
+                              label={t("settings.apiKeys.actions.test")}
+                              loading={busyId === item.id}
                               onClick={() => {
                                 if (item.capability === "image") setImageTest(item);
                                 else void onTestModel(item);
                               }}
                             >
-                              {t("settings.apiKeys.actions.test")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
+                              <CirclePlay />
+                            </RowIconAction>
+                            <RowIconAction
+                              label={t("settings.apiKeys.actions.delete")}
                               onClick={() =>
                                 setPendingDelete({ kind: "model", item, conflict: null })
                               }
                             >
-                              {t("settings.apiKeys.actions.delete")}
-                            </Button>
+                              <Trash2 />
+                            </RowIconAction>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -748,7 +774,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
             </Button>
             <Button
               type="button"
-              disabled={busyId === imageTest?.id}
+              loading={busyId === imageTest?.id}
               onClick={() => imageTest && void onTestModel(imageTest, true)}
             >
               {t("settings.apiKeys.models.imageTestConfirm")}

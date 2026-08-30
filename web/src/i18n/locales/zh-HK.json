@@ -13,7 +13,8 @@
     "cancel": "取消",
     "save": "儲存",
     "saving": "儲存緊…",
-    "close": "關閉"
+    "close": "關閉",
+    "noMatches": "冇符合嘅選項"
   },
   "header": {
     "menu": {
@@ -280,7 +281,7 @@
       "products": "產品",
       "members": "成員",
       "approvals": "審批",
-      "api-keys": "API keys"
+      "models": "Models"
     },
     "noCompany": {
       "title": "未有公司",
@@ -435,7 +436,7 @@
       }
     },
     "apiKeys": {
-      "title": "API keys",
+      "title": "Models",
       "subtitle": "用自己嘅 key 同 model，設定 cheap / medium / strong / image。成員睇唔到呢頁。",
       "addModel": "新增 model",
       "addKey": "新增 key",

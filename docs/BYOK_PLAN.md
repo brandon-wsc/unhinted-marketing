@@ -105,10 +105,12 @@ non-OpenAI org keys — that is a separate ADR, out of scope here.
    affected.
 7. **Model id source = hybrid fetch** — after entering a key, the UI tries to fetch the
    provider's model list (OpenRouter `/models` returns modality metadata; OpenAI
-   `/v1/models` returns ids only). Fetch succeeds → dropdown, and **capability comes from
-   provider metadata when available**. Fetch unsupported/fails → free text + inference
-   pre-fill (`dall-e` / `seedream` / `flux` / `imagen` → image, else chat) + manual
-   override. Capability is never auto-probed with live calls (image probes cost money).
+   `/v1/models` returns ids only). Fetch succeeds → searchable combobox (type to filter;
+   typed id is valid even if not listed), and **capability comes from
+   provider metadata when available**. Fetch unsupported/fails → same combobox with no
+   suggestions + inference pre-fill (`dall-e` / `seedream` / `flux` / `imagen` → image,
+   else chat) + manual override. Capability is never auto-probed with live calls (image
+   probes cost money).
 8. **UI: three unmixed surfaces, no wizard** — Add key, Add model, and Routing are
    each their own action; save closes; nothing offers the next layer. **Add key**
    (Keys heading) is a key-only dialog. **Add model** (Models heading) is a
@@ -264,7 +266,7 @@ New router `cmd/api/routes/byok.py` under `/api/companies/{id}/byok/…`, all ga
 | `PATCH /providers/{pid}` | Relabel / rotate key / change base URL. Empty `api_key` keeps the stored one. Key/base changes re-queue the probe. |
 | `DELETE /providers/{pid}` | Two-phase (decision 6): no `force` → 409 + dependent models; `?force=true` → cascade models + null routing slots, response lists what was removed. |
 | `POST /providers/{pid}/test` | Manual auth probe (cheapest possible call); updates `last_verified_at` / `last_error_kind`; returns `{ok, error_kind?}` from the `LlmProviderError.kind` taxonomy. Rate-limited like invites. |
-| `GET /providers/{pid}/models` | Proxy the provider's model list (decision 7) through the SSRF guard (decision 9). Returns ids + capability where the provider exposes modality metadata; `{fetchable: false}` when unsupported → UI falls back to free text. Cached briefly **scoped to the provider row** (decision 10); never persisted. |
+| `GET /providers/{pid}/models` | Proxy the provider's model list (decision 7) through the SSRF guard (decision 9). Returns ids + capability where the provider exposes modality metadata; `{fetchable: false}` when unsupported → UI combobox has no suggestions (typed id still allowed). Cached briefly **scoped to the provider row** (decision 10); never persisted. |
 | `GET /models` | Registry list (joined with masked provider info). |
 | `POST /models` | Register model: provider_id + model_id + capability (+ `capability_source`). Existing `(provider_id, model_id)` → update that row, no duplicate (decision 12). Queues a background format probe (decision 11). |
 | `DELETE /models/{mid}` | Two-phase: 409 lists referencing slots; `?force=true` nulls those slots, response reports cleared slots. |
@@ -282,30 +284,30 @@ examples; test endpoints rate-limited; decrypt only inside the resolver and test
 
 ## 6. UI (P2)
 
-New editor-only tab in `web/src/pages/company-settings.tsx` (`?tab=api-keys`, same
+New editor-only tab in `web/src/pages/company-settings.tsx` (`?tab=models`, same
 gating as `approvals`). New components under
 `web/src/features/company-settings/components/` + API functions in the existing `api.ts`.
 
 Section headings hold the matching create (do **not** put both on the page header):
 
-- **Add key** (Keys heading, `variant="outline"` `size="sm"`) — key-only dialog (label,
+- **Add key** (Keys heading, primary `size="sm"`) — key-only dialog (label,
   type, secret, `api_base` when compatible). Save closes. No follow-up into Add model.
-- **Add model** (Models heading, primary `size="sm"`) — disabled until a key exists.
-  Single-page dialog: model id via provider-fetched dropdown, free text when unfetchable
-  → capability pre-filled, overridable. One key is used automatically; multiple keys
-  show a Key field on the same form. Save closes. Never creates a key; never opens
-  routing.
+- **Add model** (Models heading, `variant="outline"` `size="sm"`) — disabled until a key exists.
+  Single-page dialog: model id via searchable combobox (provider list when fetchable;
+  typed id always allowed) → capability pre-filled, overridable. One key is used
+  automatically; multiple keys show a Key field on the same form. Save closes. Never
+  creates a key; never opens routing.
 
 Both dialogs, plus **edit/rotate key**, are credential surfaces: overlay / outside click
 does not dismiss; X and Esc do. Close resets the form. Validation and save errors render
-**inside** the dialog. Built from `Dialog` + `Select` + `Input` + `FormField`.
+**inside** the dialog. Built from `Dialog` + `Combobox` + `Select` + `Input` + `FormField`.
 
 Sections are lists + row actions only:
 
-- **Keys** — masked rows (`••••{last4}`, label, provider, verified Badge), test, edit
-  (rotate), two-phase delete listing dependents.
-- **Models** — registry rows (model id, key label, capability Badge, verified), test
-  (image test carries a cost warning), delete with slot-impact confirm.
+- **Keys** — masked rows (`••••{last4}`, label, provider, verified Badge); icon actions
+  (test / edit / delete) with tooltip + `aria-label`; two-phase delete listing dependents.
+- **Models** — registry rows (model id, key label, capability Badge, verified); icon
+  actions (test / delete); image test carries a cost warning.
 - **Routing** — four dropdowns (cheap/medium/strong/image), filtered by capability;
   each shows effective source ("Company: fable-5" vs "Platform default"); clearing a
   slot reverts **that slot only** to platform. This is the only place slots are assigned.

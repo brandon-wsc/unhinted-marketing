@@ -70,7 +70,7 @@ All BYOK endpoints and the UI tab are gated by `require_company_settings_editor`
 
 ### 7. Model id source is a hybrid fetch
 
-After a key is entered, the UI tries the provider's model list (`GET /providers/{id}/models` proxy): fetch succeeds → dropdown, and **capability comes from provider modality metadata when available**; fetch unsupported/fails → free text + inference pre-fill (`dall-e` / `seedream` / `flux` / `imagen` → image, else chat) + manual override. Capability is **never auto-probed with live calls** (image probes cost money). Model lists are format-validated, not live-revalidated per message (LibreChat's lesson).
+After a key is entered, the UI tries the provider's model list (`GET /providers/{id}/models` proxy): fetch succeeds → searchable combobox (typing filters the list; a typed id is valid even if it is not listed), and **capability comes from provider modality metadata when available**; fetch unsupported/fails → same combobox with no suggestions + inference pre-fill (`dall-e` / `seedream` / `flux` / `imagen` → image, else chat) + manual override. Capability is **never auto-probed with live calls** (image probes cost money). Model lists are format-validated, not live-revalidated per message (LibreChat's lesson).
 
 ### 8. SSRF guard on user-supplied base URLs
 
@@ -90,10 +90,10 @@ Saving a key or model is non-blocking (shape validation only) and queues a backg
 
 ### 12. UI: three unmixed surfaces, no wizard
 
-Editor-only `?tab=api-keys` in company settings. Add key, Add model, and Routing are three unmixed surfaces. Each layer is its own action: save closes; nothing offers the next layer. There is no wizard, no page-header create chrome, and no row-level create.
+Editor-only `?tab=models` in company settings. Add key, Add model, and Routing are three unmixed surfaces. Each layer is its own action: save closes; nothing offers the next layer. There is no wizard, no page-header create chrome, and no row-level create.
 
 - **Add key** (Keys heading) — key-only dialog (label, type, secret, `api_base` when compatible). Save closes. No "add a model now".
-- **Add model** (Models heading) — single-page dialog: model id (provider-fetched dropdown, free text when unfetchable) + capability (pre-filled, overridable). Requires an existing key (button disabled until one exists). One key is used automatically; multiple keys show a Key field on the same form. Save closes. Never creates a key; never opens routing.
+- **Add model** (Models heading) — single-page dialog: model id (searchable combobox over the provider list, or free text when unfetchable) + capability (pre-filled, overridable). Requires an existing key (button disabled until one exists). One key is used automatically; multiple keys show a Key field on the same form. Save closes. Never creates a key; never opens routing.
 - **Routing** — four slot dropdowns on the page, filtered by capability, showing effective source ("Company: fable-5" vs "Platform default"). Clearing a slot reverts that slot only. This is the only place slots are assigned.
 
 Credential dialogs (add key, add model, edit/rotate key): overlay click does not dismiss; X / Esc do. Validation and save errors render **inside** the dialog.

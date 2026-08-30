@@ -1,7 +1,16 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiKeysPanel } from "@/features/company-settings/components/api-keys-panel";
+
+function renderPanel() {
+  return render(
+    <TooltipProvider>
+      <ApiKeysPanel companyId="c1" />
+    </TooltipProvider>,
+  );
+}
 
 const { ByokDependentsError, api } = vi.hoisted(() => {
   class ByokDependentsError extends Error {
@@ -132,11 +141,20 @@ const envRouting = {
 
 describe("ApiKeysPanel", () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
     api.apiListByokProviders.mockReset().mockResolvedValue([provider]);
     api.apiListByokModels.mockReset().mockResolvedValue([chatModel, imageModel]);
     api.apiGetByokRouting.mockReset().mockResolvedValue(envRouting);
     api.apiDeleteByokProvider.mockReset();
     api.apiDeleteByokModel.mockReset();
+    api.apiTestByokProvider.mockReset();
     api.apiTestByokModel.mockReset();
     api.apiCreateByokProvider.mockReset();
     api.apiCreateByokModel.mockReset();
@@ -145,7 +163,7 @@ describe("ApiKeysPanel", () => {
   });
 
   it("shows keys, models, and env vs company routing helpers", async () => {
-    render(<ApiKeysPanel companyId="c1" />);
+    renderPanel();
     expect(await screen.findByText("OpenRouter")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "settings.apiKeys.addKey" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "settings.apiKeys.addModel" })).toBeEnabled();
@@ -153,11 +171,41 @@ describe("ApiKeysPanel", () => {
     expect(screen.getByText("seedream")).toBeInTheDocument();
     expect(screen.getByText("Company: deepseek-v4-flash")).toBeInTheDocument();
     expect(screen.getAllByText("settings.apiKeys.routing.helperEnv").length).toBeGreaterThan(0);
+    const keyRow = screen.getByText("OpenRouter").closest("tr") as HTMLElement;
+    expect(
+      within(keyRow).getByRole("button", { name: "settings.apiKeys.actions.test" }),
+    ).toBeInTheDocument();
+    expect(
+      within(keyRow).getByRole("button", { name: "settings.apiKeys.actions.edit" }),
+    ).toBeInTheDocument();
+    expect(
+      within(keyRow).getByRole("button", { name: "settings.apiKeys.actions.delete" }),
+    ).toBeInTheDocument();
+    const modelRow = screen.getByText("seedream").closest("tr") as HTMLElement;
+    expect(
+      within(modelRow).getByRole("button", { name: "settings.apiKeys.actions.test" }),
+    ).toBeInTheDocument();
+    expect(
+      within(modelRow).getByRole("button", { name: "settings.apiKeys.actions.delete" }),
+    ).toBeInTheDocument();
+    expect(
+      within(modelRow).queryByRole("button", { name: "settings.apiKeys.actions.edit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the edit-key dialog from the icon action", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const row = (await screen.findByText("OpenRouter")).closest("tr") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "settings.apiKeys.actions.edit" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("settings.apiKeys.edit.title")).toBeInTheDocument();
+    expect(within(dialog).getByText("settings.apiKeys.edit.apiKeyRotate")).toBeInTheDocument();
   });
 
   it("opens the add-model dialog from the models section", async () => {
     const user = userEvent.setup();
-    render(<ApiKeysPanel companyId="c1" />);
+    renderPanel();
     await screen.findByText("OpenRouter");
     await user.click(screen.getByRole("button", { name: "settings.apiKeys.addModel" }));
     const dialog = await screen.findByRole("dialog");
@@ -173,7 +221,7 @@ describe("ApiKeysPanel", () => {
 
   it("does not close the add-model dialog on overlay click", async () => {
     const user = userEvent.setup();
-    render(<ApiKeysPanel companyId="c1" />);
+    renderPanel();
     await screen.findByText("OpenRouter");
     await user.click(screen.getByRole("button", { name: "settings.apiKeys.addModel" }));
     expect(await screen.findByText("settings.apiKeys.addModelHint")).toBeInTheDocument();
@@ -185,7 +233,7 @@ describe("ApiKeysPanel", () => {
 
   it("shows add-key validation errors inside the dialog", async () => {
     const user = userEvent.setup();
-    render(<ApiKeysPanel companyId="c1" />);
+    renderPanel();
     await user.click(await screen.findByRole("button", { name: "settings.apiKeys.addKey" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "common.save" }));
@@ -198,7 +246,7 @@ describe("ApiKeysPanel", () => {
   it("disables add model until a key exists", async () => {
     api.apiListByokProviders.mockResolvedValue([]);
     api.apiListByokModels.mockResolvedValue([]);
-    render(<ApiKeysPanel companyId="c1" />);
+    renderPanel();
     expect(await screen.findByRole("button", { name: "settings.apiKeys.addModel" })).toBeDisabled();
     expect(screen.getByText("settings.apiKeys.models.emptyNeedsKey")).toBeInTheDocument();
   });
@@ -208,7 +256,7 @@ describe("ApiKeysPanel", () => {
     api.apiListByokProviders.mockResolvedValue([]);
     api.apiListByokModels.mockResolvedValue([]);
     api.apiCreateByokProvider.mockResolvedValue(createdProvider);
-    render(<ApiKeysPanel companyId="c1" />);
+    renderPanel();
     expect(await screen.findByRole("button", { name: "settings.apiKeys.addModel" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "settings.apiKeys.addKey" }));
     api.apiListByokProviders.mockResolvedValue([createdProvider]);
@@ -233,7 +281,7 @@ describe("ApiKeysPanel", () => {
   it("saves a model without calling routing", async () => {
     const user = userEvent.setup();
     api.apiCreateByokModel.mockResolvedValue(createdModel);
-    render(<ApiKeysPanel companyId="c1" />);
+    renderPanel();
     await user.click(await screen.findByRole("button", { name: "settings.apiKeys.addModel" }));
     const dialog = await screen.findByRole("dialog");
     await user.type(
@@ -255,9 +303,47 @@ describe("ApiKeysPanel", () => {
     });
   });
 
+  it("filters catalog models in the add-model combobox", async () => {
+    const user = userEvent.setup();
+    api.apiListByokProviderCatalog.mockResolvedValue({
+      fetchable: true,
+      models: [
+        { id: "gpt-4o", capability: "chat", capability_source: "provider_metadata" },
+        { id: "seedream", capability: "image", capability_source: "provider_metadata" },
+      ],
+    });
+    api.apiCreateByokModel.mockResolvedValue({
+      ...createdModel,
+      model_id: "seedream",
+      capability: "image",
+      capability_source: "provider_metadata",
+    });
+    renderPanel();
+    await user.click(await screen.findByRole("button", { name: "settings.apiKeys.addModel" }));
+    const dialog = await screen.findByRole("dialog");
+    const input = await within(dialog).findByLabelText("settings.apiKeys.wizard.modelId");
+    await user.click(input);
+    expect(await screen.findByRole("option", { name: "seedream" })).toBeInTheDocument();
+    await user.type(input, "seed");
+    const list = await screen.findByRole("listbox");
+    expect(within(list).getByRole("option", { name: "seedream" })).toBeInTheDocument();
+    expect(within(list).queryByRole("option", { name: /^gpt-4o$/ })).not.toBeInTheDocument();
+    await user.click(within(list).getByRole("option", { name: "seedream" }));
+    expect(input).toHaveValue("seedream");
+    await user.click(within(dialog).getByRole("button", { name: "common.save" }));
+    await waitFor(() => {
+      expect(api.apiCreateByokModel).toHaveBeenCalledWith("tok", "c1", {
+        provider_id: "p1",
+        model_id: "seedream",
+        capability: "image",
+        capability_source: "provider_metadata",
+      });
+    });
+  });
+
   it("warns before testing an image model", async () => {
     const user = userEvent.setup();
-    render(<ApiKeysPanel companyId="c1" />);
+    renderPanel();
     const row = (await screen.findByText("seedream")).closest("tr");
     expect(row).toBeTruthy();
     await user.click(
@@ -272,6 +358,28 @@ describe("ApiKeysPanel", () => {
     });
   });
 
+  it("shows a spinner on the test icon while the probe runs", async () => {
+    let resolveTest: (value?: unknown) => void = () => {};
+    api.apiTestByokProvider.mockReturnValue(
+      new Promise((resolve) => {
+        resolveTest = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+    const row = (await screen.findByText("OpenRouter")).closest("tr") as HTMLElement;
+    const testBtn = within(row).getByRole("button", { name: "settings.apiKeys.actions.test" });
+    await user.click(testBtn);
+    await waitFor(() => {
+      expect(testBtn).toHaveAttribute("aria-busy", "true");
+    });
+    expect(within(testBtn).getByRole("status", { name: "Loading" })).toBeInTheDocument();
+    resolveTest();
+    await waitFor(() => {
+      expect(testBtn).not.toHaveAttribute("aria-busy");
+    });
+  });
+
   it("lists dependents after 409 then force-deletes", async () => {
     const user = userEvent.setup();
     api.apiDeleteByokProvider
@@ -282,7 +390,7 @@ describe("ApiKeysPanel", () => {
         }),
       )
       .mockResolvedValueOnce(undefined);
-    render(<ApiKeysPanel companyId="c1" />);
+    renderPanel();
     const row = (await screen.findByText("OpenRouter")).closest("tr");
     await user.click(
       within(row as HTMLElement).getByRole("button", { name: "settings.apiKeys.actions.delete" }),

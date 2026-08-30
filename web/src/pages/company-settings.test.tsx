@@ -78,16 +78,22 @@ describe("CompanySettingsPage BYOK tab", () => {
     auth.user = editorUser("owner");
   });
 
-  it("shows the API keys tab for owners and admins", () => {
-    renderSettings("/settings?tab=api-keys");
-    expect(screen.getByRole("button", { name: "settings.nav.api-keys" })).toBeInTheDocument();
+  it("shows the Models tab for owners and admins", () => {
+    renderSettings("/settings?tab=models");
+    expect(screen.getByRole("button", { name: "settings.nav.models" })).toBeInTheDocument();
     expect(screen.getByText("api-keys-panel")).toBeInTheDocument();
   });
 
-  it("hides the API keys tab for members and falls back to voice", () => {
-    auth.user = editorUser("member");
+  it("rewrites the old api-keys tab onto models", () => {
     renderSettings("/settings?tab=api-keys");
-    expect(screen.queryByRole("button", { name: "settings.nav.api-keys" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "settings.nav.models" })).toBeInTheDocument();
+    expect(screen.getByText("api-keys-panel")).toBeInTheDocument();
+  });
+
+  it("hides the Models tab for members and falls back to voice", () => {
+    auth.user = editorUser("member");
+    renderSettings("/settings?tab=models");
+    expect(screen.queryByRole("button", { name: "settings.nav.models" })).not.toBeInTheDocument();
     expect(screen.queryByText("api-keys-panel")).not.toBeInTheDocument();
     expect(screen.getByText("voice-panel")).toBeInTheDocument();
   });

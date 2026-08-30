@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Combobox } from "@/components/combobox";
 import { FormField } from "@/components/form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -135,7 +135,7 @@ export function AddModelDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-lg"
+        className="overflow-visible sm:max-w-lg"
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
       >
@@ -171,41 +171,27 @@ export function AddModelDialog({
             <p className="text-sm text-muted-foreground">
               {t("settings.apiKeys.wizard.modelFetching")}
             </p>
-          ) : useCatalogSelect ? (
-            <FormField id="byok-model-id" label={t("settings.apiKeys.wizard.modelId")}>
-              <Select
-                value={modelId || undefined}
-                onValueChange={(value) => {
-                  setModelId(value);
-                  setCapabilityOverride(null);
-                }}
-              >
-                <SelectTrigger id="byok-model-id" className="w-full">
-                  <SelectValue placeholder={t("settings.apiKeys.wizard.modelId")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {catalog?.models.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormField>
           ) : (
             <FormField id="byok-model-id" label={t("settings.apiKeys.wizard.modelId")}>
-              <Input
+              <Combobox
                 id="byok-model-id"
                 value={modelId}
-                onChange={(e) => {
-                  setModelId(e.target.value);
+                onValueChange={(next) => {
+                  setModelId(next);
                   setCapabilityOverride(null);
                 }}
-                autoComplete="off"
+                options={(catalog?.fetchable ? catalog.models : []).map((item) => ({
+                  value: item.id,
+                  label: item.id,
+                }))}
+                placeholder={t("settings.apiKeys.wizard.modelId")}
+                disabled={!providerId}
               />
-              <p className="text-xs text-muted-foreground">
-                {t("settings.apiKeys.wizard.modelFreeText")}
-              </p>
+              {!useCatalogSelect && (
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.apiKeys.wizard.modelFreeText")}
+                </p>
+              )}
             </FormField>
           )}
           <FormField id="byok-model-capability" label={t("settings.apiKeys.wizard.capability")}>
