@@ -444,9 +444,10 @@ unhinted-marketing/
 |----------|---------|
 | `TEST_DATABASE_URL` | Isolated Postgres for `pytest tests/api` (skipped if unset) |
 | `DATABASE_URL` | Async PG URL → dev DB `192.168.5.20:5434/unhinted` |
-| `APP_ENV` | `development` (default) or `production` — production refuses weak JWT |
+| `APP_ENV` | `development` (default) or `production` — production refuses weak JWT and a missing/invalid `BYOK_ENCRYPTION_KEY` |
 | `ALLOW_INSECURE_JWT` | Escape hatch for local/tests only (`true` skips JWT secret check) |
 | `JWT_SECRET` | Sign access/refresh tokens — **≥32 chars + unique** (prod rejects the published `.env.example` default) |
+| `BYOK_ENCRYPTION_KEY` | Fernet KEK for org provider keys at rest ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md)). Required in production; generate with `Fernet.generate_key()` |
 | `AUTH_RATE_LIMIT_ENABLED` | Rate-limit `/api/auth/register|login|refresh` (default true) |
 | `AUTH_RATE_LIMIT_MAX` | Max requests per client IP per window (default 30) |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Sliding window length (default 60) |

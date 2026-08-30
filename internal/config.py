@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_tls: bool = True
 
-    # LLM (BYOK via env; org keys in DB deferred to Phase 4)
+    # LLM (env fallback; org BYOK keys encrypted with BYOK_ENCRYPTION_KEY — ADR 0020)
+    byok_encryption_key: str | None = None
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
     llm_api_base: str | None = None

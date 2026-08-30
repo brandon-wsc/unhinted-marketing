@@ -15,6 +15,7 @@ from cmd.api.routes.sessions import router as sessions_router
 from cmd.api.routes.signals import router as signals_router
 from internal.auth.rate_limit import assert_jwt_secret_safe
 from internal.config import settings
+from internal.llm.keys import assert_byok_encryption_key_safe
 from internal.llm.recorder import drain as drain_llm_records
 from internal.session.checkpointer import close_postgres_checkpointer, open_postgres_checkpointer
 from internal.session.graph import build_session_graph, set_session_graph
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
 def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     """Build the API app. Tests pass a noop lifespan to skip Postgres checkpointer."""
     assert_jwt_secret_safe()
+    assert_byok_encryption_key_safe()
     application = FastAPI(
         title="Unhinted Marketing API",
         version="0.1.0",
