@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-29  
+> **Last updated:** 2026-08-30  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -32,6 +32,14 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Confirm UI → stub `/confirm` | ✅ Done — receipt status in preview panel |
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
+
+**Decision (2026-08-30) — Org BYOK: keys / model registry / per-tier routing:** → [ADR 0020](./adr/0020-org-byok-keys-models-routing.md) · plan: [BYOK_PLAN.md](./BYOK_PLAN.md)
+
+- **Three decoupled layers** — `byok_providers` (Fernet-encrypted keys) / `byok_models` (registry, `chat|image` capability) / `byok_routing` (fixed `cheap/medium/strong/image` FK slots); one model can serve multiple slots. Supersedes ROADMAP's single `byok_config` table
+- **One resolver, both LLM paths** — `resolve_llm_model(company_id, tier)` scoped per turn via contextvar; LiteLLM router passes per-call kwargs (no more global mutation on the org path); Pydantic AI harness consumes the same resolution; env behavior bit-identical when no org rows exist
+- **Env keys stay as per-slot platform fallback** — NULL slot → platform key for that tier; dev/eval/onboarding unchanged
+- **Editor-only** (owner/admin); **two-phase delete** (409 + dependents → `?force=true` cascade); **hybrid model-id fetch** (provider list proxy, capability from modality metadata; free text + inference fallback); **SSRF guard** on user-supplied base URLs; **per-provider-row model-list cache**; **background auto-probe after save**; **add-model dedupe attaches**
+- **API surface premise locked** — Chat Completions + Images only; `litellm.drop_params = True` is the compatibility backstop and must not be removed; Responses API adoption is a separate future ADR
 
 **Decision (2026-08-19) — Queue send while turn in-flight:** → [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md) (supersedes ADR 0004 composer lock). Composer stays open; Send enqueues in the SPA (max 3); Stop discards the running turn only; drain after idle unless parked at image OK.
 

@@ -320,7 +320,7 @@ unhinted-marketing/
 | `session_messages` | Chat log (left panel). User rows always; assistant rows for chat / ack / LLM errors — Agent brief/draft are not chat rows |
 | `preview_drafts` | Revision chain (copy, image, platform, approval_token) |
 | `tool_receipts` | Idempotent execution receipts |
-| `byok_config` | Encrypted provider keys (server-side only) |
+| `byok_providers` / `byok_models` / `byok_routing` | Org BYOK: encrypted provider keys, model registry, per-tier slots ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md)) |
 | `recommended_questions` | Cached 12h batch JSON |
 
 ---
