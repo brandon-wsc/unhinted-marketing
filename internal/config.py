@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     invite_rate_limit_max: int = 20
     invite_rate_limit_window_seconds: int = 60
 
+    # BYOK probe / model-list proxy (per editor; Redis later)
+    byok_probe_rate_limit_enabled: bool = True
+    byok_probe_rate_limit_max: int = 20
+    byok_probe_rate_limit_window_seconds: int = 60
+
     # Invite links + optional email delivery (on-prem: link mode default)
     web_base_url: str = "http://localhost:5173"
     email_backend: str = "link"  # link | smtp | console

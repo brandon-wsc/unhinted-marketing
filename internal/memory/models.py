@@ -493,7 +493,11 @@ class ByokProvider(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    models: Mapped[list["ByokModel"]] = relationship(back_populates="provider")
+    models: Mapped[list["ByokModel"]] = relationship(
+        back_populates="provider",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class ByokModel(Base):

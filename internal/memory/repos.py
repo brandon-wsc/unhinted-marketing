@@ -1365,8 +1365,184 @@ async def mark_proposal_reviewed(
     return proposal
 
 
+ROUTING_SLOT_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("cheap", "cheap_model_id"),
+    ("medium", "medium_model_id"),
+    ("strong", "strong_model_id"),
+    ("image", "image_model_id"),
+)
+
+
 async def get_byok_routing(db: AsyncSession, company_id: uuid.UUID) -> ByokRouting | None:
     return await db.get(ByokRouting, company_id)
+
+
+async def list_byok_providers(db: AsyncSession, company_id: uuid.UUID) -> list[ByokProvider]:
+    stmt = (
+        select(ByokProvider)
+        .where(ByokProvider.company_id == company_id)
+        .order_by(ByokProvider.created_at.asc())
+    )
+    result = await db.scalars(stmt)
+    return list(result.all())
+
+
+async def get_byok_provider(
+    db: AsyncSession, company_id: uuid.UUID, provider_id: uuid.UUID
+) -> ByokProvider | None:
+    stmt = select(ByokProvider).where(
+        ByokProvider.company_id == company_id,
+        ByokProvider.id == provider_id,
+    )
+    return await db.scalar(stmt)
+
+
+async def create_byok_provider(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    label: str,
+    provider_type: str,
+    api_key_encrypted: str,
+    key_last4: str,
+    api_base: str | None,
+    created_by: uuid.UUID | None,
+) -> ByokProvider:
+    row = ByokProvider(
+        company_id=company_id,
+        label=label,
+        provider_type=provider_type,
+        api_key_encrypted=api_key_encrypted,
+        key_last4=key_last4,
+        api_base=api_base,
+        created_by=created_by,
+        updated_by=created_by,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def list_byok_models(db: AsyncSession, company_id: uuid.UUID) -> list[ByokModel]:
+    stmt = (
+        select(ByokModel)
+        .where(ByokModel.company_id == company_id)
+        .options(selectinload(ByokModel.provider))
+        .order_by(ByokModel.created_at.asc())
+    )
+    result = await db.scalars(stmt)
+    return list(result.all())
+
+
+async def list_byok_models_for_provider(
+    db: AsyncSession, company_id: uuid.UUID, provider_id: uuid.UUID
+) -> list[ByokModel]:
+    stmt = select(ByokModel).where(
+        ByokModel.company_id == company_id,
+        ByokModel.provider_id == provider_id,
+    )
+    result = await db.scalars(stmt)
+    return list(result.all())
+
+
+async def get_byok_model(
+    db: AsyncSession, company_id: uuid.UUID, model_pk: uuid.UUID
+) -> ByokModel | None:
+    stmt = (
+        select(ByokModel)
+        .where(ByokModel.company_id == company_id, ByokModel.id == model_pk)
+        .options(selectinload(ByokModel.provider))
+    )
+    return await db.scalar(stmt)
+
+
+async def get_byok_model_by_provider_model(
+    db: AsyncSession,
+    company_id: uuid.UUID,
+    provider_id: uuid.UUID,
+    model_id: str,
+) -> ByokModel | None:
+    stmt = (
+        select(ByokModel)
+        .where(
+            ByokModel.company_id == company_id,
+            ByokModel.provider_id == provider_id,
+            ByokModel.model_id == model_id,
+        )
+        .options(selectinload(ByokModel.provider))
+    )
+    return await db.scalar(stmt)
+
+
+async def create_byok_model(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    provider_id: uuid.UUID,
+    model_id: str,
+    capability: str,
+    capability_source: str,
+) -> ByokModel:
+    row = ByokModel(
+        company_id=company_id,
+        provider_id=provider_id,
+        model_id=model_id,
+        capability=capability,
+        capability_source=capability_source,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def upsert_byok_routing(
+    db: AsyncSession,
+    company_id: uuid.UUID,
+    *,
+    cheap_model_id: uuid.UUID | None,
+    medium_model_id: uuid.UUID | None,
+    strong_model_id: uuid.UUID | None,
+    image_model_id: uuid.UUID | None,
+) -> ByokRouting:
+    row = await get_byok_routing(db, company_id)
+    if row is None:
+        row = ByokRouting(
+            company_id=company_id,
+            cheap_model_id=cheap_model_id,
+            medium_model_id=medium_model_id,
+            strong_model_id=strong_model_id,
+            image_model_id=image_model_id,
+        )
+        db.add(row)
+    else:
+        row.cheap_model_id = cheap_model_id
+        row.medium_model_id = medium_model_id
+        row.strong_model_id = strong_model_id
+        row.image_model_id = image_model_id
+    await db.flush()
+    return row
+
+
+def routing_slots_for_model(routing: ByokRouting | None, model_pk: uuid.UUID) -> list[str]:
+    if routing is None:
+        return []
+    return [
+        slot
+        for slot, column in ROUTING_SLOT_COLUMNS
+        if getattr(routing, column) == model_pk
+    ]
+
+
+def routing_slots_for_models(
+    routing: ByokRouting | None, model_pks: set[uuid.UUID]
+) -> list[str]:
+    if routing is None or not model_pks:
+        return []
+    return [
+        slot
+        for slot, column in ROUTING_SLOT_COLUMNS
+        if getattr(routing, column) in model_pks
+    ]
 
 
 async def list_byok_models_by_ids(

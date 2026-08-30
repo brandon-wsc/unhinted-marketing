@@ -93,6 +93,24 @@ def enforce_invite_rate_limit(*, user_id: uuid.UUID) -> None:
         )
 
 
+def enforce_byok_probe_rate_limit(*, user_id: uuid.UUID) -> None:
+    """Raise 429 when an editor probes keys / model lists too often."""
+    if not settings.byok_probe_rate_limit_enabled:
+        return
+    key = f"byok_probe:{user_id}"
+    ok = _auth_limiter.allow(
+        key,
+        max_requests=settings.byok_probe_rate_limit_max,
+        window_seconds=float(settings.byok_probe_rate_limit_window_seconds),
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many BYOK probes — try again later",
+            headers={"Retry-After": str(settings.byok_probe_rate_limit_window_seconds)},
+        )
+
+
 def jwt_secret_is_insecure(secret: str | None = None) -> bool:
     """True if too short, or equal to the published .env.example default."""
     value = (secret if secret is not None else settings.jwt_secret).strip()

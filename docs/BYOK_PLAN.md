@@ -313,7 +313,7 @@ admin-side later).
       bit-identical; unit tests with mocked resolution (no live key, per TESTING.md)
 - [x] P0-3 worker fan-out per-company resolution
 - [x] P0-4 recorder `key_source` / `key_last4`
-- [ ] P1 BYOK routes (providers / models / routing / test / model-list proxy) + schemas +
+- [x] P1 BYOK routes (providers / models / routing / test / model-list proxy) + schemas +
       contract export + TS mirrors; route tests incl. two-phase delete
 - [ ] P2 settings tab: wizard + three sections + i18n;
       `pnpm run lint && pnpm test && pnpm run build`
