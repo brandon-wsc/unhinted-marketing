@@ -305,7 +305,7 @@ admin-side later).
 ## 7. Phasing checklist
 
 - [x] P0-1 encryption helper + `BYOK_ENCRYPTION_KEY` + direct `cryptography` dep
-- [ ] P0-1b SSRF guard helper for user-supplied base URLs (probes + model-list proxy)
+- [x] P0-1b SSRF guard helper for user-supplied base URLs (probes + model-list proxy)
 - [ ] P0-schema Alembic migration: `byok_providers` / `byok_models` / `byok_routing`
       (hex revision)
 - [ ] P0-2 resolver refactor (router + harness + contextvar scoping); env path
