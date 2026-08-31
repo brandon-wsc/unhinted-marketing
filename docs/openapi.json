@@ -2758,6 +2758,55 @@
         }
       }
     },
+    "/api/sessions/{session_id}/sources": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Get Session Sources",
+        "description": "Cited HK market signals for this session's current draft / state (ADR 0022).",
+        "operationId": "get_session_sources_api_sessions__session_id__sources_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSourcesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/{session_id}/events": {
       "get": {
         "tags": [
@@ -4652,6 +4701,56 @@
         },
         "type": "object",
         "title": "ByokRoutingUpdate"
+      },
+      "CitedSignal": {
+        "properties": {
+          "signal_id": {
+            "type": "string",
+            "title": "Signal Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": ""
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "signal_id",
+          "source",
+          "title",
+          "url",
+          "excerpt"
+        ],
+        "title": "CitedSignal",
+        "description": "User-facing HK market signal card for session source-trace links (ADR 0022)."
       },
       "CompanyMember": {
         "properties": {
@@ -7637,6 +7736,31 @@
           "updated_at"
         ],
         "title": "SessionResponse"
+      },
+      "SessionSourcesResponse": {
+        "properties": {
+          "source_signal_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Signal Ids"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/CitedSignal"
+            },
+            "type": "array",
+            "title": "Signals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_signal_ids",
+          "signals"
+        ],
+        "title": "SessionSourcesResponse",
+        "description": "Cited HK market signals for the current session draft / state (ADR 0022)."
       },
       "SessionTrace": {
         "properties": {

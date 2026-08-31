@@ -21,6 +21,8 @@ export type RecommendedQuestionsGenerating =
   components["schemas"]["RecommendedQuestionsGenerating"];
 export type DraftCopy = components["schemas"]["DraftCopy"];
 export type PreviewMediaItem = components["schemas"]["PreviewMediaItem"];
+export type CitedSignal = import("./generated/preview-updated").CitedSignal;
+export type SessionSourcesResponse = components["schemas"]["SessionSourcesResponse"];
 export type ForkRef = components["schemas"]["ForkRef"];
 export type ForkOrigin = components["schemas"]["ForkOrigin"];
 export type ForkSessionResponse = components["schemas"]["ForkSessionResponse"];

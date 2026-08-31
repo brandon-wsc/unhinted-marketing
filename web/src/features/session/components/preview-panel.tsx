@@ -14,7 +14,13 @@ import {
   isRenderableImageUrl,
   toEditableCopy,
 } from "@/features/session/components/ig-preview-mock";
-import type { ConfirmSessionResponse, DraftCopy, PreviewDraft } from "@/features/session/types";
+import { SourceCitations } from "@/features/session/components/source-citations";
+import type {
+  CitedSignal,
+  ConfirmSessionResponse,
+  DraftCopy,
+  PreviewDraft,
+} from "@/features/session/types";
 
 type Props = {
   draft: PreviewDraft;
@@ -34,6 +40,7 @@ type Props = {
   onAddImage: (format?: "single" | "comic_4panel") => Promise<PreviewDraft | null | unknown>;
   onRemoveImage: (imageId: string) => Promise<PreviewDraft | null | unknown>;
   onUploadImage: (imageId: string, file: File) => Promise<PreviewDraft | null | unknown>;
+  citedSignals?: CitedSignal[];
   /** When true, show back affordance (paged shell); split shell hides it. */
   paged?: boolean;
   onBack?: () => void;
@@ -54,6 +61,7 @@ export function PreviewPanel({
   onAddImage,
   onRemoveImage,
   onUploadImage,
+  citedSignals = [],
   paged = false,
   onBack,
 }: Props) {
@@ -178,6 +186,7 @@ export function PreviewPanel({
             onEditImage={confirmed ? undefined : () => setEditImageOpen(true)}
             onEditCopy={confirmed ? undefined : () => setEditCopyOpen(true)}
           />
+          <SourceCitations signals={citedSignals.length ? citedSignals : (draft.sources ?? [])} />
         </div>
       </div>
 

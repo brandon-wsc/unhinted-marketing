@@ -7,6 +7,7 @@ import {
   apiDeleteSession,
   apiForkSession,
   apiGetSessionMessages,
+  apiGetSessionSources,
   apiListSessions,
   apiPostSessionMessage,
   apiRegenImage,
@@ -20,6 +21,7 @@ import {
 } from "./api";
 import {
   agentActionsFromMessages,
+  asStringList,
   bumpSessionInHistory,
   EMPTY_COMPOSER_DRAFT,
   isUserFacingAgentNode,
@@ -28,8 +30,10 @@ import {
   newActionId,
   newQueuedChatMessage,
   OUTCOME_NODE,
+  orderCitedSignals,
   parseAgentProgress,
   parseBrief,
+  parseCitedSignals,
   parseDraftCopy,
   parseMediaItems,
   previewAnchorFromActions,
@@ -44,6 +48,7 @@ import type {
   AgentActionRecord,
   AgentProgress,
   ChatMessage,
+  CitedSignal,
   ComposerDraft,
   ConfirmSessionResponse,
   DraftCopy,
@@ -72,6 +77,7 @@ type LiveChatSnapshot = {
   previewAfterMessageId: string | null;
   awaitingImageOk: boolean;
   draft: PreviewDraft | null;
+  citedSignals: CitedSignal[];
   confirmReceipt: ConfirmSessionResponse | null;
   llmError: string | null;
   mode: string;
@@ -107,6 +113,7 @@ export function useSession(companyId: string | undefined) {
   const [composerInput, setComposerInputState] = useState("");
   const [editInsertAt, setEditInsertAtState] = useState<number | null>(null);
   const [draft, setDraft] = useState<PreviewDraft | null>(null);
+  const [citedSignals, setCitedSignals] = useState<CitedSignal[]>([]);
   const [confirmReceipt, setConfirmReceipt] = useState<ConfirmSessionResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [draftSaving, setDraftSaving] = useState(false);
@@ -164,6 +171,7 @@ export function useSession(companyId: string | undefined) {
     previewAfterMessageId,
     awaitingImageOk,
     draft,
+    citedSignals,
     confirmReceipt,
     llmError,
     mode,
@@ -226,6 +234,7 @@ export function useSession(companyId: string | undefined) {
     awaitingImageOkRef.current = snap.awaitingImageOk;
     setAwaitingImageOk(snap.awaitingImageOk);
     setDraft(snap.draft);
+    setCitedSignals(snap.citedSignals ?? []);
     setConfirmReceipt(snap.confirmReceipt);
     setLlmError(snap.llmError);
     setMode(snap.mode);
@@ -298,6 +307,7 @@ export function useSession(companyId: string | undefined) {
     setPreviewAfterMessageId(null);
     setAwaitingImageOk(false);
     setDraft(null);
+    setCitedSignals([]);
     setConfirmReceipt(null);
     setLlmError(null);
     setDraftSaving(false);
@@ -314,6 +324,31 @@ export function useSession(companyId: string | undefined) {
     }
     return null;
   }, []);
+
+  const applyCitedPayload = useCallback((data: Record<string, unknown>) => {
+    const ids = asStringList(data.source_signal_ids);
+    const parsed = parseCitedSignals(data.signals ?? data.sources);
+    const next = orderCitedSignals(ids, parsed);
+    if (next.length > 0 || ids.length > 0) {
+      setCitedSignals(next);
+    }
+  }, []);
+
+  const hydrateCitedSignals = useCallback(
+    async (targetSessionId: string) => {
+      if (!accessToken) return;
+      try {
+        const body = await apiGetSessionSources(accessToken, targetSessionId);
+        if (!stillOn(targetSessionId)) return;
+        setCitedSignals(
+          orderCitedSignals(body.source_signal_ids ?? [], parseCitedSignals(body.signals)),
+        );
+      } catch {
+        if (stillOn(targetSessionId)) setCitedSignals([]);
+      }
+    },
+    [accessToken, stillOn],
+  );
 
   const finishRunningActions = useCallback(() => {
     setAgentActions((prev) =>
@@ -481,6 +516,7 @@ export function useSession(companyId: string | undefined) {
         if (
           type === "agent.progress" ||
           type === "brief.updated" ||
+          type === "signals.updated" ||
           type === "draft.awaiting_image_ok" ||
           type === "message.delta" ||
           type === "draft.copy_updated" ||
@@ -501,6 +537,10 @@ export function useSession(companyId: string | undefined) {
           setBrief(parsed);
           setBriefAfterMessageId(lastUserMessageId());
         }
+        return;
+      }
+      if (type === "signals.updated") {
+        applyCitedPayload(data);
         return;
       }
       if (type === "draft.awaiting_image_ok") {
@@ -528,6 +568,11 @@ export function useSession(companyId: string | undefined) {
         setPreviewAfterMessageId(lastUserMessageId());
         const copy = parseDraftCopy(data.copy);
         const media = parseMediaItems(data.media);
+        const sources = parseCitedSignals(data.sources);
+        const sourceIds = asStringList(data.source_signal_ids);
+        if (sources.length || sourceIds.length) {
+          applyCitedPayload({ source_signal_ids: sourceIds, signals: sources });
+        }
         setDraft((prev) =>
           mergePreviewDraft(prev, {
             copy,
@@ -536,6 +581,8 @@ export function useSession(companyId: string | undefined) {
             revision: typeof data.revision === "number" ? data.revision : null,
             approval_token: typeof data.approval_token === "string" ? data.approval_token : null,
             platform: typeof data.platform === "string" ? data.platform : null,
+            source_signal_ids: sourceIds,
+            sources,
           }),
         );
         return;
@@ -563,7 +610,14 @@ export function useSession(companyId: string | undefined) {
         finishRunningActions();
       }
     },
-    [lastUserMessageId, appendAgentAction, finishRunningActions, bumpEpoch, dropInFlight],
+    [
+      lastUserMessageId,
+      appendAgentAction,
+      finishRunningActions,
+      bumpEpoch,
+      dropInFlight,
+      applyCitedPayload,
+    ],
   );
 
   useEffect(() => {
@@ -623,8 +677,14 @@ export function useSession(companyId: string | undefined) {
                     ? state.approval_token
                     : null,
               platform: typeof data.platform === "string" ? data.platform : null,
+              source_signal_ids: asStringList(data.source_signal_ids),
+              sources: parseCitedSignals(data.sources),
             }),
           );
+          applyCitedPayload({
+            source_signal_ids: asStringList(data.source_signal_ids),
+            signals: parseCitedSignals(data.sources),
+          });
           if (typeof data.mode === "string" && data.mode === "PREVIEW") {
             setPreviewAfterMessageId((prev) => {
               if (prev && messagesRef.current.some((m) => m.id === prev)) {
@@ -692,7 +752,14 @@ export function useSession(companyId: string | undefined) {
       setSseConnected(false);
       abort.abort();
     };
-  }, [sessionId, accessToken, refreshAccessToken, applyTurnEvent, lastUserMessageId]);
+  }, [
+    sessionId,
+    accessToken,
+    refreshAccessToken,
+    applyTurnEvent,
+    lastUserMessageId,
+    applyCitedPayload,
+  ]);
 
   // Active server-side history search ("" = browse mode). Ref so that
   // refreshHistory re-applies it — opening a result must not drop the
@@ -775,8 +842,15 @@ export function useSession(companyId: string | undefined) {
       if (!sendingRef.current && !stoppingRef.current && !parked) {
         drainQueueRef.current();
       }
+      void hydrateCitedSignals(res.session.id);
     },
-    [resetTransientUi, applyComposerDraft, syncSendingForCurrent, disconnectSse],
+    [
+      resetTransientUi,
+      applyComposerDraft,
+      syncSendingForCurrent,
+      disconnectSse,
+      hydrateCitedSignals,
+    ],
   );
 
   const openSession = useCallback(
@@ -1019,6 +1093,7 @@ export function useSession(companyId: string | undefined) {
       }
       finishRunningActions();
       void refreshHistory();
+      void hydrateCitedSignals(sessionId);
     } finally {
       dropInFlight(sessionId);
       if (stillOn(sessionId)) {
@@ -1035,6 +1110,7 @@ export function useSession(companyId: string | undefined) {
     bumpEpoch,
     stillOn,
     dropInFlight,
+    hydrateCitedSignals,
   ]);
 
   const enqueueQueuedAt = useCallback((content: string, index?: number): boolean => {
@@ -1557,6 +1633,7 @@ export function useSession(companyId: string | undefined) {
     previewAfterMessageId,
     awaitingImageOk,
     draft,
+    citedSignals,
     confirmReceipt,
     draftSaving,
     confirming,

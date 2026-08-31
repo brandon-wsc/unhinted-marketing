@@ -1,4 +1,11 @@
-from internal.session.service import normalize_draft_copy, preview_updated_payload
+from types import SimpleNamespace
+
+from internal.session.service import (
+    cited_signals_from_rows,
+    normalize_draft_copy,
+    preview_updated_payload,
+    unique_signal_ids,
+)
 
 
 def test_normalize_draft_copy_none() -> None:
@@ -76,3 +83,54 @@ def test_preview_updated_payload_custom_platform() -> None:
     assert payload["platform"] == "threads"
     assert payload["image_url"] == "placeholder://x"
     assert payload["copy"] == {"caption": "", "hashtags": [], "cta": ""}
+    assert payload["source_signal_ids"] == []
+    assert payload["sources"] == []
+
+
+def test_unique_signal_ids_dedupes_and_skips_blank() -> None:
+    assert unique_signal_ids(["a", "a", "", None, "b"]) == ["a", "b"]
+
+
+def test_cited_signals_from_rows_preserves_citation_order() -> None:
+    rows = [
+        SimpleNamespace(
+            signal_id="sig_b",
+            source="google_trends",
+            title="Second",
+            url="https://example.com/b",
+            excerpt="b",
+        ),
+        SimpleNamespace(
+            signal_id="sig_a",
+            source="rss",
+            title="First",
+            url="https://example.com/a",
+            excerpt="a",
+        ),
+    ]
+    cited = cited_signals_from_rows(rows, ["sig_a", "missing", "sig_b"])
+    assert [c.signal_id for c in cited] == ["sig_a", "sig_b"]
+    assert cited[0].title == "First"
+    assert cited[0].url == "https://example.com/a"
+
+
+def test_preview_updated_payload_includes_cited_sources() -> None:
+    payload = preview_updated_payload(
+        revision=2,
+        approval_token="tok",
+        image_url=None,
+        copy={"caption": "c"},
+        source_signal_ids=["sig_a"],
+        sources=[
+            {
+                "signal_id": "sig_a",
+                "source": "google_trends",
+                "title": "HK typhoon",
+                "url": "https://example.com/typhoon",
+                "excerpt": "weather",
+            }
+        ],
+    )
+    assert payload["source_signal_ids"] == ["sig_a"]
+    assert payload["sources"][0]["title"] == "HK typhoon"
+    assert payload["sources"][0]["url"] == "https://example.com/typhoon"

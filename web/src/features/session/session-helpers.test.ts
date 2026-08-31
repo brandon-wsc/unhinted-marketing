@@ -13,8 +13,10 @@ import {
   newActionId,
   newQueuedChatMessage,
   OUTCOME_NODE,
+  orderCitedSignals,
   parseAgentProgress,
   parseBrief,
+  parseCitedSignals,
   parseDraftCopy,
   parseTurnDurationMs,
   previewAnchorFromActions,
@@ -351,6 +353,8 @@ describe("mergePreviewDraft", () => {
     revision: 1,
     approval_token: "tok",
     platform: "instagram",
+    source_signal_ids: [],
+    sources: [],
   };
 
   it("returns prev when incomplete and no prior draft", () => {
@@ -385,6 +389,8 @@ describe("mergePreviewDraft", () => {
       revision: 2,
       approval_token: "t1",
       platform: "instagram",
+      source_signal_ids: [],
+      sources: [],
     });
   });
 
@@ -400,6 +406,50 @@ describe("mergePreviewDraft", () => {
       image_url: "https://img",
       platform: "instagram",
     });
+  });
+
+  it("keeps cited sources on a later copy patch", () => {
+    const grounded: PreviewDraft = {
+      ...full,
+      source_signal_ids: ["sig_a"],
+      sources: [
+        {
+          signal_id: "sig_a",
+          source: "google_trends",
+          title: "HK typhoon",
+          url: "https://example.com/typhoon",
+          excerpt: "weather",
+        },
+      ],
+    };
+    expect(
+      mergePreviewDraft(grounded, { copy: { caption: "new", hashtags: [], cta: "" } }),
+    ).toEqual({
+      ...grounded,
+      copy: { caption: "new", hashtags: [], cta: "" },
+    });
+  });
+});
+
+describe("parseCitedSignals", () => {
+  it("keeps title, excerpt, and url for matching ids", () => {
+    const parsed = parseCitedSignals([
+      {
+        signal_id: "sig_b",
+        source: "rss",
+        title: "Second",
+        url: "https://example.com/b",
+        excerpt: "b",
+      },
+      { signal_id: "sig_a", source: "google_trends", title: "First", url: null, excerpt: "a" },
+      { title: "no-id" },
+    ]);
+    expect(orderCitedSignals(["sig_a", "sig_b"], parsed).map((s) => s.signal_id)).toEqual([
+      "sig_a",
+      "sig_b",
+    ]);
+    expect(parsed.find((s) => s.signal_id === "sig_a")?.title).toBe("First");
+    expect(parsed.find((s) => s.signal_id === "sig_b")?.url).toBe("https://example.com/b");
   });
 });
 

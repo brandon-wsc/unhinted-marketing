@@ -213,6 +213,11 @@
     "confirmDone": "出咗",
     "confirmReceipt": "回執：{{status}}",
     "confirmHint": "Chat 入面講「可以出」唔會真係出。確認會用已儲存修訂（有未儲存改動會先自動儲存）。",
+    "sources": {
+      "title": "市場來源",
+      "open": "打開原文",
+      "unknownSource": "香港市場訊號"
+    },
     "exemplar": {
       "save": "將文案儲存做語氣範例",
       "working": "儲存緊…",

@@ -27,11 +27,72 @@ from internal.session.media import image_format_from_plan, media_item_payload
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
 from internal.session.trace import turn_trace
 from internal.session.turn_registry import TurnEntry, session_turn_registry
-from schemas.contracts import DraftCopy, PreviewMediaItem, PreviewUpdatedData
+from schemas.contracts import (
+    CitedSignal,
+    DraftCopy,
+    PreviewMediaItem,
+    PreviewUpdatedData,
+    SignalsUpdatedData,
+)
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PLATFORM = "instagram"
+
+
+def unique_signal_ids(ids: list[Any] | None) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for raw in ids or []:
+        key = str(raw).strip() if raw is not None else ""
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(key)
+    return cleaned
+
+
+def cited_signals_from_rows(rows: list[Any], ordered_ids: list[str]) -> list[CitedSignal]:
+    by_id = {getattr(row, "signal_id", None): row for row in rows}
+    out: list[CitedSignal] = []
+    for sid in ordered_ids:
+        row = by_id.get(sid)
+        if row is None:
+            continue
+        out.append(
+            CitedSignal(
+                signal_id=row.signal_id,
+                source=row.source or "",
+                title=row.title or sid,
+                url=row.url,
+                excerpt=row.excerpt,
+            )
+        )
+    return out
+
+
+async def load_cited_signals(db: AsyncSession, ids: list[Any] | None) -> list[CitedSignal]:
+    ordered = unique_signal_ids(ids)
+    if not ordered:
+        return []
+    rows = await repos.get_signals_by_ids(db, ordered)
+    return cited_signals_from_rows(rows, ordered)
+
+
+def citation_ids_for_session(session: Session, draft: Any | None) -> list[str]:
+    if draft is not None:
+        from_draft = unique_signal_ids(getattr(draft, "source_signal_ids", None))
+        if from_draft:
+            return from_draft
+    return unique_signal_ids((session.state or {}).get("source_signal_ids"))
+
+
+async def session_source_citations(
+    db: AsyncSession, session: Session
+) -> tuple[list[str], list[CitedSignal]]:
+    draft = await repos.get_latest_preview_draft(db, session.id)
+    ids = citation_ids_for_session(session, draft)
+    return ids, await load_cited_signals(db, ids)
 
 
 class SessionTurnConflict(Exception):
@@ -131,8 +192,14 @@ def preview_updated_payload(
     copy: dict[str, Any] | None,
     platform: str | None = None,
     media: list[dict[str, Any]] | None = None,
+    source_signal_ids: list[str] | None = None,
+    sources: list[CitedSignal] | list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     items = [PreviewMediaItem.model_validate(m) for m in (media or [])]
+    cited = [CitedSignal.model_validate(s) for s in (sources or [])]
+    ids = unique_signal_ids(source_signal_ids)
+    if not ids:
+        ids = [s.signal_id for s in cited]
     primary = image_url
     if primary is None and items:
         primary = items[0].url
@@ -143,6 +210,8 @@ def preview_updated_payload(
         media=items,
         draft_copy=DraftCopy.model_validate(normalize_draft_copy(copy)),
         platform=platform or DEFAULT_PLATFORM,
+        source_signal_ids=ids,
+        sources=cited,
     ).model_dump(by_alias=True)
 
 
@@ -162,9 +231,7 @@ async def _media_for_new_draft(
     - else reuse_media_ids: caption-only path keeps same image versions.
     """
     if create_image_row and (image_url or image_plan):
-        fmt = image_format_from_plan(
-            image_plan, fallback=image_format or "single"
-        )
+        fmt = image_format_from_plan(image_plan, fallback=image_format or "single")
         row = await repos.insert_preview_image(
             db,
             session_id=session.id,
@@ -277,15 +344,11 @@ async def copy_session_preview(
     """
     latest = await repos.get_latest_preview_draft(db, source.id)
     draft = (
-        await repos.get_preview_draft_as_of(db, source.id, as_of)
-        if as_of is not None
-        else latest
+        await repos.get_preview_draft_as_of(db, source.id, as_of) if as_of is not None else latest
     )
     latest_revision = latest.revision if latest is not None else None
     if draft is None:
-        return ForkPreviewCopy(
-            copied=False, copied_revision=None, latest_revision=latest_revision
-        )
+        return ForkPreviewCopy(copied=False, copied_revision=None, latest_revision=latest_revision)
 
     id_map: dict[uuid.UUID, uuid.UUID] = {}
     for img in await repos.get_preview_images_by_ids(db, list(draft.media_ids or [])):
@@ -326,6 +389,7 @@ async def copy_session_preview(
         "pending_confirm": False,
         "need_image": False,
         "awaiting_image_ok": False,
+        "source_signal_ids": list(draft.source_signal_ids or []),
     }
     if draft.image_plan is not None:
         state["image_plan"] = copy.deepcopy(draft.image_plan)
@@ -512,9 +576,7 @@ async def _persist_after_invoke(
         next_state["turn_discard"] = {
             "pre_state": _strip_discard_meta(pre_state),
             "user_message_id": str(user_msg.id),
-            "message_ids": [
-                str(mid) for mid in (entry.message_ids if entry else [user_msg.id])
-            ],
+            "message_ids": [str(mid) for mid in (entry.message_ids if entry else [user_msg.id])],
         }
     session.state = next_state
 
@@ -534,21 +596,26 @@ async def _persist_after_invoke(
             )
 
     if not provider_error:
+        cited_ids = unique_signal_ids(values.get("source_signal_ids"))
+        cited_signals: list[CitedSignal] = []
+        if cited_ids:
+            cited_signals = await load_cited_signals(db, cited_ids)
         if values.get("brief"):
             events.append({"type": "brief.updated", "data": values["brief"]})
-        if values.get("source_signal_ids"):
+        if cited_ids:
             events.append(
                 {
                     "type": "signals.updated",
-                    "data": {"source_signal_ids": values["source_signal_ids"]},
+                    "data": SignalsUpdatedData(
+                        source_signal_ids=cited_ids,
+                        signals=cited_signals,
+                    ).model_dump(),
                 }
             )
         if values.get("draft"):
             events.append({"type": "draft.copy_updated", "data": values["draft"]})
         if values.get("image_plan") and not still_interrupted:
-            events.append(
-                {"type": "draft.image_plan_updated", "data": values["image_plan"]}
-            )
+            events.append({"type": "draft.image_plan_updated", "data": values["image_plan"]})
         if still_interrupted:
             events.append(
                 {
@@ -557,9 +624,7 @@ async def _persist_after_invoke(
                 }
             )
         elif values.get("image_url"):
-            events.append(
-                {"type": "draft.updated", "data": {"image_url": values["image_url"]}}
-            )
+            events.append({"type": "draft.updated", "data": {"image_url": values["image_url"]}})
 
         if (
             mode == MODE_PREVIEW
@@ -570,9 +635,7 @@ async def _persist_after_invoke(
             existing_draft = await repos.get_latest_preview_draft(db, session.id)
             rev = int(values["revision"])
             if not existing_draft or existing_draft.revision < rev:
-                platform = (
-                    existing_draft.platform if existing_draft else None
-                ) or DEFAULT_PLATFORM
+                platform = (existing_draft.platform if existing_draft else None) or DEFAULT_PLATFORM
                 draft_copy = normalize_draft_copy(values.get("draft"))
                 media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
                     db,
@@ -609,6 +672,9 @@ async def _persist_after_invoke(
                             copy=draft_copy,
                             platform=platform,
                             media=media,
+                            source_signal_ids=cited_ids
+                            or unique_signal_ids(values.get("source_signal_ids")),
+                            sources=cited_signals,
                         ),
                     }
                 )
@@ -689,8 +755,7 @@ async def _invoke_graph(
                     still_interrupted = False
                 else:
                     logger.warning(
-                        "LLM provider error during session turn "
-                        "(session=%s model=%s kind=%s): %s",
+                        "LLM provider error during session turn (session=%s model=%s kind=%s): %s",
                         session_id,
                         provider_error.model,
                         provider_error.kind,
@@ -1087,6 +1152,7 @@ async def _bump_preview_revision(
     if primary_plan is not None:
         state["image_plan"] = primary_plan
     state["media_ids"] = [str(i) for i in media_ids]
+    state["source_signal_ids"] = source_signal_ids
     state["pending_confirm"] = False
     state["need_image"] = False
     state["awaiting_image_ok"] = False
@@ -1117,6 +1183,7 @@ async def _bump_preview_revision(
             exc_info=True,
         )
 
+    cited = await load_cited_signals(db, source_signal_ids)
     events = [
         {"type": "draft.copy_updated", "data": draft_copy},
         {
@@ -1128,6 +1195,8 @@ async def _bump_preview_revision(
                 copy=draft_copy,
                 platform=platform,
                 media=media,
+                source_signal_ids=source_signal_ids,
+                sources=cited,
             ),
         },
     ]
@@ -1145,9 +1214,7 @@ async def _bump_preview_revision(
     }
 
 
-async def list_latest_session_media(
-    db: AsyncSession, session: Session
-) -> list[dict[str, Any]]:
+async def list_latest_session_media(db: AsyncSession, session: Session) -> list[dict[str, Any]]:
     draft = await repos.get_latest_preview_draft(db, session.id)
     ids = list(draft.media_ids or []) if draft else []
     if not ids:

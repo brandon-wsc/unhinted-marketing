@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from schemas.contracts import DraftCopy, PreviewMediaItem, SessionBriefData
+from schemas.contracts import CitedSignal, DraftCopy, PreviewMediaItem, SessionBriefData
 
 
 class CreateSessionRequest(BaseModel):
@@ -169,6 +169,15 @@ class UpdateDraftResponse(BaseModel):
     media: list[PreviewMediaItem] = Field(default_factory=list)
     platform: str
     mode: str
+
+
+class SessionSourcesResponse(BaseModel):
+    """Cited HK market signals for the current session draft / state (ADR 0022)."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    source_signal_ids: list[str] = Field(default_factory=list)
+    signals: list[CitedSignal] = Field(default_factory=list)
 
 
 class SessionMediaListResponse(BaseModel):

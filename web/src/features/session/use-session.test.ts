@@ -5,6 +5,7 @@ import type { Session, SessionListItem } from "@/features/session/types";
 const {
   apiListSessions,
   apiGetSessionMessages,
+  apiGetSessionSources,
   apiCreateSession,
   apiPostSessionMessage,
   apiResumeSessionImage,
@@ -20,6 +21,7 @@ const {
 } = vi.hoisted(() => ({
   apiListSessions: vi.fn(),
   apiGetSessionMessages: vi.fn(),
+  apiGetSessionSources: vi.fn(),
   apiCreateSession: vi.fn(),
   apiPostSessionMessage: vi.fn(),
   apiResumeSessionImage: vi.fn(),
@@ -44,6 +46,7 @@ vi.mock("@/context/auth-context", () => ({
 vi.mock("@/features/session/api", () => ({
   apiListSessions,
   apiGetSessionMessages,
+  apiGetSessionSources,
   apiCreateSession,
   apiPostSessionMessage,
   apiResumeSessionImage,
@@ -139,6 +142,7 @@ describe("useSession", () => {
     vi.clearAllMocks();
     getRememberedSessionId.mockReturnValue(null);
     apiListSessions.mockResolvedValue([historyItem]);
+    apiGetSessionSources.mockResolvedValue({ source_signal_ids: [], signals: [] });
     subscribeSessionEvents.mockImplementation(({ onOpen }: { onOpen?: () => void }) => {
       onOpen?.();
       return new Promise<void>(() => {});
@@ -1722,5 +1726,69 @@ describe("useSession", () => {
     });
     expect(result.current.awaitingImageOk).toBe(true);
     expect(result.current.interruptAfterMessageId).toBe("u-b");
+  });
+
+  it("hydrates cited signals from REST and SSE in citation order", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [msgA],
+    });
+    apiGetSessionSources.mockResolvedValue({
+      source_signal_ids: ["sig_b", "sig_a"],
+      signals: [
+        {
+          signal_id: "sig_a",
+          source: "google_trends",
+          title: "First",
+          url: "https://example.com/a",
+          excerpt: "a",
+        },
+        {
+          signal_id: "sig_b",
+          source: "rss",
+          title: "Second",
+          url: "https://example.com/b",
+          excerpt: "b",
+        },
+      ],
+    });
+    const handlers = new Map<string, (type: string, data: Record<string, unknown>) => void>();
+    subscribeSessionEvents.mockImplementation(
+      (opts: {
+        sessionId: string;
+        onOpen?: () => void;
+        onEvent: (type: string, data: Record<string, unknown>) => void;
+      }) => {
+        handlers.set(opts.sessionId, opts.onEvent);
+        opts.onOpen?.();
+        return new Promise<void>(() => {});
+      },
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() =>
+      expect(result.current.citedSignals.map((s) => s.signal_id)).toEqual(["sig_b", "sig_a"]),
+    );
+    expect(result.current.citedSignals[0]?.title).toBe("Second");
+    expect(result.current.citedSignals[0]?.url).toBe("https://example.com/b");
+
+    await act(async () => {
+      handlers.get("sess-1")?.("signals.updated", {
+        source_signal_ids: ["sig_a"],
+        signals: [
+          {
+            signal_id: "sig_a",
+            source: "google_trends",
+            title: "Updated",
+            url: "https://example.com/a",
+            excerpt: "a",
+          },
+        ],
+      });
+    });
+    expect(result.current.citedSignals).toEqual([
+      expect.objectContaining({ signal_id: "sig_a", title: "Updated" }),
+    ]);
   });
 });

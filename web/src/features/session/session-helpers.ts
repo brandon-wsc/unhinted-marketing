@@ -2,6 +2,7 @@ import type {
   AgentActionRecord,
   AgentProgress,
   ChatMessage,
+  CitedSignal,
   ComposerDraft,
   DraftCopy,
   PreviewDraft,
@@ -40,6 +41,47 @@ export function parseDraftCopy(data: unknown): DraftCopy | null {
   const cta = typeof raw.cta === "string" ? raw.cta : "";
   if (!caption && !hashtags.length && !cta) return null;
   return { caption, hashtags, cta };
+}
+
+export function parseCitedSignal(data: unknown): CitedSignal | null {
+  if (!data || typeof data !== "object") return null;
+  const raw = data as Record<string, unknown>;
+  if (typeof raw.signal_id !== "string" || !raw.signal_id) return null;
+  return {
+    signal_id: raw.signal_id,
+    source: typeof raw.source === "string" ? raw.source : "",
+    title: typeof raw.title === "string" && raw.title ? raw.title : raw.signal_id,
+    url: typeof raw.url === "string" && raw.url ? raw.url : null,
+    excerpt: typeof raw.excerpt === "string" ? raw.excerpt : null,
+  };
+}
+
+export function parseCitedSignals(data: unknown): CitedSignal[] {
+  if (!Array.isArray(data)) return [];
+  const out: CitedSignal[] = [];
+  for (const item of data) {
+    const parsed = parseCitedSignal(item);
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+export function orderCitedSignals(ids: string[], signals: CitedSignal[]): CitedSignal[] {
+  const byId = new Map(signals.map((s) => [s.signal_id, s]));
+  const ordered: CitedSignal[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    const hit = byId.get(id);
+    if (!hit || seen.has(id)) continue;
+    seen.add(id);
+    ordered.push(hit);
+  }
+  for (const signal of signals) {
+    if (seen.has(signal.signal_id)) continue;
+    seen.add(signal.signal_id);
+    ordered.push(signal);
+  }
+  return ordered;
 }
 
 export function parseAgentProgress(data: Record<string, unknown>): AgentProgress | null {
@@ -217,6 +259,8 @@ export function mergePreviewDraft(
     revision?: number | null;
     approval_token?: string | null;
     platform?: string | null;
+    source_signal_ids?: string[] | null;
+    sources?: CitedSignal[] | null;
   },
 ): PreviewDraft | null {
   const copy = patch.copy ?? prev?.copy ?? null;
@@ -227,6 +271,12 @@ export function mergePreviewDraft(
   const revision = typeof patch.revision === "number" ? patch.revision : (prev?.revision ?? null);
   const media =
     patch.media !== undefined && patch.media !== null ? patch.media : (prev?.media ?? []);
+  const source_signal_ids =
+    patch.source_signal_ids !== undefined && patch.source_signal_ids !== null
+      ? patch.source_signal_ids
+      : (prev?.source_signal_ids ?? []);
+  const sources =
+    patch.sources !== undefined && patch.sources !== null ? patch.sources : (prev?.sources ?? []);
   if (!copy || !approval_token || revision == null) {
     if (copy && prev) {
       return {
@@ -235,6 +285,8 @@ export function mergePreviewDraft(
         image_url: patch.image_url !== undefined ? patch.image_url : prev.image_url,
         media,
         platform: patch.platform || prev.platform,
+        source_signal_ids,
+        sources,
       };
     }
     return prev;
@@ -246,6 +298,8 @@ export function mergePreviewDraft(
     revision,
     approval_token,
     platform: patch.platform || prev?.platform || "instagram",
+    source_signal_ids,
+    sources,
   };
 }
 

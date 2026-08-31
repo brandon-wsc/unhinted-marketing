@@ -213,6 +213,11 @@
     "confirmDone": "Confirmed",
     "confirmReceipt": "Receipt status: {{status}}",
     "confirmHint": "Saying so in chat does not publish. Confirm uses the saved revision (dirty edits are saved first).",
+    "sources": {
+      "title": "Market sources",
+      "open": "Open original",
+      "unknownSource": "HK market signal"
+    },
     "exemplar": {
       "save": "Save caption as voice example",
       "working": "Saving…",

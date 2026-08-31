@@ -37,6 +37,7 @@ import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
+import { SourceCitations } from "@/features/session/components/source-citations";
 import {
   agentNodeFallbackKey,
   agentNodeLabelKey,
@@ -100,6 +101,7 @@ export function ChatPanel() {
     previewAfterMessageId,
     awaitingImageOk,
     draft,
+    citedSignals,
     confirmReceipt,
     draftSaving,
     confirming,
@@ -155,6 +157,8 @@ export function ChatPanel() {
   const [composerH, setComposerH] = useState(0);
   const { ref: shellRef, width: shellWidth } = useContainerWidth();
   const previewMode = mode === "PREVIEW" && !!draft;
+  const lastUserId = [...messages].reverse().find((m) => m.role === "user")?.id ?? null;
+  const sourcesAfterId = briefAfterMessageId ?? lastUserId;
   const layoutMode = sessionLayoutMode(shellWidth, {
     historyCollapsed,
     previewReady: previewMode,
@@ -540,6 +544,9 @@ export function ChatPanel() {
                       />
                     )}
                     {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
+                    {citedSignals.length > 0 && sourcesAfterId === m.id && (
+                      <SourceCitations signals={citedSignals} />
+                    )}
                     {awaitingImageOk && interruptAfterMessageId === m.id && (
                       <InterruptCard
                         sending={sending || stopping}
@@ -568,6 +575,10 @@ export function ChatPanel() {
             {brief &&
               briefAfterMessageId &&
               !messages.some((m) => m.id === briefAfterMessageId) && <BriefCard brief={brief} />}
+            {citedSignals.length > 0 &&
+              (!sourcesAfterId || !messages.some((m) => m.id === sourcesAfterId)) && (
+                <SourceCitations signals={citedSignals} />
+              )}
             {awaitingImageOk &&
               interruptAfterMessageId &&
               !messages.some((m) => m.id === interruptAfterMessageId) && (
@@ -744,6 +755,7 @@ export function ChatPanel() {
       onAddImage={onAddImage}
       onRemoveImage={onRemoveImage}
       onUploadImage={onUploadImage}
+      citedSignals={citedSignals}
       paged={!isSplit}
       onBack={goToChat}
     />

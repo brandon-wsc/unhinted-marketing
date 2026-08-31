@@ -36,6 +36,7 @@ from internal.session.service import (
     remove_session_image,
     resume_image_turn,
     run_session_turn,
+    session_source_citations,
     stop_session_turn,
     update_session_draft,
     update_session_image_plan,
@@ -63,6 +64,7 @@ from schemas.session import (
     SessionMediaListResponse,
     SessionMessagesResponse,
     SessionResponse,
+    SessionSourcesResponse,
     StopSessionResponse,
     UpdateDraftRequest,
     UpdateDraftResponse,
@@ -119,9 +121,7 @@ def _image_interrupt_from_snapshot(state: dict | None, snap_next: object) -> boo
     return any(node in nxt for node in INTERRUPT_BEFORE)
 
 
-async def _require_owned_session(
-    db: AsyncSession, session_id: uuid.UUID, user: User
-) -> Session:
+async def _require_owned_session(db: AsyncSession, session_id: uuid.UUID, user: User) -> Session:
     session = await repos.get_session(db, session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
@@ -173,9 +173,7 @@ async def list_sessions(
                 for session, preview, match_content, draft_copy in rows
             ]
         )
-    rows = await repos.list_user_sessions(
-        db, user_id=user.id, company_id=company_id, limit=limit
-    )
+    rows = await repos.list_user_sessions(db, user_id=user.id, company_id=company_id, limit=limit)
     return SessionListResponse(
         sessions=[
             SessionListItem(
@@ -552,6 +550,18 @@ async def get_session_messages(
     )
 
 
+@router.get("/{session_id}/sources", response_model=SessionSourcesResponse)
+async def get_session_sources(
+    session_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SessionSourcesResponse:
+    """Cited HK market signals for this session's current draft / state (ADR 0022)."""
+    session = await _require_owned_session(db, session_id, user)
+    ids, signals = await session_source_citations(db, session)
+    return SessionSourcesResponse(source_signal_ids=ids, signals=signals)
+
+
 @router.get("/{session_id}/events")
 async def session_events(
     session_id: uuid.UUID,
@@ -562,11 +572,10 @@ async def session_events(
     session = await _require_owned_session(db, session_id, user)
     draft = await repos.get_latest_preview_draft(db, session.id)
     state = session.state or {}
-    copy = normalize_draft_copy(
-        (draft.copy if draft else None) or state.get("draft")
-    )
+    copy = normalize_draft_copy((draft.copy if draft else None) or state.get("draft"))
     platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
     media_items = await list_latest_session_media(db, session)
+    source_ids, source_cards = await session_source_citations(db, session)
 
     interrupted = _image_interrupt_from_snapshot(state, ())
     try:
@@ -591,6 +600,8 @@ async def session_events(
         "copy": copy,
         "platform": platform,
         "interrupted": interrupted,
+        "source_signal_ids": source_ids,
+        "sources": [s.model_dump() for s in source_cards],
     }
 
     async def event_stream() -> AsyncIterator[str]:
@@ -664,9 +675,7 @@ async def get_session_media(
     """List media for the latest preview draft (ADR 0008)."""
     session = await _require_owned_session(db, session_id, user)
     items = await list_latest_session_media(db, session)
-    return SessionMediaListResponse(
-        media=[PreviewMediaItem.model_validate(m) for m in items]
-    )
+    return SessionMediaListResponse(media=[PreviewMediaItem.model_validate(m) for m in items])
 
 
 @router.patch(

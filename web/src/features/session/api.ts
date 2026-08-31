@@ -12,6 +12,7 @@ import type {
   Session,
   SessionListItem,
   SessionMessagesResponse,
+  SessionSourcesResponse,
   UpdateDraftResponse,
 } from "./types";
 
@@ -71,6 +72,15 @@ export async function apiGetSessionMessages(
   sessionId: string,
 ): Promise<SessionMessagesResponse> {
   const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/messages`);
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
+export async function apiGetSessionSources(
+  accessToken: string | null,
+  sessionId: string,
+): Promise<SessionSourcesResponse> {
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/sources`);
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
 }

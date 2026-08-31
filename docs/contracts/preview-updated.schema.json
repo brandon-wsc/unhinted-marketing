@@ -1,5 +1,57 @@
 {
   "$defs": {
+    "CitedSignal": {
+      "description": "User-facing HK market signal card for session source-trace links (ADR 0022).",
+      "properties": {
+        "signal_id": {
+          "title": "Signal Id",
+          "type": "string"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        }
+      },
+      "required": [
+        "signal_id",
+        "source",
+        "title",
+        "url",
+        "excerpt"
+      ],
+      "title": "CitedSignal",
+      "type": "object"
+    },
     "DraftCopy": {
       "description": "Shared post copy across preview skins (ADR 0001).",
       "properties": {
@@ -139,6 +191,20 @@
       "maxLength": 40,
       "title": "Platform",
       "type": "string"
+    },
+    "source_signal_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Source Signal Ids",
+      "type": "array"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/CitedSignal"
+      },
+      "title": "Sources",
+      "type": "array"
     }
   },
   "required": [
@@ -147,7 +213,9 @@
     "image_url",
     "media",
     "copy",
-    "platform"
+    "platform",
+    "source_signal_ids",
+    "sources"
   ],
   "title": "PreviewUpdatedData",
   "type": "object"

@@ -731,6 +731,26 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session Sources
+         * @description Cited HK market signals for this session's current draft / state (ADR 0022).
+         */
+        get: operations["get_session_sources_api_sessions__session_id__sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/events": {
         parameters: {
             query?: never;
@@ -1288,6 +1308,28 @@ export type components = {
             strong_model_id?: string | null;
             /** Image Model Id */
             image_model_id?: string | null;
+        };
+        /**
+         * CitedSignal
+         * @description User-facing HK market signal card for session source-trace links (ADR 0022).
+         */
+        CitedSignal: {
+            /** Signal Id */
+            signal_id: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /** Url */
+            url: string | null;
+            /** Excerpt */
+            excerpt: string | null;
         };
         /** CompanyMember */
         CompanyMember: {
@@ -2474,6 +2516,16 @@ export type components = {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * SessionSourcesResponse
+         * @description Cited HK market signals for the current session draft / state (ADR 0022).
+         */
+        SessionSourcesResponse: {
+            /** Source Signal Ids */
+            source_signal_ids: string[];
+            /** Signals */
+            signals: components["schemas"]["CitedSignal"][];
         };
         /** SessionTrace */
         SessionTrace: {
@@ -4420,6 +4472,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ForkSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_sources_api_sessions__session_id__sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSourcesResponse"];
                 };
             };
             /** @description Validation Error */

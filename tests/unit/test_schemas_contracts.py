@@ -4,9 +4,11 @@ import pytest
 from pydantic import ValidationError
 
 from schemas.contracts import (
+    CitedSignal,
     DraftCopy,
     PreviewUpdatedData,
     SessionEventType,
+    SignalsUpdatedData,
     TypedSessionEvent,
 )
 from schemas.tools import (
@@ -36,6 +38,37 @@ def test_preview_updated_roundtrip() -> None:
     again = PreviewUpdatedData.model_validate(data)
     assert again.revision == 3
     assert again.draft_copy.caption == "你好"
+    assert again.source_signal_ids == []
+    assert again.sources == []
+
+
+def test_preview_updated_includes_cited_signals() -> None:
+    payload = PreviewUpdatedData(
+        revision=1,
+        approval_token="token-abc-12",
+        draft_copy=DraftCopy(caption="x"),
+        source_signal_ids=["sig_a"],
+        sources=[
+            CitedSignal(
+                signal_id="sig_a",
+                source="google_trends",
+                title="奶茶",
+                url="https://example.com/milk-tea",
+                excerpt="HK trend",
+            )
+        ],
+    )
+    data = payload.model_dump(by_alias=True)
+    assert data["source_signal_ids"] == ["sig_a"]
+    assert data["sources"][0]["title"] == "奶茶"
+
+
+def test_signals_updated_includes_cards() -> None:
+    body = SignalsUpdatedData(
+        source_signal_ids=["sig_a"],
+        signals=[CitedSignal(signal_id="sig_a", source="rss", title="News")],
+    )
+    assert body.signals[0].title == "News"
 
 
 def test_session_event_type_catalog_includes_preview() -> None:

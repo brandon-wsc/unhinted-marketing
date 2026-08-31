@@ -20,6 +20,7 @@ from schemas.session import (
     SessionListResponse,
     SessionMessagesResponse,
     SessionResponse,
+    SessionSourcesResponse,
     StopSessionResponse,
     UpdateDraftRequest,
     UpdateDraftResponse,
@@ -149,6 +150,11 @@ def test_confirm_and_draft_responses() -> None:
     assert draft.draft_copy.caption == "c"
     req = UpdateDraftRequest(caption="Hello", hashtags=["hk"])
     assert req.cta == ""
+    sources = SessionSourcesResponse(
+        source_signal_ids=["sig_a"],
+        signals=[{"signal_id": "sig_a", "source": "rss", "title": "News"}],
+    )
+    assert sources.signals[0].title == "News"
 
 
 def test_session_event() -> None:

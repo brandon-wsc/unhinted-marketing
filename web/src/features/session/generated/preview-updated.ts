@@ -17,6 +17,13 @@ export type Caption = string;
 export type Hashtags = string[];
 export type Cta = string;
 export type Platform = string;
+export type SourceSignalIds = string[];
+export type SignalId = string;
+export type Source = string;
+export type Title = string;
+export type Url1 = string | null;
+export type Excerpt = string | null;
+export type Sources = CitedSignal[];
 
 /**
  * Payload for SSE / turn event `preview.updated`.
@@ -28,6 +35,8 @@ export interface PreviewUpdatedData {
   media: Media;
   copy: DraftCopy;
   platform: Platform;
+  source_signal_ids: SourceSignalIds;
+  sources: Sources;
 }
 /**
  * One append-only image version referenced by a draft (ADR 0008).
@@ -57,4 +66,17 @@ export interface DraftCopy {
   caption: Caption;
   hashtags: Hashtags;
   cta: Cta;
+}
+/**
+ * User-facing HK market signal card for session source-trace links (ADR 0022).
+ *
+ * This interface was referenced by `PreviewUpdatedData`'s JSON-Schema
+ * via the `definition` "CitedSignal".
+ */
+export interface CitedSignal {
+  signal_id: SignalId;
+  source: Source;
+  title: Title;
+  url: Url1;
+  excerpt: Excerpt;
 }
