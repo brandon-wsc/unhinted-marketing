@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { KeyFormFields } from "@/features/company-settings/components/key-form-fields";
 import { EMPTY_BYOK_KEY_FORM } from "@/features/company-settings/byok-helpers";
+import { KeyFormFields } from "@/features/company-settings/components/key-form-fields";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),

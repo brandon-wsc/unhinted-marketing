@@ -115,11 +115,11 @@ def test_images_models_url_compat_only() -> None:
         "https://openrouter.ai/api/v1/images/models"
     )
 
-    class O:
+    class Openai:
         provider_type = "openai"
         api_base = None
 
-    assert images_models_url(O()) == "https://api.openai.com/v1/images/models"  # type: ignore[arg-type]
+    assert images_models_url(Openai()) == "https://api.openai.com/v1/images/models"  # type: ignore[arg-type]
 
     class V:
         provider_type = "vertex_ai"
