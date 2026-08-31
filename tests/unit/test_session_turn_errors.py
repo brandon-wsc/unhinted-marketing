@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.exc import InvalidRequestError
 
+from internal.llm.resolve import CompanyLlmBundle
 from internal.llm.router import LlmProviderError
 from internal.session.service import (
     _invoke_graph,
@@ -24,6 +25,15 @@ async def _clear_registry():
     session_turn_registry._entries.clear()
     yield
     session_turn_registry._entries.clear()
+
+
+@pytest.fixture(autouse=True)
+def _empty_byok_bundle():
+    with patch(
+        "internal.llm.resolve.load_company_llm_bundle",
+        AsyncMock(return_value=CompanyLlmBundle()),
+    ):
+        yield
 
 
 class _ExpiredAfterInvoke:

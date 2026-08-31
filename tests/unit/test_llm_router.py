@@ -84,6 +84,49 @@ async def test_generate_image_returns_url(monkeypatch: pytest.MonkeyPatch) -> No
     assert url == "https://cdn.example/a.png"
 
 
+@pytest.mark.asyncio
+async def test_generate_image_normalizes_gemini_inline_b64(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(R, "resolve_image_model", lambda: "imagen-3.0-generate-002")
+    monkeypatch.setattr(R, "configure_litellm", lambda: None)
+    monkeypatch.setattr(R.settings, "llm_api_base", None)
+
+    response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {"inlineData": {"mimeType": "image/png", "data": "iVBORw0KGgo"}},
+                    ]
+                }
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        R.litellm, "aimage_generation", AsyncMock(return_value=response)
+    )
+    url = await R.generate_image(prompt="x")
+    assert url == "data:image/png;base64,iVBORw0KGgo"
+
+
+def test_image_result_to_url_openai_and_gemini() -> None:
+    item = MagicMock()
+    item.url = "https://cdn.example/a.png"
+    item.b64_json = None
+    response = MagicMock()
+    response.data = [item]
+    response.candidates = None
+    response.images = None
+    assert R.image_result_to_url(response) == "https://cdn.example/a.png"
+    assert R.image_result_to_url({"data": [{"b64_json": "/9j/xxxx"}]}) == (
+        "data:image/jpeg;base64,/9j/xxxx"
+    )
+    assert R.image_result_to_url(
+        {"candidates": [{"content": {"parts": [{"inline_data": {"data": "abc"}}]}}]}
+    ) == "data:image/png;base64,abc"
+
+
 class _FakeStream:
     def __init__(
         self,
@@ -363,6 +406,92 @@ async def test_generate_image_records_provider_error(
     assert rec.status == "provider_error"
     assert rec.error["kind"] == "unsupported"
     assert rec.user_prompt == "HK cafe"
+
+
+@pytest.mark.asyncio
+async def test_complete_json_vertex_express_skips_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
+
+    vertex = ResolvedModel(
+        model_id="gemini-2.5-flash",
+        api_key="AQ.test",
+        api_base=None,
+        provider_type="vertex_ai",
+        source="org",
+        key_last4="test",
+    )
+    called: dict[str, object] = {}
+
+    class FakeModels:
+        async def generate_content_stream(self, **kwargs):
+            called["stream"] = kwargs
+
+            async def gen():
+                yield SimpleNamespace(text='{"ok": true}', usage_metadata=None)
+
+            return gen()
+
+    class FakeClient:
+        aio = SimpleNamespace(models=FakeModels())
+
+    monkeypatch.setattr(R, "express_client", lambda *_a, **_k: FakeClient())
+
+    async def boom(**_kwargs):
+        raise AssertionError("LiteLLM must not run for vertex_ai")
+
+    monkeypatch.setattr(R.litellm, "acompletion", boom)
+
+    with llm_bundle_scope(CompanyLlmBundle(cheap=vertex)):
+        raw = await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
+    assert raw == '{"ok": true}'
+    assert called["stream"]["model"] == "gemini-2.5-flash"
+
+
+@pytest.mark.asyncio
+async def test_generate_image_vertex_express_skips_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
+
+    vertex = ResolvedModel(
+        model_id="gemini-2.5-flash-image",
+        api_key="AQ.test",
+        api_base=None,
+        provider_type="vertex_ai",
+        source="org",
+        key_last4="test",
+    )
+    response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {"inlineData": {"mimeType": "image/png", "data": "iVBORw0KGgo"}},
+                    ]
+                }
+            }
+        ]
+    }
+
+    class FakeModels:
+        async def generate_content(self, **_kwargs):
+            return response
+
+    class FakeClient:
+        aio = SimpleNamespace(models=FakeModels())
+
+    monkeypatch.setattr(R, "express_client", lambda *_a, **_k: FakeClient())
+
+    async def boom(**_kwargs):
+        raise AssertionError("LiteLLM must not run for vertex_ai")
+
+    monkeypatch.setattr(R.litellm, "aimage_generation", boom)
+
+    with llm_bundle_scope(CompanyLlmBundle(image=vertex)):
+        url = await R.generate_image(prompt="HK cafe")
+    assert url == "data:image/png;base64,iVBORw0KGgo"
 
 
 @pytest.mark.asyncio

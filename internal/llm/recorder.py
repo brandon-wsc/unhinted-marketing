@@ -97,10 +97,16 @@ class LlmCallRecordBuilder:
         prompt = _usage_int(usage, "prompt_tokens")
         if prompt is None:
             prompt = _usage_int(usage, "input_tokens")
+        if prompt is None:
+            prompt = _usage_int(usage, "prompt_token_count")
         completion = _usage_int(usage, "completion_tokens")
         if completion is None:
             completion = _usage_int(usage, "output_tokens")
+        if completion is None:
+            completion = _usage_int(usage, "candidates_token_count")
         total = _usage_int(usage, "total_tokens")
+        if total is None:
+            total = _usage_int(usage, "total_token_count")
         if prompt is not None:
             self.prompt_tokens = prompt
         if completion is not None:

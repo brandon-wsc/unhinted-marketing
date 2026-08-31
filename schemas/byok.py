@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-ProviderType = Literal["openai", "anthropic", "openai_compatible"]
+ProviderType = Literal["openai", "anthropic", "openai_compatible", "gemini", "vertex_ai"]
 Capability = Literal["chat", "image"]
 CapabilitySource = Literal["provider_metadata", "inferred", "manual"]
 RoutingSlot = Literal["cheap", "medium", "strong", "image"]

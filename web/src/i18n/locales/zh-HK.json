@@ -492,7 +492,9 @@
       "providerType": {
         "openai": "OpenAI",
         "anthropic": "Anthropic",
-        "openai_compatible": "OpenAI-compatible"
+        "openai_compatible": "OpenAI-compatible",
+        "gemini": "Gemini",
+        "vertex_ai": "Vertex AI（Express）"
       },
       "actions": {
         "test": "測試",
@@ -506,9 +508,12 @@
         "apiKey": "API key",
         "apiBase": "API base",
         "apiBaseHint": "OpenAI-compatible endpoint，例如 https://openrouter.ai/api/v1",
+        "geminiKeyHint": "Google AI Studio 嘅 key（generativelanguage.googleapis.com）。Vertex Express 嗰條貼入去會 401。",
+        "vertexKeyHint": "Vertex Express Mode 嘅 key（aiplatform.googleapis.com）。唔係 AI Studio 嗰條 Gemini key，都唔係 OpenAI 格式。",
         "modelId": "Model id",
         "modelFetching": "攞緊 model 清單…",
         "modelFreeText": "呢個 key 唔支援自動清單，輸入 model id 就得。",
+        "modelTypedOk": "清單係參考。冇格都可以自己打 model id。",
         "capability": "用途"
       },
       "edit": {

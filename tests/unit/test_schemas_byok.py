@@ -41,7 +41,23 @@ def test_provider_create_requires_base_for_compatible() -> None:
     assert body.api_base == "https://openrouter.ai/api/v1"
 
 
-def test_provider_patch_empty_key_keeps_stored() -> None:
+def test_provider_create_gemini_without_base() -> None:
+    body = ByokProviderCreate(
+        label="Gemini",
+        provider_type="gemini",
+        api_key="AIza-test",
+    )
+    assert body.api_base is None
+    assert body.provider_type == "gemini"
+
+    express = ByokProviderCreate(
+        label="Vertex Express",
+        provider_type="vertex_ai",
+        api_key="AQ-test",
+    )
+    assert express.api_base is None
+    assert express.provider_type == "vertex_ai"
+
     body = ByokProviderPatch(api_key="  ")
     assert body.api_key is None
 

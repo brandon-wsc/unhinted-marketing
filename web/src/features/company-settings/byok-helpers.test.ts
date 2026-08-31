@@ -5,6 +5,7 @@ import {
   isByokPending,
   routingToUpdate,
   slotUpdateField,
+  validateByokKeyForm,
 } from "@/features/company-settings/byok-helpers";
 
 describe("inferByokCapability", () => {
@@ -13,11 +14,42 @@ describe("inferByokCapability", () => {
     expect(inferByokCapability("seedream-4.0")).toBe("image");
     expect(inferByokCapability("flux-schnell")).toBe("image");
     expect(inferByokCapability("imagen-3")).toBe("image");
+    expect(inferByokCapability("gemini-2.5-flash-image")).toBe("image");
   });
 
   it("defaults to chat", () => {
     expect(inferByokCapability("gpt-4o")).toBe("chat");
     expect(inferByokCapability("deepseek-v4-flash")).toBe("chat");
+    expect(inferByokCapability("gemini-2.5-flash")).toBe("chat");
+  });
+});
+
+describe("validateByokKeyForm", () => {
+  it("does not require api_base for gemini", () => {
+    expect(
+      validateByokKeyForm(
+        { label: "G", providerType: "gemini", apiKey: "AIza", apiBase: "" },
+        { requireKey: true },
+      ),
+    ).toBeNull();
+  });
+
+  it("does not require api_base for vertex_ai", () => {
+    expect(
+      validateByokKeyForm(
+        { label: "V", providerType: "vertex_ai", apiKey: "AQ", apiBase: "" },
+        { requireKey: true },
+      ),
+    ).toBeNull();
+  });
+
+  it("requires api_base for openai_compatible", () => {
+    expect(
+      validateByokKeyForm(
+        { label: "OR", providerType: "openai_compatible", apiKey: "sk", apiBase: "" },
+        { requireKey: true },
+      ),
+    ).toBe("apiBaseRequired");
   });
 });
 

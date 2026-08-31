@@ -321,6 +321,7 @@ describe("ApiKeysPanel", () => {
     renderPanel();
     await user.click(await screen.findByRole("button", { name: "settings.apiKeys.addModel" }));
     const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("settings.apiKeys.wizard.modelTypedOk")).toBeInTheDocument();
     const input = await within(dialog).findByLabelText("settings.apiKeys.wizard.modelId");
     await user.click(input);
     expect(await screen.findByRole("option", { name: "seedream" })).toBeInTheDocument();

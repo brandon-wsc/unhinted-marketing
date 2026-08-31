@@ -1189,7 +1189,7 @@ export type components = {
              * Provider Type
              * @enum {string}
              */
-            provider_type: "openai" | "anthropic" | "openai_compatible";
+            provider_type: "openai" | "anthropic" | "openai_compatible" | "gemini" | "vertex_ai";
             /** Api Key */
             api_key: string;
             /** Api Base */
@@ -1220,7 +1220,7 @@ export type components = {
              * Provider Type
              * @enum {string}
              */
-            provider_type: "openai" | "anthropic" | "openai_compatible";
+            provider_type: "openai" | "anthropic" | "openai_compatible" | "gemini" | "vertex_ai";
             /** Key Last4 */
             key_last4: string;
             /** Api Base */

@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-30  
+> **Last updated:** 2026-08-31  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -33,15 +33,21 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
-**Decision (2026-08-30) — Org BYOK: keys / model registry / per-tier routing:** → [ADR 0020](./adr/0020-org-byok-keys-models-routing.md) · plan: [BYOK_PLAN.md](./BYOK_PLAN.md)
+**Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
+
+- **Native `provider_type` only when the wire is not Chat Completions + Images.** Enum is `openai` \| `anthropic` \| `openai_compatible` \| `gemini` \| `vertex_ai`. Clones stay `openai_compatible` (DeepSeek, OpenRouter, Groq, …). Vertex **OAuth** / Bedrock / Cohere / Ollama-native / Azure-as-type deferred
+- **Gemini = AI Studio API key** — harness `GoogleModel` + `GoogleProvider`; LiteLLM `gemini/` prefix; model list `GET …/v1beta/models` + `x-goog-api-key`; image slot via `aimage_generation` with inline-b64 normalize. Env `GEMINI_API_KEY`
+- **Vertex Express = API key only** — distinct type (`vertex_ai`); harness `GoogleCloudProvider(api_key=…)`; `genai.Client(vertexai=True, api_key=…)` for JSON/text/stream/image (not LiteLLM). Probe is `POST …:generateContent?key=` (Express has no ListModels). Env `VERTEX_AI_API_KEY` or `GOOGLE_API_KEY` + `GOOGLE_GENAI_USE_VERTEXAI=true` (never treat `GEMINI_API_KEY` as Express; never set the flag in-process)
+
+**Decision (2026-08-30) — Org BYOK: keys / model registry / per-tier routing:** → [ADR 0020](./adr/0020-org-byok-keys-models-routing.md) · plan: [BYOK_PLAN.md](./BYOK_PLAN.md) · native Gemini + Vertex Express: [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
 - **Three decoupled layers** — `byok_providers` (Fernet-encrypted keys) / `byok_models` (registry, `chat|image` capability) / `byok_routing` (fixed `cheap/medium/strong/image` FK slots); one model can serve multiple slots. Supersedes ROADMAP's single `byok_config` table
 - **One resolver, both LLM paths** — `resolve_llm_model(company_id, tier)` scoped per turn via contextvar; LiteLLM router passes per-call kwargs (no more global mutation on the org path); Pydantic AI harness consumes the same resolution; env behavior bit-identical when no org rows exist
 - **Env keys stay as per-slot platform fallback** — NULL slot → platform key for that tier; dev/eval/onboarding unchanged
-- **Editor-only** (owner/admin); **two-phase delete** (409 + dependents → `?force=true` cascade); **hybrid model-id fetch** (provider list proxy, capability from modality metadata; free text + inference fallback); **SSRF guard** on user-supplied base URLs; **per-provider-row model-list cache**; **background auto-probe after save**; **add-model dedupe attaches**
+- **Editor-only** (owner/admin); **two-phase delete** (409 + dependents → `?force=true` cascade); **hybrid model-id fetch** (provider list proxy + `openai`/`openai_compatible` `{base}/images/models` merge; capability from modality metadata; typed id valid if unlisted; inference fallback); **SSRF guard** on user-supplied base URLs; **per-provider-row model-list cache**; **background auto-probe after save**; **add-model dedupe attaches**
 - **Settings UI** — editor-only `?tab=models` (old `?tab=api-keys` rewrites). Three unmixed surfaces, no wizard. Add key (Keys heading, key-only dialog) and Add model (Models heading, searchable model-id combobox) each save-and-close; neither offers the next layer. Add model is disabled until a key exists and never creates a key. Routing is the four slot dropdowns on the page — the only place slots are assigned. Credential dialogs do not dismiss on overlay click; their errors render inside the dialog.
-- **Slot capability match is app-level** (`PUT /routing` + resolver skip-to-env); enum columns + `openai_compatible` requires `api_base` are CHECK-constrained. Models have no `created_by`/`updated_by`; routing has no `created_at` (intentional)
-- **API surface premise locked** — Chat Completions + Images only; `litellm.drop_params = True` is the compatibility backstop and must not be removed; Responses API adoption is a separate future ADR
+- **Slot capability match is app-level** (`PUT /routing` + resolver skip-to-env); enum columns + `openai_compatible` requires `api_base` are CHECK-constrained (`gemini` / `vertex_ai` added in [ADR 0021](./adr/0021-org-byok-native-gemini.md)). Models have no `created_by`/`updated_by`; routing has no `created_at` (intentional)
+- **API surface premise** — Chat Completions + Images for `openai` / `anthropic` / `openai_compatible`; `litellm.drop_params = True` is the compatibility backstop and must not be removed; native Gemini + Vertex Express are the Completions exceptions ([ADR 0021](./adr/0021-org-byok-native-gemini.md)); Responses API adoption is a separate future ADR
 
 **Decision (2026-08-19) — Queue send while turn in-flight:** → [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md) (supersedes ADR 0004 composer lock). Composer stays open; Send enqueues in the SPA (max 3); Stop discards the running turn only; drain after idle unless parked at image OK.
 
@@ -252,7 +258,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | Hot search worker | ✅ | `python -m cmd.worker hot-search` (Google Trends HK + RSS news) |
 | Question generator | ✅ | Worker LangGraph (ADR 0018); 13h cache; GET-miss fill; RSS + Trends ingest |
 | News promoter | ✅ | Top trends → topic `entities` + `edges` in PG |
-| LiteLLM BYOK loader | ✅ | Env-based (`OPENAI_API_KEY`, model tiers); `LLM_API_BASE` → `openai/` prefix (org/model slugs kept) |
+| LiteLLM BYOK loader | ✅ | Env-based (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `VERTEX_AI_API_KEY` or `GOOGLE_API_KEY`+`GOOGLE_GENAI_USE_VERTEXAI`, model tiers); `LLM_API_BASE` → `openai/` prefix; native Gemini → `gemini/`; Vertex Express → google-genai `vertexai=True` ([ADR 0021](./adr/0021-org-byok-native-gemini.md)) |
 | Default personas | ✅ | Seeded in `entities` (type=persona) on first question run |
 | Signals API | ✅ | `GET /api/signals/top` |
 | Questions API | ✅ | `GET /api/companies/{id}/recommended-questions` (200 cache / 202 fill); `POST …/refresh` |
@@ -299,7 +305,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | API `/api` path prefix | ✅ | [ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md) — hard cut; SPA `/system` (legacy `/admin` redirect) |
 | Admin Trace viewer (node-steps + session) | ✅ | [ADR 0007](./adr/0007-admin-trace-viewer.md) — `session_node_steps` + `turn_id`; admin tabs Node steps / Session Trace |
 | Meta Graph API hot search | ⏸ | Next after core UI |
-| BYOK settings page | ✅ | Editor-only keys / models / routing tab ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md)) |
+| BYOK settings page | ✅ | Editor-only keys / models / routing tab ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md), native Gemini + Vertex Express [ADR 0021](./adr/0021-org-byok-native-gemini.md)) |
 | Trace viewer | ✅ | Admin Session Trace tab ([ADR 0007](./adr/0007-admin-trace-viewer.md)) — not end-user UI |
 
 ---
@@ -457,6 +463,10 @@ unhinted-marketing/
 | `OPENAI_API_KEY` | LLM for questions + session nodes + `python -m scripts.eval_agent` |
 | `LLM_API_BASE` | Optional OpenAI-compatible proxy base URL (OpenRouter, DeepSeek, Azure, …). When set, model ids go through the OpenAI-compatible client (`openai/` prefix); OpenRouter `org/model` slugs are kept intact |
 | `ANTHROPIC_API_KEY` | Optional alternate provider |
+| `GEMINI_API_KEY` | Optional native Gemini / Imagen, AI Studio ([ADR 0021](./adr/0021-org-byok-native-gemini.md)) |
+| `VERTEX_AI_API_KEY` | Optional Vertex Express API key — not OAuth ([ADR 0021](./adr/0021-org-byok-native-gemini.md)) |
+| `GOOGLE_API_KEY` | Optional Vertex Express key when `GOOGLE_GENAI_USE_VERTEXAI=true` (SDK pair; never treated as AI Studio). Do not set the flag in-process |
+| `GOOGLE_GENAI_USE_VERTEXAI` | Read-only: `true` routes env `GOOGLE_API_KEY` as Express. `GEMINI_API_KEY` alone is not Express |
 | `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `gpt-4o-mini`, `deepseek/deepseek-v4-flash-0731`) |
 | `LLM_IMAGE_MODEL` | Image-capable id (e.g. `dall-e-3` / OpenRouter image model). Unset with credentials → error on gen; `placeholder` = mock URL |
 | `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |

@@ -71,6 +71,15 @@ export function KeyFormFields({
           autoComplete="new-password"
           placeholder={keyRequired ? undefined : t("settings.apiKeys.edit.apiKeyPlaceholder")}
         />
+        {(value.providerType === "gemini" || value.providerType === "vertex_ai") && (
+          <p className="text-xs text-muted-foreground">
+            {t(
+              value.providerType === "gemini"
+                ? "settings.apiKeys.wizard.geminiKeyHint"
+                : "settings.apiKeys.wizard.vertexKeyHint",
+            )}
+          </p>
+        )}
       </FormField>
       {value.providerType === "openai_compatible" && (
         <FormField id={`${idPrefix}-base`} label={t("settings.apiKeys.wizard.apiBase")}>

@@ -8,11 +8,27 @@ import type {
   ByokRoutingUpdate,
 } from "@/features/company-settings/api";
 
-const IMAGE_MARKERS = ["dall-e", "dalle", "seedream", "flux", "imagen"] as const;
+const IMAGE_MARKERS = [
+  "dall-e",
+  "dalle",
+  "seedream",
+  "flux",
+  "imagen",
+  "flash-image",
+  "pro-image",
+  "image-preview",
+  "image-generation",
+] as const;
 
 export const PLATFORM_SLOT_VALUE = "__platform__";
 
-export const BYOK_PROVIDER_TYPES: ByokProviderType[] = ["openai", "anthropic", "openai_compatible"];
+export const BYOK_PROVIDER_TYPES: ByokProviderType[] = [
+  "openai",
+  "anthropic",
+  "openai_compatible",
+  "gemini",
+  "vertex_ai",
+];
 
 export type ByokKeyFormValue = {
   label: string;
@@ -45,6 +61,7 @@ export function validateByokKeyForm(
 export function inferByokCapability(modelId: string): ByokCapability {
   const lowered = modelId.toLowerCase();
   if (IMAGE_MARKERS.some((marker) => lowered.includes(marker))) return "image";
+  if (lowered.includes("-image") || lowered.endsWith("image")) return "image";
   return "chat";
 }
 

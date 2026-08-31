@@ -27,11 +27,14 @@ from internal.config import settings
 from internal.llm.recorder import track
 from internal.llm.resolve import (
     bundle_has_credentials,
+    effective_api_base,
     env_has_llm_credentials,
-    prefix_litellm_model,
+    gemini_catalog_id,
+    litellm_model_id,
     resolve_image,
     resolve_llm_model,
 )
+from internal.llm.vertex_express import express_client
 
 logger = logging.getLogger(__name__)
 
@@ -79,32 +82,181 @@ def resolve_image_model() -> str | None:
     return raw or None
 
 
-def _litellm_model(model: str, api_base: str | None = None) -> str:
-    """When a custom api_base is set, force the OpenAI-compatible provider.
+def _litellm_model(
+    model: str,
+    api_base: str | None = None,
+    provider_type: str = "openai",
+) -> str:
+    """LiteLLM id: native ``gemini/`` for AI Studio; ``openai/`` when a compat base is set.
 
-    Bare ids like ``deepseek-chat`` make LiteLLM pick the native Deepseek
-    provider and ignore a custom api_base. Prefix ``openai/`` so the request
-    goes through the OpenAI-compatible HTTP client against that base.
-    OpenRouter ``org/model`` slugs keep the catalog id (not the last segment).
+    ``vertex_ai`` is not LiteLLM — use ``express_client`` instead.
     """
-    return prefix_litellm_model(model, api_base)
+    return litellm_model_id(model, provider_type, api_base)
 
 
 def _base_kwargs(tier: ModelTier, temperature: float) -> dict:
     configure_litellm()
     resolved = resolve_llm_model(tier)
     raw = resolve_model(tier)
-    model = _litellm_model(raw, resolved.api_base)
+    api_base = effective_api_base(resolved.provider_type, resolved.api_base)
+    model = _litellm_model(raw, api_base, resolved.provider_type)
     kwargs: dict = {
         "model": model,
         "temperature": temperature,
         "timeout": settings.llm_timeout_seconds,
     }
-    if resolved.api_base:
-        kwargs["api_base"] = resolved.api_base
+    if api_base:
+        kwargs["api_base"] = api_base
     if resolved.api_key:
         kwargs["api_key"] = resolved.api_key
     return kwargs
+
+
+def _vertex_timeout_ms() -> int:
+    return max(1, int(settings.llm_timeout_seconds * 1000))
+
+
+def _wrap_google_genai_error(exc: BaseException, *, model: str) -> LlmProviderError:
+    try:
+        from google.genai.errors import APIError
+    except ImportError:
+        APIError = ()  # type: ignore[misc, assignment]
+    if isinstance(exc, APIError):
+        code = int(getattr(exc, "code", 0) or 0)
+        if code in (401, 403):
+            return LlmProviderError(
+                f"LLM authentication failed for {model}. Check the Vertex Express API key.",
+                model=model,
+                kind="auth",
+            )
+        if code == 429:
+            return LlmProviderError(
+                f"LLM rate limit hit for {model}. Try again shortly.",
+                model=model,
+                kind="rate_limit",
+            )
+        if code == 404:
+            return LlmProviderError(
+                f"Model {model} was not found on Vertex Express. Check the model id.",
+                model=model,
+                kind="unsupported",
+            )
+        if 400 <= code < 500:
+            return LlmProviderError(
+                f"LLM rejected the request for {model} (bad model id or unsupported params).",
+                model=model,
+                kind="bad_request",
+            )
+        return LlmProviderError(
+            f"LLM call failed for {model}: {str(exc)[:240]}",
+            model=model,
+            kind="provider",
+        )
+    if isinstance(exc, TimeoutError):
+        return LlmProviderError(
+            f"LLM timed out talking to {model}. Check network and that the Express key is valid.",
+            model=model,
+            kind="timeout",
+        )
+    return _wrap_provider_error(exc, model=model)
+
+
+async def _vertex_astream_text(
+    *,
+    resolved: Any,
+    system: str,
+    user: str,
+    temperature: float,
+    json_mode: bool = False,
+    usage_sink: Any = None,
+) -> AsyncIterator[str]:
+    from google.genai import types
+    from google.genai.errors import APIError
+
+    model = gemini_catalog_id(resolved.model_id)
+    config_kwargs: dict[str, Any] = {"temperature": temperature}
+    if system:
+        config_kwargs["system_instruction"] = system
+    if json_mode:
+        config_kwargs["response_mime_type"] = "application/json"
+    stream: Any = None
+    try:
+        client = express_client(resolved.api_key or "", timeout_ms=_vertex_timeout_ms())
+        stream = await client.aio.models.generate_content_stream(
+            model=model,
+            contents=user,
+            config=types.GenerateContentConfig(**config_kwargs),
+        )
+        async for chunk in stream:
+            if usage_sink is not None:
+                usage = getattr(chunk, "usage_metadata", None)
+                if usage is not None:
+                    usage_sink(usage)
+            piece = getattr(chunk, "text", None)
+            if piece:
+                yield str(piece)
+    except asyncio.CancelledError:
+        raise
+    except APIError as exc:
+        raise _wrap_google_genai_error(exc, model=model) from exc
+    except Exception as exc:
+        if _is_provider_failure(exc) or isinstance(exc, TimeoutError):
+            raise _wrap_google_genai_error(exc, model=model) from exc
+        raise
+    finally:
+        await _aclose_stream(stream)
+
+
+async def _vertex_complete_text(
+    *,
+    resolved: Any,
+    system: str,
+    user: str,
+    temperature: float,
+    usage_sink: Any = None,
+) -> str:
+    from google.genai import types
+    from google.genai.errors import APIError
+
+    model = gemini_catalog_id(resolved.model_id)
+    config_kwargs: dict[str, Any] = {"temperature": temperature}
+    if system:
+        config_kwargs["system_instruction"] = system
+    try:
+        client = express_client(resolved.api_key or "", timeout_ms=_vertex_timeout_ms())
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=user,
+            config=types.GenerateContentConfig(**config_kwargs),
+        )
+    except APIError as exc:
+        raise _wrap_google_genai_error(exc, model=model) from exc
+    except Exception as exc:
+        if _is_provider_failure(exc) or isinstance(exc, TimeoutError):
+            raise _wrap_google_genai_error(exc, model=model) from exc
+        raise
+    if usage_sink is not None:
+        usage_sink(getattr(response, "usage_metadata", None))
+    text = getattr(response, "text", None)
+    return str(text).strip() if text else ""
+
+
+async def _vertex_generate_image(*, resolved: Any, prompt: str) -> Any:
+    from google.genai.errors import APIError
+
+    model = gemini_catalog_id(resolved.model_id)
+    try:
+        client = express_client(resolved.api_key or "", timeout_ms=_vertex_timeout_ms())
+        return await client.aio.models.generate_content(
+            model=model,
+            contents=prompt,
+        )
+    except APIError as exc:
+        raise _wrap_google_genai_error(exc, model=model) from exc
+    except Exception as exc:
+        if _is_provider_failure(exc) or isinstance(exc, TimeoutError):
+            raise _wrap_google_genai_error(exc, model=model) from exc
+        raise
 
 
 def _looks_like_unsupported_image(text: str) -> bool:
@@ -302,6 +454,32 @@ async def complete_json(
     temperature: float = 0.4,
 ) -> str:
     """JSON completion via streaming so Stop can aclose mid-response."""
+    resolved = resolve_llm_model(tier)
+    if resolved.provider_type == "vertex_ai":
+        model = gemini_catalog_id(resolved.model_id)
+        with track(
+            kind="chat_json", tier=tier, model=model, temperature=temperature,
+            system=system, user=user,
+        ) as rec:
+            parts: list[str] = []
+            async for piece in _vertex_astream_text(
+                resolved=resolved,
+                system=system,
+                user=user,
+                temperature=temperature,
+                json_mode=True,
+                usage_sink=rec.set_usage,
+            ):
+                parts.append(piece)
+            content = "".join(parts)
+            if not content:
+                rec.fail(
+                    "empty_response",
+                    {"kind": "empty_response", "message": "LLM returned empty content"},
+                )
+                raise RuntimeError("LLM returned empty content")
+            rec.response_text = content
+            return content
     kwargs = _base_kwargs(tier, temperature)
     model = str(kwargs["model"])
     kwargs["messages"] = [
@@ -334,6 +512,28 @@ async def complete_text(
     user: str,
     temperature: float = 0.5,
 ) -> str:
+    resolved = resolve_llm_model(tier)
+    if resolved.provider_type == "vertex_ai":
+        model = gemini_catalog_id(resolved.model_id)
+        with track(
+            kind="chat_text", tier=tier, model=model, temperature=temperature,
+            system=system, user=user,
+        ) as rec:
+            content = await _vertex_complete_text(
+                resolved=resolved,
+                system=system,
+                user=user,
+                temperature=temperature,
+                usage_sink=rec.set_usage,
+            )
+            if not content:
+                rec.fail(
+                    "empty_response",
+                    {"kind": "empty_response", "message": "LLM returned empty content"},
+                )
+                raise RuntimeError("LLM returned empty content")
+            rec.response_text = content
+            return rec.response_text
     kwargs = _base_kwargs(tier, temperature)
     model = str(kwargs["model"])
     kwargs["messages"] = [
@@ -367,6 +567,25 @@ async def astream_text(
     temperature: float = 0.5,
 ) -> AsyncIterator[str]:
     """Yield assistant text pieces as the model streams them; aclose on cancel."""
+    resolved = resolve_llm_model(tier)
+    if resolved.provider_type == "vertex_ai":
+        model = gemini_catalog_id(resolved.model_id)
+        with track(
+            kind="chat_text", tier=tier, model=model, temperature=temperature,
+            system=system, user=user,
+        ) as rec:
+            parts: list[str] = []
+            async for piece in _vertex_astream_text(
+                resolved=resolved,
+                system=system,
+                user=user,
+                temperature=temperature,
+                usage_sink=rec.set_usage,
+            ):
+                parts.append(piece)
+                yield piece
+            rec.response_text = "".join(parts)
+        return
     kwargs = _base_kwargs(tier, temperature)
     model = str(kwargs["model"])
     kwargs["messages"] = [
@@ -384,6 +603,84 @@ async def astream_text(
             parts.append(piece)
             yield piece
         rec.response_text = "".join(parts)
+
+
+def _b64_data_url(raw: str) -> str:
+    mime = "image/jpeg" if raw.startswith("/9j/") else "image/png"
+    return f"data:{mime};base64,{raw}"
+
+
+def _inline_b64(part: Any) -> str | None:
+    if isinstance(part, dict):
+        inline = part.get("inlineData") or part.get("inline_data") or {}
+        if isinstance(inline, dict) and inline.get("data"):
+            return str(inline["data"])
+        for key in ("b64_json", "b64", "bytesBase64Encoded", "data"):
+            val = part.get(key)
+            if val and key != "data":
+                return str(val)
+        return None
+    for attr in ("b64_json", "b64", "bytesBase64Encoded"):
+        val = getattr(part, attr, None)
+        if val:
+            return str(val)
+    inline = getattr(part, "inline_data", None) or getattr(part, "inlineData", None)
+    if inline is None:
+        return None
+    data = inline.get("data") if isinstance(inline, dict) else getattr(inline, "data", None)
+    return str(data) if data else None
+
+
+def _gemini_inline_b64(response: Any) -> str | None:
+    candidates = getattr(response, "candidates", None)
+    if candidates is None and isinstance(response, dict):
+        candidates = response.get("candidates")
+    if candidates:
+        first = candidates[0]
+        content = (
+            first.get("content") if isinstance(first, dict) else getattr(first, "content", None)
+        )
+        if content is not None:
+            parts = (
+                content.get("parts")
+                if isinstance(content, dict)
+                else getattr(content, "parts", None)
+            )
+            if parts:
+                for part in parts:
+                    found = _inline_b64(part)
+                    if found:
+                        return found
+    images = getattr(response, "images", None)
+    if images is None and isinstance(response, dict):
+        images = response.get("images")
+    if images:
+        return _inline_b64(images[0])
+    return None
+
+
+def image_result_to_url(response: Any) -> str | None:
+    """Normalize OpenAI Images or Gemini inline-b64 responses to a hostable URL."""
+    data = getattr(response, "data", None)
+    if data is None and isinstance(response, dict):
+        data = response.get("data")
+    if data:
+        first = data[0]
+        url = first.get("url") if isinstance(first, dict) else getattr(first, "url", None)
+        if url:
+            return str(url)
+        b64 = (
+            first.get("b64_json") if isinstance(first, dict) else getattr(first, "b64_json", None)
+        )
+        if b64:
+            return _b64_data_url(str(b64))
+        inline = _inline_b64(first)
+        if inline:
+            return _b64_data_url(inline)
+    gemini = _gemini_inline_b64(response)
+    if gemini:
+        return _b64_data_url(gemini)
+    return None
 
 
 async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
@@ -406,11 +703,30 @@ async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
             kind="unsupported",
         )
 
-    configure_litellm()
     resolved = resolve_image()
-    api_base = resolved.api_base if resolved is not None else None
+    if resolved is not None and resolved.provider_type == "vertex_ai":
+        model = gemini_catalog_id(resolved.model_id)
+        with track(
+            kind="image", tier=None, model=model, temperature=None, system=None, user=prompt
+        ) as rec:
+            response = await _vertex_generate_image(resolved=resolved, prompt=prompt)
+            url = image_result_to_url(response)
+            if url:
+                rec.response_text = url
+                return rec.response_text
+            raise LlmProviderError(
+                f"Image model {model} response had neither url nor b64_json.",
+                model=model,
+                kind="provider",
+            )
+
+    configure_litellm()
+    ptype = resolved.provider_type if resolved is not None else "openai"
+    api_base = (
+        effective_api_base(ptype, resolved.api_base) if resolved is not None else None
+    )
     api_key = resolved.api_key if resolved is not None else None
-    model = _litellm_model(raw, api_base)
+    model = _litellm_model(raw, api_base, ptype)
     kwargs: dict = {
         "model": model,
         "prompt": prompt,
@@ -430,30 +746,9 @@ async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
                 raise _wrap_provider_error(exc, model=model) from exc
             raise
 
-        data = getattr(response, "data", None) or []
-        if not data:
-            raise LlmProviderError(
-                f"Image model {model} returned no image data.",
-                model=model,
-                kind="provider",
-            )
-        first = data[0]
-        url = getattr(first, "url", None)
-        if not url and isinstance(first, dict):
-            url = first.get("url")
-        # Some providers return b64_json instead of a URL.
-        b64 = getattr(first, "b64_json", None)
-        if not b64 and isinstance(first, dict):
-            b64 = first.get("b64_json")
+        url = image_result_to_url(response)
         if url:
-            rec.response_text = str(url)
-            return rec.response_text
-        if b64:
-            # Providers often return JPEG bytes even when labelled loosely; sniff magic.
-            raw = str(b64)
-            mime = "image/jpeg" if raw.startswith("/9j/") else "image/png"
-            # The recorder stores a size marker for data URIs, not megabytes of base64.
-            rec.response_text = f"data:{mime};base64,{raw}"
+            rec.response_text = url
             return rec.response_text
         raise LlmProviderError(
             f"Image model {model} response had neither url nor b64_json.",

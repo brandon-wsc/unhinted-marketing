@@ -18,7 +18,7 @@ from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, RunCancelled
 from pydantic_ai.models import Model
 
 from internal.llm.recorder import LlmCallRecordBuilder, track
-from internal.llm.resolve import openai_compat_model_id, resolve_llm_model
+from internal.llm.resolve import gemini_catalog_id, openai_compat_model_id, resolve_llm_model
 from internal.llm.router import LlmProviderError, ModelTier
 from internal.memory.repos import list_top_signals
 from internal.session import prompts
@@ -56,6 +56,25 @@ def live_harness_model(tier: ModelTier) -> Model:
 
     resolved = resolve_llm_model(tier)
     raw = resolved.model_id
+    if resolved.provider_type in ("gemini", "vertex_ai"):
+        try:
+            from pydantic_ai.models.google import GoogleModel
+            from pydantic_ai.providers.google import GoogleProvider
+            from pydantic_ai.providers.google_cloud import GoogleCloudProvider
+        except ImportError as exc:
+            raise LlmProviderError(
+                "Gemini / Vertex Express session harness needs the google extra "
+                '(pip install "pydantic-ai-slim[google]").',
+                model=raw,
+                kind="unsupported",
+            ) from exc
+        # Vertex: api_key only. project/location/credentials would take ADC (ADR 0021 §4).
+        provider = (
+            GoogleCloudProvider(api_key=resolved.api_key or "not-set")
+            if resolved.provider_type == "vertex_ai"
+            else GoogleProvider(api_key=resolved.api_key or "not-set")
+        )
+        return GoogleModel(gemini_catalog_id(raw), provider=provider)
     compat_id = openai_compat_model_id(raw)
     leaf_id = compat_id.split("/")[-1]
     if resolved.provider_type == "openai_compatible" or resolved.api_base:

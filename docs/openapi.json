@@ -4313,7 +4313,9 @@
             "enum": [
               "openai",
               "anthropic",
-              "openai_compatible"
+              "openai_compatible",
+              "gemini",
+              "vertex_ai"
             ],
             "title": "Provider Type"
           },
@@ -4397,7 +4399,9 @@
             "enum": [
               "openai",
               "anthropic",
-              "openai_compatible"
+              "openai_compatible",
+              "gemini",
+              "vertex_ai"
             ],
             "title": "Provider Type"
           },

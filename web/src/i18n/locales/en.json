@@ -492,7 +492,9 @@
       "providerType": {
         "openai": "OpenAI",
         "anthropic": "Anthropic",
-        "openai_compatible": "OpenAI-compatible"
+        "openai_compatible": "OpenAI-compatible",
+        "gemini": "Gemini",
+        "vertex_ai": "Vertex AI (Express)"
       },
       "actions": {
         "test": "Test",
@@ -506,9 +508,12 @@
         "apiKey": "API key",
         "apiBase": "API base",
         "apiBaseHint": "OpenAI-compatible endpoint, for example https://openrouter.ai/api/v1",
+        "geminiKeyHint": "Google AI Studio key (generativelanguage.googleapis.com). A Vertex Express key will 401 here.",
+        "vertexKeyHint": "Vertex Express Mode key (aiplatform.googleapis.com). Not an AI Studio Gemini key, and not OpenAI-compatible.",
         "modelId": "Model id",
         "modelFetching": "Loading the model list…",
         "modelFreeText": "This key does not support a model list. Enter the model id.",
+        "modelTypedOk": "The list is a hint. A typed id is fine even if it does not appear.",
         "capability": "Capability"
       },
       "edit": {

@@ -461,7 +461,7 @@ class ByokProvider(Base):
     __table_args__ = (
         UniqueConstraint("id", "company_id", name="uq_byok_providers_id_company"),
         CheckConstraint(
-            "provider_type IN ('openai', 'anthropic', 'openai_compatible')",
+            "provider_type IN ('openai', 'anthropic', 'openai_compatible', 'gemini', 'vertex_ai')",
             name="ck_byok_providers_type",
         ),
         CheckConstraint(

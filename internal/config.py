@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     byok_encryption_key: str | None = None
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
+    gemini_api_key: str | None = None
+    vertex_ai_api_key: str | None = None
+    # SDK Express pair (read-only; never set GOOGLE_GENAI_USE_VERTEXAI in-process).
+    google_api_key: str | None = None
+    google_genai_use_vertexai: bool = False
     llm_api_base: str | None = None
     llm_cheap_model: str = "gpt-4o-mini"
     llm_medium_model: str = "gpt-4o-mini"

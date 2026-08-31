@@ -128,6 +128,48 @@ async def test_private_api_base_rejected(
 
 
 @pytest.mark.asyncio
+async def test_gemini_provider_without_api_base(
+    client: AsyncClient, skip_background_probes: None
+) -> None:
+    headers, company_id = await _owner(client)
+    res = await client.post(
+        f"{_base(company_id)}/providers",
+        headers=headers,
+        json={
+            "label": "Gemini",
+            "provider_type": "gemini",
+            "api_key": SECRET_KEY,
+        },
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["provider_type"] == "gemini"
+    assert body["api_base"] is None
+    _assert_no_secret(body)
+
+
+@pytest.mark.asyncio
+async def test_vertex_ai_provider_without_api_base(
+    client: AsyncClient, skip_background_probes: None
+) -> None:
+    headers, company_id = await _owner(client)
+    res = await client.post(
+        f"{_base(company_id)}/providers",
+        headers=headers,
+        json={
+            "label": "Vertex Express",
+            "provider_type": "vertex_ai",
+            "api_key": SECRET_KEY,
+        },
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["provider_type"] == "vertex_ai"
+    assert body["api_base"] is None
+    _assert_no_secret(body)
+
+
+@pytest.mark.asyncio
 async def test_two_phase_provider_and_model_delete(
     client: AsyncClient, skip_background_probes: None
 ) -> None:

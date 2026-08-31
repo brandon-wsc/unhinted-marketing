@@ -18,7 +18,7 @@ Settings UI. Env keys stay as the platform-level fallback.
 |-------|------|-------|
 | LiteLLM router | `internal/llm/router.py` | `complete_json` / `complete_text` / `astream_text` / `generate_image`; tiers `cheap/medium/strong`; `LlmProviderError` taxonomy (timeout/auth/rate_limit/unsupported/…) |
 | Pydantic AI harness | `internal/session/harness.py` | `live_harness_model(tier)` builds `OpenAIChatModel` / `AnthropicModel`; shared by chat / research / execute harnesses (ADR 0019) |
-| Env config | `internal/config.py` | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `LLM_API_BASE`, `LLM_*_MODEL`, `LLM_IMAGE_MODEL` |
+| Env config | `internal/config.py` | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `VERTEX_AI_API_KEY`, `GOOGLE_API_KEY` + `GOOGLE_GENAI_USE_VERTEXAI`, `LLM_API_BASE`, `LLM_*_MODEL`, `LLM_IMAGE_MODEL` |
 | Call records | `internal/llm/recorder.py` | `llm_call_records` already carry `company_id` (ADR 0005) — cost attribution per org is free |
 | ROADMAP placeholder | `docs/ROADMAP.md` | `byok_config` table named; Phase 3 checkbox "BYOK settings page (masked keys, server-side storage)" |
 
@@ -30,8 +30,11 @@ Settings UI. Env keys stay as the platform-level fallback.
 2. `ANTHROPIC_API_KEY` — Claude (router sets `litellm.anthropic_key`; harness builds `AnthropicModel` when the model id looks like Claude).
 3. `LLM_API_BASE` — any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Azure, local gateway); model ids get the `openai/` prefix so LiteLLM uses the compatible client (OpenRouter `org/model` slugs kept).
 
-So DeepSeek / OpenRouter / Claude already work **via env**. Missing: Gemini/other native
-provider env vars, per-provider key map, and anything per-org.
+So DeepSeek / OpenRouter / Claude already work **via env**. Native Gemini (AI Studio) is
+`GEMINI_API_KEY`. Vertex Express is `VERTEX_AI_API_KEY` or the SDK pair
+`GOOGLE_API_KEY` + `GOOGLE_GENAI_USE_VERTEXAI=true` — never treat `GEMINI_API_KEY`
+as Express — per [ADR 0021](./adr/0021-org-byok-native-gemini.md). Vertex OAuth / Bedrock /
+other non-API-key shapes stay out.
 
 ### Is the layer abstract enough for BYOK?
 
@@ -61,7 +64,8 @@ Everything today runs on **Chat Completions + Images API** — no Responses API 
 This is BYOK-friendly **by accident, and we now treat it as deliberate**: third-party
 OpenAI-compatible providers (DeepSeek, OpenRouter, Azure, local gateways) almost
 universally implement Chat Completions only, so the current surface needs zero changes to
-route org keys to them.
+route org keys to them. **Amended by [ADR 0021](./adr/0021-org-byok-native-gemini.md):**
+`gemini` and `vertex_ai` are native `generateContent` (not Completions + Images).
 
 Two hidden OpenAI-specific assumptions ride on this surface:
 
@@ -105,8 +109,12 @@ non-OpenAI org keys — that is a separate ADR, out of scope here.
    affected.
 7. **Model id source = hybrid fetch** — after entering a key, the UI tries to fetch the
    provider's model list (OpenRouter `/models` returns modality metadata; OpenAI
-   `/v1/models` returns ids only). Fetch succeeds → searchable combobox (type to filter;
-   typed id is valid even if not listed), and **capability comes from
+   `/v1/models` returns ids only). For `openai` / `openai_compatible`, also
+   `GET {api_base}/images/models` when that path exists (OpenRouter image-only slugs
+   such as `bytedance-seed/seedream-4.5` are not on `/models`; 404 there must not
+   drop the chat catalog). Fetch succeeds → searchable combobox (type to filter;
+   typed id is valid even if not listed — background format probe must not mark
+   unlisted ids as failed), and **capability comes from
    provider metadata when available**. Fetch unsupported/fails → same combobox with no
    suggestions + inference pre-fill (`dall-e` / `seedream` / `flux` / `imagen` → image,
    else chat) + manual override. Capability is never auto-probed with live calls (image
@@ -165,7 +173,7 @@ Three tables, one Alembic hex revision (`alembic revision -m "byok"`). ROADMAP's
 | `id` | uuid PK |
 | `company_id` | FK → entities, index |
 | `label` | user-given, e.g. "OpenRouter main" |
-| `provider_type` | `openai` \| `anthropic` \| `openai_compatible` (CHECK) |
+| `provider_type` | `openai` \| `anthropic` \| `openai_compatible` \| `gemini` \| `vertex_ai` (CHECK; [ADR 0021](./adr/0021-org-byok-native-gemini.md)) |
 | `api_key_encrypted` | Fernet ciphertext; never logged, never serialized |
 | `key_last4` | masked display + ops correlation |
 | `api_base` | nullable; required when `provider_type=openai_compatible` (CHECK: non-empty) |
@@ -265,8 +273,8 @@ New router `cmd/api/routes/byok.py` under `/api/companies/{id}/byok/…`, all ga
 | `POST /providers` | Add key. Validates shape only — no blocking live call on save; queues a background auth probe (decision 11). |
 | `PATCH /providers/{pid}` | Relabel / rotate key / change base URL. Empty `api_key` keeps the stored one. Key/base changes re-queue the probe. |
 | `DELETE /providers/{pid}` | Two-phase (decision 6): no `force` → 409 + dependent models; `?force=true` → cascade models + null routing slots, response lists what was removed. |
-| `POST /providers/{pid}/test` | Manual auth probe (cheapest possible call); updates `last_verified_at` / `last_error_kind`; returns `{ok, error_kind?}` from the `LlmProviderError.kind` taxonomy. Rate-limited like invites. |
-| `GET /providers/{pid}/models` | Proxy the provider's model list (decision 7) through the SSRF guard (decision 9). Returns ids + capability where the provider exposes modality metadata; `{fetchable: false}` when unsupported → UI combobox has no suggestions (typed id still allowed). Cached briefly **scoped to the provider row** (decision 10); never persisted. |
+| `POST /providers/{pid}/test` | Manual auth probe (cheapest possible call; Vertex Express is `generateContent`, not ListModels); updates `last_verified_at` / `last_error_kind`; returns `{ok, error_kind?}` from the `LlmProviderError.kind` taxonomy. Rate-limited like invites. |
+| `GET /providers/{pid}/models` | Proxy the provider's model list (decision 7) through the SSRF guard (decision 9), including `{base}/images/models` for `openai` / `openai_compatible`. Returns ids + capability where the provider exposes modality metadata; `{fetchable: false}` when unsupported → UI combobox has no suggestions (typed id still allowed). Cached briefly **scoped to the provider row** (decision 10); never persisted. |
 | `GET /models` | Registry list (joined with masked provider info). |
 | `POST /models` | Register model: provider_id + model_id + capability (+ `capability_source`). Existing `(provider_id, model_id)` → update that row, no duplicate (decision 12). Queues a background format probe (decision 11). |
 | `DELETE /models/{mid}` | Two-phase: 409 lists referencing slots; `?force=true` nulls those slots, response reports cleared slots. |
@@ -326,7 +334,9 @@ admin-side later).
 - [x] P0-1 encryption helper + `BYOK_ENCRYPTION_KEY` + direct `cryptography` dep
 - [x] P0-1b SSRF guard helper for user-supplied base URLs (probes + model-list proxy)
 - [x] P0-schema Alembic migration: `byok_providers` / `byok_models` / `byok_routing`
-      (hex revision); CHECK on enums + `openai_compatible` requires `api_base`; slot
+      (hex revision); CHECK on enums includes `gemini` and `vertex_ai`
+      ([ADR 0021](./adr/0021-org-byok-native-gemini.md));
+      `openai_compatible` requires `api_base`; slot
       capability match is app-level (documented in ADR 0020)
 - [x] P0-2 resolver refactor (router + harness + contextvar scoping); env path
       bit-identical; unit tests with mocked resolution (no live key, per TESTING.md)
@@ -334,6 +344,10 @@ admin-side later).
 - [x] P0-4 recorder `key_source` / `key_last4`
 - [x] P1 BYOK routes (providers / models / routing / test / model-list proxy) + schemas +
       contract export + TS mirrors; route tests incl. two-phase delete
+- [x] P1 native Gemini (`provider_type=gemini`, GoogleModel, `gemini/` LiteLLM, Imagen
+      image slot) — [ADR 0021](./adr/0021-org-byok-native-gemini.md)
+- [x] P1 Vertex Express (`provider_type=vertex_ai`, GoogleCloudProvider API key only,
+      `genai.Client(vertexai=True)`, generateContent probe) — [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 - [x] P2 settings tab: three unmixed sections + i18n;
       `pnpm run lint && pnpm test && pnpm run build`
 - [x] ADR 0020 + STATUS decision entry; tick ROADMAP "BYOK settings page" (rename to

@@ -192,6 +192,11 @@ export function AddModelDialog({
                   {t("settings.apiKeys.wizard.modelFreeText")}
                 </p>
               )}
+              {useCatalogSelect && (
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.apiKeys.wizard.modelTypedOk")}
+                </p>
+              )}
             </FormField>
           )}
           <FormField id="byok-model-capability" label={t("settings.apiKeys.wizard.capability")}>

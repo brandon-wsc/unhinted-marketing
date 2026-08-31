@@ -27,7 +27,9 @@ from internal.llm.keys import ByokEncryptionError, decrypt_key, mask_key
 logger = logging.getLogger(__name__)
 
 Source = Literal["env", "org"]
-ProviderType = Literal["openai", "anthropic", "openai_compatible"]
+ProviderType = Literal["openai", "anthropic", "openai_compatible", "gemini", "vertex_ai"]
+# Express REST host (SDK + documented generateContent). Not a LiteLLM api_base.
+VERTEX_AI_EXPRESS_API_BASE = "https://aiplatform.googleapis.com/v1/publishers/google"
 
 
 @dataclass(frozen=True)
@@ -81,9 +83,27 @@ def llm_bundle_scope(bundle: CompanyLlmBundle | None) -> Iterator[None]:
         _bundle.reset(token)
 
 
+def _env_vertex_express_key() -> str | None:
+    """Express key from env. Never ``GEMINI_API_KEY`` (that is AI Studio).
+
+    Prefer ``VERTEX_AI_API_KEY``. Else the SDK pair ``GOOGLE_API_KEY`` +
+    ``GOOGLE_GENAI_USE_VERTEXAI=true``. The flag is read, never written.
+    """
+    explicit = (settings.vertex_ai_api_key or "").strip()
+    if explicit:
+        return explicit
+    if settings.google_genai_use_vertexai:
+        raw = (settings.google_api_key or "").strip()
+        return raw or None
+    return None
+
+
 def env_has_llm_credentials() -> bool:
     return bool(
-        (settings.openai_api_key or "").strip() or (settings.anthropic_api_key or "").strip()
+        (settings.openai_api_key or "").strip()
+        or (settings.anthropic_api_key or "").strip()
+        or (settings.gemini_api_key or "").strip()
+        or _env_vertex_express_key()
     )
 
 
@@ -135,12 +155,96 @@ def prefix_litellm_model(model_id: str, api_base: str | None) -> str:
     return f"openai/{model_id}"
 
 
+_LITELLM_GEMINI_PREFIX = "gemini/"
+_LITELLM_IMAGEN_PREFIX = "imagen/"
+
+
+def gemini_litellm_model_id(model_id: str) -> str:
+    """Force LiteLLM's native Gemini HTTP client (never the OpenAI-compat prefix)."""
+    lowered = model_id.lower()
+    if lowered.startswith(_LITELLM_GEMINI_PREFIX) or lowered.startswith(_LITELLM_IMAGEN_PREFIX):
+        return model_id
+    if lowered.startswith("vertex_ai/"):
+        model_id = model_id.split("/", 1)[1]
+        lowered = model_id.lower()
+    if lowered.startswith("publishers/google/models/"):
+        model_id = model_id.split("/", 3)[-1]
+        lowered = model_id.lower()
+    if lowered.startswith("models/"):
+        model_id = model_id.split("/", 1)[1]
+    return f"gemini/{model_id}"
+
+
+def gemini_catalog_id(model_id: str) -> str:
+    """Bare Gemini/Imagen id for GoogleModel (strip LiteLLM / Vertex resource prefixes)."""
+    leaf = model_id
+    lowered = leaf.lower()
+    if lowered.startswith(_LITELLM_GEMINI_PREFIX) or lowered.startswith(_LITELLM_IMAGEN_PREFIX):
+        leaf = leaf.split("/", 1)[1]
+        lowered = leaf.lower()
+    if lowered.startswith("vertex_ai/"):
+        leaf = leaf.split("/", 1)[1]
+        lowered = leaf.lower()
+    if lowered.startswith("publishers/google/models/"):
+        leaf = leaf.split("/", 3)[-1]
+        lowered = leaf.lower()
+    if lowered.startswith("models/"):
+        leaf = leaf.split("/", 1)[1]
+    return leaf
+
+
+def litellm_model_id(
+    model_id: str,
+    provider_type: str,
+    api_base: str | None,
+) -> str:
+    """LiteLLM model string for a resolved provider.
+
+    ``gemini`` (AI Studio) uses the native ``gemini/`` HTTP client. ``vertex_ai``
+    is not a LiteLLM path — callers must use ``genai.Client(vertexai=True)``
+    (ADR 0021 §4). ``openai_compatible`` (or any custom base) keeps
+    ``prefix_litellm_model``.
+    """
+    ptype = (provider_type or "").strip()
+    if ptype == "gemini":
+        return gemini_litellm_model_id(model_id)
+    if ptype == "vertex_ai":
+        return gemini_catalog_id(model_id)
+    if ptype == "openai_compatible" or (api_base or "").strip():
+        return prefix_litellm_model(model_id, api_base)
+    return model_id
+
+
+def effective_api_base(provider_type: str, api_base: str | None) -> str | None:
+    """Native Google types ignore a stored base; Express uses a fixed publishers host."""
+    ptype = (provider_type or "").strip()
+    if ptype == "gemini":
+        return None
+    if ptype == "vertex_ai":
+        return VERTEX_AI_EXPRESS_API_BASE
+    return (api_base or "").strip() or None
+
+
 def _env_provider_type(model_id: str) -> ProviderType:
     if (settings.llm_api_base or "").strip():
         return "openai_compatible"
     lowered = model_id.lower()
     if "claude" in lowered or lowered.startswith("anthropic"):
         return "anthropic"
+    if (
+        "gemini" in lowered
+        or lowered.startswith("imagen")
+        or "/imagen" in lowered
+        or lowered.startswith(_LITELLM_IMAGEN_PREFIX)
+        or lowered.startswith("vertex_ai/")
+    ):
+        # GEMINI_API_KEY wins so existing AI Studio env deploys stay bit-identical.
+        # Never treat GEMINI_API_KEY as Express.
+        if (settings.gemini_api_key or "").strip():
+            return "gemini"
+        if _env_vertex_express_key():
+            return "vertex_ai"
+        return "gemini"
     return "openai"
 
 
@@ -148,6 +252,11 @@ def _env_api_key(provider_type: ProviderType) -> str | None:
     if provider_type == "anthropic":
         raw = (settings.anthropic_api_key or "").strip()
         return raw or None
+    if provider_type == "gemini":
+        raw = (settings.gemini_api_key or "").strip()
+        return raw or None
+    if provider_type == "vertex_ai":
+        return _env_vertex_express_key()
     raw = (settings.openai_api_key or "").strip()
     return raw or None
 
@@ -253,9 +362,9 @@ def _slot_from_model(
     except ByokEncryptionError:
         return FailedOrgSlot(model_id=str(model.model_id))
     ptype = str(provider.provider_type or "openai")
-    if ptype not in ("openai", "anthropic", "openai_compatible"):
+    if ptype not in ("openai", "anthropic", "openai_compatible", "gemini", "vertex_ai"):
         ptype = "openai"
-    api_base = (provider.api_base or "").strip() or None
+    api_base = effective_api_base(ptype, provider.api_base)
     return ResolvedModel(
         model_id=str(model.model_id),
         api_key=api_key,

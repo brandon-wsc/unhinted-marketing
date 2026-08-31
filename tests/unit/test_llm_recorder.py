@@ -151,6 +151,14 @@ def test_set_usage_from_object_and_dict() -> None:
     rec4.set_usage(None)
     assert rec4.total_tokens is None
 
+    rec5 = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec5.set_usage(
+        SimpleNamespace(
+            prompt_token_count=2, candidates_token_count=4, total_token_count=6
+        )
+    )
+    assert (rec5.prompt_tokens, rec5.completion_tokens, rec5.total_tokens) == (2, 4, 6)
+
 
 def test_to_model_caps_long_text() -> None:
     rec = recorder.LlmCallRecordBuilder(

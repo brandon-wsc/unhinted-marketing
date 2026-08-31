@@ -4,6 +4,7 @@
 - **Date:** 2026-08-30
 - **Supersedes:** ROADMAP's `byok_config` single-table placeholder (replaced by the three-table split in §2)
 - **Related:** [ADR 0005](./0005-platform-levels-and-llm-records.md) (`llm_call_records` gains `key_source` / `key_last4`); [ADR 0010](./0010-org-membership-invites-and-shared-assets.md) (owner/admin editor roles gate BYOK management); [ADR 0019](./0019-pydantic-ai-inner-harness.md) (the Pydantic AI harness consumes the same credential resolver as the LiteLLM router)
+- **Amended by:** [ADR 0021](./0021-org-byok-native-gemini.md) (`provider_type` adds `gemini` and `vertex_ai`; Completions + Images is the surface for `openai` / `anthropic` / `openai_compatible` only)
 
 ## Context
 
@@ -15,7 +16,7 @@ BYOK today is **env-only**: `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `LLM_API_BA
 
 Two things make this tractable:
 
-- **The API surface is already BYOK-friendly.** Everything runs on Chat Completions + Images API (no Responses API), which every OpenAI-compatible provider implements. `litellm.drop_params = True` silently drops our two OpenAI-specific assumptions (`response_format: json_object`, `stream_options.include_usage`) for stricter providers — **that flag is the compatibility backstop and must not be removed**.
+- **The API surface is already BYOK-friendly for Completions clones.** `openai` / `openai_compatible` / (Anthropic Messages aside) run on Chat Completions + Images API (no Responses API). `litellm.drop_params = True` silently drops our two OpenAI-specific assumptions (`response_format: json_object`, `stream_options.include_usage`) for stricter providers — **that flag is the compatibility backstop and must not be removed**. Native Gemini and Vertex Express are exceptions: see [ADR 0021](./0021-org-byok-native-gemini.md).
 - **`llm_call_records` already carry `company_id`** ([ADR 0005](./0005-platform-levels-and-llm-records.md)), so per-org cost attribution needs no new plumbing.
 
 Prior art checked (2026-08-30): **Cline/Roo Code** (provider → key → model dropdown fetched from OpenRouter `/models`, cached, capability from `architecture.modality`); **LibreChat** (`models.fetch` against user-supplied base URLs — their bug history is where the SSRF guard and per-principal cache scoping below come from); **Dify** (multi-tenant workspace SaaS: provider-level credentials shared across models, custom models with own credentials, "Default Models" per job category, owner/admin-only, validate-on-save, attach-instead-of-duplicate). Dify's shape independently confirms the three-layer design.
@@ -41,7 +42,7 @@ flowchart LR
     M --> R
 ```
 
-A model is registered **once** against a key; tiers are pure pointers. One model may serve multiple slots (`cheap = medium = deepseek-v4-flash`) without re-entering credentials. Routing slots are **four fixed FK columns** matching `ModelTier` + image — a new tier is a code change anyway (`NODE_MODEL_TIERS`, prompts, cost profiles), so JSONB flexibility buys nothing and FK integrity is worth more. Chat slots must reference `capability=chat` rows; the image slot a `capability=image` row. **That capability match is app-level** (`PUT /routing` validation + resolver skip-to-env on mismatch in `_slot_from_model`). Postgres cannot put a constant in a foreign key without extra capability columns or a trigger; we do not add those. Enum-like columns (`provider_type`, `capability`, `capability_source`) and “`api_base` required when `openai_compatible`” **are** CHECK-constrained.
+A model is registered **once** against a key; tiers are pure pointers. One model may serve multiple slots (`cheap = medium = deepseek-v4-flash`) without re-entering credentials. Routing slots are **four fixed FK columns** matching `ModelTier` + image — a new tier is a code change anyway (`NODE_MODEL_TIERS`, prompts, cost profiles), so JSONB flexibility buys nothing and FK integrity is worth more. Chat slots must reference `capability=chat` rows; the image slot a `capability=image` row. **That capability match is app-level** (`PUT /routing` validation + resolver skip-to-env on mismatch in `_slot_from_model`). Postgres cannot put a constant in a foreign key without extra capability columns or a trigger; we do not add those. Enum-like columns (`provider_type`, `capability`, `capability_source`) and “`api_base` required when `openai_compatible`” **are** CHECK-constrained. `provider_type` values as of [ADR 0021](./0021-org-byok-native-gemini.md): `openai` \| `anthropic` \| `openai_compatible` \| `gemini` \| `vertex_ai`.
 
 ### 2. Encryption at rest
 
@@ -70,7 +71,7 @@ All BYOK endpoints and the UI tab are gated by `require_company_settings_editor`
 
 ### 7. Model id source is a hybrid fetch
 
-After a key is entered, the UI tries the provider's model list (`GET /providers/{id}/models` proxy): fetch succeeds → searchable combobox (typing filters the list; a typed id is valid even if it is not listed), and **capability comes from provider modality metadata when available**; fetch unsupported/fails → same combobox with no suggestions + inference pre-fill (`dall-e` / `seedream` / `flux` / `imagen` → image, else chat) + manual override. Capability is **never auto-probed with live calls** (image probes cost money). Model lists are format-validated, not live-revalidated per message (LibreChat's lesson).
+After a key is entered, the UI tries the provider's model list (`GET /providers/{id}/models` proxy): fetch succeeds → searchable combobox (typing filters the list; a typed id is valid even if it is not listed), and **capability comes from provider modality metadata when available**; fetch unsupported/fails → same combobox with no suggestions + inference pre-fill (`dall-e` / `seedream` / `flux` / `imagen` → image, else chat) + manual override. For `openai` and `openai_compatible`, the proxy also `GET {api_base}/images/models` when that path exists (OpenRouter image-only slugs such as `bytedance-seed/seedream-4.5` are not on `/models`; a 404 there must not drop the chat catalog). A typed id still must not be treated as failed just because the catalog omitted it. Capability is **never auto-probed with live calls** (image probes cost money). Model lists are format-validated, not live-revalidated per message (LibreChat's lesson).
 
 ### 8. SSRF guard on user-supplied base URLs
 

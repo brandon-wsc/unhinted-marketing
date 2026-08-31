@@ -453,7 +453,12 @@ export async function apiAcceptInvite(
   return res.json();
 }
 
-export type ByokProviderType = "openai" | "anthropic" | "openai_compatible";
+export type ByokProviderType =
+  | "openai"
+  | "anthropic"
+  | "openai_compatible"
+  | "gemini"
+  | "vertex_ai";
 export type ByokCapability = "chat" | "image";
 export type ByokCapabilitySource = "provider_metadata" | "inferred" | "manual";
 export type ByokKeySource = "org" | "env";
