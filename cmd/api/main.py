@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from cmd.api.routes.admin import router as admin_router
 from cmd.api.routes.auth import router as auth_router
+from cmd.api.routes.byok import router as byok_router
 from cmd.api.routes.companies import router as companies_router
 from cmd.api.routes.invites import router as invites_router
 from cmd.api.routes.products import router as products_router
@@ -15,6 +16,7 @@ from cmd.api.routes.sessions import router as sessions_router
 from cmd.api.routes.signals import router as signals_router
 from internal.auth.rate_limit import assert_jwt_secret_safe
 from internal.config import settings
+from internal.llm.keys import assert_byok_encryption_key_safe
 from internal.llm.recorder import drain as drain_llm_records
 from internal.session.checkpointer import close_postgres_checkpointer, open_postgres_checkpointer
 from internal.session.graph import build_session_graph, set_session_graph
@@ -44,6 +46,7 @@ async def lifespan(app: FastAPI):
 def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     """Build the API app. Tests pass a noop lifespan to skip Postgres checkpointer."""
     assert_jwt_secret_safe()
+    assert_byok_encryption_key_safe()
     application = FastAPI(
         title="Unhinted Marketing API",
         version="0.1.0",
@@ -64,6 +67,7 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(signals_router, prefix="/api")
     application.include_router(questions_router, prefix="/api")
     application.include_router(companies_router, prefix="/api")
+    application.include_router(byok_router, prefix="/api")
     application.include_router(invites_router, prefix="/api")
     application.include_router(products_router, prefix="/api")
     application.include_router(proposals_router, prefix="/api")

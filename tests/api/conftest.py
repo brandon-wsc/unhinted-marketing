@@ -37,6 +37,9 @@ TRUNCATE_TABLES = (
     "product_proposals",
     "products",
     "org_invites",
+    "byok_routing",
+    "byok_models",
+    "byok_providers",
     "refresh_tokens",
     "organization_members",
     "entities",
@@ -89,11 +92,17 @@ async def session_factory(engine):
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def clean_db(engine, migrated_database: str):
+async def clean_db(engine, migrated_database: str, monkeypatch: pytest.MonkeyPatch):
     """Truncate app tables before each API test."""
-    from internal.auth.rate_limit import reset_auth_rate_limiter
+    from cryptography.fernet import Fernet
 
+    from internal.auth.rate_limit import reset_auth_rate_limiter
+    from internal.config import settings
+    from internal.llm.probes import reset_model_list_cache
+
+    monkeypatch.setattr(settings, "byok_encryption_key", Fernet.generate_key().decode())
     reset_auth_rate_limiter()
+    reset_model_list_cache()
     async with engine.begin() as conn:
         tables = ", ".join(TRUNCATE_TABLES)
         await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))

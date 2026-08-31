@@ -151,6 +151,14 @@ def test_set_usage_from_object_and_dict() -> None:
     rec4.set_usage(None)
     assert rec4.total_tokens is None
 
+    rec5 = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec5.set_usage(
+        SimpleNamespace(
+            prompt_token_count=2, candidates_token_count=4, total_token_count=6
+        )
+    )
+    assert (rec5.prompt_tokens, rec5.completion_tokens, rec5.total_tokens) == (2, 4, 6)
+
 
 def test_to_model_caps_long_text() -> None:
     rec = recorder.LlmCallRecordBuilder(
@@ -171,6 +179,52 @@ def test_to_model_summarizes_image_data_uri() -> None:
 def test_to_model_defaults_unknown_caller() -> None:
     model = recorder.LlmCallRecordBuilder(kind="chat_json").to_model()
     assert model.caller == "unknown"
+
+
+def test_to_model_copies_key_source_and_last4() -> None:
+    rec = recorder.LlmCallRecordBuilder(
+        kind="chat_json", caller="node:x", key_source="org", key_last4="org1"
+    )
+    model = rec.to_model()
+    assert model.key_source == "org"
+    assert model.key_last4 == "org1"
+
+
+async def test_track_stamps_org_key_from_bundle(collected: list, monkeypatch: pytest.MonkeyPatch) -> None:
+    from internal import config
+    from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
+
+    monkeypatch.setattr(config.settings, "llm_cheap_model", "gpt-env")
+    org = ResolvedModel(
+        model_id="org-cheap",
+        api_key="sk-org-secret",
+        api_base="https://openrouter.ai/api/v1",
+        provider_type="openai_compatible",
+        source="org",
+        key_last4="cret",
+    )
+    with (
+        llm_bundle_scope(CompanyLlmBundle(cheap=org)),
+        recorder.track(kind="chat_json", tier="cheap", model="org-cheap"),
+    ):
+        pass
+    rec = collected[0]
+    assert rec.key_source == "org"
+    assert rec.key_last4 == "cret"
+
+
+async def test_track_stamps_env_key_when_unbound(collected: list, monkeypatch: pytest.MonkeyPatch) -> None:
+    from internal import config
+
+    monkeypatch.setattr(config.settings, "llm_cheap_model", "gpt-4o-mini")
+    monkeypatch.setattr(config.settings, "openai_api_key", "sk-env-key")
+    monkeypatch.setattr(config.settings, "anthropic_api_key", None)
+    monkeypatch.setattr(config.settings, "llm_api_base", None)
+    with recorder.track(kind="chat_json", tier="cheap", model="gpt-4o-mini"):
+        pass
+    rec = collected[0]
+    assert rec.key_source == "env"
+    assert rec.key_last4 == "-key"
 
 
 async def test_submit_persists_via_background_task(monkeypatch: pytest.MonkeyPatch) -> None:

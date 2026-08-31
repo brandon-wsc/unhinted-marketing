@@ -136,7 +136,77 @@ async def test_stream_chat_reply_records_call_context(monkeypatch: pytest.Monkey
 
 
 def test_live_chat_model_uses_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(H.settings, "llm_api_base", "http://127.0.0.1:4000/v1")
-    monkeypatch.setattr(H.settings, "openai_api_key", "sk-test")
+    from internal import config
+
+    monkeypatch.setattr(config.settings, "llm_api_base", "http://127.0.0.1:4000/v1")
+    monkeypatch.setattr(config.settings, "openai_api_key", "sk-test")
     model = H.live_chat_model()
     assert getattr(model, "model_name", None)
+
+
+def test_live_harness_keeps_openrouter_slug(monkeypatch: pytest.MonkeyPatch) -> None:
+    from internal import config
+    from internal.llm.router import ModelTier
+
+    monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
+    monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
+    monkeypatch.setattr(config.settings, "llm_cheap_model", "deepseek/deepseek-v4-flash-0731")
+    model = H.live_harness_model(ModelTier.CHEAP)
+    assert getattr(model, "model_name", None) == "deepseek/deepseek-v4-flash-0731"
+
+
+def test_live_harness_strips_openrouter_provider_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from internal import config
+    from internal.llm.router import ModelTier
+
+    monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
+    monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
+    monkeypatch.setattr(
+        config.settings, "llm_cheap_model", "openrouter/bytedance-seed/seedream-4.5"
+    )
+    model = H.live_harness_model(ModelTier.CHEAP)
+    assert getattr(model, "model_name", None) == "bytedance-seed/seedream-4.5"
+
+
+def test_live_harness_uses_google_model_for_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic_ai.models.google import GoogleModel
+
+    from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
+    from internal.llm.router import ModelTier
+
+    gemini = ResolvedModel(
+        model_id="gemini-2.5-flash",
+        api_key="AIza-test",
+        api_base=None,
+        provider_type="gemini",
+        source="org",
+        key_last4="test",
+    )
+    with llm_bundle_scope(CompanyLlmBundle(cheap=gemini)):
+        model = H.live_harness_model(ModelTier.CHEAP)
+    assert isinstance(model, GoogleModel)
+    assert getattr(model, "model_name", None) == "gemini-2.5-flash"
+
+
+def test_live_harness_uses_google_cloud_provider_for_vertex_ai() -> None:
+    from pydantic_ai.models.google import GoogleModel
+
+    from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
+    from internal.llm.router import ModelTier
+
+    vertex = ResolvedModel(
+        model_id="gemini-2.5-flash",
+        api_key="AQ-test",
+        api_base=None,
+        provider_type="vertex_ai",
+        source="org",
+        key_last4="test",
+    )
+    with llm_bundle_scope(CompanyLlmBundle(cheap=vertex)):
+        model = H.live_harness_model(ModelTier.CHEAP)
+    assert isinstance(model, GoogleModel)
+    assert getattr(model, "model_name", None) == "gemini-2.5-flash"
+    assert model.system == "google-cloud"
+    assert getattr(model.client, "vertexai", None) is True

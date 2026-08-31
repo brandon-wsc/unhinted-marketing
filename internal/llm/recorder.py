@@ -82,6 +82,8 @@ class LlmCallRecordBuilder:
     error: dict | None = None
     parse_ok: bool | None = None
     fallback_used: bool = False
+    key_source: str | None = None
+    key_last4: str | None = None
 
     def fail(self, status: str, error: dict) -> None:
         """Pre-mark a specific failure; ``track``'s generic except keeps it."""
@@ -95,10 +97,16 @@ class LlmCallRecordBuilder:
         prompt = _usage_int(usage, "prompt_tokens")
         if prompt is None:
             prompt = _usage_int(usage, "input_tokens")
+        if prompt is None:
+            prompt = _usage_int(usage, "prompt_token_count")
         completion = _usage_int(usage, "completion_tokens")
         if completion is None:
             completion = _usage_int(usage, "output_tokens")
+        if completion is None:
+            completion = _usage_int(usage, "candidates_token_count")
         total = _usage_int(usage, "total_tokens")
+        if total is None:
+            total = _usage_int(usage, "total_token_count")
         if prompt is not None:
             self.prompt_tokens = prompt
         if completion is not None:
@@ -134,6 +142,8 @@ class LlmCallRecordBuilder:
             error=self.error,
             parse_ok=self.parse_ok,
             fallback_used=self.fallback_used,
+            key_source=self.key_source,
+            key_last4=self.key_last4,
         )
 
 
@@ -196,6 +206,24 @@ def mark_last_call(
         rec.fallback_used = fallback_used
 
 
+def _stamp_key_meta(rec: LlmCallRecordBuilder) -> None:
+    """Copy resolver source/last4 onto the record. Recording must never raise."""
+    try:
+        from internal.llm.resolve import resolve_image, resolve_llm_model
+
+        resolved = None
+        if rec.kind == "image":
+            resolved = resolve_image()
+        elif rec.tier:
+            resolved = resolve_llm_model(rec.tier)
+        if resolved is None:
+            return
+        rec.key_source = resolved.source
+        rec.key_last4 = resolved.key_last4
+    except Exception:
+        logger.debug("could not stamp key_source on LLM record", exc_info=True)
+
+
 @contextmanager
 def track(
     *,
@@ -226,6 +254,8 @@ def track(
         rec.turn_id = ctx.turn_id
         rec.user_id = ctx.user_id
         rec.company_id = ctx.company_id
+
+    _stamp_key_meta(rec)
 
     start = time.monotonic()
     try:

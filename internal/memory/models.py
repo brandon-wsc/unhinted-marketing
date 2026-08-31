@@ -3,9 +3,11 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     String,
     Text,
@@ -320,6 +322,12 @@ class LlmCallRecord(Base):
     """One provider call (ADR 0005) — the debug unit for prompt/node fine-tuning."""
 
     __tablename__ = "llm_call_records"
+    __table_args__ = (
+        CheckConstraint(
+            "key_source IS NULL OR key_source IN ('env', 'org')",
+            name="ck_llm_call_records_key_source",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # Correlation: who/where. Nullable + SET NULL so records survive entity deletion.
@@ -354,6 +362,9 @@ class LlmCallRecord(Base):
     error: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     parse_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     fallback_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    # ADR 0020 — which key paid for this call. Never the raw key / ciphertext.
+    key_source: Mapped[str | None] = mapped_column(String(8), nullable=True)  # env | org
+    key_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
@@ -438,6 +449,136 @@ class ProductProposal(Base):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ByokProvider(Base):
+    """Org LLM provider credential (ADR 0020). Raw key is Fernet-encrypted."""
+
+    __tablename__ = "byok_providers"
+    __table_args__ = (
+        UniqueConstraint("id", "company_id", name="uq_byok_providers_id_company"),
+        CheckConstraint(
+            "provider_type IN ('openai', 'anthropic', 'openai_compatible', 'gemini', 'vertex_ai')",
+            name="ck_byok_providers_type",
+        ),
+        CheckConstraint(
+            "provider_type <> 'openai_compatible' OR "
+            "(api_base IS NOT NULL AND btrim(api_base) <> '')",
+            name="ck_byok_providers_api_base",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    key_last4: Mapped[str] = mapped_column(String(4), nullable=False)
+    api_base: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    models: Mapped[list["ByokModel"]] = relationship(
+        back_populates="provider",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class ByokModel(Base):
+    """Org-registered model id against a provider key (ADR 0020)."""
+
+    __tablename__ = "byok_models"
+    __table_args__ = (
+        UniqueConstraint("id", "company_id", name="uq_byok_models_id_company"),
+        UniqueConstraint("provider_id", "model_id", name="uq_byok_models_provider_model"),
+        CheckConstraint(
+            "capability IN ('chat', 'image')",
+            name="ck_byok_models_capability",
+        ),
+        CheckConstraint(
+            "capability_source IN ('provider_metadata', 'inferred', 'manual')",
+            name="ck_byok_models_capability_source",
+        ),
+        ForeignKeyConstraint(
+            ["provider_id", "company_id"],
+            ["byok_providers.id", "byok_providers.company_id"],
+            ondelete="CASCADE",
+            name="fk_byok_models_provider_company",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    provider_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    capability: Mapped[str] = mapped_column(String(16), nullable=False)
+    capability_source: Mapped[str] = mapped_column(String(32), nullable=False)
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    provider: Mapped["ByokProvider"] = relationship(back_populates="models")
+
+
+class ByokRouting(Base):
+    """Per-company cheap/medium/strong/image slot assignment (ADR 0020)."""
+
+    __tablename__ = "byok_routing"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["cheap_model_id", "company_id"],
+            ["byok_models.id", "byok_models.company_id"],
+            ondelete="SET NULL (cheap_model_id)",
+            name="fk_byok_routing_cheap",
+        ),
+        ForeignKeyConstraint(
+            ["medium_model_id", "company_id"],
+            ["byok_models.id", "byok_models.company_id"],
+            ondelete="SET NULL (medium_model_id)",
+            name="fk_byok_routing_medium",
+        ),
+        ForeignKeyConstraint(
+            ["strong_model_id", "company_id"],
+            ["byok_models.id", "byok_models.company_id"],
+            ondelete="SET NULL (strong_model_id)",
+            name="fk_byok_routing_strong",
+        ),
+        ForeignKeyConstraint(
+            ["image_model_id", "company_id"],
+            ["byok_models.id", "byok_models.company_id"],
+            ondelete="SET NULL (image_model_id)",
+            name="fk_byok_routing_image",
+        ),
+    )
+
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), primary_key=True
+    )
+    cheap_model_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    medium_model_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    strong_model_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    image_model_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

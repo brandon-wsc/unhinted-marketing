@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from internal.llm.resolve import company_llm_scope
 from internal.llm.router import LlmProviderError
 from internal.memory import repos
 from internal.memory.models import Session
@@ -656,65 +657,66 @@ async def _invoke_graph(
     progress_events: list[dict[str, Any]] = []
     started = time.perf_counter()
 
-    with (
-        session_db(db),
-        turn_trace(
-            session_id=session_id,
-            user_id=user_id,
-            company_id=company_id,
-        ),
-    ):
-        session_event_bus.begin_turn_progress(session_id)
-        try:
-            result = await graph.ainvoke(graph_input, config)
-            snapshot = await graph.aget_state(config)
-            values = dict(snapshot.values or result or {})
-            still_interrupted = bool(snapshot.next)
-        except asyncio.CancelledError:
-            progress_events = session_event_bus.end_turn_progress(session_id)
-            raise
-        except Exception as exc:
-            provider_error = _extract_llm_provider_error(exc)
-            if provider_error is None:
-                logger.exception("Session turn failed (session=%s)", session_id)
-                await _rollback_quietly(db, session_id=session_id)
-                fail_msg = _turn_failure_reply(user_content)
-                values = {
-                    "error": fail_msg,
-                    "messages": list(message_dicts)
-                    + [{"role": "assistant", "content": fail_msg}],
-                }
-                still_interrupted = False
-            else:
-                logger.warning(
-                    "LLM provider error during session turn "
-                    "(session=%s model=%s kind=%s): %s",
-                    session_id,
-                    provider_error.model,
-                    provider_error.kind,
-                    provider_error.message,
-                )
-                try:
-                    snapshot = await graph.aget_state(config)
-                    values = dict(snapshot.values or {})
-                    still_interrupted = bool(snapshot.next)
-                except Exception:
-                    logger.exception(
-                        "aget_state after LLM error failed (session=%s)",
-                        session_id,
-                    )
-                    values = {}
-                    still_interrupted = False
-                values["error"] = provider_error.message
-                values["messages"] = list(values.get("messages") or message_dicts) + [
-                    {
-                        "role": "assistant",
-                        "content": _llm_failure_reply(user_content, provider_error),
-                    }
-                ]
-        finally:
-            if not progress_events:
+    async with company_llm_scope(db, company_id):
+        with (
+            session_db(db),
+            turn_trace(
+                session_id=session_id,
+                user_id=user_id,
+                company_id=company_id,
+            ),
+        ):
+            session_event_bus.begin_turn_progress(session_id)
+            try:
+                result = await graph.ainvoke(graph_input, config)
+                snapshot = await graph.aget_state(config)
+                values = dict(snapshot.values or result or {})
+                still_interrupted = bool(snapshot.next)
+            except asyncio.CancelledError:
                 progress_events = session_event_bus.end_turn_progress(session_id)
+                raise
+            except Exception as exc:
+                provider_error = _extract_llm_provider_error(exc)
+                if provider_error is None:
+                    logger.exception("Session turn failed (session=%s)", session_id)
+                    await _rollback_quietly(db, session_id=session_id)
+                    fail_msg = _turn_failure_reply(user_content)
+                    values = {
+                        "error": fail_msg,
+                        "messages": list(message_dicts)
+                        + [{"role": "assistant", "content": fail_msg}],
+                    }
+                    still_interrupted = False
+                else:
+                    logger.warning(
+                        "LLM provider error during session turn "
+                        "(session=%s model=%s kind=%s): %s",
+                        session_id,
+                        provider_error.model,
+                        provider_error.kind,
+                        provider_error.message,
+                    )
+                    try:
+                        snapshot = await graph.aget_state(config)
+                        values = dict(snapshot.values or {})
+                        still_interrupted = bool(snapshot.next)
+                    except Exception:
+                        logger.exception(
+                            "aget_state after LLM error failed (session=%s)",
+                            session_id,
+                        )
+                        values = {}
+                        still_interrupted = False
+                    values["error"] = provider_error.message
+                    values["messages"] = list(values.get("messages") or message_dicts) + [
+                        {
+                            "role": "assistant",
+                            "content": _llm_failure_reply(user_content, provider_error),
+                        }
+                    ]
+            finally:
+                if not progress_events:
+                    progress_events = session_event_bus.end_turn_progress(session_id)
 
     duration_ms = max(0, int((time.perf_counter() - started) * 1000))
     return values, still_interrupted, provider_error, progress_events, duration_ms
@@ -1265,19 +1267,20 @@ async def regen_session_image(
     if not prompt:
         prompt = f"Clean modern social media image for Hong Kong brand, format={fmt}"
 
-    image_model = resolve_image_model()
-    if not has_llm_credentials() or (image_model and image_model.lower() == "placeholder"):
-        url = f"placeholder://local/{session.id}/regen-{secrets.token_hex(4)}.png"
-    elif not image_model:
-        raise LlmProviderError(
-            "No image model configured (set LLM_IMAGE_MODEL).",
-            kind="unsupported",
-        )
-    else:
-        raw_ref = await generate_image(prompt=prompt)
-        rev = (existing.revision if existing else 0) + 1
-        key = media_object_key(session_id=str(session.id), revision=rev)
-        url = await persist_generated_image(raw_ref, key=key)
+    async with company_llm_scope(db, session.company_id):
+        image_model = resolve_image_model()
+        if not has_llm_credentials() or (image_model and image_model.lower() == "placeholder"):
+            url = f"placeholder://local/{session.id}/regen-{secrets.token_hex(4)}.png"
+        elif not image_model:
+            raise LlmProviderError(
+                "No image model configured (set LLM_IMAGE_MODEL).",
+                kind="unsupported",
+            )
+        else:
+            raw_ref = await generate_image(prompt=prompt)
+            rev = (existing.revision if existing else 0) + 1
+            key = media_object_key(session_id=str(session.id), revision=rev)
+            url = await persist_generated_image(raw_ref, key=key)
 
     row = await repos.insert_preview_image(
         db,

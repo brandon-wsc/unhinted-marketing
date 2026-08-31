@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     invite_rate_limit_max: int = 20
     invite_rate_limit_window_seconds: int = 60
 
+    # BYOK probe / model-list proxy (per editor; Redis later)
+    byok_probe_rate_limit_enabled: bool = True
+    byok_probe_rate_limit_max: int = 20
+    byok_probe_rate_limit_window_seconds: int = 60
+
     # Invite links + optional email delivery (on-prem: link mode default)
     web_base_url: str = "http://localhost:5173"
     email_backend: str = "link"  # link | smtp | console
@@ -38,9 +43,15 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_tls: bool = True
 
-    # LLM (BYOK via env; org keys in DB deferred to Phase 4)
+    # LLM (env fallback; org BYOK keys encrypted with BYOK_ENCRYPTION_KEY — ADR 0020)
+    byok_encryption_key: str | None = None
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
+    gemini_api_key: str | None = None
+    vertex_ai_api_key: str | None = None
+    # SDK Express pair (read-only; never set GOOGLE_GENAI_USE_VERTEXAI in-process).
+    google_api_key: str | None = None
+    google_genai_use_vertexai: bool = False
     llm_api_base: str | None = None
     llm_cheap_model: str = "gpt-4o-mini"
     llm_medium_model: str = "gpt-4o-mini"

@@ -268,6 +268,146 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/companies/{company_id}/byok/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Providers */
+        get: operations["list_providers_api_companies__company_id__byok_providers_get"];
+        put?: never;
+        /** Create Provider */
+        post: operations["create_provider_api_companies__company_id__byok_providers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/byok/providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Provider */
+        delete: operations["delete_provider_api_companies__company_id__byok_providers__provider_id__delete"];
+        options?: never;
+        head?: never;
+        /** Patch Provider */
+        patch: operations["patch_provider_api_companies__company_id__byok_providers__provider_id__patch"];
+        trace?: never;
+    };
+    "/api/companies/{company_id}/byok/providers/{provider_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Provider */
+        post: operations["test_provider_api_companies__company_id__byok_providers__provider_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/byok/providers/{provider_id}/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Provider Catalog */
+        get: operations["list_provider_catalog_api_companies__company_id__byok_providers__provider_id__models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/byok/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Models */
+        get: operations["list_models_api_companies__company_id__byok_models_get"];
+        put?: never;
+        /** Create Or Attach Model */
+        post: operations["create_or_attach_model_api_companies__company_id__byok_models_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/byok/models/{model_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Model */
+        delete: operations["delete_model_api_companies__company_id__byok_models__model_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/byok/models/{model_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Model */
+        post: operations["test_model_api_companies__company_id__byok_models__model_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/byok/routing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Routing */
+        get: operations["get_routing_api_companies__company_id__byok_routing_get"];
+        /** Put Routing */
+        put: operations["put_routing_api_companies__company_id__byok_routing_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/invites/{token}": {
         parameters: {
             query?: never;
@@ -937,6 +1077,218 @@ export type components = {
             /** File */
             file: string;
         };
+        /** ByokListedModel */
+        ByokListedModel: {
+            /** Id */
+            id: string;
+            /** Capability */
+            capability?: ("chat" | "image") | null;
+            /** Capability Source */
+            capability_source?: ("provider_metadata" | "inferred" | "manual") | null;
+        };
+        /** ByokModelCreate */
+        ByokModelCreate: {
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /** Model Id */
+            model_id: string;
+            /**
+             * Capability
+             * @enum {string}
+             */
+            capability: "chat" | "image";
+            /**
+             * Capability Source
+             * @default manual
+             * @enum {string}
+             */
+            capability_source: "provider_metadata" | "inferred" | "manual";
+        };
+        /** ByokModelDeleted */
+        ByokModelDeleted: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Cleared Slots */
+            cleared_slots: ("cheap" | "medium" | "strong" | "image")[];
+        };
+        /** ByokModelItem */
+        ByokModelItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /** Provider Label */
+            provider_label: string;
+            /** Provider Key Last4 */
+            provider_key_last4: string;
+            /** Model Id */
+            model_id: string;
+            /**
+             * Capability
+             * @enum {string}
+             */
+            capability: "chat" | "image";
+            /**
+             * Capability Source
+             * @enum {string}
+             */
+            capability_source: "provider_metadata" | "inferred" | "manual";
+            /** Last Verified At */
+            last_verified_at: string | null;
+            /** Last Error Kind */
+            last_error_kind: string | null;
+            /** Verified */
+            verified: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ByokModelList */
+        ByokModelList: {
+            /** Items */
+            items: components["schemas"]["ByokModelItem"][];
+        };
+        /** ByokModelListProxy */
+        ByokModelListProxy: {
+            /** Fetchable */
+            fetchable: boolean;
+            /** Models */
+            models?: components["schemas"]["ByokListedModel"][];
+        };
+        /** ByokProbeResult */
+        ByokProbeResult: {
+            /** Ok */
+            ok: boolean;
+            /** Error Kind */
+            error_kind?: string | null;
+        };
+        /** ByokProviderCreate */
+        ByokProviderCreate: {
+            /** Label */
+            label: string;
+            /**
+             * Provider Type
+             * @enum {string}
+             */
+            provider_type: "openai" | "anthropic" | "openai_compatible" | "gemini" | "vertex_ai";
+            /** Api Key */
+            api_key: string;
+            /** Api Base */
+            api_base?: string | null;
+        };
+        /** ByokProviderDeleted */
+        ByokProviderDeleted: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Removed Models */
+            removed_models: string[];
+            /** Cleared Slots */
+            cleared_slots: ("cheap" | "medium" | "strong" | "image")[];
+        };
+        /** ByokProviderItem */
+        ByokProviderItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Provider Type
+             * @enum {string}
+             */
+            provider_type: "openai" | "anthropic" | "openai_compatible" | "gemini" | "vertex_ai";
+            /** Key Last4 */
+            key_last4: string;
+            /** Api Base */
+            api_base: string | null;
+            /** Last Verified At */
+            last_verified_at: string | null;
+            /** Last Error Kind */
+            last_error_kind: string | null;
+            /** Verified */
+            verified: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ByokProviderList */
+        ByokProviderList: {
+            /** Items */
+            items: components["schemas"]["ByokProviderItem"][];
+        };
+        /** ByokProviderPatch */
+        ByokProviderPatch: {
+            /** Label */
+            label?: string | null;
+            /** Api Key */
+            api_key?: string | null;
+            /** Api Base */
+            api_base?: string | null;
+        };
+        /** ByokRoutingResponse */
+        ByokRoutingResponse: {
+            /** Slots */
+            slots: components["schemas"]["ByokRoutingSlot"][];
+        };
+        /** ByokRoutingSlot */
+        ByokRoutingSlot: {
+            /**
+             * Slot
+             * @enum {string}
+             */
+            slot: "cheap" | "medium" | "strong" | "image";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "org" | "env";
+            /** Registry Id */
+            registry_id?: string | null;
+            /** Model Id */
+            model_id?: string | null;
+        };
+        /** ByokRoutingUpdate */
+        ByokRoutingUpdate: {
+            /** Cheap Model Id */
+            cheap_model_id?: string | null;
+            /** Medium Model Id */
+            medium_model_id?: string | null;
+            /** Strong Model Id */
+            strong_model_id?: string | null;
+            /** Image Model Id */
+            image_model_id?: string | null;
+        };
         /** CompanyMember */
         CompanyMember: {
             /**
@@ -1220,6 +1572,10 @@ export type components = {
             parse_ok: boolean | null;
             /** Fallback Used */
             fallback_used: boolean;
+            /** Key Source */
+            key_source?: string | null;
+            /** Key Last4 */
+            key_last4?: string | null;
             /** User Id */
             user_id: string | null;
             /** Company Id */
@@ -1289,6 +1645,10 @@ export type components = {
             parse_ok: boolean | null;
             /** Fallback Used */
             fallback_used: boolean;
+            /** Key Source */
+            key_source?: string | null;
+            /** Key Last4 */
+            key_last4?: string | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -2965,6 +3325,406 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExemplarPromoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_providers_api_companies__company_id__byok_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokProviderList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_provider_api_companies__company_id__byok_providers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ByokProviderCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokProviderItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_provider_api_companies__company_id__byok_providers__provider_id__delete: {
+        parameters: {
+            query?: {
+                force?: boolean;
+            };
+            header?: never;
+            path: {
+                provider_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokProviderDeleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_provider_api_companies__company_id__byok_providers__provider_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ByokProviderPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokProviderItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_provider_api_companies__company_id__byok_providers__provider_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokProbeResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_provider_catalog_api_companies__company_id__byok_providers__provider_id__models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokModelListProxy"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_models_api_companies__company_id__byok_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokModelList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_or_attach_model_api_companies__company_id__byok_models_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ByokModelCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokModelItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_model_api_companies__company_id__byok_models__model_id__delete: {
+        parameters: {
+            query?: {
+                force?: boolean;
+            };
+            header?: never;
+            path: {
+                model_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokModelDeleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_model_api_companies__company_id__byok_models__model_id__test_post: {
+        parameters: {
+            query?: {
+                confirm_paid?: boolean;
+            };
+            header?: never;
+            path: {
+                model_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokProbeResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_routing_api_companies__company_id__byok_routing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokRoutingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_routing_api_companies__company_id__byok_routing_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ByokRoutingUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokRoutingResponse"];
                 };
             };
             /** @description Validation Error */

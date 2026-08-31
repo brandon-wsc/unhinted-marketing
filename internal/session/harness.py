@@ -17,9 +17,9 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, RunCancelled
 from pydantic_ai.models import Model
 
-from internal.config import settings
 from internal.llm.recorder import LlmCallRecordBuilder, track
-from internal.llm.router import LlmProviderError, ModelTier, resolve_model
+from internal.llm.resolve import gemini_catalog_id, openai_compat_model_id, resolve_llm_model
+from internal.llm.router import LlmProviderError, ModelTier
 from internal.memory.repos import list_top_signals
 from internal.session import prompts
 from internal.session.context import get_db
@@ -50,24 +50,48 @@ def set_chat_model_override(model: Model | None) -> None:
 
 
 def live_harness_model(tier: ModelTier) -> Model:
-    """OpenAI-compatible BYOK model (LLM_API_BASE or OpenAI key)."""
+    """BYOK model from the per-turn resolver (org slot or env fallback)."""
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
 
-    raw = resolve_model(tier)
-    model_id = raw.split("/")[-1]
-    lowered = raw.lower()
-    if settings.llm_api_base:
+    resolved = resolve_llm_model(tier)
+    raw = resolved.model_id
+    if resolved.provider_type in ("gemini", "vertex_ai"):
+        try:
+            from pydantic_ai.models.google import GoogleModel
+            from pydantic_ai.providers.google import GoogleProvider
+            from pydantic_ai.providers.google_cloud import GoogleCloudProvider
+        except ImportError as exc:
+            raise LlmProviderError(
+                "Gemini / Vertex Express session harness needs the google extra "
+                '(pip install "pydantic-ai-slim[google]").',
+                model=raw,
+                kind="unsupported",
+            ) from exc
+        # Vertex: api_key only. project/location/credentials would take ADC (ADR 0021 §4).
+        provider = (
+            GoogleCloudProvider(api_key=resolved.api_key or "not-set")
+            if resolved.provider_type == "vertex_ai"
+            else GoogleProvider(api_key=resolved.api_key or "not-set")
+        )
+        return GoogleModel(gemini_catalog_id(raw), provider=provider)
+    compat_id = openai_compat_model_id(raw)
+    leaf_id = compat_id.split("/")[-1]
+    if resolved.provider_type == "openai_compatible" or resolved.api_base:
         return OpenAIChatModel(
-            model_id,
+            compat_id,
             provider=OpenAIProvider(
-                base_url=settings.llm_api_base,
-                api_key=settings.openai_api_key or "not-set",
+                base_url=resolved.api_base,
+                api_key=resolved.api_key or "not-set",
             ),
         )
-    if "claude" in lowered or lowered.startswith("anthropic"):
+    lowered = raw.lower()
+    if resolved.provider_type == "anthropic" or "claude" in lowered or lowered.startswith(
+        "anthropic"
+    ):
         try:
             from pydantic_ai.models.anthropic import AnthropicModel
+            from pydantic_ai.providers.anthropic import AnthropicProvider
         except ImportError as exc:
             raise LlmProviderError(
                 "Anthropic session harness needs the anthropic extra "
@@ -75,16 +99,19 @@ def live_harness_model(tier: ModelTier) -> Model:
                 model=raw,
                 kind="unsupported",
             ) from exc
-        return AnthropicModel(model_id)
-    if not settings.openai_api_key:
+        return AnthropicModel(
+            leaf_id,
+            provider=AnthropicProvider(api_key=resolved.api_key),
+        )
+    if not resolved.api_key:
         raise LlmProviderError(
             "No OpenAI-compatible key for the session harness.",
             model=raw,
             kind="auth",
         )
     return OpenAIChatModel(
-        model_id,
-        provider=OpenAIProvider(api_key=settings.openai_api_key),
+        leaf_id,
+        provider=OpenAIProvider(api_key=resolved.api_key),
     )
 
 

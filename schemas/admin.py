@@ -26,6 +26,8 @@ class LlmCallRecordSummary(BaseModel):
     total_tokens: int | None
     parse_ok: bool | None
     fallback_used: bool
+    key_source: str | None = None
+    key_last4: str | None = None
 
 
 class LlmCallRecordDetail(LlmCallRecordSummary):

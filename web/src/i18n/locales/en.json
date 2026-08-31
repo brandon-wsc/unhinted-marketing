@@ -13,7 +13,8 @@
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving…",
-    "close": "Close"
+    "close": "Close",
+    "noMatches": "No matches"
   },
   "header": {
     "menu": {
@@ -279,7 +280,8 @@
       "voice": "Voice",
       "products": "Products",
       "members": "Members",
-      "approvals": "Approvals"
+      "approvals": "Approvals",
+      "models": "Models"
     },
     "noCompany": {
       "title": "No company yet",
@@ -431,6 +433,109 @@
         "product": "Product",
         "sku": "SKU",
         "note": "Note"
+      }
+    },
+    "apiKeys": {
+      "title": "Models",
+      "subtitle": "Use your own keys and models for cheap / medium / strong / image. Members never see this page.",
+      "addModel": "Add model",
+      "addKey": "Add key",
+      "addKeyHint": "You can add models and routing later.",
+      "addModelHint": "Assign slots in Routing after you save.",
+      "keys": {
+        "title": "Keys",
+        "empty": "No keys yet. Add a key to get started.",
+        "masked": "••••{{last4}}",
+        "columns": {
+          "label": "Label",
+          "key": "Key",
+          "type": "Type",
+          "status": "Status"
+        }
+      },
+      "models": {
+        "title": "Models",
+        "empty": "No models yet. Use Add model to register one.",
+        "emptyNeedsKey": "Add a key first, then register a model.",
+        "columns": {
+          "model": "Model",
+          "key": "Key",
+          "capability": "Capability",
+          "status": "Status"
+        },
+        "imageTestTitle": "This test calls a paid image API",
+        "imageTestBody": "Testing an image model runs a real image generation request and may use provider quota. Continue?",
+        "imageTestConfirm": "Test anyway"
+      },
+      "routing": {
+        "title": "Routing",
+        "subtitle": "Pick a company model for each slot, or leave empty for the platform default.",
+        "platformDefault": "Platform default",
+        "helperOrg": "Company: {{modelId}}",
+        "helperEnv": "Platform default",
+        "slots": {
+          "cheap": "Cheap",
+          "medium": "Medium",
+          "strong": "Strong",
+          "image": "Image"
+        }
+      },
+      "status": {
+        "verified": "Verified",
+        "error": "Error",
+        "pending": "Checking"
+      },
+      "capability": {
+        "chat": "Chat",
+        "image": "Image"
+      },
+      "providerType": {
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "openai_compatible": "OpenAI-compatible",
+        "gemini": "Gemini",
+        "vertex_ai": "Vertex AI (Express)"
+      },
+      "actions": {
+        "test": "Test",
+        "edit": "Edit",
+        "delete": "Delete"
+      },
+      "wizard": {
+        "keyExisting": "Key",
+        "label": "Label",
+        "providerType": "Provider",
+        "apiKey": "API key",
+        "apiBase": "API base",
+        "apiBaseHint": "OpenAI-compatible endpoint, for example https://openrouter.ai/api/v1",
+        "geminiKeyHint": "Google AI Studio key (generativelanguage.googleapis.com). A Vertex Express key will 401 here.",
+        "vertexKeyHint": "Vertex Express Mode key (aiplatform.googleapis.com). Not an AI Studio Gemini key, and not OpenAI-compatible.",
+        "modelId": "Model id",
+        "modelFetching": "Loading the model list…",
+        "modelFreeText": "This key does not support a model list. Enter the model id.",
+        "modelTypedOk": "The list is a hint. A typed id is fine even if it does not appear.",
+        "capability": "Capability"
+      },
+      "edit": {
+        "title": "Edit key",
+        "apiKeyRotate": "Paste a new key to rotate it. Leave empty to keep the stored key.",
+        "apiKeyPlaceholder": "Leave empty to keep the current key"
+      },
+      "delete": {
+        "titleKey": "Delete key",
+        "titleModel": "Delete model",
+        "bodyKey": "Delete “{{label}}”?",
+        "bodyModel": "Delete {{modelId}}?",
+        "dependents": "This is still in use:",
+        "modelsLabel": "Models: {{list}}",
+        "slotsLabel": "Slots: {{list}}",
+        "force": "Delete anyway"
+      },
+      "errors": {
+        "labelRequired": "Enter a label.",
+        "keyRequired": "Enter an API key.",
+        "apiBaseRequired": "OpenAI-compatible keys need an API base.",
+        "modelRequired": "Enter a model id."
       }
     }
   },

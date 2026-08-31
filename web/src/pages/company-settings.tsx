@@ -1,18 +1,22 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/app-header";
 import { useAuth } from "@/context/auth-context";
+import { ApiKeysPanel } from "@/features/company-settings/components/api-keys-panel";
 import { ApprovalsPanel } from "@/features/company-settings/components/approvals-panel";
 import { MembersPanel } from "@/features/company-settings/components/members-panel";
 import { ProductsPanel } from "@/features/company-settings/components/products-panel";
 import { VoiceForm } from "@/features/company-settings/components/voice-form";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "voice" | "products" | "members" | "approvals";
+type SettingsTab = "voice" | "products" | "members" | "approvals" | "models";
 
 function parseTab(raw: string | null): SettingsTab {
-  if (raw === "products" || raw === "members" || raw === "approvals") return raw;
+  if (raw === "api-keys") return "models";
+  if (raw === "products" || raw === "members" || raw === "approvals" || raw === "models") {
+    return raw;
+  }
   return "voice";
 }
 
@@ -32,6 +36,13 @@ export function CompanySettingsPage() {
   const scope = parseScope(params.get("scope"));
   const org = user?.organizations[0];
   const companyId = org?.id;
+
+  useEffect(() => {
+    if (params.get("tab") !== "api-keys") return;
+    const next = new URLSearchParams(params);
+    next.set("tab", "models");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
 
   const setTab = useMemo(
     () => (next: SettingsTab, nextScope?: "org" | "mine") => {
@@ -76,12 +87,13 @@ export function CompanySettingsPage() {
 
   const editor = canManageTeam(org?.role);
   const nav: SettingsTab[] = editor
-    ? ["voice", "products", "members", "approvals"]
+    ? ["voice", "products", "members", "approvals", "models"]
     : ["voice", "products", "members"];
-  const activeTab = tab === "approvals" && !editor ? "voice" : tab;
+  const editorOnly = tab === "approvals" || tab === "models";
+  const activeTab = editorOnly && !editor ? "voice" : tab;
 
   return (
-    <AppShell mainClassName="overflow-y-auto">
+    <AppShell mainClassName="overflow-y-auto [scrollbar-gutter:stable]">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:flex-row sm:gap-8 sm:px-6">
         <aside className="w-full shrink-0 sm:w-56">
           <p className="mb-3 px-3 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -124,6 +136,7 @@ export function CompanySettingsPage() {
             />
           )}
           {activeTab === "approvals" && <ApprovalsPanel companyId={companyId} />}
+          {activeTab === "models" && <ApiKeysPanel companyId={companyId} />}
         </div>
       </div>
     </AppShell>

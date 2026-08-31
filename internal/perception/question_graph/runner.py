@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.config import settings
+from internal.llm.resolve import company_llm_scope
 from internal.memory.database import SessionLocal
 from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.models import Entity, QuestionRun
@@ -226,10 +227,11 @@ async def _execute(db: AsyncSession, *, run_id: uuid.UUID, company_id: uuid.UUID
     }
 
     graph = get_question_graph()
-    with question_db(db):
-        final = await asyncio.wait_for(
-            graph.ainvoke(state), timeout=_GRAPH_TIMEOUT.total_seconds()
-        )
+    async with company_llm_scope(db, company_id):
+        with question_db(db):
+            final = await asyncio.wait_for(
+                graph.ainvoke(state), timeout=_GRAPH_TIMEOUT.total_seconds()
+            )
 
     questions = final.get("questions") or []
     if not questions:
