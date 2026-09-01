@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SESSION_PANE } from "@/features/session/session-layout";
 import type { SessionListItem } from "@/features/session/types";
 
 type Props = {
@@ -248,7 +249,10 @@ export function SessionHistorySidebar({
 
   if (collapsed) {
     return (
-      <aside className="flex h-full min-h-0 w-12 shrink-0 flex-col items-center gap-2 overflow-hidden border-r border-border bg-background py-3">
+      <aside
+        className="flex h-full min-h-0 shrink-0 flex-col items-center gap-2 overflow-hidden border-r border-border bg-background py-3"
+        style={{ width: SESSION_PANE.historyCollapsed }}
+      >
         <IconButton
           type="button"
           onClick={onToggle}
@@ -274,8 +278,9 @@ export function SessionHistorySidebar({
   return (
     <aside
       className={`flex h-full min-h-0 shrink-0 flex-col overflow-hidden bg-background ${
-        pageMode ? "w-full" : "w-[280px] border-r border-border"
+        pageMode ? "w-full" : "border-r border-border"
       }`}
+      style={pageMode ? undefined : { width: SESSION_PANE.historyExpanded }}
     >
       <div className="flex shrink-0 items-center gap-1 px-3 pb-1 pt-3">
         {pageMode && onBack ? (
@@ -497,7 +502,10 @@ export function SessionHistoryMobileSheet({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative h-full w-[280px] max-w-[85vw] shadow-xl [&_aside]:border-r-0">
+      <div
+        className="relative h-full max-w-[85vw] shadow-xl [&_aside]:border-r-0"
+        style={{ width: SESSION_PANE.historyExpanded }}
+      >
         <SessionHistorySidebar
           collapsed={false}
           onToggle={onClose}
