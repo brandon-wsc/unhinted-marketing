@@ -115,9 +115,10 @@ Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly co
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Preview Mode (iterative)                                       │
-│  • Desktop: left chat (narrow) · right preview (wide)           │
-│  • Mobile (< lg): Chat primary; Preview / Record as push pages  │
-│    (history icon → Record; ready banner → Preview; 上一頁 back) │
+│  • Split: left chat (narrow) · right preview (wide); resizable  │
+│  • Paged (content-width): Chat primary; Preview / Record as     │
+│    push pages (history icon → Record; ready banner → Preview;   │
+│    上一頁 back)                                                 │
 │  • Canonical draft: caption / hashtags / cta / image_url        │
 │  • MVP skin: Instagram phone mock (FB/Threads skins later)      │
 │  • AI revise (chat) → reviewer → new revision → SSE             │
@@ -427,7 +428,7 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 - [x] Chat token stream: LiteLLM streaming on `chat` node → SSE `message.delta` → final `message.assistant`
 - [x] Agent UI: SSE `agent.progress` `{node, model_tier, model}` → in-chat action-record trail (persisted on user message `metadata.agent_actions`; hydrate on reopen) + brief / interrupt cards; snapshot `interrupted` restores Generate-image CTA (no Agent JSON as streamed chat MD)
 - [x] Landing: recommended questions cards (poll or SSE refresh)
-- [x] Preview Mode: desktop left chat / right IG mock + editable fields; mobile Preview push page (canonical draft; SSE `preview.updated` + copy)
+- [x] Preview Mode: split left chat / right IG mock (resizable leftover) + editable fields; paged Preview push page (canonical draft; SSE `preview.updated` + copy)
 - [x] `POST /sessions/{id}/draft` — manual revision (no LLM); sync session.state + graph checkpoint
 - [x] Confirm button → dirty auto-flush then `/confirm`; shows stub receipt status
 - [x] `GET /sessions` + `GET /sessions/{id}/messages` — history list + hydrate after refresh

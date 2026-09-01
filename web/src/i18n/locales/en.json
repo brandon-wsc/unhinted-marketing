@@ -71,6 +71,9 @@
     "send": "Send",
     "stop": "Stop",
     "stopping": "Stopping…",
+    "shell": {
+      "resize": "Resize chat and preview"
+    },
     "queue": {
       "badge": "Queued",
       "remove": "Remove from queue",

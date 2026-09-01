@@ -71,6 +71,9 @@
     "send": "送出",
     "stop": "停止",
     "stopping": "停緊…",
+    "shell": {
+      "resize": "調 chat 同 preview 闊度"
+    },
     "queue": {
       "badge": "排隊緊",
       "remove": "唔好排呢條",

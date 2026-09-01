@@ -37,6 +37,7 @@ import { useToast } from "@/context/toast-context";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
+import { SessionShell } from "@/features/session/components/session-shell";
 import {
   agentNodeFallbackKey,
   agentNodeLabelKey,
@@ -45,7 +46,12 @@ import {
   parseTurnDurationMs,
   QUEUE_TUCK_PX,
 } from "@/features/session/session-helpers";
-import { sessionLayoutMode } from "@/features/session/session-layout";
+import {
+  getSessionChatRatio,
+  type PagedPane,
+  sessionLayoutMode,
+  setSessionChatRatio,
+} from "@/features/session/session-layout";
 import type {
   AgentActionRecord,
   ChatMessage,
@@ -63,8 +69,6 @@ import { formatWorkedDuration, workedDurationLocale } from "@/lib/format-worked-
 import { cn } from "@/lib/utils";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
-
-type PagedPane = "record" | "chat" | "preview";
 
 /** Border-box plus overflowing descendants (tucked queue). */
 function overlayStackHeight(el: HTMLElement): number {
@@ -750,39 +754,28 @@ export function ChatPanel() {
   ) : null;
 
   return (
-    <div ref={shellRef} className="flex min-h-0 flex-1 overflow-hidden">
-      {isSplit && <div className="flex h-full min-h-0">{historySidebar}</div>}
-
-      {!isSplit && pagedPane === "record" && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <SessionHistorySidebar
-            collapsed={false}
-            onToggle={() => undefined}
-            pageMode
-            onBack={goToChat}
-            {...historyProps}
-          />
-        </div>
-      )}
-
-      <div
-        className={`min-h-0 min-w-0 flex-col overflow-hidden ${
-          isSplit || pagedPane === "chat" ? "flex" : "hidden"
-        } ${isSplit && previewMode ? "flex-none basis-[38%]" : "flex-1"}`}
-      >
-        {chatColumn}
-      </div>
-
-      {previewMode && previewPane ? (
-        <div
-          className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
-            isSplit || pagedPane === "preview" ? "flex" : "hidden"
-          }`}
-        >
-          {previewPane}
-        </div>
-      ) : null}
-    </div>
+    <SessionShell
+      shellRef={shellRef}
+      layoutMode={layoutMode}
+      pagedPane={pagedPane}
+      previewReady={previewMode}
+      historyCollapsed={historyCollapsed}
+      shellWidth={shellWidth}
+      chatRatio={getSessionChatRatio()}
+      onChatRatioChange={setSessionChatRatio}
+      history={historySidebar}
+      historyPage={
+        <SessionHistorySidebar
+          collapsed={false}
+          onToggle={() => undefined}
+          pageMode
+          onBack={goToChat}
+          {...historyProps}
+        />
+      }
+      chat={chatColumn}
+      preview={previewPane}
+    />
   );
 }
 
