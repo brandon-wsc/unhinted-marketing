@@ -33,6 +33,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
+**Decision (2026-09-02) — Real publish: Instagram adapter + org social accounts:** → [ADR 0022](./adr/0022-real-publish-instagram.md) · plan: [PUBLISH_PLAN.md](./PUBLISH_PLAN.md)
+
+- **`social_accounts` table** — org-scoped IG credentials, Fernet-encrypted (reuses `BYOK_ENCRYPTION_KEY` + `byok_providers` shape); CLI-seeded token, no OAuth flow this slice
+- **`PUBLISH_ADAPTER=stub|instagram`** — default stub; adapter lives in `internal/tools/publish.py` against the locked `schemas/tools.py` shapes; IG two-phase container → media_publish
+- **Copy-only drafts rejected at Confirm** (400 — IG requires media); receipt status machine `pending` / `published` / `failed` with permalink; SSE `confirm.completed` carries real status
+- **Boundaries unchanged** — Confirm-only publish ([ADR 0003](./adr/0003-confirm-without-llm.md)); per-revision `approval_token`; user/session-scoped idempotency
+
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
 - **Native `provider_type` only when the wire is not Chat Completions + Images.** Enum is `openai` \| `anthropic` \| `openai_compatible` \| `gemini` \| `vertex_ai`. Clones stay `openai_compatible` (DeepSeek, OpenRouter, Groq, …). Vertex **OAuth** / Bedrock / Cohere / Ollama-native / Azure-as-type deferred
@@ -511,7 +518,7 @@ From ROADMAP; current completion:
 3. User can register, login, access protected dashboard — ✅  
 4. Chat → can/cannot recommendation → preview — ✅ API; ✅ chat/brief/preview UI  
 5. Unlimited preview revisions + reviewer gate — ✅ API (AI revise); ✅ UI + manual `POST /draft`  
-6. Confirm posts via platform API + receipt — 🟡 stub confirm + UI receipt; real publish Phase 4  
+6. Confirm posts via platform API + receipt — 🟡 stub confirm + UI receipt; real publish **in progress** ([ADR 0022](./adr/0022-real-publish-instagram.md))  
 7. Claims traceable to `source_signal_ids` — ✅ session grounding in graph; ⬜ UI trace links  
 
 ---

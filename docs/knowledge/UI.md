@@ -34,6 +34,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 | `Company settings · Members` | ✅ Drawn — editor (idle invite form) + **invite-sent** card + member read-only; sidebar Voice / Products / Members / Approvals |
 | `Invite accept` | ✅ Drawn — A logged out · B ready · C email mismatch · D invalid · **E already in org (409)** |
 | `Company settings · Approvals` | Pending proposals · field diff · Approve / Decline — owner/admin |
+| `Company settings · Instagram` | ✅ Drawn — empty (paste token) · connected (last4 + Rotate / Disconnect) · expired (alert + Update token). Editor-only; no OAuth |
 
 Entry: UserMenu → **公司設定** (desktop dropdown + mobile dialog; above **系統** when platform level ≥ 6). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell). UserMenu copy is zh-HK; only **登出** is destructive red.
 
@@ -48,7 +49,9 @@ UserMenu
   │     ├─ Voice               ← K1 + K5 exemplars
   │     ├─ Products            ← K3 / K3b  (tabs: Org | Mine)
   │     ├─ Members             ← org team (slice 4)
-  │     └─ Approvals           ← K6 — owner/admin queue
+  │     ├─ Approvals           ← K6 — owner/admin queue
+  │     ├─ Models              ← BYOK keys / models / routing (ADR 0020)
+  │     └─ Instagram           ← org publish account (ADR 0022; editor-only; no OAuth)
   ├─ 系統                      ← SPA `/system` (platform ops; API `/api/admin/*`; en: System)
   └─ 登出                      ← destructive
 
@@ -80,6 +83,7 @@ UserMenu
 | Session chat | Spoken SKU/price (no form) | User × New | current user | shipped; **private** per user |
 | Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** ✅ |
 | **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6** ✅ |
+| **Instagram** | `ig_user_id` + long-lived token (Fernet) + optional `expires_at`; show `token_last4`; rotate / disconnect | Org → `social_accounts` | owner/admin | **ADR 0022** drawn; not shipped |
 
 **Not collected in UI (MVP):** per-company persona CRUD, offer-snippet dedicated page, brand PDF upload, pain points, market signals, platform craft ([VOICE.md](../VOICE.md)).
 
@@ -125,6 +129,20 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 
 **Empty states:** sole owner alone → still show roster; pending invites empty → hide section or “No pending invites”.
 
+### Instagram (org publish account — ADR 0022)
+
+**Route:** `/settings?tab=instagram` · sidebar label **Instagram** (i18n `settings.nav.instagram`). Editor-only, same gate as Models / Approvals. Members never see the tab.
+
+**No OAuth this slice.** Paste a Meta long-lived token; CLI `connect-social-account` stays as bootstrap fallback.
+
+**Layout:**
+
+1. **Empty** — one card: IG user id, access token (masked), optional expires, Save. After save, only `token_last4` is shown.
+2. **Connected** — badge Connected · IG user id · `••••last4` · expires · **Rotate token** (outline) · **Disconnect** (destructive outline).
+3. **Expired** — same card + destructive alert; primary action becomes **Update token**.
+
+Confirm still 400 `social_account_not_connected` if none is saved.
+
 ### Invite accept (slice 4)
 
 **Route:** `/invite/:token` · **not** under `/settings`. The page is public (logged-out CTA is a real state). **Accept** (`POST`) requires a session; login/register return via `?next=`.
@@ -165,6 +183,7 @@ Title + body sit **inside** the AuthLayout card (Penpot AuthCard), left-aligned.
 | **Org team** | Members tab + invite accept page + login `next` | ✅ |
 | **Session isolation** | Cross-member session API tests; routes stay `user_id`-scoped | ✅ CI `backend-api` |
 | **K6** | Approvals tab + Mine propose + HTTP approve/reject | ✅ |
+| **Instagram** | Settings tab empty / connected / expired (Penpot) | drawn; not shipped |
 
 ---
 
