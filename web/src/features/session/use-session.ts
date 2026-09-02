@@ -22,6 +22,7 @@ import {
   agentActionsFromMessages,
   bumpSessionInHistory,
   EMPTY_COMPOSER_DRAFT,
+  isConfirmSuccessStatus,
   isUserFacingAgentNode,
   MAX_QUEUED_SESSION_MESSAGES,
   mergePreviewDraft,
@@ -30,6 +31,7 @@ import {
   OUTCOME_NODE,
   parseAgentProgress,
   parseBrief,
+  parseConfirmReceipt,
   parseDraftCopy,
   parseMediaItems,
   previewAnchorFromActions,
@@ -541,12 +543,13 @@ export function useSession(companyId: string | undefined) {
         return;
       }
       if (type === "confirm.completed") {
-        setConfirmReceipt({
-          receipt_id: typeof data.receipt_id === "string" ? data.receipt_id : "",
-          status: typeof data.status === "string" ? data.status : "stubbed",
-          tool_name: "publish_social_post",
-          idempotency_key: typeof data.idempotency_key === "string" ? data.idempotency_key : "",
-        });
+        const receipt = parseConfirmReceipt(data);
+        if (receipt) {
+          setConfirmReceipt(receipt);
+          if (isConfirmSuccessStatus(receipt.status)) {
+            setSession((prev) => (prev ? { ...prev, status: "confirmed" } : prev));
+          }
+        }
       }
       if (type === "llm.failed") {
         const err =
@@ -589,9 +592,11 @@ export function useSession(companyId: string | undefined) {
         if (abort.signal.aborted || sessionIdRef.current !== sessionId) return;
         if (type === "session.snapshot") {
           if (typeof data.mode === "string") setMode(data.mode);
-          if (typeof data.status === "string" && data.status === "confirmed") {
-            // Keep draft visible after reconnect; receipt may be unknown.
+          if (typeof data.status === "string") {
+            setSession((prev) => (prev ? { ...prev, status: data.status as string } : prev));
           }
+          const snapReceipt = parseConfirmReceipt(data.confirm_receipt);
+          setConfirmReceipt(snapReceipt);
           const state = data.state as Record<string, unknown> | undefined;
           const snapshotBrief = parseBrief(state?.brief);
           if (snapshotBrief) {
@@ -1525,7 +1530,9 @@ export function useSession(companyId: string | undefined) {
         });
         if (!stillOn(boundId)) return receipt;
         setConfirmReceipt(receipt);
-        setSession((prev) => (prev ? { ...prev, status: "confirmed" } : prev));
+        if (isConfirmSuccessStatus(receipt.status)) {
+          setSession((prev) => (prev ? { ...prev, status: "confirmed" } : prev));
+        }
         return receipt;
       } finally {
         if (stillOn(boundId)) setConfirming(false);

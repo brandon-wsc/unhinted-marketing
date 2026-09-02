@@ -83,7 +83,7 @@ UserMenu
 | Session chat | Spoken SKU/price (no form) | User × New | current user | shipped; **private** per user |
 | Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** ✅ |
 | **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6** ✅ |
-| **Instagram** | `ig_user_id` + long-lived token (Fernet) + optional `expires_at`; show `token_last4`; rotate / disconnect | Org → `social_accounts` | owner/admin | **ADR 0022** HTTP shipped; settings tab UI not |
+| **Instagram** | `ig_user_id` + long-lived token (Fernet) + optional `expires_at`; show `token_last4`; rotate / disconnect | Org → `social_accounts` | owner/admin | **ADR 0022** ✅ `/settings?tab=instagram` |
 
 **Not collected in UI (MVP):** per-company persona CRUD, offer-snippet dedicated page, brand PDF upload, pain points, market signals, platform craft ([VOICE.md](../VOICE.md)).
 
@@ -183,7 +183,7 @@ Title + body sit **inside** the AuthLayout card (Penpot AuthCard), left-aligned.
 | **Org team** | Members tab + invite accept page + login `next` | ✅ |
 | **Session isolation** | Cross-member session API tests; routes stay `user_id`-scoped | ✅ CI `backend-api` |
 | **K6** | Approvals tab + Mine propose + HTTP approve/reject | ✅ |
-| **Instagram** | Settings tab empty / connected / expired (Penpot) | drawn; not shipped |
+| **Instagram** | Settings tab empty / connected / expired | ✅ `/settings?tab=instagram` |
 
 ---
 

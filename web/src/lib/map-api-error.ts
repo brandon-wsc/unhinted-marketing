@@ -12,6 +12,8 @@ const API_ERROR_KEYS: Record<string, string> = {
   "A pending invite already exists for this email": "settings.members.invite.alreadyPending",
   "A pending proposal already exists for this product code": "settings.products.alreadyPending",
   "A product with this product code already exists": "settings.products.fields.skuConflict",
+  image_required: "preview.error.imageRequired",
+  social_account_not_connected: "preview.error.notConnected",
 };
 
 export function mapApiError(message: string, t: TFunction): string {

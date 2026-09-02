@@ -1033,6 +1033,20 @@ async def create_tool_receipt(
     return row
 
 
+async def get_latest_publish_receipt(
+    db: AsyncSession, session_id: uuid.UUID
+) -> ToolReceipt | None:
+    return await db.scalar(
+        select(ToolReceipt)
+        .where(
+            ToolReceipt.session_id == session_id,
+            ToolReceipt.tool_name == "publish_social_post",
+        )
+        .order_by(ToolReceipt.created_at.desc())
+        .limit(1)
+    )
+
+
 async def list_products(
     db: AsyncSession,
     *,

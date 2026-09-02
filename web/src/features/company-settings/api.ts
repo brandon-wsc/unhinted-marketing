@@ -719,3 +719,64 @@ export async function apiPutByokRouting(
   if (!res.ok) await throwApiError(res);
   return res.json();
 }
+
+export type SocialAccountItem = {
+  id: string;
+  company_id: string;
+  platform: "instagram";
+  ig_user_id: string;
+  token_last4: string;
+  expires_at: string | null;
+  last_verified_at: string | null;
+  last_error_kind: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SocialAccountList = {
+  items: SocialAccountItem[];
+};
+
+export type SocialAccountUpsert = {
+  ig_user_id: string;
+  access_token: string;
+  expires_at?: string | null;
+};
+
+function socialPath(companyId: string, suffix = ""): string {
+  return `${API_BASE}/companies/${companyId}/social-accounts${suffix}`;
+}
+
+export async function apiListSocialAccounts(
+  accessToken: string | null,
+  companyId: string,
+): Promise<SocialAccountItem[]> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId));
+  if (!res.ok) await throwApiError(res);
+  const body = (await res.json()) as SocialAccountList;
+  return body.items ?? [];
+}
+
+export async function apiUpsertInstagramAccount(
+  accessToken: string | null,
+  companyId: string,
+  body: SocialAccountUpsert,
+): Promise<SocialAccountItem> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/instagram"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiDisconnectInstagramAccount(
+  accessToken: string | null,
+  companyId: string,
+): Promise<void> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/instagram"), {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 404) await throwApiError(res);
+}

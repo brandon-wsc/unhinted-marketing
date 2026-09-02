@@ -216,6 +216,25 @@
     "confirmDone": "Confirmed",
     "confirmReceipt": "Receipt status: {{status}}",
     "confirmHint": "Saying so in chat does not publish. Confirm uses the saved revision (dirty edits are saved first).",
+    "gate": {
+      "imageRequired": "Instagram posts need an image",
+      "notConnected": "No Instagram account connected.",
+      "openSettings": "Open settings"
+    },
+    "receipt": {
+      "publishedTitle": "Published",
+      "publishedBody": "Posted to Instagram",
+      "publishedBadge": "Posted",
+      "viewOnInstagram": "View on Instagram",
+      "failedTitle": "Couldn’t publish",
+      "failedHint": "Not posted. Fix the image or account, then confirm again.",
+      "retry": "Confirm again",
+      "error": {
+        "token_expired": "The Instagram token expired. Update it in settings, then confirm again.",
+        "permission": "Instagram didn’t allow this post. Check the account, then confirm again.",
+        "platform_error": "Instagram couldn’t take the post. Try confirming again in a moment."
+      }
+    },
     "exemplar": {
       "save": "Save caption as voice example",
       "working": "Saving…",
@@ -268,6 +287,8 @@
     "error": {
       "saveFailed": "Failed to save the draft. Please try again.",
       "confirmFailed": "Failed to confirm. Please try again.",
+      "imageRequired": "Instagram posts need an image. Add one, then confirm.",
+      "notConnected": "No Instagram account connected. Add a token in company settings.",
       "planFailed": "Failed to save the image plan. Please try again.",
       "regenFailed": "Failed to regenerate the image. Please try again.",
       "addFailed": "Failed to add an image. Please try again.",
@@ -284,7 +305,8 @@
       "products": "Products",
       "members": "Members",
       "approvals": "Approvals",
-      "models": "Models"
+      "models": "Models",
+      "instagram": "Instagram"
     },
     "noCompany": {
       "title": "No company yet",
@@ -437,6 +459,27 @@
         "sku": "SKU",
         "note": "Note"
       }
+    },
+    "instagram": {
+      "title": "Instagram",
+      "subtitle": "Connect the professional account Confirm publishes to.",
+      "igUserId": "Instagram user ID",
+      "accessToken": "Access token",
+      "expiresAt": "Expires (optional)",
+      "tokenMasked": "Token",
+      "connected": "Connected",
+      "expiredTitle": "Token expired",
+      "expiredBody": "Update the token before Confirm can publish.",
+      "save": "Save",
+      "rotate": "Rotate token",
+      "update": "Update token",
+      "disconnect": "Disconnect",
+      "disconnectTitle": "Disconnect Instagram?",
+      "disconnectBody": "Confirm will need a new token before it can publish again.",
+      "saved": "Instagram connected.",
+      "disconnected": "Disconnected.",
+      "loadFailed": "Couldn’t load Instagram settings.",
+      "saveFailed": "Couldn’t save. Please try again."
     },
     "apiKeys": {
       "title": "Models",

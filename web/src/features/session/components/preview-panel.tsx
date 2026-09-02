@@ -1,7 +1,9 @@
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { IconButton } from "@/components/icon-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
@@ -14,6 +16,7 @@ import {
   isRenderableImageUrl,
   toEditableCopy,
 } from "@/features/session/components/ig-preview-mock";
+import { isConfirmSuccessStatus } from "@/features/session/session-helpers";
 import type { ConfirmSessionResponse, DraftCopy, PreviewDraft } from "@/features/session/types";
 
 type Props = {
@@ -24,6 +27,7 @@ type Props = {
   confirming: boolean;
   companyId?: string;
   canPromoteExemplar?: boolean;
+  confirmError?: string | null;
   onApply: (copy: DraftCopy) => Promise<unknown>;
   onConfirm: (copy: DraftCopy) => Promise<unknown>;
   onSavePlan: (
@@ -47,6 +51,7 @@ export function PreviewPanel({
   confirming,
   companyId,
   canPromoteExemplar = false,
+  confirmError = null,
   onApply,
   onConfirm,
   onSavePlan,
@@ -86,12 +91,6 @@ export function PreviewPanel({
 
   const dirty = !draftEquals(local, draft.copy);
   const busy = draftSaving || confirming || promoting;
-  const canConfirm = !!draft.approval_token && !confirmed && local.caption.trim().length > 0;
-  const showPromote =
-    canPromoteExemplar &&
-    !!companyId &&
-    (confirmReceipt || confirmed) &&
-    local.caption.trim().length > 0;
   const previewUrls = useMemo(() => {
     const fromMedia = [...(draft.media ?? [])]
       .sort((a, b) => a.seq - b.seq)
@@ -100,6 +99,17 @@ export function PreviewPanel({
     if (fromMedia.length > 0) return fromMedia;
     return isRenderableImageUrl(draft.image_url) ? [draft.image_url] : [];
   }, [draft.media, draft.image_url]);
+  const hasImage =
+    (draft.media ?? []).some((item) => !!(item.url || "").trim()) ||
+    !!(draft.image_url || "").trim();
+  const canConfirm =
+    !!draft.approval_token && !confirmed && local.caption.trim().length > 0 && hasImage;
+  const failedReceipt = confirmReceipt?.status === "failed";
+  const showReceipt =
+    confirmed || (!!confirmReceipt && isConfirmSuccessStatus(confirmReceipt.status));
+  const showFailed = failedReceipt && !confirmed;
+  const showPromote =
+    canPromoteExemplar && !!companyId && showReceipt && local.caption.trim().length > 0;
 
   async function handleApply() {
     if (!dirty || busy) return;
@@ -107,8 +117,8 @@ export function PreviewPanel({
   }
 
   async function handleConfirm() {
-    if (!canConfirm || busy) return;
-    await onConfirm(local);
+    if (busy) return;
+    if (showFailed || canConfirm) await onConfirm(local);
   }
 
   async function handleSaveCopy(copy: DraftCopy) {
@@ -132,6 +142,12 @@ export function PreviewPanel({
       setPromoting(false);
     }
   }
+
+  const hint = !hasImage
+    ? t("preview.gate.imageRequired")
+    : confirmError === "social_account_not_connected"
+      ? t("preview.gate.notConnected")
+      : t("preview.confirmHint");
 
   return (
     <aside className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -159,11 +175,18 @@ export function PreviewPanel({
             </p>
           </div>
         </div>
-        {dirty && !confirmed && (
-          <span className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-            {t("preview.dirty")}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {showReceipt && (
+            <span className="rounded-md border border-success/30 bg-success-soft px-2 py-0.5 text-[11px] text-success-foreground">
+              {t("preview.receipt.publishedBadge")}
+            </span>
+          )}
+          {dirty && !confirmed && (
+            <span className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+              {t("preview.dirty")}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -178,16 +201,9 @@ export function PreviewPanel({
       </div>
 
       <div className="shrink-0 border-t border-border bg-card px-4 py-3">
-        {confirmReceipt || confirmed ? (
+        {showReceipt ? (
           <div className="space-y-2">
-            <div className="rounded-xl border border-success/30 bg-success-soft px-3 py-2.5 text-sm text-success-foreground">
-              <p className="font-medium">{t("preview.confirmDone")}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {t("preview.confirmReceipt", {
-                  status: confirmReceipt?.status ?? "confirmed",
-                })}
-              </p>
-            </div>
+            <ReceiptSuccess receipt={confirmReceipt} />
             {showPromote && (
               <div className="flex flex-col gap-1.5">
                 <Button
@@ -214,28 +230,67 @@ export function PreviewPanel({
               </div>
             )}
           </div>
+        ) : showFailed ? (
+          <div className="space-y-2">
+            <Alert variant="destructive" className="border-destructive/30 bg-destructive-soft">
+              <AlertTitle>{t("preview.receipt.failedTitle")}</AlertTitle>
+              <AlertDescription>
+                <p>
+                  {confirmReceipt?.error_kind
+                    ? t(`preview.receipt.error.${confirmReceipt.error_kind}`, {
+                        defaultValue: t("preview.receipt.failedHint"),
+                      })
+                    : t("preview.receipt.failedHint")}
+                </p>
+              </AlertDescription>
+            </Alert>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                disabled={busy || !hasImage}
+                onClick={() => void handleConfirm()}
+              >
+                {confirming ? t("preview.confirmWorking") : t("preview.receipt.retry")}
+              </Button>
+            </div>
+          </div>
         ) : (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={!dirty || busy}
-              onClick={() => void handleApply()}
-            >
-              {draftSaving ? t("preview.applySaving") : t("preview.apply")}
-            </Button>
-            <Button
-              type="button"
-              disabled={!canConfirm || busy}
-              onClick={() => void handleConfirm()}
-            >
-              {confirming ? t("preview.confirmWorking") : t("preview.confirm")}
-            </Button>
+          <div className="space-y-2">
+            {confirmError === "social_account_not_connected" && (
+              <Alert variant="destructive" className="border-destructive/30 bg-destructive-soft">
+                <AlertDescription>
+                  <span>{t("preview.gate.notConnected")} </span>
+                  <Link
+                    to="/settings?tab=instagram"
+                    className="font-medium text-destructive-foreground underline-offset-4 hover:underline"
+                  >
+                    {t("preview.gate.openSettings")}
+                  </Link>
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!dirty || busy}
+                onClick={() => void handleApply()}
+              >
+                {draftSaving ? t("preview.applySaving") : t("preview.apply")}
+              </Button>
+              <Button
+                type="button"
+                disabled={!canConfirm || busy}
+                onClick={() => void handleConfirm()}
+              >
+                {confirming ? t("preview.confirmWorking") : t("preview.confirm")}
+              </Button>
+            </div>
           </div>
         )}
-        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          {t("preview.confirmHint")}
-        </p>
+        {!showReceipt && confirmError !== "social_account_not_connected" && (
+          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{hint}</p>
+        )}
       </div>
 
       {!confirmed && (
@@ -261,5 +316,39 @@ export function PreviewPanel({
         </>
       )}
     </aside>
+  );
+}
+
+function ReceiptSuccess({ receipt }: { receipt: ConfirmSessionResponse | null }) {
+  const { t } = useTranslation();
+  const published = receipt?.status === "published";
+  const permalink = receipt?.permalink;
+  return (
+    <Alert variant="success">
+      <AlertTitle>
+        {published ? t("preview.receipt.publishedTitle") : t("preview.confirmDone")}
+      </AlertTitle>
+      <AlertDescription>
+        {published ? (
+          <p>{t("preview.receipt.publishedBody")}</p>
+        ) : (
+          <p>
+            {t("preview.confirmReceipt", {
+              status: receipt?.status ?? "confirmed",
+            })}
+          </p>
+        )}
+        {published && permalink && (
+          <a
+            href={permalink}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex h-8 items-center rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-accent"
+          >
+            {t("preview.receipt.viewOnInstagram")}
+          </a>
+        )}
+      </AlertDescription>
+    </Alert>
   );
 }

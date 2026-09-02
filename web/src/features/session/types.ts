@@ -77,4 +77,5 @@ export type SessionSnapshot = {
   media?: PreviewMediaItem[];
   copy?: DraftCopy | Record<string, unknown> | null;
   platform?: string | null;
+  confirm_receipt?: ConfirmSessionResponse | null;
 };

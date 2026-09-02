@@ -29,13 +29,14 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Landing recommended-question cards | ✅ Done — empty-state cards → `sendMessage` |
 | Preview Mode (IG mock + draft editor) | ✅ Done — Edit Copy / Edit Image dialogs; multi-image carousel; mobile push pages; Confirm auto-flush |
 | Manual draft API `POST …/draft` | ✅ Done — no LLM; revision + approval_token |
-| Confirm UI → stub `/confirm` | ✅ Done — receipt status in preview panel; permalink / failed-retry UI not yet |
+| Confirm UI → stub `/confirm` | ✅ Done — published / failed / stubbed receipts; copy-only Confirm gate |
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
 **Decision (2026-09-02) — Real publish: Instagram adapter + org social accounts:** → [ADR 0022](./adr/0022-real-publish-instagram.md) · plan: [PUBLISH_PLAN.md](./PUBLISH_PLAN.md)
 
-- **Backend shipped** — `social_accounts` + editor HTTP (`GET/PUT/DELETE …/social-accounts`) + `connect-social-account` CLI; Confirm dispatches on `PUBLISH_ADAPTER` (default `stub`). Receipt UI + settings Instagram tab still pending
+- **Backend shipped** — `social_accounts` + editor HTTP (`GET/PUT/DELETE …/social-accounts`) + `connect-social-account` CLI; Confirm dispatches on `PUBLISH_ADAPTER` (default `stub`); `session.snapshot` hydrates the latest confirm receipt
+- **UI shipped** — preview receipts (`published` / `failed` / `stubbed`) + copy-only Confirm gate; editor-only `/settings?tab=instagram` (last4 only, never the raw token)
 - **`social_accounts` table** — org-scoped IG credentials, Fernet-encrypted (reuses `BYOK_ENCRYPTION_KEY` + `byok_providers` shape); HTTP or CLI-seeded token, no OAuth this slice
 - **`PUBLISH_ADAPTER=stub|instagram`** — adapter in `internal/tools/publish.py`; IG two-phase container → media_publish
 - **Copy-only drafts rejected at Confirm** (`400 image_required`); missing IG account → `400 social_account_not_connected`; receipt `stubbed` / `published` / `failed` with optional `permalink` / `error_kind`; failed publish does **not** set `session.status=confirmed`

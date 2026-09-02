@@ -7,6 +7,7 @@ import {
   asStringList,
   bumpSessionInHistory,
   EMPTY_COMPOSER_DRAFT,
+  isConfirmSuccessStatus,
   isUserFacingAgentNode,
   MAX_QUEUED_SESSION_MESSAGES,
   mergePreviewDraft,
@@ -15,6 +16,7 @@ import {
   OUTCOME_NODE,
   parseAgentProgress,
   parseBrief,
+  parseConfirmReceipt,
   parseDraftCopy,
   parseTurnDurationMs,
   previewAnchorFromActions,
@@ -91,6 +93,35 @@ describe("parseDraftCopy", () => {
       caption: "hi",
       hashtags: ["#hk"],
       cta: "go",
+    });
+  });
+});
+
+describe("confirm receipt helpers", () => {
+  it("treats stubbed and published as success", () => {
+    expect(isConfirmSuccessStatus("stubbed")).toBe(true);
+    expect(isConfirmSuccessStatus("published")).toBe(true);
+    expect(isConfirmSuccessStatus("failed")).toBe(false);
+    expect(isConfirmSuccessStatus(null)).toBe(false);
+  });
+
+  it("parses confirm receipts and drops empty optionals", () => {
+    expect(parseConfirmReceipt(null)).toBeNull();
+    expect(parseConfirmReceipt({ status: "stubbed" })).toBeNull();
+    expect(
+      parseConfirmReceipt({
+        receipt_id: "r1",
+        status: "published",
+        permalink: "https://www.instagram.com/p/ABC/",
+        error_kind: "",
+      }),
+    ).toEqual({
+      receipt_id: "r1",
+      status: "published",
+      tool_name: "publish_social_post",
+      idempotency_key: "",
+      permalink: "https://www.instagram.com/p/ABC/",
+      error_kind: null,
     });
   });
 });

@@ -216,6 +216,25 @@
     "confirmDone": "出咗",
     "confirmReceipt": "回執：{{status}}",
     "confirmHint": "Chat 入面講「可以出」唔會真係出。確認會用已儲存修訂（有未儲存改動會先自動儲存）。",
+    "gate": {
+      "imageRequired": "Instagram 出帖要有圖",
+      "notConnected": "未連接 Instagram 帳號。",
+      "openSettings": "去設定"
+    },
+    "receipt": {
+      "publishedTitle": "出咗",
+      "publishedBody": "已發到 Instagram",
+      "publishedBadge": "已出",
+      "viewOnInstagram": "喺 Instagram 睇",
+      "failedTitle": "發佈唔到",
+      "failedHint": "未出街。改好圖或帳號之後再確認。",
+      "retry": "再確認",
+      "error": {
+        "token_expired": "Token 過咗期，去設定更新之後再確認。",
+        "permission": "Instagram 權限唔夠，檢查帳號設定之後再確認。",
+        "platform_error": "Instagram 暫時處理唔到，陣間再確認。"
+      }
+    },
     "exemplar": {
       "save": "將文案儲存做語氣範例",
       "working": "儲存緊…",
@@ -268,6 +287,8 @@
     "error": {
       "saveFailed": "草稿儲存唔到喎，再試一次。",
       "confirmFailed": "確認唔到喎，再試一次。",
+      "imageRequired": "Instagram 出帖要有圖，加張圖再開確認。",
+      "notConnected": "未連接 Instagram。去公司設定貼 token。",
       "planFailed": "圖像 Plan 儲存唔到喎，再試一次。",
       "regenFailed": "再出圖失敗，再試一次。",
       "addFailed": "加圖失敗，再試一次。",
@@ -284,7 +305,8 @@
       "products": "產品",
       "members": "成員",
       "approvals": "審批",
-      "models": "Models"
+      "models": "Models",
+      "instagram": "Instagram"
     },
     "noCompany": {
       "title": "未有公司",
@@ -437,6 +459,27 @@
         "sku": "SKU",
         "note": "備註"
       }
+    },
+    "instagram": {
+      "title": "Instagram",
+      "subtitle": "Confirm 出帖會用呢個專業帳號。",
+      "igUserId": "Instagram 用戶 ID",
+      "accessToken": "Access token",
+      "expiresAt": "到期（可選）",
+      "tokenMasked": "Token",
+      "connected": "已連接",
+      "expiredTitle": "Token 過咗期",
+      "expiredBody": "更新 token 先可以再出帖。",
+      "save": "儲存",
+      "rotate": "更換 token",
+      "update": "更新 token",
+      "disconnect": "解除連接",
+      "disconnectTitle": "解除 Instagram 連接？",
+      "disconnectBody": "之後確認出街會需要重新貼 token。",
+      "saved": "已連接 Instagram。",
+      "disconnected": "已解除連接。",
+      "loadFailed": "載入唔到 Instagram 設定。",
+      "saveFailed": "儲存唔到，再試一次。"
     },
     "apiKeys": {
       "title": "Models",

@@ -834,6 +834,130 @@ describe("useSession", () => {
     expect(result.current.session?.status).toBe("confirmed");
   });
 
+  it("does not mark the session confirmed when confirm returns failed", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [],
+    });
+    apiUpdateSessionDraft.mockResolvedValue({
+      revision: 1,
+      approval_token: "tok-fail",
+      copy: { caption: "hi", hashtags: [], cta: "" },
+      image_url: "https://cdn.example/a.png",
+      platform: "instagram",
+      mode: "PREVIEW",
+    });
+    apiConfirmSession.mockResolvedValue({
+      receipt_id: "r-fail",
+      status: "failed",
+      tool_name: "publish_social_post",
+      idempotency_key: "idem-fail",
+      error_kind: "platform_error",
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+    expect(result.current.session?.status).toBe("active");
+
+    await act(async () => {
+      await result.current.updateDraft({ caption: "hi", hashtags: [], cta: "" });
+    });
+    await act(async () => {
+      await result.current.confirmPost();
+    });
+
+    expect(result.current.confirmReceipt?.status).toBe("failed");
+    expect(result.current.confirmReceipt?.error_kind).toBe("platform_error");
+    expect(result.current.session?.status).toBe("active");
+  });
+
+  it("hydrates confirm receipt permalink from session.snapshot", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW", status: "confirmed" },
+      messages: [],
+    });
+    const handlers = new Map<string, (type: string, data: Record<string, unknown>) => void>();
+    subscribeSessionEvents.mockImplementation(
+      (opts: {
+        sessionId: string;
+        onOpen?: () => void;
+        onEvent: (type: string, data: Record<string, unknown>) => void;
+      }) => {
+        handlers.set(opts.sessionId, opts.onEvent);
+        opts.onOpen?.();
+        return new Promise<void>(() => {});
+      },
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    await act(async () => {
+      handlers.get("sess-1")?.("session.snapshot", {
+        status: "confirmed",
+        confirm_receipt: {
+          receipt_id: "r-pub",
+          status: "published",
+          permalink: "https://www.instagram.com/p/ABC/",
+        },
+      });
+    });
+
+    expect(result.current.session?.status).toBe("confirmed");
+    expect(result.current.confirmReceipt).toEqual(
+      expect.objectContaining({
+        receipt_id: "r-pub",
+        status: "published",
+        permalink: "https://www.instagram.com/p/ABC/",
+      }),
+    );
+  });
+
+  it("parses permalink and error_kind from confirm.completed without treating failed as confirmed", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [],
+    });
+    const handlers = new Map<string, (type: string, data: Record<string, unknown>) => void>();
+    subscribeSessionEvents.mockImplementation(
+      (opts: {
+        sessionId: string;
+        onOpen?: () => void;
+        onEvent: (type: string, data: Record<string, unknown>) => void;
+      }) => {
+        handlers.set(opts.sessionId, opts.onEvent);
+        opts.onOpen?.();
+        return new Promise<void>(() => {});
+      },
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    await act(async () => {
+      handlers.get("sess-1")?.("confirm.completed", {
+        receipt_id: "r-fail",
+        status: "failed",
+        error_kind: "token_expired",
+      });
+    });
+    expect(result.current.confirmReceipt?.error_kind).toBe("token_expired");
+    expect(result.current.session?.status).toBe("active");
+
+    await act(async () => {
+      handlers.get("sess-1")?.("confirm.completed", {
+        receipt_id: "r-pub",
+        status: "published",
+        permalink: "https://www.instagram.com/p/XYZ/",
+      });
+    });
+    expect(result.current.confirmReceipt?.permalink).toBe("https://www.instagram.com/p/XYZ/");
+    expect(result.current.session?.status).toBe("confirmed");
+  });
+
   it("renameSession / pinSession / deleteSession update history", async () => {
     const { result } = renderHook(() => useSession("co-1"));
     await waitFor(() => expect(result.current.history).toHaveLength(1));

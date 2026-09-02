@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import pytest
@@ -259,3 +260,49 @@ async def test_confirm_failed_publish_leaves_session_active(
     assert replay.status_code == 200
     assert replay.json()["receipt_id"] == body["receipt_id"]
     assert replay.json()["error_kind"] == "platform_error"
+
+
+@pytest.mark.asyncio
+async def test_session_events_snapshot_includes_confirm_receipt(
+    client, db_session, monkeypatch
+) -> None:
+    from collections.abc import AsyncIterator
+
+    from internal.session import events as events_mod
+
+    async def _empty_subscribe(_session_id: uuid.UUID) -> AsyncIterator[dict]:
+        if False:  # pragma: no cover — make this an async generator
+            yield {}
+        return
+
+    monkeypatch.setattr(events_mod.session_event_bus, "subscribe", _empty_subscribe)
+
+    data = await register_user(client)
+    user_id = uuid.UUID(data["user"]["id"])
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    token = "snap-confirm-token-iiiiiiii"
+    session_id = await seed_preview_session(
+        db_session,
+        user_id=user_id,
+        company_id=company_id,
+        approval_token=token,
+    )
+    headers = auth_header(data["access_token"])
+    confirmed = await client.post(
+        f"/api/sessions/{session_id}/confirm",
+        headers=headers,
+        json={
+            "approval_token": token,
+            "idempotency_key": f"idem-{uuid.uuid4().hex}",
+            "platform": "stub",
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    receipt = confirmed.json()
+
+    res = await client.get(f"/api/sessions/{session_id}/events", headers=headers)
+    assert res.status_code == 200
+    data_line = next(line for line in res.text.splitlines() if line.startswith("data:"))
+    payload = json.loads(data_line.removeprefix("data:").strip())
+    assert payload["confirm_receipt"]["receipt_id"] == receipt["receipt_id"]
+    assert payload["confirm_receipt"]["status"] == "stubbed"

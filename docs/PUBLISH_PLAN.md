@@ -1,8 +1,8 @@
 # Real Publish (Instagram) — Plan
 
-Status: **backend shipped (2026-09-02)**; receipt / Instagram settings UI still pending — see
-[ADR 0022](./adr/0022-real-publish-instagram.md) + STATUS entry. This document is the
-working design; the ADR is the durable record.
+Status: **backend + SPA shipped (2026-09-02)**; live Instagram acceptance is still
+manual — see [ADR 0022](./adr/0022-real-publish-instagram.md) + STATUS entry. This
+document is the working design; the ADR is the durable record.
 
 Scope: upgrade `POST /api/sessions/{id}/confirm` from the stub adapter to a real
 Instagram publish via Meta Graph API — org-scoped credentials in PostgreSQL, a
@@ -21,16 +21,15 @@ Zero LLM anywhere on the path ([ADR 0003](./adr/0003-confirm-without-llm.md)).
 | REST contracts | `schemas/session.py` | `ConfirmSessionRequest` / `ConfirmSessionResponse` |
 | SSE catalog | `schemas/contracts.py` | `ConfirmCompletedData` mapped in `EVENT_PAYLOAD_MODELS` |
 | TS mirrors | `web/src/features/session/generated/` | Generated from `schemas/` via `scripts/typescript_gen` — never hand-edit |
-| FE consumers | `web/src/features/session/use-session.ts`, `components/preview-panel.tsx` | `confirmPost` + `confirm.completed` handler; receipt block shows `status` only today |
+| FE consumers | `web/src/features/session/use-session.ts`, `components/preview-panel.tsx` | `confirmPost` + `confirm.completed` / snapshot hydrate; published / failed / stubbed receipts |
 | Crypto precedent | `internal/llm/keys.py` | Fernet under `BYOK_ENCRYPTION_KEY`; `encrypt_key` / `decrypt_key` / `mask_key` reused as-is |
 | CLI precedent | `cmd/worker/main.py` `set-platform-role` | Bootstrap-only admin command pattern |
 
-### Still open (UI)
+### Still open
 
-1. Receipt panel does not yet render `permalink` / `error_kind` or a retry CTA (still shows stub `status` only).
-2. Company settings Instagram tab is drawn in Penpot + HTTP exists; the SPA tab is not wired.
+Live Instagram acceptance (public HTTPS image + `PUBLISH_ADAPTER=instagram`) stays manual — not CI.
 
-Backend gaps from the original review (credential store, adapter seam, status vocabulary, copy-only 400) are shipped.
+Backend + SPA from the original review (credential store, adapter seam, status vocabulary, copy-only 400, receipt panel, settings tab) are shipped.
 
 ---
 
@@ -221,7 +220,7 @@ row (`status` + `response.permalink` / `response.error_kind`) — same source as
 2. `feat(db)` — `social_accounts` migration + model + repos + `connect-social-account` CLI (**done**)
 3. `feat(publish)` — `internal/tools/publish.py` seam + stub move + `PUBLISH_ADAPTER` flag (**done**)
 4. `feat(publish)` — Instagram adapter + handler wiring + status machine + copy-only 400 (**done**)
-5. `feat(web)` — receipt panel: permalink / failure reason / retry hint; settings Instagram tab
+5. `feat(web)` — receipt panel: permalink / failure reason / retry hint; settings Instagram tab (**this slice**)
 6. `test(publish)` — mock adapter coverage + contracts regen (**done**); live acceptance still manual
 
 ## 9. Deferred (explicit non-goals)

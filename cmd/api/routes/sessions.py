@@ -601,6 +601,9 @@ async def session_events(
         "platform": platform,
         "interrupted": interrupted,
     }
+    receipt_row = await repos.get_latest_publish_receipt(db, session.id)
+    if receipt_row:
+        snapshot_data["confirm_receipt"] = _confirm_response(receipt_row).model_dump(mode="json")
 
     async def event_stream() -> AsyncIterator[str]:
         yield format_sse("session.snapshot", snapshot_data)
