@@ -14,7 +14,7 @@ const { api } = vi.hoisted(() => ({
 
 vi.mock("react-i18next", () => {
   const t = (key: string) => key;
-  return { useTranslation: () => ({ t }) };
+  return { useTranslation: () => ({ t, i18n: { language: "en" } }) };
 });
 
 vi.mock("@/context/auth-context", () => ({
@@ -112,5 +112,34 @@ describe("InstagramPanel", () => {
     });
     expect(screen.getByText("••••ab12")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("secret-token-value")).not.toBeInTheDocument();
+  });
+
+  it("saves a picked expiry as an ISO timestamp for that local date", async () => {
+    const user = userEvent.setup();
+    api.apiListSocialAccounts.mockResolvedValue([]);
+    api.apiUpsertInstagramAccount.mockResolvedValue(connected);
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByLabelText("settings.instagram.igUserId")).toBeInTheDocument();
+    });
+    await user.type(screen.getByLabelText("settings.instagram.igUserId"), connected.ig_user_id);
+    await user.type(screen.getByLabelText("settings.instagram.accessToken"), "secret-token-value");
+    await user.click(screen.getByLabelText("settings.instagram.expiresAt"));
+    const today = await waitFor(() => {
+      const button = document.querySelector("[data-today] button");
+      expect(button).toBeTruthy();
+      return button as HTMLElement;
+    });
+    await user.click(today);
+    await user.click(screen.getByRole("button", { name: "settings.instagram.save" }));
+    await waitFor(() => {
+      expect(api.apiUpsertInstagramAccount).toHaveBeenCalled();
+    });
+    const payload = api.apiUpsertInstagramAccount.mock.calls[0]?.[2] as {
+      expires_at: string | null;
+    };
+    expect(payload.expires_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const stamp = new Date(payload.expires_at as string);
+    expect(Number.isNaN(stamp.getTime())).toBe(false);
   });
 });

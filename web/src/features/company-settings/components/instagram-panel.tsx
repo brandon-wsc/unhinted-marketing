@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { DatePicker, fromLocalDate, toLocalDate } from "@/components/date-picker";
 import { FormField } from "@/components/form-field";
 import { PasswordBox } from "@/components/password-box";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -35,31 +36,15 @@ function isExpired(expiresAt: string | null): boolean {
   return !Number.isNaN(stamp.getTime()) && stamp.getTime() <= Date.now();
 }
 
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return "";
-  const stamp = new Date(iso);
-  if (Number.isNaN(stamp.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())}T${pad(stamp.getHours())}:${pad(stamp.getMinutes())}`;
-}
-
-function fromDatetimeLocal(raw: string): string | null {
-  const value = raw.trim();
-  if (!value) return null;
-  const stamp = new Date(value);
-  if (Number.isNaN(stamp.getTime())) return null;
-  return stamp.toISOString();
-}
-
 export function InstagramPanel({ companyId }: InstagramPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [account, setAccount] = useState<SocialAccountItem | null>(null);
   const [igUserId, setIgUserId] = useState("");
   const [token, setToken] = useState("");
-  const [expiresLocal, setExpiresLocal] = useState("");
+  const [expiresDate, setExpiresDate] = useState<Date | undefined>(undefined);
   const [editing, setEditing] = useState(false);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +58,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
       const row = items.find((item) => item.platform === "instagram") ?? null;
       setAccount(row);
       setIgUserId(row?.ig_user_id ?? "");
-      setExpiresLocal(toDatetimeLocal(row?.expires_at ?? null));
+      setExpiresDate(toLocalDate(row?.expires_at ?? null));
       setToken("");
       setEditing(!row);
     } catch (err) {
@@ -96,8 +81,12 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
     if (!account?.expires_at) return t("common.notAvailable");
     const stamp = new Date(account.expires_at);
     if (Number.isNaN(stamp.getTime())) return t("common.notAvailable");
-    return stamp.toLocaleString();
-  }, [account?.expires_at, t]);
+    return stamp.toLocaleDateString(i18n.language === "en" ? "en" : "zh-HK", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  }, [account?.expires_at, i18n.language, t]);
 
   async function onSave() {
     if (!igUserId.trim() || token.trim().length < 8) return;
@@ -108,11 +97,11 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
       const row = await apiUpsertInstagramAccount(accessToken, companyId, {
         ig_user_id: igUserId.trim(),
         access_token: token.trim(),
-        expires_at: fromDatetimeLocal(expiresLocal),
+        expires_at: fromLocalDate(expiresDate),
       });
       setAccount(row);
       setIgUserId(row.ig_user_id);
-      setExpiresLocal(toDatetimeLocal(row.expires_at));
+      setExpiresDate(toLocalDate(row.expires_at));
       setToken("");
       setEditing(false);
       setFlash("saved");
@@ -135,7 +124,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
       setAccount(null);
       setIgUserId("");
       setToken("");
-      setExpiresLocal("");
+      setExpiresDate(undefined);
       setEditing(true);
       setDisconnectOpen(false);
       setFlash("disconnected");
@@ -227,12 +216,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
               autoComplete="off"
             />
             <FormField id="ig-expires" label={t("settings.instagram.expiresAt")}>
-              <Input
-                id="ig-expires"
-                type="datetime-local"
-                value={expiresLocal}
-                onChange={(e) => setExpiresLocal(e.target.value)}
-              />
+              <DatePicker id="ig-expires" value={expiresDate} onChange={setExpiresDate} />
             </FormField>
           </div>
         )}

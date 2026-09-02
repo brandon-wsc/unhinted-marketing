@@ -14,6 +14,8 @@
     "save": "Save",
     "saving": "Saving…",
     "close": "Close",
+    "clear": "Clear",
+    "datePlaceholder": "YYYY-MM-DD",
     "noMatches": "No matches"
   },
   "header": {
