@@ -13,3 +13,5 @@ def _disable_llm_record_persistence(monkeypatch: pytest.MonkeyPatch) -> None:
     # Avoid FastEmbed model download in unit/CI; opt in per-test if needed.
     monkeypatch.setattr(settings, "semantic_router_enabled", False)
     monkeypatch.setattr(settings, "product_embeddings_enabled", False)
+    # ADR 0022: never inherit PUBLISH_ADAPTER=instagram from a local .env.
+    monkeypatch.setattr(settings, "publish_adapter", "stub")

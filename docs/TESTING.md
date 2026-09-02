@@ -38,11 +38,12 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 1. `GET /api/health`
 2. Auth: register → login → me → refresh → logout (+ duplicate email, bad password, missing Bearer)
 3. Sessions CRUD + ownership `403` + **teammate isolation** (same org, different `user_id` — `tests/api/test_session_isolation.py`)
-4. Confirm stub: invalid `approval_token` → 400; idempotency replay
+4. Confirm: invalid `approval_token` → 400; idempotency replay; copy-only → `400 image_required`; Instagram adapter with no account → `400 social_account_not_connected`; failed publish leaves `session.status` unconfirmed (`tests/api/test_confirm.py`). Adapter Graph calls mocked in `tests/unit/test_publish.py` (never live Meta). Tests pin `PUBLISH_ADAPTER=stub` so a local `.env` cannot reach Meta.
 5. Signals / questions: auth required
 6. Org invites: create → list → revoke → accept; email bind; bootstrap replace (ADR 0013); 409 only for a real team (`tests/api/test_company_invites.py`)
 7. Product proposals (K6): Mine propose → list → approve upserts org / reject leaves org empty; 409 pending SKU; cannot propose org or others' Mine; member cannot approve; reject then re-propose; proposer can cancel then re-propose; snapshot frozen after propose; approve replaces existing org SKU (`tests/api/test_product_proposals.py`)
 8. Product catalog: PATCH keeps extra import columns; create/patch SKU clash → 409 `sku_taken` + `suggested_sku` (no silent overwrite) (`tests/api/test_company_products.py`)
+9. Social accounts (ADR 0022): editor CRUD; member 403; response never leaks the raw token (`tests/api/test_company_social.py`)
 
 Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 

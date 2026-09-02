@@ -60,3 +60,5 @@ class PublishSocialPostResponse(BaseModel):
     tool_name: str = "publish_social_post"
     idempotency_key: str
     platform: str = "stub"
+    permalink: str | None = None
+    error_kind: str | None = None

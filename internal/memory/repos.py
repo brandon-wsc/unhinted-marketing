@@ -27,6 +27,7 @@ from internal.memory.models import (
     RecommendedQuestions,
     Session,
     SessionMessage,
+    SocialAccount,
     ToolReceipt,
     User,
 )
@@ -1573,3 +1574,71 @@ async def list_byok_providers_by_ids(
     )
     result = await db.scalars(stmt)
     return list(result.all())
+
+
+async def get_social_account(
+    db: AsyncSession, company_id: uuid.UUID, platform: str = "instagram"
+) -> SocialAccount | None:
+    return await db.scalar(
+        select(SocialAccount).where(
+            SocialAccount.company_id == company_id,
+            SocialAccount.platform == platform,
+        )
+    )
+
+
+async def list_social_accounts(
+    db: AsyncSession, company_id: uuid.UUID
+) -> list[SocialAccount]:
+    stmt = (
+        select(SocialAccount)
+        .where(SocialAccount.company_id == company_id)
+        .order_by(SocialAccount.created_at.asc())
+    )
+    result = await db.scalars(stmt)
+    return list(result.all())
+
+
+async def upsert_social_account(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    platform: str,
+    ig_user_id: str,
+    access_token_encrypted: str,
+    token_last4: str,
+    expires_at: datetime | None,
+    created_by: uuid.UUID | None,
+) -> SocialAccount:
+    row = await get_social_account(db, company_id, platform)
+    if row is None:
+        row = SocialAccount(
+            company_id=company_id,
+            platform=platform,
+            ig_user_id=ig_user_id,
+            access_token_encrypted=access_token_encrypted,
+            token_last4=token_last4,
+            expires_at=expires_at,
+            created_by=created_by,
+            last_error_kind=None,
+        )
+        db.add(row)
+    else:
+        row.ig_user_id = ig_user_id
+        row.access_token_encrypted = access_token_encrypted
+        row.token_last4 = token_last4
+        row.expires_at = expires_at
+        row.last_error_kind = None
+        row.last_verified_at = None
+    await db.flush()
+    return row
+
+
+async def delete_social_account(
+    db: AsyncSession, company_id: uuid.UUID, platform: str = "instagram"
+) -> bool:
+    row = await get_social_account(db, company_id, platform)
+    if row is None:
+        return False
+    await db.delete(row)
+    return True

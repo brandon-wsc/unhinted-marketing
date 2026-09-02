@@ -408,6 +408,41 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/companies/{company_id}/social-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Accounts */
+        get: operations["list_accounts_api_companies__company_id__social_accounts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/social-accounts/{platform}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Account */
+        put: operations["upsert_account_api_companies__company_id__social_accounts__platform__put"];
+        post?: never;
+        /** Disconnect Account */
+        delete: operations["disconnect_account_api_companies__company_id__social_accounts__platform__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/invites/{token}": {
         parameters: {
             query?: never;
@@ -886,7 +921,7 @@ export type paths = {
         put?: never;
         /**
          * Confirm Session
-         * @description Traditional Confirm handler — no LLM. Stub platform adapter writes tool_receipts.
+         * @description Traditional Confirm handler — no LLM. Adapter writes tool_receipts (ADR 0003 / 0022).
          */
         post: operations["confirm_session_api_sessions__session_id__confirm_post"];
         delete?: never;
@@ -1416,6 +1451,10 @@ export type components = {
             tool_name: string;
             /** Idempotency Key */
             idempotency_key: string;
+            /** Permalink */
+            permalink?: string | null;
+            /** Error Kind */
+            error_kind?: string | null;
         };
         /** CreateSessionRequest */
         CreateSessionRequest: {
@@ -2537,6 +2576,58 @@ export type components = {
              * Format: date-time
              */
             ingested_at: string;
+        };
+        /** SocialAccountItem */
+        SocialAccountItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /**
+             * Platform
+             * @constant
+             */
+            platform: "instagram";
+            /** Ig User Id */
+            ig_user_id: string;
+            /** Token Last4 */
+            token_last4: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Last Verified At */
+            last_verified_at?: string | null;
+            /** Last Error Kind */
+            last_error_kind?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** SocialAccountList */
+        SocialAccountList: {
+            /** Items */
+            items?: components["schemas"]["SocialAccountItem"][];
+        };
+        /** SocialAccountUpsert */
+        SocialAccountUpsert: {
+            /** Ig User Id */
+            ig_user_id: string;
+            /** Access Token */
+            access_token: string;
+            /** Expires At */
+            expires_at?: string | null;
         };
         /** StopSessionResponse */
         StopSessionResponse: {
@@ -3726,6 +3817,103 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ByokRoutingResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_accounts_api_companies__company_id__social_accounts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialAccountList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_account_api_companies__company_id__social_accounts__platform__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                platform: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SocialAccountUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialAccountItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_account_api_companies__company_id__social_accounts__platform__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                platform: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

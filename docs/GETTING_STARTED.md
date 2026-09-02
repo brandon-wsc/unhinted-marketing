@@ -78,6 +78,9 @@ python -m cmd.worker all
 python -m cmd.worker reset-signals
 python -m cmd.worker reset-signals --reingest
 
+# Org Instagram token for Confirm (ADR 0022; never prints the raw token)
+python -m cmd.worker connect-social-account --company UUID --ig-user-id ID --token TOKEN
+
 # Background scheduler (hourly ingest, 12h questions)
 python -m cmd.scheduler --once
 python -m cmd.scheduler
@@ -122,7 +125,9 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 | POST | `/api/sessions/{id}/stop` | Discard in-flight or parked turn |
 | POST | `/api/sessions/{id}/draft` | Manual draft revision (no LLM) |
 | GET | `/api/sessions/{id}/events` | SSE stream (snapshot includes `interrupted` for Generate-image CTA) |
-| POST | `/api/sessions/{id}/confirm` | Confirm stub publish |
+| POST | `/api/sessions/{id}/confirm` | Confirm publish (stub by default; Instagram when `PUBLISH_ADAPTER=instagram`) |
+| GET | `/api/companies/{id}/social-accounts` | List org Instagram credentials (editor; `token_last4` only) |
+| PUT / DELETE | `/api/companies/{id}/social-accounts/instagram` | Save or disconnect the org IG token |
 
 ### Health
 

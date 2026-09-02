@@ -119,6 +119,8 @@ class ConfirmCompletedData(BaseModel):
     status: str = "stubbed"
     tool_name: str = "publish_social_post"
     idempotency_key: str = ""
+    permalink: str | None = None
+    error_kind: str | None = None
 
 
 class SignalsUpdatedData(BaseModel):

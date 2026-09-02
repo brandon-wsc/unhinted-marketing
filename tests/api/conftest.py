@@ -40,6 +40,7 @@ TRUNCATE_TABLES = (
     "byok_routing",
     "byok_models",
     "byok_providers",
+    "social_accounts",
     "refresh_tokens",
     "organization_members",
     "entities",
@@ -101,6 +102,7 @@ async def clean_db(engine, migrated_database: str, monkeypatch: pytest.MonkeyPat
     from internal.llm.probes import reset_model_list_cache
 
     monkeypatch.setattr(settings, "byok_encryption_key", Fernet.generate_key().decode())
+    monkeypatch.setattr(settings, "publish_adapter", "stub")
     reset_auth_rate_limiter()
     reset_model_list_cache()
     async with engine.begin() as conn:

@@ -11,6 +11,7 @@ from schemas.contracts import (
 )
 from schemas.tools import (
     PublishSocialPostRequest,
+    PublishSocialPostResponse,
     QueryMarketTrendsRequest,
     QueryMarketTrendsResponse,
 )
@@ -93,6 +94,23 @@ def test_publish_social_post_ok() -> None:
     assert body.draft_copy.caption == "hello"
     assert body.model_dump(by_alias=True)["copy"]["caption"] == "hello"
     assert body.revision == 2
+    receipt = PublishSocialPostResponse(
+        receipt_id=uuid.uuid4(),
+        status="published",
+        idempotency_key="idem-key-12",
+        platform="instagram",
+        permalink="https://www.instagram.com/p/ABC/",
+        error_kind=None,
+    )
+    assert receipt.permalink is not None
+    failed = PublishSocialPostResponse(
+        receipt_id=uuid.uuid4(),
+        status="failed",
+        idempotency_key="idem-key-12",
+        platform="instagram",
+        error_kind="token_expired",
+    )
+    assert failed.error_kind == "token_expired"
 
 
 def test_export_contracts_respects_export_root(tmp_path, monkeypatch) -> None:

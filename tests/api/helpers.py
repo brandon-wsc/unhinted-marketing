@@ -91,8 +91,10 @@ async def seed_preview_session(
     approval_token: str = "test-approval-token-001",
     revision: int = 1,
     draft_created_at: datetime | None = None,
+    with_media: bool = True,
 ) -> uuid.UUID:
     """Insert a PREVIEW-mode session + draft without LangGraph."""
+    image_url = "placeholder://seed" if with_media else None
     session = Session(
         user_id=user_id,
         company_id=company_id,
@@ -102,29 +104,33 @@ async def seed_preview_session(
             "revision": revision,
             "approval_token": approval_token,
             "draft": {"caption": "seed", "hashtags": [], "cta": ""},
-            "image_url": "placeholder://seed",
+            "image_url": image_url,
         },
     )
     db_session.add(session)
     await db_session.flush()
-    image = await repos.insert_preview_image(
-        db_session,
-        session_id=session.id,
-        url="placeholder://seed",
-        plan={"prompt": "seed plan", "format": "single"},
-        format="single",
-        role="primary",
-        seq=0,
-        status="ready",
-    )
+    media_ids: list[uuid.UUID] = []
+    image_plan = {"prompt": "seed plan", "format": "single"} if with_media else None
+    if with_media:
+        image = await repos.insert_preview_image(
+            db_session,
+            session_id=session.id,
+            url="placeholder://seed",
+            plan={"prompt": "seed plan", "format": "single"},
+            format="single",
+            role="primary",
+            seq=0,
+            status="ready",
+        )
+        media_ids = [image.id]
     await repos.upsert_preview_draft(
         db_session,
         session_id=session.id,
         revision=revision,
         copy={"caption": "seed", "hashtags": [], "cta": ""},
-        image_url="placeholder://seed",
-        image_plan={"prompt": "seed plan", "format": "single"},
-        media_ids=[image.id],
+        image_url=image_url,
+        image_plan=image_plan,
+        media_ids=media_ids,
         source_signal_ids=[],
         approval_token=approval_token,
         platform="instagram",

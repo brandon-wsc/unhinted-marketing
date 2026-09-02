@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-08-31  
+> **Last updated:** 2026-09-02  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -29,15 +29,16 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Landing recommended-question cards | ✅ Done — empty-state cards → `sendMessage` |
 | Preview Mode (IG mock + draft editor) | ✅ Done — Edit Copy / Edit Image dialogs; multi-image carousel; mobile push pages; Confirm auto-flush |
 | Manual draft API `POST …/draft` | ✅ Done — no LLM; revision + approval_token |
-| Confirm UI → stub `/confirm` | ✅ Done — receipt status in preview panel |
+| Confirm UI → stub `/confirm` | ✅ Done — receipt status in preview panel; permalink / failed-retry UI not yet |
 | Chat history (hydrate + Gemini sidebar) | ✅ Done — list / pin / rename / delete; desktop sidebar + mobile record page |
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
 **Decision (2026-09-02) — Real publish: Instagram adapter + org social accounts:** → [ADR 0022](./adr/0022-real-publish-instagram.md) · plan: [PUBLISH_PLAN.md](./PUBLISH_PLAN.md)
 
-- **`social_accounts` table** — org-scoped IG credentials, Fernet-encrypted (reuses `BYOK_ENCRYPTION_KEY` + `byok_providers` shape); CLI-seeded token, no OAuth flow this slice
-- **`PUBLISH_ADAPTER=stub|instagram`** — default stub; adapter lives in `internal/tools/publish.py` against the locked `schemas/tools.py` shapes; IG two-phase container → media_publish
-- **Copy-only drafts rejected at Confirm** (400 — IG requires media); receipt status machine `pending` / `published` / `failed` with permalink; SSE `confirm.completed` carries real status
+- **Backend shipped** — `social_accounts` + editor HTTP (`GET/PUT/DELETE …/social-accounts`) + `connect-social-account` CLI; Confirm dispatches on `PUBLISH_ADAPTER` (default `stub`). Receipt UI + settings Instagram tab still pending
+- **`social_accounts` table** — org-scoped IG credentials, Fernet-encrypted (reuses `BYOK_ENCRYPTION_KEY` + `byok_providers` shape); HTTP or CLI-seeded token, no OAuth this slice
+- **`PUBLISH_ADAPTER=stub|instagram`** — adapter in `internal/tools/publish.py`; IG two-phase container → media_publish
+- **Copy-only drafts rejected at Confirm** (`400 image_required`); missing IG account → `400 social_account_not_connected`; receipt `stubbed` / `published` / `failed` with optional `permalink` / `error_kind`; failed publish does **not** set `session.status=confirmed`
 - **Boundaries unchanged** — Confirm-only publish ([ADR 0003](./adr/0003-confirm-without-llm.md)); per-revision `approval_token`; user/session-scoped idempotency
 
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
@@ -462,7 +463,7 @@ unhinted-marketing/
 | `APP_ENV` | `development` (default) or `production` — production refuses weak JWT and a missing/invalid `BYOK_ENCRYPTION_KEY` |
 | `ALLOW_INSECURE_JWT` | Escape hatch for local/tests only (`true` skips JWT secret check) |
 | `JWT_SECRET` | Sign access/refresh tokens — **≥32 chars + unique** (prod rejects the published `.env.example` default) |
-| `BYOK_ENCRYPTION_KEY` | Fernet KEK for org provider keys at rest ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md)). Required in production; generate with `Fernet.generate_key()` |
+| `BYOK_ENCRYPTION_KEY` | Fernet KEK for org provider keys **and** Instagram tokens at rest ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md), [ADR 0022](./adr/0022-real-publish-instagram.md)). Required in production; generate with `Fernet.generate_key()` |
 | `AUTH_RATE_LIMIT_ENABLED` | Rate-limit `/api/auth/register|login|refresh` (default true) |
 | `AUTH_RATE_LIMIT_MAX` | Max requests per client IP per window (default 30) |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Sliding window length (default 60) |
@@ -477,7 +478,9 @@ unhinted-marketing/
 | `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `gpt-4o-mini`, `deepseek/deepseek-v4-flash-0731`) |
 | `LLM_IMAGE_MODEL` | Image-capable id (e.g. `dall-e-3` / OpenRouter image model). Unset with credentials → error on gen; `placeholder` = mock URL |
 | `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |
-| `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`) |
+| `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`). Instagram publish needs a Meta-reachable HTTPS URL (local MinIO is not) |
+| `PUBLISH_ADAPTER` | Confirm adapter: `stub` (default, never hits Meta) or `instagram` ([ADR 0022](./adr/0022-real-publish-instagram.md)) |
+| `META_GRAPH_API_VERSION` | Graph API version pin (default `v22.0`) |
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |
 | `LLM_RECORD_ENABLED` | Persist every LLM call to `llm_call_records` (default true; [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | `QUESTION_CACHE_TTL_HOURS` | Recommended questions cache (default 12) |
@@ -518,7 +521,7 @@ From ROADMAP; current completion:
 3. User can register, login, access protected dashboard — ✅  
 4. Chat → can/cannot recommendation → preview — ✅ API; ✅ chat/brief/preview UI  
 5. Unlimited preview revisions + reviewer gate — ✅ API (AI revise); ✅ UI + manual `POST /draft`  
-6. Confirm posts via platform API + receipt — 🟡 stub confirm + UI receipt; real publish **in progress** ([ADR 0022](./adr/0022-real-publish-instagram.md))  
+6. Confirm posts via platform API + receipt — 🟡 backend Instagram adapter + org `social_accounts` shipped (default stub); receipt / settings UI still stub ([ADR 0022](./adr/0022-real-publish-instagram.md))  
 7. Claims traceable to `source_signal_ids` — ✅ session grounding in graph; ⬜ UI trace links  
 
 ---

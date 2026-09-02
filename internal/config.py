@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     )
     semantic_router_score_threshold: float = 0.5
 
+    # Real publish (ADR 0022) — stub never hits Meta; instagram uses social_accounts
+    publish_adapter: str = "stub"  # stub | instagram
+    meta_graph_api_version: str = "v22.0"
+
     # Product catalog embeddings (COLLECT K4) — same FastEmbed family as semantic gate
     product_embeddings_enabled: bool = True
     # Empty → reuse semantic_router_model

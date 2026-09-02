@@ -1,6 +1,6 @@
 # Real Publish (Instagram) — Plan
 
-Status: **design locked via Q&A (2026-09-02), ADR written** — see
+Status: **backend shipped (2026-09-02)**; receipt / Instagram settings UI still pending — see
 [ADR 0022](./adr/0022-real-publish-instagram.md) + STATUS entry. This document is the
 working design; the ADR is the durable record.
 
@@ -15,7 +15,7 @@ Zero LLM anywhere on the path ([ADR 0003](./adr/0003-confirm-without-llm.md)).
 
 | Piece | File | Notes |
 |-------|------|-------|
-| Confirm handler | `cmd/api/routes/sessions.py` `confirm_session` | Validates `approval_token` against `preview_drafts`, enforces user/session-scoped idempotency (IDOR-safe), writes `tool_receipts` with `status="stubbed"`, sets `session.status="confirmed"`, publishes SSE `confirm.completed` |
+| Confirm handler | `cmd/api/routes/sessions.py` `confirm_session` | Validates `approval_token`, user/session-scoped idempotency, copy-only `400 image_required`; dispatches `internal/tools/publish.py`; writes `tool_receipts` (`stubbed` / `published` / `failed`); `session.status="confirmed"` only on success; SSE `confirm.completed` carries `permalink` / `error_kind` |
 | Receipt store | `internal/memory/models.py` `ToolReceipt` | `status String(40)` + `request` / `response` JSONB — **no migration needed**; permalink / post id / error go into `response` |
 | Tool contracts | `schemas/tools.py` | `PublishSocialPostRequest` / `PublishSocialPostResponse` already locked; request already carries `image_url` |
 | REST contracts | `schemas/session.py` | `ConfirmSessionRequest` / `ConfirmSessionResponse` |
@@ -25,16 +25,12 @@ Zero LLM anywhere on the path ([ADR 0003](./adr/0003-confirm-without-llm.md)).
 | Crypto precedent | `internal/llm/keys.py` | Fernet under `BYOK_ENCRYPTION_KEY`; `encrypt_key` / `decrypt_key` / `mask_key` reused as-is |
 | CLI precedent | `cmd/worker/main.py` `set-platform-role` | Bootstrap-only admin command pattern |
 
-### What is missing
+### Still open (UI)
 
-1. **No credential store for platforms.** Env vars can carry one tenant's account only;
-   a multi-org product needs per-org tokens at rest (same problem BYOK solved in ADR 0020).
-2. **No adapter layer.** The handler inline-writes a stub receipt; there is no seam to
-   swap in a real platform call.
-3. **No status vocabulary.** Receipts only know `"stubbed"`; the UI cannot distinguish
-   published / failed / why.
-4. **Copy-only drafts are publishable in stub.** IG's Content Publishing API requires
-   media — this must become a hard 400, not a silent success.
+1. Receipt panel does not yet render `permalink` / `error_kind` or a retry CTA (still shows stub `status` only).
+2. Company settings Instagram tab is drawn in Penpot + HTTP exists; the SPA tab is not wired.
+
+Backend gaps from the original review (credential store, adapter seam, status vocabulary, copy-only 400) are shipped.
 
 ---
 
@@ -206,12 +202,14 @@ row (`status` + `response.permalink` / `response.error_kind`) — same source as
 ## 7. Testing
 
 - **Unit (mock httpx):** two-phase success, token expired, permission denied,
-  platform 5xx / timeout, copy-only rejection, no-account rejection, idempotent
-  replay returns the same receipt, failed confirm leaves `session.status` untouched.
-- **API integration (tests/api):** confirm handler on the stub adapter stays green
-  unchanged.
+  platform 5xx / timeout, non-http image → `platform_error`, no-account
+  `PublishPreconditionError` (`tests/unit/test_publish.py`). Copy-only 400, no-account
+  400, idempotent replay, and failed confirm leaving `session.status` untouched are
+  API tests (`tests/api/test_confirm.py`).
+- **API integration (tests/api):** stub adapter stays green; social-account CRUD never
+  leaks the raw token (`tests/api/test_company_social.py`).
 - **Contracts:** `export_contracts` output committed; schema tests in
-  `tests/unit/test_schemas_tools.py` / `test_schemas_session.py` updated.
+  `tests/unit/test_schemas_session.py` / `test_schemas_contracts.py` / `test_schemas_social.py`.
 - **Live acceptance (manual, not CI):** curl flow question → draft → image → confirm
   → real IG post + permalink in receipt. Requires tunnel/real S3 for media.
 
@@ -220,11 +218,11 @@ row (`status` + `response.permalink` / `response.error_kind`) — same source as
 ## 8. PR slicing
 
 1. `docs(adr)` — ADR 0022 + STATUS (**done**: `docs/real-publish-adr`)
-2. `feat(db)` — `social_accounts` migration + model + repos + `connect-social-account` CLI
-3. `feat(publish)` — `internal/tools/publish.py` seam + stub move + `PUBLISH_ADAPTER` flag
-4. `feat(publish)` — Instagram adapter + handler wiring + status machine + copy-only 400
-5. `feat(web)` — receipt panel: permalink / failure reason / retry hint
-6. `test(publish)` — mock adapter coverage + contracts regen + live acceptance notes
+2. `feat(db)` — `social_accounts` migration + model + repos + `connect-social-account` CLI (**done**)
+3. `feat(publish)` — `internal/tools/publish.py` seam + stub move + `PUBLISH_ADAPTER` flag (**done**)
+4. `feat(publish)` — Instagram adapter + handler wiring + status machine + copy-only 400 (**done**)
+5. `feat(web)` — receipt panel: permalink / failure reason / retry hint; settings Instagram tab
+6. `test(publish)` — mock adapter coverage + contracts regen (**done**); live acceptance still manual
 
 ## 9. Deferred (explicit non-goals)
 

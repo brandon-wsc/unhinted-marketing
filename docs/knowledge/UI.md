@@ -83,7 +83,7 @@ UserMenu
 | Session chat | Spoken SKU/price (no form) | User × New | current user | shipped; **private** per user |
 | Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** ✅ |
 | **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6** ✅ |
-| **Instagram** | `ig_user_id` + long-lived token (Fernet) + optional `expires_at`; show `token_last4`; rotate / disconnect | Org → `social_accounts` | owner/admin | **ADR 0022** drawn; not shipped |
+| **Instagram** | `ig_user_id` + long-lived token (Fernet) + optional `expires_at`; show `token_last4`; rotate / disconnect | Org → `social_accounts` | owner/admin | **ADR 0022** HTTP shipped; settings tab UI not |
 
 **Not collected in UI (MVP):** per-company persona CRUD, offer-snippet dedicated page, brand PDF upload, pain points, market signals, platform craft ([VOICE.md](../VOICE.md)).
 
