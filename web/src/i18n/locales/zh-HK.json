@@ -484,7 +484,7 @@
       "saveFailed": "儲存唔到，再試一次。",
       "connect": "連接 Instagram",
       "connectingTitle": "連接緊 Instagram…",
-      "connectingBody": "喺新視窗完成授權之後，呢度會自動更新。",
+      "connectingBody": "喺新視窗完成授權之後，呢度會自動更新。卡住可以取消再試。",
       "oauthFailed": "連接失敗，請再試一次。",
       "oauthAborted": "授權已取消或逾時，請重新連接。",
       "oauthNotConfigured": "仲未設定 Meta OAuth（META_APP_ID / META_APP_SECRET）。"

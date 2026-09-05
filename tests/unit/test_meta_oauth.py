@@ -16,7 +16,6 @@ from internal.auth.meta_oauth import (
     parse_state,
     start_oauth,
 )
-from internal.llm.keys import encrypt_key
 from internal.memory.models import SocialAccount
 
 IG_USER = "17841400000000"
@@ -182,6 +181,23 @@ async def test_exchange_code_reports_missing_scopes(monkeypatch: pytest.MonkeyPa
         db, code="code", state=f"{row.id}:{started.connect_state}", csrf_token=started.csrf_token
     )
     assert result.missing_scopes == ["instagram_content_publish", "pages_show_list"]
+
+
+async def test_pending_connect_is_stale(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure(monkeypatch)
+    from datetime import UTC, datetime, timedelta
+
+    from internal.auth.meta_oauth import (
+        OAUTH_PENDING_TTL,
+        _encrypt_connect_state,
+        pending_connect_is_stale,
+    )
+
+    blob = _encrypt_connect_state("row", "verifier", "csrf")
+    assert pending_connect_is_stale(blob) is False
+    later = datetime.now(UTC) + OAUTH_PENDING_TTL + timedelta(seconds=1)
+    assert pending_connect_is_stale(blob, now=later) is True
+    assert pending_connect_is_stale("not-a-blob") is True
 
 
 async def test_exchange_code_rejects_stale_state(monkeypatch: pytest.MonkeyPatch) -> None:

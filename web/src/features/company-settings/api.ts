@@ -808,3 +808,14 @@ export async function apiGetInstagramOAuthStatus(
   if (!res.ok) await throwApiError(res);
   return res.json();
 }
+
+export async function apiCancelInstagramOAuth(
+  accessToken: string | null,
+  companyId: string,
+): Promise<SocialOAuthInfo> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/oauth/cancel"), {
+    method: "POST",
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}

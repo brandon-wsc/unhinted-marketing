@@ -425,6 +425,68 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/companies/{company_id}/social-accounts/oauth/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Oauth Status
+         * @description Return the org's Meta OAuth connection state (no token material).
+         */
+        get: operations["oauth_status_api_companies__company_id__social_accounts_oauth_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/social-accounts/oauth/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Oauth Start
+         * @description Start the Meta connect flow. Persists the encrypted pending state and
+         *     returns the authorization URL for a popup / new tab. The double-submit CSRF
+         *     cookie is scoped to the public callback so Meta's redirect carries it back.
+         */
+        post: operations["oauth_start_api_companies__company_id__social_accounts_oauth_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/social-accounts/oauth/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Oauth Cancel
+         * @description Abort an in-flight Meta connect (timeout, cancel, or closed popup).
+         */
+        post: operations["oauth_cancel_api_companies__company_id__social_accounts_oauth_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/companies/{company_id}/social-accounts/{platform}": {
         parameters: {
             query?: never;
@@ -438,6 +500,27 @@ export type paths = {
         post?: never;
         /** Disconnect Account */
         delete: operations["disconnect_account_api_companies__company_id__social_accounts__platform__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/social/oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Oauth Callback
+         * @description Backend Meta callback — this exact URL goes into the Meta App Dashboard:
+         *     App Settings → Advanced → Security → Valid OAuth Redirect URIs.
+         */
+        get: operations["oauth_callback_api_social_oauth_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1790,6 +1873,11 @@ export type components = {
             /** Output Keys */
             output_keys?: unknown[];
         };
+        /**
+         * OAuthStatus
+         * @enum {string}
+         */
+        OAuthStatus: "not_connected" | "connected" | "pending" | "failed";
         /** OrgInviteAcceptResponse */
         OrgInviteAcceptResponse: {
             /**
@@ -2628,6 +2716,18 @@ export type components = {
             access_token: string;
             /** Expires At */
             expires_at?: string | null;
+        };
+        /**
+         * SocialOAuthInfo
+         * @description Current connection state for an org's Instagram account.
+         */
+        SocialOAuthInfo: {
+            /** @default not_connected */
+            status: components["schemas"]["OAuthStatus"];
+            /** Authorization Url */
+            authorization_url?: string | null;
+            /** Poll Url */
+            poll_url?: string | null;
         };
         /** StopSessionResponse */
         StopSessionResponse: {
@@ -3860,6 +3960,99 @@ export interface operations {
             };
         };
     };
+    oauth_status_api_companies__company_id__social_accounts_oauth_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialOAuthInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    oauth_start_api_companies__company_id__social_accounts_oauth_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialOAuthInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    oauth_cancel_api_companies__company_id__social_accounts_oauth_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialOAuthInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upsert_account_api_companies__company_id__social_accounts__platform__put: {
         parameters: {
             query?: never;
@@ -3914,6 +4107,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    oauth_callback_api_social_oauth_callback_get: {
+        parameters: {
+            query?: {
+                code?: string | null;
+                state?: string | null;
+                error?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

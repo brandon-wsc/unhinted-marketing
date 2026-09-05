@@ -9,6 +9,7 @@ const { api } = vi.hoisted(() => ({
     apiListSocialAccounts: vi.fn(),
     apiStartInstagramOAuth: vi.fn(),
     apiGetInstagramOAuthStatus: vi.fn(),
+    apiCancelInstagramOAuth: vi.fn(),
     apiDisconnectInstagramAccount: vi.fn(),
   },
 }));
@@ -26,6 +27,7 @@ vi.mock("@/features/company-settings/api", () => ({
   apiListSocialAccounts: api.apiListSocialAccounts,
   apiStartInstagramOAuth: api.apiStartInstagramOAuth,
   apiGetInstagramOAuthStatus: api.apiGetInstagramOAuthStatus,
+  apiCancelInstagramOAuth: api.apiCancelInstagramOAuth,
   apiDisconnectInstagramAccount: api.apiDisconnectInstagramAccount,
 }));
 
@@ -56,6 +58,7 @@ describe("InstagramPanel", () => {
     api.apiListSocialAccounts.mockReset().mockResolvedValue([]);
     api.apiStartInstagramOAuth.mockReset();
     api.apiGetInstagramOAuthStatus.mockReset();
+    api.apiCancelInstagramOAuth.mockReset();
     api.apiDisconnectInstagramAccount.mockReset();
   });
 
@@ -79,6 +82,26 @@ describe("InstagramPanel", () => {
     expect(screen.queryByText("settings.instagram.connected")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "settings.instagram.connect" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "settings.instagram.rotate" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "common.cancel" })).toBeInTheDocument();
+  });
+
+  it("cancels a pending oauth poll", async () => {
+    const user = userEvent.setup();
+    api.apiListSocialAccounts.mockResolvedValue([]);
+    api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "pending" });
+    api.apiCancelInstagramOAuth.mockResolvedValue({ status: "not_connected" });
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "common.cancel" })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: "common.cancel" }));
+    await waitFor(() => {
+      expect(api.apiCancelInstagramOAuth).toHaveBeenCalledWith("tok", "c1");
+    });
+    await waitFor(() => {
+      expect(screen.getByText("settings.instagram.oauthAborted")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "settings.instagram.connect" })).toBeInTheDocument();
+    });
   });
 
   it("shows last4 only on a connected account", async () => {

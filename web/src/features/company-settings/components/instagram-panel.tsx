@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
 import {
+  apiCancelInstagramOAuth,
   apiDisconnectInstagramAccount,
   apiGetInstagramOAuthStatus,
   apiListSocialAccounts,
@@ -29,6 +30,7 @@ type InstagramPanelProps = {
 };
 
 const POLL_INTERVAL_MS = 2500;
+export const OAUTH_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 
 function isExpired(expiresAt: string | null): boolean {
   if (!expiresAt) return false;
@@ -48,11 +50,17 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const [flash, setFlash] = useState<"connected" | "disconnected" | null>(null);
   const popupRef = useRef<Window | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortingRef = useRef(false);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
   }, []);
 
@@ -75,9 +83,29 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
     [accessToken, companyId, t],
   );
 
+  const abortConnect = useCallback(async () => {
+    if (abortingRef.current) return;
+    abortingRef.current = true;
+    stopPolling();
+    if (popupRef.current && !popupRef.current.closed) {
+      popupRef.current.close();
+    }
+    try {
+      await apiCancelInstagramOAuth(accessToken, companyId);
+    } catch {
+      // Still leave the panel so the user can retry even if cancel fails.
+    }
+    setStatus("not_connected");
+    setError(t("settings.instagram.oauthAborted"));
+    abortingRef.current = false;
+  }, [accessToken, companyId, stopPolling, t]);
+
   // Poll the OAuth status while a connect is pending; resolve when done/failed.
   const pollStatus = useCallback(() => {
     stopPolling();
+    timeoutRef.current = setTimeout(() => {
+      void abortConnect();
+    }, OAUTH_POLL_TIMEOUT_MS);
     pollRef.current = setInterval(async () => {
       try {
         const oauth = await apiGetInstagramOAuthStatus(accessToken, companyId);
@@ -101,7 +129,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
         );
       }
     }, POLL_INTERVAL_MS);
-  }, [accessToken, companyId, loadAccounts, stopPolling, t]);
+  }, [abortConnect, accessToken, companyId, loadAccounts, stopPolling, t]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,7 +252,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
           </Alert>
         )}
 
-        {connected && !connecting && (
+        {connected && !connecting && account && (
           <div className="space-y-3">
             {!expired && (
               <Badge
@@ -245,7 +273,13 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
           </div>
         )}
 
-        {!connecting && (
+        {connecting ? (
+          <div className="flex flex-wrap items-center justify-start gap-2">
+            <Button type="button" variant="outline" disabled={busy} onClick={() => void abortConnect()}>
+              {t("common.cancel")}
+            </Button>
+          </div>
+        ) : (
           <div
             className={
               connected

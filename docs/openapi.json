@@ -1609,6 +1609,153 @@
         }
       }
     },
+    "/api/companies/{company_id}/social-accounts/oauth/status": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Oauth Status",
+        "description": "Return the org's Meta OAuth connection state (no token material).",
+        "operationId": "oauth_status_api_companies__company_id__social_accounts_oauth_status_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialOAuthInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/social-accounts/oauth/start": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Oauth Start",
+        "description": "Start the Meta connect flow. Persists the encrypted pending state and\nreturns the authorization URL for a popup / new tab. The double-submit CSRF\ncookie is scoped to the public callback so Meta's redirect carries it back.",
+        "operationId": "oauth_start_api_companies__company_id__social_accounts_oauth_start_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialOAuthInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/social-accounts/oauth/cancel": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Oauth Cancel",
+        "description": "Abort an in-flight Meta connect (timeout, cancel, or closed popup).",
+        "operationId": "oauth_cancel_api_companies__company_id__social_accounts_oauth_cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialOAuthInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/companies/{company_id}/social-accounts/{platform}": {
       "put": {
         "tags": [
@@ -1710,6 +1857,86 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/social/oauth/callback": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Oauth Callback",
+        "description": "Backend Meta callback — this exact URL goes into the Meta App Dashboard:\nApp Settings → Advanced → Security → Valid OAuth Redirect URIs.",
+        "operationId": "oauth_callback_api_social_oauth_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -6130,6 +6357,16 @@
         ],
         "title": "NodeStepSummary"
       },
+      "OAuthStatus": {
+        "type": "string",
+        "enum": [
+          "not_connected",
+          "connected",
+          "pending",
+          "failed"
+        ],
+        "title": "OAuthStatus"
+      },
       "OrgInviteAcceptResponse": {
         "properties": {
           "company_id": {
@@ -8106,6 +8343,39 @@
           "access_token"
         ],
         "title": "SocialAccountUpsert"
+      },
+      "SocialOAuthInfo": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/OAuthStatus",
+            "default": "not_connected"
+          },
+          "authorization_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Url"
+          },
+          "poll_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll Url"
+          }
+        },
+        "type": "object",
+        "title": "SocialOAuthInfo",
+        "description": "Current connection state for an org's Instagram account."
       },
       "StopSessionResponse": {
         "properties": {

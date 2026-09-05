@@ -484,7 +484,7 @@
       "saveFailed": "Couldn’t save. Please try again.",
       "connect": "Connect Instagram",
       "connectingTitle": "Connecting Instagram…",
-      "connectingBody": "Complete the authorization in the new window; this panel updates automatically.",
+      "connectingBody": "Complete authorization in the new window. This panel updates automatically; cancel if it stays stuck.",
       "oauthFailed": "Connection failed. Please try again.",
       "oauthAborted": "Authorization was cancelled or timed out. Please reconnect.",
       "oauthNotConfigured": "Meta OAuth isn't configured yet (META_APP_ID / META_APP_SECRET)."

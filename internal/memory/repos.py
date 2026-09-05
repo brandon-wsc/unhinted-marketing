@@ -1666,6 +1666,25 @@ def social_pending_state_clear(row: SocialAccount) -> None:
     row.oauth_pending_scopes = None
 
 
+async def abort_social_oauth_row(db: AsyncSession, row: SocialAccount) -> None:
+    """Drop pending OAuth without disconnecting an already-linked account."""
+    if social_account_is_connected(row):
+        social_pending_state_clear(row)
+    else:
+        await db.delete(row)
+    await db.flush()
+
+
+async def cancel_social_oauth(
+    db: AsyncSession, company_id: uuid.UUID, platform: str = "instagram"
+) -> None:
+    """Editor abort of an in-flight connect (timeout, cancel, popup closed)."""
+    row = await get_social_account(db, company_id, platform)
+    if row is None or not row.oauth_connect_state:
+        return
+    await abort_social_oauth_row(db, row)
+
+
 async def find_social_account_by_oauth_state(
     db: AsyncSession, state: str
 ) -> SocialAccount | None:
@@ -1691,11 +1710,7 @@ async def clear_social_oauth_state_for_state(
     row = await find_social_account_by_oauth_state(db, state)
     if row is None:
         return
-    if social_account_is_connected(row):
-        social_pending_state_clear(row)
-    else:
-        await db.delete(row)
-    await db.flush()
+    await abort_social_oauth_row(db, row)
 
 
 async def delete_social_account(

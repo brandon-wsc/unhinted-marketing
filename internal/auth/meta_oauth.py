@@ -36,6 +36,8 @@ ME_URL = "https://graph.facebook.com/v{version}/me"
 ME_FIELDS = "id,instagram_business_account{id}"
 
 OAUTH_MAX_AGE_DAYS = 1
+# Abandoned connect (Facebook never hits the callback) should not stay "pending" forever.
+OAUTH_PENDING_TTL = timedelta(minutes=10)
 CSRF_COOKIE = "meta_oauth_csrf"
 
 
@@ -92,7 +94,12 @@ def _encrypt_connect_state(row_id: str, code_verifier: str, csrf_token: str) -> 
     try:
         return encrypt_key(
             json.dumps(
-                {"row_id": row_id, "code_verifier": code_verifier, "csrf_token": csrf_token}
+                {
+                    "row_id": row_id,
+                    "code_verifier": code_verifier,
+                    "csrf_token": csrf_token,
+                    "started_at": datetime.now(UTC).isoformat(),
+                }
             )
         )
     except ByokEncryptionError as exc:
@@ -111,6 +118,23 @@ def _decrypt_connect_state(stored: str) -> dict[str, str] | None:
     if not row_id or not code_verifier:
         return None
     return payload
+
+
+def pending_connect_is_stale(blob: str, *, now: datetime | None = None) -> bool:
+    """True when the encrypted pending blob is missing, undecryptable, or too old."""
+    payload = _decrypt_connect_state(blob)
+    if payload is None:
+        return True
+    raw = str(payload.get("started_at") or "")
+    if not raw:
+        return False
+    try:
+        started = datetime.fromisoformat(raw)
+    except ValueError:
+        return True
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=UTC)
+    return (now or datetime.now(UTC)) - started > OAUTH_PENDING_TTL
 
 
 def _state_value(row_id: str, token: str) -> str:

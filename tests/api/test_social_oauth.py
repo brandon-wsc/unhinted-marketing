@@ -125,10 +125,14 @@ async def test_oauth_start_status_callback(
 
 
 @pytest.mark.asyncio
-async def test_oauth_requires_meta_config(client: AsyncClient) -> None:
+async def test_oauth_requires_meta_config(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(data["access_token"])
+    monkeypatch.setattr(config.settings, "meta_app_id", None)
+    monkeypatch.setattr(config.settings, "meta_app_secret", None)
     res = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
     assert res.status_code == 400
     assert "meta_oauth_not_configured" in res.text
@@ -168,12 +172,65 @@ async def test_oauth_denied_clears_state(
 
 
 @pytest.mark.asyncio
+async def test_oauth_cancel_clears_pending(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data = await register_user(client)
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(data["access_token"])
+    monkeypatch.setattr(config.settings, "meta_app_id", "123456")
+    monkeypatch.setattr(config.settings, "meta_app_secret", "secret123")
+    monkeypatch.setattr(
+        config.settings,
+        "meta_oauth_redirect_uri",
+        "http://localhost:8000/api/social/oauth/callback",
+    )
+
+    started = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
+    assert started.status_code == 201
+    pending = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
+    assert pending.json()["status"] == "pending"
+
+    cancelled = await client.post(f"{_base(company_id)}/oauth/cancel", headers=headers)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "not_connected"
+    after = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
+    assert after.json()["status"] == "not_connected"
+
+
+@pytest.mark.asyncio
+async def test_oauth_status_expires_stale_pending(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data = await register_user(client)
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(data["access_token"])
+    monkeypatch.setattr(config.settings, "meta_app_id", "123456")
+    monkeypatch.setattr(config.settings, "meta_app_secret", "secret123")
+    monkeypatch.setattr(
+        config.settings,
+        "meta_oauth_redirect_uri",
+        "http://localhost:8000/api/social/oauth/callback",
+    )
+    started = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
+    assert started.status_code == 201
+    monkeypatch.setattr(
+        "cmd.api.routes.social.pending_connect_is_stale", lambda *_a, **_k: True
+    )
+    expired = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
+    assert expired.status_code == 200
+    assert expired.json()["status"] == "not_connected"
+
+
+@pytest.mark.asyncio
 async def test_oauth_unauthenticated(client: AsyncClient) -> None:
     company_id = uuid.uuid4()
     status = await client.get(f"{_base(str(company_id))}/oauth/status")
     assert status.status_code == 401
     started = await client.post(f"{_base(str(company_id))}/oauth/start")
     assert started.status_code == 401
+    cancelled = await client.post(f"{_base(str(company_id))}/oauth/cancel")
+    assert cancelled.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -194,3 +251,5 @@ async def test_oauth_member_forbidden(
     assert status.status_code == 403
     started = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
     assert started.status_code == 403
+    cancelled = await client.post(f"{_base(company_id)}/oauth/cancel", headers=headers)
+    assert cancelled.status_code == 403

@@ -7,15 +7,15 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from fastapi.responses import RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
 from internal.auth.meta_oauth import (
     CSRF_COOKIE,
     MetaOAuthError,
     exchange_code,
+    pending_connect_is_stale,
     start_oauth,
 )
 from internal.auth.org import require_company_settings_editor
@@ -25,6 +25,7 @@ from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import SocialAccount, User
 from internal.memory.repos import (
+    cancel_social_oauth,
     delete_social_account,
     list_social_accounts,
     social_account_is_connected,
@@ -101,6 +102,12 @@ async def oauth_status(
 ) -> SocialOAuthInfo:
     """Return the org's Meta OAuth connection state (no token material)."""
     row = await repos.get_social_account(db, company_id, "instagram")
+    if row is not None and row.oauth_connect_state and pending_connect_is_stale(
+        row.oauth_connect_state
+    ):
+        await cancel_social_oauth(db, company_id, "instagram")
+        await db.commit()
+        row = await repos.get_social_account(db, company_id, "instagram")
     return _oauth_info(company_id, row)
 
 
@@ -134,6 +141,18 @@ async def oauth_start(
         authorization_url=started.authorization_url,
         poll_url=OAUTH_POLL_ROUTE.format(company_id=str(company_id)),
     )
+
+
+@router.post("/oauth/cancel", response_model=SocialOAuthInfo)
+async def oauth_cancel(
+    company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SocialOAuthInfo:
+    """Abort an in-flight Meta connect (timeout, cancel, or closed popup)."""
+    await cancel_social_oauth(db, company_id, "instagram")
+    await db.commit()
+    row = await repos.get_social_account(db, company_id, "instagram")
+    return _oauth_info(company_id, row)
 
 
 @oauth_callback_router.get("/oauth/callback")
