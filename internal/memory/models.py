@@ -614,6 +614,11 @@ class SocialAccount(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Meta OAuth connect flow (ADR 0022 OAuth slice)
+    # JSON-encrypted {state, code_verifier} while the exchange is in flight.
+    oauth_connect_state: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Comma-separated granted-but-unwanted scope gaps from the token exchange.
+    oauth_pending_scopes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

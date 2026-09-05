@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-09-02  
+> **Last updated:** 2026-09-05  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -34,10 +34,12 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
 **Decision (2026-09-02) — Real publish: Instagram adapter + org social accounts:** → [ADR 0022](./adr/0022-real-publish-instagram.md) · plan: [PUBLISH_PLAN.md](./PUBLISH_PLAN.md)
+**Update (2026-09-05) — Meta OAuth connect added:** editor `/settings?tab=instagram` now connects via Meta OAuth (popup + poll); manual token paste removed. Callback URL for the Meta App Dashboard → `META_OAUTH_REDIRECT_URI`.
 
 - **Backend shipped** — `social_accounts` + editor HTTP (`GET/PUT/DELETE …/social-accounts`) + `connect-social-account` CLI; Confirm dispatches on `PUBLISH_ADAPTER` (default `stub`); `session.snapshot` hydrates the latest confirm receipt
 - **UI shipped** — preview receipts (`published` / `failed` / `stubbed`) + copy-only Confirm gate; editor-only `/settings?tab=instagram` (last4 only, never the raw token)
-- **`social_accounts` table** — org-scoped IG credentials, Fernet-encrypted (reuses `BYOK_ENCRYPTION_KEY` + `byok_providers` shape); HTTP or CLI-seeded token, no OAuth this slice
+- **`social_accounts` table** — org-scoped IG credentials, Fernet-encrypted (reuses `BYOK_ENCRYPTION_KEY` + `byok_providers` shape)
+- **Meta OAuth (2026-09-05)** — PKCE auth-code flow via Meta dialog; encrypted connect-state + CSRF on the `social_accounts` row; public `/api/social/oauth/callback` recovery of the org from `state`; token + `ig_user_id` upserted server-side. Env: `META_APP_ID`, `META_APP_SECRET`, `META_OAUTH_REDIRECT_URI`, `META_OAUTH_SUCCESS_URL`. CLI/PUT seeding still available as fallback.
 - **`PUBLISH_ADAPTER=stub|instagram`** — adapter in `internal/tools/publish.py`; IG two-phase container → media_publish
 - **Copy-only drafts rejected at Confirm** (`400 image_required`); missing IG account → `400 social_account_not_connected`; receipt `stubbed` / `published` / `failed` with optional `permalink` / `error_kind`; failed publish does **not** set `session.status=confirmed`
 - **Boundaries unchanged** — Confirm-only publish ([ADR 0003](./adr/0003-confirm-without-llm.md)); per-revision `approval_token`; user/session-scoped idempotency

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,7 +7,8 @@ import { InstagramPanel } from "@/features/company-settings/components/instagram
 const { api } = vi.hoisted(() => ({
   api: {
     apiListSocialAccounts: vi.fn(),
-    apiUpsertInstagramAccount: vi.fn(),
+    apiStartInstagramOAuth: vi.fn(),
+    apiGetInstagramOAuthStatus: vi.fn(),
     apiDisconnectInstagramAccount: vi.fn(),
   },
 }));
@@ -23,7 +24,8 @@ vi.mock("@/context/auth-context", () => ({
 
 vi.mock("@/features/company-settings/api", () => ({
   apiListSocialAccounts: api.apiListSocialAccounts,
-  apiUpsertInstagramAccount: api.apiUpsertInstagramAccount,
+  apiStartInstagramOAuth: api.apiStartInstagramOAuth,
+  apiGetInstagramOAuthStatus: api.apiGetInstagramOAuthStatus,
   apiDisconnectInstagramAccount: api.apiDisconnectInstagramAccount,
 }));
 
@@ -52,23 +54,24 @@ describe("InstagramPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.apiListSocialAccounts.mockReset().mockResolvedValue([]);
-    api.apiUpsertInstagramAccount.mockReset();
+    api.apiStartInstagramOAuth.mockReset();
+    api.apiGetInstagramOAuthStatus.mockReset();
     api.apiDisconnectInstagramAccount.mockReset();
   });
 
-  it("shows the empty paste form when no account is connected", async () => {
+  it("shows the connect button when no account is connected", async () => {
     api.apiListSocialAccounts.mockResolvedValue([]);
+    api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "not_connected" });
     renderPanel();
     await waitFor(() => {
-      expect(screen.getByLabelText("settings.instagram.igUserId")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "settings.instagram.connect" })).toBeInTheDocument();
     });
-    expect(screen.getByLabelText("settings.instagram.accessToken")).toBeInTheDocument();
-    expect(screen.queryByText("••••ab12")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "settings.instagram.save" })).toBeDisabled();
+    expect(screen.queryByLabelText("settings.instagram.igUserId")).not.toBeInTheDocument();
   });
 
   it("shows last4 only on a connected account", async () => {
     api.apiListSocialAccounts.mockResolvedValue([connected]);
+    api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "connected" });
     renderPanel();
     await waitFor(() => {
       expect(screen.getByText("••••ab12")).toBeInTheDocument();
@@ -76,70 +79,70 @@ describe("InstagramPanel", () => {
     expect(screen.getByText("settings.instagram.connected")).toBeInTheDocument();
     expect(screen.getByText(connected.ig_user_id)).toBeInTheDocument();
     expect(screen.queryByDisplayValue(/IGQ|secret-token/)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("settings.instagram.accessToken")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "settings.instagram.rotate" })).toBeInTheDocument();
   });
 
-  it("shows the expired alert and update form", async () => {
+  it("starts OAuth and opens a popup when connect is clicked", async () => {
+    const user = userEvent.setup();
+    api.apiListSocialAccounts.mockResolvedValue([]);
+    api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "not_connected" });
+    api.apiStartInstagramOAuth.mockResolvedValue({
+      status: "pending",
+      authorization_url: "https://www.facebook.com/v22.0/dialog/oauth?state=x",
+      poll_url: "/api/companies/c1/social-accounts/oauth/status",
+    });
+    const openSpy = vi.spyOn(window, "open").mockReturnValue({ closed: false } as Window);
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "settings.instagram.connect" })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: "settings.instagram.connect" }));
+    await waitFor(() => {
+      expect(api.apiStartInstagramOAuth).toHaveBeenCalledWith("tok", "c1");
+    });
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://www.facebook.com/v22.0/dialog/oauth?state=x",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    openSpy.mockRestore();
+  });
+
+  it("shows the expired alert on an expired connected account", async () => {
     api.apiListSocialAccounts.mockResolvedValue([
       { ...connected, expires_at: "2020-01-01T00:00:00Z" },
     ]);
+    api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "connected" });
     renderPanel();
     await waitFor(() => {
       expect(screen.getAllByText("settings.instagram.expiredTitle").length).toBeGreaterThan(0);
     });
-    expect(screen.getByLabelText("settings.instagram.accessToken")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "settings.instagram.update" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "settings.instagram.rotate" })).toBeInTheDocument();
   });
 
-  it("saves a pasted token then hides the raw value", async () => {
+  it("disconnects a connected account", async () => {
     const user = userEvent.setup();
-    api.apiListSocialAccounts.mockResolvedValue([]);
-    api.apiUpsertInstagramAccount.mockResolvedValue(connected);
+    api.apiListSocialAccounts.mockResolvedValue([connected]);
+    api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "connected" });
+    api.apiDisconnectInstagramAccount.mockResolvedValue(undefined);
     renderPanel();
     await waitFor(() => {
-      expect(screen.getByLabelText("settings.instagram.igUserId")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "settings.instagram.rotate" })).toBeInTheDocument();
     });
-    await user.type(screen.getByLabelText("settings.instagram.igUserId"), connected.ig_user_id);
-    await user.type(screen.getByLabelText("settings.instagram.accessToken"), "secret-token-value");
-    await user.click(screen.getByRole("button", { name: "settings.instagram.save" }));
+    await user.click(screen.getByRole("button", { name: "settings.instagram.disconnect" }));
     await waitFor(() => {
-      expect(api.apiUpsertInstagramAccount).toHaveBeenCalledWith("tok", "c1", {
-        ig_user_id: connected.ig_user_id,
-        access_token: "secret-token-value",
-        expires_at: null,
-      });
+      expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     });
-    expect(screen.getByText("••••ab12")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("secret-token-value")).not.toBeInTheDocument();
-  });
-
-  it("saves a picked expiry as an ISO timestamp for that local date", async () => {
-    const user = userEvent.setup();
-    api.apiListSocialAccounts.mockResolvedValue([]);
-    api.apiUpsertInstagramAccount.mockResolvedValue(connected);
-    renderPanel();
+    // The destructive action inside the AlertDialog carries the same label; grab it from the dialog.
+    const dialog = screen.getByRole("alertdialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: "settings.instagram.disconnect" }),
+    );
     await waitFor(() => {
-      expect(screen.getByLabelText("settings.instagram.igUserId")).toBeInTheDocument();
+      expect(api.apiDisconnectInstagramAccount).toHaveBeenCalledWith("tok", "c1");
     });
-    await user.type(screen.getByLabelText("settings.instagram.igUserId"), connected.ig_user_id);
-    await user.type(screen.getByLabelText("settings.instagram.accessToken"), "secret-token-value");
-    await user.click(screen.getByLabelText("settings.instagram.expiresAt"));
-    const today = await waitFor(() => {
-      const button = document.querySelector("[data-today] button");
-      expect(button).toBeTruthy();
-      return button as HTMLElement;
-    });
-    await user.click(today);
-    await user.click(screen.getByRole("button", { name: "settings.instagram.save" }));
     await waitFor(() => {
-      expect(api.apiUpsertInstagramAccount).toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "settings.instagram.connect" })).toBeInTheDocument();
     });
-    const payload = api.apiUpsertInstagramAccount.mock.calls[0]?.[2] as {
-      expires_at: string | null;
-    };
-    expect(payload.expires_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    const stamp = new Date(payload.expires_at as string);
-    expect(Number.isNaN(stamp.getTime())).toBe(false);
   });
 });

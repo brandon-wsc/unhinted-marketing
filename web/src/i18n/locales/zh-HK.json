@@ -481,7 +481,13 @@
       "saved": "已連接 Instagram。",
       "disconnected": "已解除連接。",
       "loadFailed": "載入唔到 Instagram 設定。",
-      "saveFailed": "儲存唔到，再試一次。"
+      "saveFailed": "儲存唔到，再試一次。",
+      "connect": "連接 Instagram",
+      "connectingTitle": "連接緊 Instagram…",
+      "connectingBody": "喺新視窗完成授權之後，呢度會自動更新。",
+      "oauthFailed": "連接失敗，請再試一次。",
+      "oauthAborted": "授權已取消或逾時，請重新連接。",
+      "oauthNotConfigured": "仲未設定 Meta OAuth（META_APP_ID / META_APP_SECRET）。"
     },
     "apiKeys": {
       "title": "Models",

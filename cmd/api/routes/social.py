@@ -6,12 +6,22 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi.responses import RedirectResponse
+
 from internal.auth.deps import get_current_user
+from internal.auth.meta_oauth import (
+    CSRF_COOKIE,
+    MetaOAuthError,
+    exchange_code,
+    start_oauth,
+)
 from internal.auth.org import require_company_settings_editor
+from internal.config import settings
 from internal.llm.keys import ByokEncryptionError, encrypt_key, mask_key
+from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import SocialAccount, User
 from internal.memory.repos import (
@@ -19,9 +29,13 @@ from internal.memory.repos import (
     list_social_accounts,
     upsert_social_account,
 )
+from schemas.oauth import SocialOAuthInfo
 from schemas.social import SocialAccountItem, SocialAccountList, SocialAccountUpsert
 
 router = APIRouter(prefix="/companies/{company_id}/social-accounts", tags=["social"])
+oauth_callback_router = APIRouter(prefix="/social", tags=["social"])
+
+OAUTH_POLL_ROUTE = "/api/companies/{company_id}/social-accounts/oauth/status"
 
 _PLATFORMS = frozenset({"instagram"})
 
@@ -64,6 +78,116 @@ async def list_accounts(
 ) -> SocialAccountList:
     rows = await list_social_accounts(db, company_id)
     return SocialAccountList(items=[_item(row) for row in rows])
+
+
+def _oauth_info(company_id: uuid.UUID, row: SocialAccount | None) -> SocialOAuthInfo:
+    if row is not None and row.oauth_connect_state:
+        return SocialOAuthInfo(
+            status="pending",
+            poll_url=OAUTH_POLL_ROUTE.format(company_id=str(company_id)),
+        )
+    if row is not None and (row.ig_user_id or "").strip():
+        return SocialOAuthInfo(status="connected")
+    return SocialOAuthInfo(status="not_connected")
+
+
+@router.get("/oauth/status", response_model=SocialOAuthInfo)
+async def oauth_status(
+    company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SocialOAuthInfo:
+    """Return the org's Meta OAuth connection state (no token material)."""
+    row = await repos.get_social_account(db, company_id, "instagram")
+    return _oauth_info(company_id, row)
+
+
+@router.post("/oauth/start", response_model=SocialOAuthInfo, status_code=status.HTTP_201_CREATED)
+async def oauth_start(
+    company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SocialOAuthInfo:
+    """Start the Meta connect flow. Persists the encrypted pending state and
+    returns the authorization URL for a popup / new tab. The double-submit CSRF
+    cookie is scoped to the public callback so Meta's redirect carries it back."""
+    try:
+        started = await start_oauth(db, company_id=company_id)
+    except MetaOAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message
+        ) from exc
+    await db.commit()
+    response.set_cookie(
+        key=CSRF_COOKIE,
+        value=started.csrf_token,
+        httponly=True,
+        secure=settings.refresh_cookie_secure,
+        samesite="lax",
+        max_age=86400,
+        path="/api/social",
+    )
+    return SocialOAuthInfo(
+        status="pending",
+        authorization_url=started.authorization_url,
+        poll_url=OAUTH_POLL_ROUTE.format(company_id=str(company_id)),
+    )
+
+
+@oauth_callback_router.get("/oauth/callback")
+async def oauth_callback(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    """Backend Meta callback — this exact URL goes into the Meta App Dashboard:
+    App Settings → Advanced → Security → Valid OAuth Redirect URIs."""
+    if error:
+        await repos.clear_social_oauth_state_for_state(db, state)
+        await db.commit()
+        return _oauth_redirect(detail="access_denied")
+
+    if not code or not state:
+        await repos.clear_social_oauth_state_for_state(db, state)
+        await db.commit()
+        return _oauth_redirect(detail="meta_oauth_missing_params")
+
+    try:
+        result = await exchange_code(
+            db,
+            code=code,
+            state=state,
+            csrf_token=request.cookies.get(CSRF_COOKIE),
+        )
+    except MetaOAuthError as exc:
+        await repos.clear_social_oauth_state_for_state(db, state)
+        await db.commit()
+        return _oauth_redirect(detail=exc.message)
+
+    await db.commit()
+    return _oauth_redirect(
+        detail="ok",
+        missing_scopes=",".join(result.missing_scopes) if result.missing_scopes else None,
+        ig_user_id=result.ig_user_id,
+    )
+
+
+def _oauth_redirect(
+    *,
+    detail: str,
+    missing_scopes: str | None = None,
+    ig_user_id: str | None = None,
+) -> RedirectResponse:
+    from urllib.parse import urlencode
+
+    base = (settings.meta_oauth_success_url or "").strip() or (settings.web_base_url or "").strip()
+    params: dict[str, str] = {"oauth": "done", "status": detail}
+    if missing_scopes:
+        params["missing_scopes"] = missing_scopes
+    if ig_user_id:
+        params["ig_user_id"] = ig_user_id
+    return RedirectResponse(url=f"{base}?{urlencode(params)}")
 
 
 @router.put("/{platform}", response_model=SocialAccountItem)

@@ -24,7 +24,7 @@ One Alembic hex revision adds `social_accounts`, mirroring the `byok_providers` 
 - Raw tokens are never logged, never serialized to API/SSE/OpenAPI — `token_last4` only, same posture as BYOK keys.
 - Tokens are seeded via a worker CLI command (`python -m cmd.worker connect-social-account …`), following the `set-platform-role` bootstrap pattern.
 
-Explicitly **not** built in this slice: OAuth connect flow, token auto-refresh scheduler (long-lived tokens last ~60 days; expiry is handled manually), a multi-platform abstraction layer (`platform` CHECK constraint is enough for one platform), and platform webhooks.
+Explicitly **not** built in the original slice: OAuth connect flow (added 2026-09-05 — see below), token auto-refresh scheduler (long-lived tokens last ~60 days; expiry is handled manually), a multi-platform abstraction layer (`platform` CHECK constraint is enough for one platform), and platform webhooks.
 
 ### 2. Publish adapter behind a feature flag
 
@@ -55,5 +55,7 @@ Publishing still happens only in the Confirm handler with a valid per-revision `
 - New routes surface no token material; the receipt panel exposes `status` / `permalink` / error reason only.
 - Contracts (`docs/contracts/publish-social-post-*.schema.json`) are regenerated via `python -m scripts.export_contracts` when response fields change.
 - `.env.example` gains `PUBLISH_ADAPTER` and `META_GRAPH_API_VERSION`.
-- Deferred (each needs its own slice, some a superseding ADR): OAuth connect flow, token auto-refresh, FB/Threads platforms, carousels, per-day publish rate limits (ROADMAP Safety), container-status polling.
+**Added 2026-09-05 — Meta OAuth connect (PKCE):** `POST/GET …/social-accounts/oauth/start|status` + public `GET /api/social/oauth/callback`. Editor clicks Connect → dialog opens in a popup → callback exchanges the code server-side and upserts `social_accounts` (token + `ig_user_id`) → the settings panel polls `oauth/status` until `connected`. Connect-state + PKCE verifier + CSRF token are stored Fernet-encrypted on the `social_accounts` row; the callback recovers the org from the signed `state` and verifies the double-submit CSRF cookie (same browser that started the flow).
+
+- Deferred (each needs its own slice, some a superseding ADR): token auto-refresh, FB/Threads platforms, carousels, per-day publish rate limits (ROADMAP Safety), container-status polling.
 - Changing the credential-storage rule (§1), the copy-only rejection (§3), or the Confirm-only publish boundary (§5) requires a superseding ADR; adapter internals and UI arrangement may iterate without one.

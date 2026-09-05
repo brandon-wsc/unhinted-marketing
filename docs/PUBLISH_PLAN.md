@@ -75,10 +75,11 @@ The command upserts on `(company_id, platform)` so token rotation is re-running 
 same command. Encryption happens in the command via `internal/llm/keys.py`.
 
 **Product UX (Penpot, 2026-09-02):** editor-only Company settings tab
-`/settings?tab=instagram` — empty / connected / expired. Manual paste, not OAuth.
-CLI remains the bootstrap fallback. See [knowledge/UI.md](./knowledge/UI.md).
+`/settings?tab=instagram` — empty / connected / expired. **Update 2026-09-05:** connects via Meta
+OAuth (popup + poll to `oauth/status`); manual paste removed from the UI but CLI / `PUT`
+fallback remains. See [knowledge/UI.md](./knowledge/UI.md).
 
-**Explicitly not in this slice:** OAuth connect flow, token auto-refresh scheduler
+**Explicitly not in the original slice:** OAuth connect flow (**built 2026-09-05**, see STATUS), token auto-refresh scheduler
 (long-lived tokens last ~60 days), multi-platform abstraction, webhooks.
 
 ---
@@ -225,7 +226,7 @@ row (`status` + `response.permalink` / `response.error_kind`) — same source as
 
 ## 9. Deferred (explicit non-goals)
 
-- OAuth connect flow; token auto-refresh
+- Token auto-refresh (OAuth connect flow built 2026-09-05)
 - Facebook / Threads platforms; multi-account per platform; platform switcher
 - Multi-image carousels
 - Per-day publish rate limits (ROADMAP Safety — separate slice)

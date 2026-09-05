@@ -780,3 +780,31 @@ export async function apiDisconnectInstagramAccount(
   });
   if (!res.ok && res.status !== 404) await throwApiError(res);
 }
+
+export type SocialOAuthStatus = "not_connected" | "pending" | "connected";
+
+export type SocialOAuthInfo = {
+  status: SocialOAuthStatus;
+  authorization_url?: string | null;
+  poll_url?: string | null;
+};
+
+export async function apiStartInstagramOAuth(
+  accessToken: string | null,
+  companyId: string,
+): Promise<SocialOAuthInfo> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/oauth/start"), {
+    method: "POST",
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiGetInstagramOAuthStatus(
+  accessToken: string | null,
+  companyId: string,
+): Promise<SocialOAuthInfo> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/oauth/status"));
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}

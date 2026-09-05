@@ -1601,6 +1601,10 @@ async def get_social_account(
     )
 
 
+async def get_social_account_by_id(db: AsyncSession, row_id: uuid.UUID) -> SocialAccount | None:
+    return await db.get(SocialAccount, row_id)
+
+
 async def list_social_accounts(
     db: AsyncSession, company_id: uuid.UUID
 ) -> list[SocialAccount]:
@@ -1646,6 +1650,37 @@ async def upsert_social_account(
         row.last_verified_at = None
     await db.flush()
     return row
+
+
+
+def social_pending_state_clear(row: SocialAccount) -> None:
+    """Clear OAuth pending state after the exchange ends (success or failure)."""
+    row.oauth_connect_state = None
+    row.oauth_pending_scopes = None
+
+
+async def find_social_account_by_oauth_state(
+    db: AsyncSession, state: str
+) -> SocialAccount | None:
+    """Resolve the SocialAccount row from a callback state (row_id before the colon)."""
+    try:
+        row_id_str, _ = state.split(":", 1)
+        row_uuid = uuid.UUID(row_id_str)
+    except (ValueError, AttributeError):
+        return None
+    return await get_social_account_by_id(db, row_uuid)
+
+
+async def clear_social_oauth_state_for_state(
+    db: AsyncSession, state: str | None
+) -> None:
+    """Clear the pending OAuth state matching a failed / aborted callback."""
+    if not state:
+        return
+    row = await find_social_account_by_oauth_state(db, state)
+    if row is not None:
+        social_pending_state_clear(row)
+        await db.flush()
 
 
 async def delete_social_account(

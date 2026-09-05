@@ -1,8 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DatePicker, fromLocalDate, toLocalDate } from "@/components/date-picker";
-import { FormField } from "@/components/form-field";
-import { PasswordBox } from "@/components/password-box";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -16,19 +13,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
 import {
   apiDisconnectInstagramAccount,
+  apiGetInstagramOAuthStatus,
   apiListSocialAccounts,
-  apiUpsertInstagramAccount,
+  apiStartInstagramOAuth,
   type SocialAccountItem,
+  type SocialOAuthStatus,
 } from "@/features/company-settings/api";
 import { mapApiError } from "@/lib/map-api-error";
 
 type InstagramPanelProps = {
   companyId: string;
 };
+
+const POLL_INTERVAL_MS = 2500;
 
 function isExpired(expiresAt: string | null): boolean {
   if (!expiresAt) return false;
@@ -40,42 +40,135 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const { t, i18n } = useTranslation();
   const { accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [account, setAccount] = useState<SocialAccountItem | null>(null);
-  const [igUserId, setIgUserId] = useState("");
-  const [token, setToken] = useState("");
-  const [expiresDate, setExpiresDate] = useState<Date | undefined>(undefined);
-  const [editing, setEditing] = useState(false);
+  const [status, setStatus] = useState<SocialOAuthStatus>("not_connected");
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [flash, setFlash] = useState<"saved" | "disconnected" | null>(null);
+  const [flash, setFlash] = useState<"connected" | "disconnected" | null>(null);
+  const popupRef = useRef<Window | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const loadAccounts = useCallback(
+    async (withStatus: boolean) => {
+      try {
+        const [items, oauth] = await Promise.all([
+          apiListSocialAccounts(accessToken, companyId),
+          withStatus ? apiGetInstagramOAuthStatus(accessToken, companyId) : undefined,
+        ]);
+        const row = items.find((item) => item.platform === "instagram") ?? null;
+        setAccount(row);
+        if (withStatus) setStatus(oauth?.status ?? "not_connected");
+      } catch (err) {
+        setError(
+          err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.loadFailed"),
+        );
+      }
+    },
+    [accessToken, companyId, t],
+  );
+
+  // Poll the OAuth status while a connect is pending; resolve when done/failed.
+  const pollStatus = useCallback(() => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const oauth = await apiGetInstagramOAuthStatus(accessToken, companyId);
+        if (oauth.status === "connected") {
+          stopPolling();
+          setStatus("connected");
+          await loadAccounts(false);
+          setFlash("connected");
+          window.setTimeout(() => setFlash(null), 2500);
+        } else if (oauth.status === "pending") {
+          setStatus("pending");
+        } else {
+          stopPolling();
+          setStatus("not_connected");
+          setError(t("settings.instagram.oauthAborted"));
+        }
+      } catch (err) {
+        // Transient network error — keep polling.
+        setError(
+          err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.loadFailed"),
+        );
+      }
+    }, POLL_INTERVAL_MS);
+  }, [accessToken, companyId, loadAccounts, stopPolling, t]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const items = await apiListSocialAccounts(accessToken, companyId);
-      const row = items.find((item) => item.platform === "instagram") ?? null;
-      setAccount(row);
-      setIgUserId(row?.ig_user_id ?? "");
-      setExpiresDate(toLocalDate(row?.expires_at ?? null));
-      setToken("");
-      setEditing(!row);
-    } catch (err) {
-      setError(
-        err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.loadFailed"),
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken, companyId, t]);
+    await loadAccounts(true);
+    setLoading(false);
+  }, [loadAccounts]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  // Resume polling if a previous flow was left pending (e.g. page refresh mid-connect).
+  useEffect(() => {
+    if (status === "pending") pollStatus();
+    return stopPolling;
+  }, [status, pollStatus, stopPolling]);
+
+  const startConnect = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    setFlash(null);
+    try {
+      const oauth = await apiStartInstagramOAuth(accessToken, companyId);
+      if (!oauth.authorization_url) {
+        setError(t("settings.instagram.oauthNotConfigured"));
+        return;
+      }
+      setStatus("pending");
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
+      }
+      popupRef.current = window.open(oauth.authorization_url, "_blank", "noopener,noreferrer");
+      pollStatus();
+    } catch (err) {
+      setError(
+        err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.saveFailed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [accessToken, companyId, pollStatus, t]);
+
+  async function onDisconnect() {
+    setBusy(true);
+    setError(null);
+    setFlash(null);
+    stopPolling();
+    try {
+      await apiDisconnectInstagramAccount(accessToken, companyId);
+      setAccount(null);
+      setStatus("not_connected");
+      setDisconnectOpen(false);
+      setFlash("disconnected");
+      window.setTimeout(() => setFlash(null), 2500);
+    } catch (err) {
+      setError(
+        err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.saveFailed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const expired = isExpired(account?.expires_at ?? null);
-  const showForm = !account || editing || expired;
+  const connected = account !== null;
+  const connecting = status === "pending";
 
   const expiresLabel = useMemo(() => {
     if (!account?.expires_at) return t("common.notAvailable");
@@ -87,56 +180,6 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
       day: "2-digit",
     });
   }, [account?.expires_at, i18n.language, t]);
-
-  async function onSave() {
-    if (!igUserId.trim() || token.trim().length < 8) return;
-    setSaving(true);
-    setError(null);
-    setFlash(null);
-    try {
-      const row = await apiUpsertInstagramAccount(accessToken, companyId, {
-        ig_user_id: igUserId.trim(),
-        access_token: token.trim(),
-        expires_at: fromLocalDate(expiresDate),
-      });
-      setAccount(row);
-      setIgUserId(row.ig_user_id);
-      setExpiresDate(toLocalDate(row.expires_at));
-      setToken("");
-      setEditing(false);
-      setFlash("saved");
-      window.setTimeout(() => setFlash(null), 2500);
-    } catch (err) {
-      setError(
-        err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.saveFailed"),
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function onDisconnect() {
-    setSaving(true);
-    setError(null);
-    setFlash(null);
-    try {
-      await apiDisconnectInstagramAccount(accessToken, companyId);
-      setAccount(null);
-      setIgUserId("");
-      setToken("");
-      setExpiresDate(undefined);
-      setEditing(true);
-      setDisconnectOpen(false);
-      setFlash("disconnected");
-      window.setTimeout(() => setFlash(null), 2500);
-    } catch (err) {
-      setError(
-        err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.saveFailed"),
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
@@ -157,7 +200,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        {flash === "saved" && (
+        {flash === "connected" && (
           <Alert variant="success">
             <AlertDescription>{t("settings.instagram.saved")}</AlertDescription>
           </Alert>
@@ -174,7 +217,14 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
           </Alert>
         )}
 
-        {account && !editing && (
+        {connecting && (
+          <Alert variant="default">
+            <AlertTitle>{t("settings.instagram.connectingTitle")}</AlertTitle>
+            <AlertDescription>{t("settings.instagram.connectingBody")}</AlertDescription>
+          </Alert>
+        )}
+
+        {connected && !connecting && (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge
@@ -198,61 +248,40 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
           </div>
         )}
 
-        {showForm && (
-          <div className="space-y-4">
-            <FormField id="ig-user-id" label={t("settings.instagram.igUserId")}>
-              <Input
-                id="ig-user-id"
-                value={igUserId}
-                onChange={(e) => setIgUserId(e.target.value)}
-                autoComplete="off"
-              />
-            </FormField>
-            <PasswordBox
-              id="ig-access-token"
-              label={t("settings.instagram.accessToken")}
-              value={token}
-              onChange={setToken}
-              autoComplete="off"
-            />
-            <FormField id="ig-expires" label={t("settings.instagram.expiresAt")}>
-              <DatePicker id="ig-expires" value={expiresDate} onChange={setExpiresDate} />
-            </FormField>
+        {!connecting && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {connected ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void startConnect()}
+              >
+                {t("settings.instagram.rotate")}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="default"
+                disabled={busy}
+                onClick={() => void startConnect()}
+              >
+                {t("settings.instagram.connect")}
+              </Button>
+            )}
+            {connected && (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-destructive/40 text-destructive hover:enabled:bg-destructive-soft"
+                disabled={busy}
+                onClick={() => setDisconnectOpen(true)}
+              >
+                {t("settings.instagram.disconnect")}
+              </Button>
+            )}
           </div>
         )}
-
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {account && !editing && !expired && (
-            <Button type="button" variant="outline" onClick={() => setEditing(true)}>
-              {t("settings.instagram.rotate")}
-            </Button>
-          )}
-          {account && (
-            <Button
-              type="button"
-              variant="outline"
-              className="border-destructive/40 text-destructive hover:enabled:bg-destructive-soft"
-              onClick={() => setDisconnectOpen(true)}
-            >
-              {t("settings.instagram.disconnect")}
-            </Button>
-          )}
-          {showForm && (
-            <Button
-              type="button"
-              disabled={saving || !igUserId.trim() || token.trim().length < 8}
-              onClick={() => void onSave()}
-            >
-              {saving
-                ? t("common.saving")
-                : expired
-                  ? t("settings.instagram.update")
-                  : account
-                    ? t("settings.instagram.update")
-                    : t("settings.instagram.save")}
-            </Button>
-          )}
-        </div>
       </div>
 
       <AlertDialog open={disconnectOpen} onOpenChange={setDisconnectOpen}>

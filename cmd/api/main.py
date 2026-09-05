@@ -14,7 +14,7 @@ from cmd.api.routes.proposals import router as proposals_router
 from cmd.api.routes.questions import router as questions_router
 from cmd.api.routes.sessions import router as sessions_router
 from cmd.api.routes.signals import router as signals_router
-from cmd.api.routes.social import router as social_router
+from cmd.api.routes.social import oauth_callback_router, router as social_router
 from internal.auth.rate_limit import assert_jwt_secret_safe
 from internal.config import settings
 from internal.llm.keys import assert_byok_encryption_key_safe
@@ -70,6 +70,7 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(companies_router, prefix="/api")
     application.include_router(byok_router, prefix="/api")
     application.include_router(social_router, prefix="/api")
+    application.include_router(oauth_callback_router, prefix="/api")
     application.include_router(invites_router, prefix="/api")
     application.include_router(products_router, prefix="/api")
     application.include_router(proposals_router, prefix="/api")
