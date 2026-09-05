@@ -183,6 +183,27 @@ async def test_instagram_missing_account(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.mark.asyncio
+async def test_instagram_placeholder_account_not_connected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    account = _account(
+        monkeypatch,
+        ig_user_id="",
+        access_token_encrypted="",
+        token_last4="",
+    )
+    _patch_account(monkeypatch, account)
+    monkeypatch.setattr(
+        "internal.tools.publish.httpx.AsyncClient",
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("placeholder account must not call Graph")
+        ),
+    )
+    with pytest.raises(PublishPreconditionError, match="social_account_not_connected"):
+        await publish_social_post(AsyncMock(), _req(), company_id=account.company_id)
+
+
+@pytest.mark.asyncio
 async def test_instagram_expired_token_skips_graph(monkeypatch: pytest.MonkeyPatch) -> None:
     account = _account(
         monkeypatch,

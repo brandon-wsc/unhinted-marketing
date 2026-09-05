@@ -1605,6 +1605,13 @@ async def get_social_account_by_id(db: AsyncSession, row_id: uuid.UUID) -> Socia
     return await db.get(SocialAccount, row_id)
 
 
+def social_account_is_connected(row: SocialAccount | None) -> bool:
+    """True when Confirm can publish with this row (not an OAuth placeholder)."""
+    if row is None:
+        return False
+    return bool((row.ig_user_id or "").strip() and (row.token_last4 or "").strip())
+
+
 async def list_social_accounts(
     db: AsyncSession, company_id: uuid.UUID
 ) -> list[SocialAccount]:
@@ -1674,13 +1681,21 @@ async def find_social_account_by_oauth_state(
 async def clear_social_oauth_state_for_state(
     db: AsyncSession, state: str | None
 ) -> None:
-    """Clear the pending OAuth state matching a failed / aborted callback."""
+    """Clear pending OAuth state after a failed / aborted callback.
+
+    First-time connect leaves an empty placeholder — delete it so list /
+    Confirm stay not-connected. Rotate keeps the already-connected row.
+    """
     if not state:
         return
     row = await find_social_account_by_oauth_state(db, state)
-    if row is not None:
+    if row is None:
+        return
+    if social_account_is_connected(row):
         social_pending_state_clear(row)
-        await db.flush()
+    else:
+        await db.delete(row)
+    await db.flush()
 
 
 async def delete_social_account(

@@ -27,6 +27,7 @@ from internal.memory.models import SocialAccount, User
 from internal.memory.repos import (
     delete_social_account,
     list_social_accounts,
+    social_account_is_connected,
     upsert_social_account,
 )
 from schemas.oauth import SocialOAuthInfo
@@ -77,7 +78,9 @@ async def list_accounts(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SocialAccountList:
     rows = await list_social_accounts(db, company_id)
-    return SocialAccountList(items=[_item(row) for row in rows])
+    return SocialAccountList(
+        items=[_item(row) for row in rows if social_account_is_connected(row)]
+    )
 
 
 def _oauth_info(company_id: uuid.UUID, row: SocialAccount | None) -> SocialOAuthInfo:
@@ -86,7 +89,7 @@ def _oauth_info(company_id: uuid.UUID, row: SocialAccount | None) -> SocialOAuth
             status="pending",
             poll_url=OAUTH_POLL_ROUTE.format(company_id=str(company_id)),
         )
-    if row is not None and (row.ig_user_id or "").strip():
+    if social_account_is_connected(row):
         return SocialOAuthInfo(status="connected")
     return SocialOAuthInfo(status="not_connected")
 

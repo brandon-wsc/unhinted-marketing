@@ -167,7 +167,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   }
 
   const expired = isExpired(account?.expires_at ?? null);
-  const connected = account !== null;
+  const connected = status === "connected" || Boolean(account?.ig_user_id?.trim());
   const connecting = status === "pending";
 
   const expiresLabel = useMemo(() => {
@@ -226,17 +226,14 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
 
         {connected && !connecting && (
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
+            {!expired && (
               <Badge
                 variant="outline"
                 className="border-success/30 bg-success-soft text-success-foreground"
               >
                 {t("settings.instagram.connected")}
               </Badge>
-              {expired && (
-                <Badge variant="destructive">{t("settings.instagram.expiredTitle")}</Badge>
-              )}
-            </div>
+            )}
             <dl className="grid gap-2 text-sm sm:grid-cols-[8rem_1fr]">
               <dt className="text-muted-foreground">{t("settings.instagram.igUserId")}</dt>
               <dd className="font-medium text-foreground">{account.ig_user_id}</dd>
@@ -249,7 +246,13 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
         )}
 
         {!connecting && (
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div
+            className={
+              connected
+                ? "flex flex-wrap items-center justify-end gap-2"
+                : "flex flex-wrap items-center justify-start gap-2"
+            }
+          >
             {connected ? (
               <Button
                 type="button"

@@ -8,9 +8,10 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal import config
-from tests.api.helpers import auth_header, register_user
+from tests.api.helpers import auth_header, join_org, register_user
 
 
 def _base(company_id: str) -> str:
@@ -85,6 +86,10 @@ async def test_oauth_start_status_callback(
     assert pending.status_code == 200
     assert pending.json()["status"] == "pending"
 
+    listed_pending = await client.get(f"{_base(company_id)}", headers=headers)
+    assert listed_pending.status_code == 200
+    assert listed_pending.json()["items"] == []
+
     client.cookies.set("meta_oauth_csrf", csrf_cookie, path="/api/social")
     callback = await client.get(
         CALLBACK,
@@ -114,6 +119,9 @@ async def test_oauth_start_status_callback(
     assert restarted.status_code == 201
     pending2 = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
     assert pending2.json()["status"] == "pending"
+    listed_rotate = await client.get(f"{_base(company_id)}", headers=headers)
+    assert len(listed_rotate.json()["items"]) == 1
+    assert listed_rotate.json()["items"][0]["ig_user_id"] == "17841400000000"
 
 
 @pytest.mark.asyncio
@@ -155,3 +163,34 @@ async def test_oauth_denied_clears_state(
 
     pending = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
     assert pending.json()["status"] == "not_connected"
+    listed = await client.get(f"{_base(company_id)}", headers=headers)
+    assert listed.json()["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_oauth_unauthenticated(client: AsyncClient) -> None:
+    company_id = uuid.uuid4()
+    status = await client.get(f"{_base(str(company_id))}/oauth/status")
+    assert status.status_code == 401
+    started = await client.post(f"{_base(str(company_id))}/oauth/start")
+    assert started.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_oauth_member_forbidden(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner = await register_user(client, email=f"own-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    member = await register_user(client, email=f"mem-{uuid.uuid4().hex[:8]}@example.com")
+    await join_org(
+        db_session,
+        user_id=uuid.UUID(member["user"]["id"]),
+        company_id=uuid.UUID(company_id),
+        role="member",
+    )
+    headers = auth_header(member["access_token"])
+    status = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
+    assert status.status_code == 403
+    started = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
+    assert started.status_code == 403

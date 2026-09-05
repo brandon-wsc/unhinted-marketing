@@ -134,7 +134,7 @@ async def _publish_instagram(
     company_id: uuid.UUID,
 ) -> PublishOutcome:
     account = await repos.get_social_account(db, company_id, "instagram")
-    if account is None:
+    if account is None or not repos.social_account_is_connected(account):
         raise PublishPreconditionError("social_account_not_connected")
     if _token_expired(account):
         account.last_error_kind = ERROR_TOKEN_EXPIRED

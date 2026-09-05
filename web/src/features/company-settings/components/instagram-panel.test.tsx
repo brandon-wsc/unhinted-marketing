@@ -69,6 +69,18 @@ describe("InstagramPanel", () => {
     expect(screen.queryByLabelText("settings.instagram.igUserId")).not.toBeInTheDocument();
   });
 
+  it("does not show connected chrome while oauth is pending with an empty list", async () => {
+    api.apiListSocialAccounts.mockResolvedValue([]);
+    api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "pending" });
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByText("settings.instagram.connectingTitle")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("settings.instagram.connected")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "settings.instagram.connect" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "settings.instagram.rotate" })).not.toBeInTheDocument();
+  });
+
   it("shows last4 only on a connected account", async () => {
     api.apiListSocialAccounts.mockResolvedValue([connected]);
     api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "connected" });
@@ -115,8 +127,10 @@ describe("InstagramPanel", () => {
     api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "connected" });
     renderPanel();
     await waitFor(() => {
-      expect(screen.getAllByText("settings.instagram.expiredTitle").length).toBeGreaterThan(0);
+      expect(screen.getByText("settings.instagram.expiredTitle")).toBeInTheDocument();
     });
+    expect(screen.getByText("settings.instagram.expiredBody")).toBeInTheDocument();
+    expect(screen.queryByText("settings.instagram.connected")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "settings.instagram.rotate" })).toBeInTheDocument();
   });
 
