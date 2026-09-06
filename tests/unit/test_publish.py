@@ -167,9 +167,8 @@ async def test_instagram_two_phase_success(monkeypatch: pytest.MonkeyPatch) -> N
     assert outcome.error_kind is None
     assert account.last_error_kind is None
     assert account.last_verified_at is not None
-    assert f"/{IG_USER}/media" in client.post_urls[0]
-    assert f"/{IG_USER}/media_publish" in client.post_urls[1]
-    assert "v22.0" in client.post_urls[0]
+    assert f"https://graph.instagram.com/v22.0/{IG_USER}/media" == client.post_urls[0]
+    assert f"https://graph.instagram.com/v22.0/{IG_USER}/media_publish" == client.post_urls[1]
 
 
 @pytest.mark.asyncio

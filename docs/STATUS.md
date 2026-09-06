@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-09-05  
+> **Last updated:** 2026-09-06  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -34,12 +34,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
 **Decision (2026-09-02) — Real publish: Instagram adapter + org social accounts:** → [ADR 0022](./adr/0022-real-publish-instagram.md) · plan: [PUBLISH_PLAN.md](./PUBLISH_PLAN.md)
-**Update (2026-09-05) — Meta OAuth connect added:** editor `/settings?tab=instagram` now connects via Meta OAuth (popup + poll); manual token paste removed. Callback URL for the Meta App Dashboard → `META_OAUTH_REDIRECT_URI`.
+**Update (2026-09-05) — Meta OAuth connect added:** editor `/settings?tab=instagram` connects via popup + poll; manual token paste removed. Callback URL → `META_OAUTH_REDIRECT_URI`.
+**Update (2026-09-06) — Instagram Login:** Business Login for Instagram (`instagram.com/oauth/authorize` + `graph.instagram.com`); Facebook Login / Page lookup removed. Alembic wipe of Facebook-era `social_accounts` rows.
 
 - **Backend shipped** — `social_accounts` + editor HTTP (`GET/PUT/DELETE …/social-accounts`) + `connect-social-account` CLI; Confirm dispatches on `PUBLISH_ADAPTER` (default `stub`); `session.snapshot` hydrates the latest confirm receipt
 - **UI shipped** — preview receipts (`published` / `failed` / `stubbed`) + copy-only Confirm gate; editor-only `/settings?tab=instagram` (last4 only, never the raw token)
 - **`social_accounts` table** — org-scoped IG credentials, Fernet-encrypted (reuses `BYOK_ENCRYPTION_KEY` + `byok_providers` shape)
-- **Meta OAuth (2026-09-05)** — PKCE auth-code flow via Meta dialog; encrypted connect-state + CSRF on the `social_accounts` row; public `/api/social/oauth/callback` recovery of the org from `state`; token + `ig_user_id` upserted server-side. Env: `META_APP_ID`, `META_APP_SECRET`, `META_OAUTH_REDIRECT_URI`, `META_OAUTH_SUCCESS_URL`. CLI/PUT seeding still available as fallback. Abandoned connect: 10-minute poll timeout + Cancel (`POST …/oauth/cancel`); stale pending expires on `oauth/status`.
+- **Instagram Login OAuth (2026-09-06)** — auth-code flow via Instagram dialog (no PKCE, no Facebook Page picker); encrypted connect-state + CSRF on the `social_accounts` row; public `/api/social/oauth/callback` recovers the org from `state`; short-lived token exchanged for 60-day token; `ig_user_id` from `GET /me`. Env: `META_APP_ID` / `META_APP_SECRET` (**Instagram** App ID / Secret), `META_OAUTH_REDIRECT_URI`, `META_OAUTH_SUCCESS_URL`. Scopes: `instagram_business_basic`, `instagram_business_content_publish`. Failures: `meta_oauth_not_professional`, `meta_oauth_missing_publish`. CLI/PUT seeding still available as fallback. Abandoned connect: 10-minute poll timeout + Cancel (`POST …/oauth/cancel`). Publish host: `graph.instagram.com`.
 - **`PUBLISH_ADAPTER=stub|instagram`** — adapter in `internal/tools/publish.py`; IG two-phase container → media_publish
 - **Copy-only drafts rejected at Confirm** (`400 image_required`); missing IG account → `400 social_account_not_connected`; receipt `stubbed` / `published` / `failed` with optional `permalink` / `error_kind`; failed publish does **not** set `session.status=confirmed`
 - **Boundaries unchanged** — Confirm-only publish ([ADR 0003](./adr/0003-confirm-without-llm.md)); per-revision `approval_token`; user/session-scoped idempotency
@@ -483,7 +484,10 @@ unhinted-marketing/
 | `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |
 | `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`). Instagram publish needs a Meta-reachable HTTPS URL (local MinIO is not) |
 | `PUBLISH_ADAPTER` | Confirm adapter: `stub` (default, never hits Meta) or `instagram` ([ADR 0022](./adr/0022-real-publish-instagram.md)) |
-| `META_GRAPH_API_VERSION` | Graph API version pin (default `v22.0`) |
+| `META_GRAPH_API_VERSION` | Instagram Graph version pin (default `v22.0`) |
+| `META_APP_ID` / `META_APP_SECRET` | Instagram App ID / Secret (App Dashboard → Instagram; not the Facebook App ID) |
+| `META_OAUTH_REDIRECT_URI` | Instagram Login Valid OAuth Redirect URI (local: `http://localhost:5173/api/social/oauth/callback`) |
+| `META_OAUTH_SUCCESS_URL` | Optional post-connect SPA URL (defaults to `WEB_BASE_URL` + `/settings?tab=instagram`) |
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |
 | `LLM_RECORD_ENABLED` | Persist every LLM call to `llm_call_records` (default true; [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | `QUESTION_CACHE_TTL_HOURS` | Recommended questions cache (default 12) |

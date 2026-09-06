@@ -29,6 +29,12 @@ describe("mapApiError", () => {
     );
     expect(mapApiError("image_required", t)).toBe("i18n:preview.error.imageRequired");
     expect(mapApiError("social_account_not_connected", t)).toBe("i18n:preview.error.notConnected");
+    expect(mapApiError("meta_oauth_not_professional", t)).toBe(
+      "i18n:settings.instagram.oauthNotProfessional",
+    );
+    expect(mapApiError("meta_oauth_missing_publish", t)).toBe(
+      "i18n:settings.instagram.oauthMissingPublish",
+    );
   });
 
   it("maps Request failed (N) to errors.requestFailed with status", () => {

@@ -103,12 +103,13 @@ class Settings(BaseSettings):
     publish_adapter: str = "stub"  # stub | instagram
     meta_graph_api_version: str = "v22.0"
 
-    # Meta OAuth connect flow (ADR 0022 OAuth slice) — dashboard Valid OAuth Redirect URI
+    # Instagram Login connect (ADR 0022 OAuth slice). These are the Instagram App
+    # ID / Secret from App Dashboard → Instagram (often not the Facebook App ID).
     meta_app_id: str | None = None
     meta_app_secret: str | None = None
-    # Backend callback — this exact URL goes into the Meta App Dashboard:
-    #   App Settings → Advanced → Security → Valid OAuth Redirect URIs
-    meta_oauth_redirect_uri: str = "http://localhost:8000/api/social/oauth/callback"
+    # Backend callback — Instagram product → Valid OAuth Redirect URIs:
+    # Dialog scopes: instagram_business_basic, instagram_business_content_publish.
+    meta_oauth_redirect_uri: str = "http://localhost:5173/api/social/oauth/callback"
     # Where the browser lands after a successful connect (defaults to WEB_BASE_URL)
     meta_oauth_success_url: str | None = None
 

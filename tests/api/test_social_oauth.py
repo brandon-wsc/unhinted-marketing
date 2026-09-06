@@ -11,6 +11,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal import config
+from internal.auth.meta_oauth import META_OAUTH_SCOPES
 from tests.api.helpers import auth_header, join_org, register_user
 
 
@@ -22,10 +23,21 @@ CALLBACK = "/api/social/oauth/callback"
 
 
 class ScriptedGraph:
-    def __init__(self, token_payload: dict, me_payload: dict | None = None) -> None:
+    def __init__(
+        self,
+        token_payload: dict,
+        me_payload: dict | None = None,
+        long_lived_payload: dict | None = None,
+    ) -> None:
         self._token_payload = token_payload
         self._me_payload = me_payload or {}
+        self._long_lived_payload = long_lived_payload or {
+            "access_token": "IGQW-oauth-token-999",
+            "token_type": "bearer",
+            "expires_in": 5_184_000,
+        }
         self.get_urls: list[str] = []
+        self.post_urls: list[str] = []
 
     async def __aenter__(self) -> ScriptedGraph:
         return self
@@ -33,11 +45,57 @@ class ScriptedGraph:
     async def __aexit__(self, *args: object) -> None:
         return None
 
+    async def post(self, url: str, data: dict | None = None) -> httpx.Response:
+        self.post_urls.append(url)
+        if "api.instagram.com/oauth/access_token" in url:
+            return httpx.Response(200, json=self._token_payload)
+        return httpx.Response(404, json={})
+
     async def get(self, url: str, params: dict | None = None) -> httpx.Response:
         self.get_urls.append(url)
-        if "/oauth/access_token" in url:
-            return httpx.Response(200, json=self._token_payload)
-        return httpx.Response(200, json=self._me_payload)
+        if url.startswith("https://graph.instagram.com/access_token"):
+            return httpx.Response(200, json=self._long_lived_payload)
+        if url.rstrip("/").endswith("/me"):
+            return httpx.Response(200, json=self._me_payload)
+        return httpx.Response(200, json={})
+
+
+def _patch_meta(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config.settings, "meta_app_id", "123456")
+    monkeypatch.setattr(config.settings, "meta_app_secret", "secret123")
+    monkeypatch.setattr(
+        config.settings,
+        "meta_oauth_redirect_uri",
+        "http://localhost:8000/api/social/oauth/callback",
+    )
+
+
+def _ok_token() -> dict:
+    return {
+        "access_token": "IGQW-short",
+        "user_id": "17841400000000",
+        "permissions": META_OAUTH_SCOPES,
+    }
+
+
+async def _start_oauth(
+    client: AsyncClient, headers: dict[str, str], company_id: str
+) -> tuple[str, str]:
+    started = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
+    assert started.status_code == 201, started.text
+    state = parse_qs(urlsplit(started.json()["authorization_url"]).query)["state"][0]
+    csrf = started.cookies.get("meta_oauth_csrf")
+    assert csrf
+    return state, csrf
+
+
+async def _hit_callback(client: AsyncClient, *, state: str, csrf: str) -> httpx.Response:
+    client.cookies.set("meta_oauth_csrf", csrf, path="/api/social")
+    return await client.get(
+        CALLBACK,
+        params={"code": "auth-code", "state": state},
+        follow_redirects=False,
+    )
 
 
 @pytest.mark.asyncio
@@ -49,25 +107,10 @@ async def test_oauth_start_status_callback(
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(data["access_token"])
-    monkeypatch.setattr(config.settings, "meta_app_id", "123456")
-    monkeypatch.setattr(config.settings, "meta_app_secret", "secret123")
-    monkeypatch.setattr(
-        config.settings,
-        "meta_oauth_redirect_uri",
-        "http://localhost:8000/api/social/oauth/callback",
-    )
+    _patch_meta(monkeypatch)
     graph = ScriptedGraph(
-        token_payload={
-            "access_token": "IGQW-oauth-token-999",
-            "expires_in": 5_184_000,
-            "token_type": "bearer",
-            "granted_scopes": [
-                "instagram_basic",
-                "instagram_content_publish",
-                "pages_show_list",
-            ],
-        },
-        me_payload={"id": "fbid-1", "instagram_business_account": {"id": "17841400000000"}},
+        token_payload=_ok_token(),
+        me_payload={"user_id": "17841400000000", "account_type": "BUSINESS"},
     )
     monkeypatch.setattr(mod_httpx, "AsyncClient", lambda *a, **k: graph)
 
@@ -76,9 +119,13 @@ async def test_oauth_start_status_callback(
     body = started.json()
     assert body["status"] == "pending"
     assert body["authorization_url"].startswith(
-        "https://www.facebook.com/v22.0/dialog/oauth?"
+        "https://www.instagram.com/oauth/authorize?"
     )
-    state = parse_qs(urlsplit(body["authorization_url"]).query)["state"][0]
+    start_query = parse_qs(urlsplit(body["authorization_url"]).query)
+    assert start_query["scope"][0] == META_OAUTH_SCOPES
+    assert "extras" not in start_query
+    assert "code_challenge" not in start_query
+    state = start_query["state"][0]
     csrf_cookie = started.cookies.get("meta_oauth_csrf")
     assert csrf_cookie
 
@@ -100,6 +147,8 @@ async def test_oauth_start_status_callback(
     location = callback.headers["location"]
     assert "oauth=done" in location
     assert "status=ok" in location
+    assert "/settings" in location
+    assert "tab=instagram" in location
 
     connected = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
     assert connected.status_code == 200
@@ -125,6 +174,61 @@ async def test_oauth_start_status_callback(
 
 
 @pytest.mark.asyncio
+async def test_oauth_callback_not_professional(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from internal.auth.meta_oauth import httpx as mod_httpx
+
+    data = await register_user(client)
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(data["access_token"])
+    _patch_meta(monkeypatch)
+    graph = ScriptedGraph(
+        token_payload=_ok_token(),
+        me_payload={"id": "personal-1", "account_type": "PERSONAL"},
+    )
+    monkeypatch.setattr(mod_httpx, "AsyncClient", lambda *a, **k: graph)
+    state, csrf = await _start_oauth(client, headers, company_id)
+    callback = await _hit_callback(client, state=state, csrf=csrf)
+    assert callback.status_code in (302, 307)
+    location = callback.headers["location"]
+    assert "oauth=done" in location
+    assert "status=meta_oauth_not_professional" in location
+    assert "/settings" in location
+    after = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
+    assert after.json()["status"] == "not_connected"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_missing_publish(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from internal.auth.meta_oauth import httpx as mod_httpx
+
+    data = await register_user(client)
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(data["access_token"])
+    _patch_meta(monkeypatch)
+    graph = ScriptedGraph(
+        token_payload={
+            "access_token": "IGQW-short",
+            "user_id": "17841400000000",
+            "permissions": "instagram_business_basic",
+        },
+        me_payload={"user_id": "17841400000000", "account_type": "BUSINESS"},
+    )
+    monkeypatch.setattr(mod_httpx, "AsyncClient", lambda *a, **k: graph)
+    state, csrf = await _start_oauth(client, headers, company_id)
+    callback = await _hit_callback(client, state=state, csrf=csrf)
+    assert callback.status_code in (302, 307)
+    location = callback.headers["location"]
+    assert "oauth=done" in location
+    assert "status=meta_oauth_missing_publish" in location
+    after = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
+    assert after.json()["status"] == "not_connected"
+
+
+@pytest.mark.asyncio
 async def test_oauth_requires_meta_config(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -145,13 +249,7 @@ async def test_oauth_denied_clears_state(
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(data["access_token"])
-    monkeypatch.setattr(config.settings, "meta_app_id", "123456")
-    monkeypatch.setattr(config.settings, "meta_app_secret", "secret123")
-    monkeypatch.setattr(
-        config.settings,
-        "meta_oauth_redirect_uri",
-        "http://localhost:8000/api/social/oauth/callback",
-    )
+    _patch_meta(monkeypatch)
 
     started = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
     assert started.status_code == 201
@@ -178,13 +276,7 @@ async def test_oauth_cancel_clears_pending(
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(data["access_token"])
-    monkeypatch.setattr(config.settings, "meta_app_id", "123456")
-    monkeypatch.setattr(config.settings, "meta_app_secret", "secret123")
-    monkeypatch.setattr(
-        config.settings,
-        "meta_oauth_redirect_uri",
-        "http://localhost:8000/api/social/oauth/callback",
-    )
+    _patch_meta(monkeypatch)
 
     started = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
     assert started.status_code == 201
@@ -205,13 +297,7 @@ async def test_oauth_status_expires_stale_pending(
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(data["access_token"])
-    monkeypatch.setattr(config.settings, "meta_app_id", "123456")
-    monkeypatch.setattr(config.settings, "meta_app_secret", "secret123")
-    monkeypatch.setattr(
-        config.settings,
-        "meta_oauth_redirect_uri",
-        "http://localhost:8000/api/social/oauth/callback",
-    )
+    _patch_meta(monkeypatch)
     started = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
     assert started.status_code == 201
     monkeypatch.setattr(

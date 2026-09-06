@@ -614,8 +614,8 @@ class SocialAccount(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    # Meta OAuth connect flow (ADR 0022 OAuth slice)
-    # JSON-encrypted {state, code_verifier} while the exchange is in flight.
+    # Instagram Login connect (ADR 0022 OAuth slice)
+    # JSON-encrypted {row_id, csrf_token, started_at} while the exchange is in flight.
     oauth_connect_state: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Comma-separated granted-but-unwanted scope gaps from the token exchange.
     oauth_pending_scopes: Mapped[str | None] = mapped_column(Text, nullable=True)

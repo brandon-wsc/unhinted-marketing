@@ -34,7 +34,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 | `Company settings · Members` | ✅ Drawn — editor (idle invite form) + **invite-sent** card + member read-only; sidebar Voice / Products / Members / Approvals |
 | `Invite accept` | ✅ Drawn — A logged out · B ready · C email mismatch · D invalid · **E already in org (409)** |
 | `Company settings · Approvals` | Pending proposals · field diff · Approve / Decline — owner/admin |
-| `Company settings · Instagram` | ✅ Drawn — empty (Connect Instagram, left) · connecting (pending alert) · connected (last4 + Reconnect / Disconnect) · expired (Alert + Reconnect; no badge). Dialogs: Disconnect confirm. Editor-only; Meta OAuth |
+| `Company settings · Instagram` | ✅ Drawn — empty (Connect Instagram, left) · connecting (voice-soft cluster + Cancel inside; Connect/Reconnect hidden) · connected (last4 + Reconnect / Disconnect) · expired (destructive badge + Reconnect). Dialogs: Disconnect confirm. Editor-only; Instagram Login |
 
 Entry: UserMenu → **公司設定** (desktop dropdown + mobile dialog; above **系統** when platform level ≥ 6). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell). UserMenu copy is zh-HK; only **登出** is destructive red.
 
@@ -51,7 +51,7 @@ UserMenu
   │     ├─ Members             ← org team (slice 4)
   │     ├─ Approvals           ← K6 — owner/admin queue
   │     ├─ Models              ← BYOK keys / models / routing (ADR 0020)
-  │     └─ Instagram           ← org publish account (ADR 0022; editor-only; Meta OAuth)
+  │     └─ Instagram           ← org publish account (ADR 0022; editor-only; Instagram Login)
   ├─ 系統                      ← SPA `/system` (platform ops; API `/api/admin/*`; en: System)
   └─ 登出                      ← destructive
 
@@ -83,7 +83,7 @@ UserMenu
 | Session chat | Spoken SKU/price (no form) | User × New | current user | shipped; **private** per user |
 | Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** ✅ |
 | **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6** ✅ |
-| **Instagram** | Meta OAuth connect; show `ig_user_id` + `token_last4` + `expires_at`; reconnect / disconnect | Org → `social_accounts` | owner/admin | **ADR 0022** ✅ `/settings?tab=instagram` |
+| **Instagram** | Instagram Login connect; show `ig_user_id` + `token_last4` + `expires_at`; reconnect / disconnect | Org → `social_accounts` | owner/admin | **ADR 0022** ✅ `/settings?tab=instagram` |
 
 **Not collected in UI (MVP):** per-company persona CRUD, offer-snippet dedicated page, brand PDF upload, pain points, market signals, platform craft ([VOICE.md](../VOICE.md)).
 
@@ -133,14 +133,14 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 
 **Route:** `/settings?tab=instagram` · sidebar label **Instagram** (i18n `settings.nav.instagram`). Editor-only, same gate as Models / Approvals. Members never see the tab.
 
-**OAuth connect (ADR 0022, 2026-09-05).** Editor clicks Connect → Meta popup → panel polls until connected. CLI `connect-social-account` stays as bootstrap fallback.
+**OAuth connect (ADR 0022, 2026-09-06).** Editor clicks Connect → Instagram Login popup → panel polls until connected. Abandoned connects time out at **10 minutes**; **Cancel** posts `…/oauth/cancel` and stops polling. CLI `connect-social-account` stays as bootstrap fallback.
 
 **Layout:**
 
-1. **Empty** — one card: **Connect Instagram** (primary, left). Opens the Meta authorization window.
-2. **Connecting** — default alert (title + body); actions hidden while `oauth/status` is pending.
+1. **Empty** — one card: **Connect Instagram** (primary, left). Opens the Instagram authorization window.
+2. **Connecting** — voice-soft cluster (`border-voice-border` + `bg-accent`): spinner + title + body; **Cancel** inside the cluster. Connect / Reconnect hidden while `oauth/status` is pending. Stuck for 10 minutes → same Cancel path as the user abort.
 3. **Connected** — badge Connected · IG user id · `••••last4` · expires · **Reconnect** (outline) · **Disconnect** (destructive outline).
-4. **Expired** — destructive Alert (title + instruction) · **Reconnect** / **Disconnect**. No status badge — this page is the object, not a list.
+4. **Expired** — same card as connected: destructive badge (`expiredTitle`) · IG user id · `••••last4` · expires · **Reconnect** / **Disconnect**. No instruction Alert.
 5. **Disconnect confirm** — AlertDialog; Cancel · Disconnect.
 
 Confirm still 400 `social_account_not_connected` if none is saved.

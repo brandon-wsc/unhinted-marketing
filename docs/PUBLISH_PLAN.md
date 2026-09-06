@@ -75,7 +75,7 @@ The command upserts on `(company_id, platform)` so token rotation is re-running 
 same command. Encryption happens in the command via `internal/llm/keys.py`.
 
 **Product UX (Penpot, 2026-09-02):** editor-only Company settings tab
-`/settings?tab=instagram` — empty / connected / expired. **Update 2026-09-05:** connects via Meta
+`/settings?tab=instagram` — empty / connecting / connected / expired. **Update 2026-09-06:** connects via Instagram Login
 OAuth (popup + poll to `oauth/status`); manual paste removed from the UI but CLI / `PUT`
 fallback remains. See [knowledge/UI.md](./knowledge/UI.md).
 
@@ -100,7 +100,7 @@ async def publish_social_post(
   UI and tests stay green untouched. **Locked in Q&A:** keep `stubbed`; do not unify
   to `published` + `platform="stub"`.
 - The Instagram path loads the org's `social_accounts` row, decrypts via
-  `decrypt_key`, and runs the Graph two-phase publish:
+  `decrypt_key`, and runs the Graph two-phase publish on `graph.instagram.com`:
   1. `POST /{ig-user-id}/media` — container with `image_url` + `caption`
      (caption = canonical draft `caption` + hashtags + cta, composed deterministically).
   2. `POST /{ig-user-id}/media_publish` — returns the media id; permalink fetched or

@@ -74,7 +74,7 @@ def compose_caption(copy: DraftCopy) -> str:
 
 def _graph_base() -> str:
     version = (settings.meta_graph_api_version or "v22.0").strip().lstrip("/")
-    return f"https://graph.facebook.com/{version}"
+    return f"https://graph.instagram.com/{version}"
 
 
 def classify_graph_error(payload: dict[str, Any] | None, status_code: int) -> str:

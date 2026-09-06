@@ -1,6 +1,8 @@
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useSearchParams } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,13 +43,14 @@ function isExpired(expiresAt: string | null): boolean {
 export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const { t, i18n } = useTranslation();
   const { accessToken } = useAuth();
+  const [params, setParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [account, setAccount] = useState<SocialAccountItem | null>(null);
   const [status, setStatus] = useState<SocialOAuthStatus>("not_connected");
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [flash, setFlash] = useState<"connected" | "disconnected" | null>(null);
+  const [flash, setFlash] = useState<"disconnected" | null>(null);
   const popupRef = useRef<Window | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,22 +86,29 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
     [accessToken, companyId, t],
   );
 
-  const abortConnect = useCallback(async () => {
-    if (abortingRef.current) return;
-    abortingRef.current = true;
-    stopPolling();
-    if (popupRef.current && !popupRef.current.closed) {
-      popupRef.current.close();
-    }
-    try {
-      await apiCancelInstagramOAuth(accessToken, companyId);
-    } catch {
-      // Still leave the panel so the user can retry even if cancel fails.
-    }
-    setStatus("not_connected");
-    setError(t("settings.instagram.oauthAborted"));
-    abortingRef.current = false;
-  }, [accessToken, companyId, stopPolling, t]);
+  const abortConnect = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (abortingRef.current) return;
+      abortingRef.current = true;
+      stopPolling();
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
+      }
+      try {
+        await apiCancelInstagramOAuth(accessToken, companyId);
+      } catch {
+        // Still leave the panel so the user can retry even if cancel fails.
+      }
+      setStatus("not_connected");
+      if (options?.silent) {
+        setError(null);
+      } else {
+        setError(t("settings.instagram.oauthAborted"));
+      }
+      abortingRef.current = false;
+    },
+    [accessToken, companyId, stopPolling, t],
+  );
 
   // Poll the OAuth status while a connect is pending; resolve when done/failed.
   const pollStatus = useCallback(() => {
@@ -109,12 +119,12 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
     pollRef.current = setInterval(async () => {
       try {
         const oauth = await apiGetInstagramOAuthStatus(accessToken, companyId);
+        // User cancel / timeout already stopped the interval; ignore stale replies.
+        if (!pollRef.current) return;
         if (oauth.status === "connected") {
           stopPolling();
           setStatus("connected");
           await loadAccounts(false);
-          setFlash("connected");
-          window.setTimeout(() => setFlash(null), 2500);
         } else if (oauth.status === "pending") {
           setStatus("pending");
         } else {
@@ -139,7 +149,22 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   }, [loadAccounts]);
 
   useEffect(() => {
-    void load();
+    const oauthDone = params.get("oauth") === "done";
+    const detail = params.get("status") || "";
+    void (async () => {
+      await load();
+      if (!oauthDone) return;
+      const next = new URLSearchParams(params);
+      next.delete("oauth");
+      next.delete("status");
+      next.delete("ig_user_id");
+      next.delete("missing_scopes");
+      setParams(next, { replace: true });
+      if (detail === "ok") return;
+      if (detail) setError(mapApiError(detail, t));
+    })();
+    // Consume ?oauth=done once; including `params` would re-run load() and clear the error.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / company change only
   }, [load]);
 
   // Resume polling if a previous flow was left pending (e.g. page refresh mid-connect).
@@ -228,40 +253,51 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        {flash === "connected" && (
-          <Alert variant="success">
-            <AlertDescription>{t("settings.instagram.saved")}</AlertDescription>
-          </Alert>
-        )}
         {flash === "disconnected" && (
           <Alert variant="success">
             <AlertDescription>{t("settings.instagram.disconnected")}</AlertDescription>
           </Alert>
         )}
-        {account && expired && (
-          <Alert variant="destructive" className="border-destructive/30 bg-destructive-soft">
-            <AlertTitle>{t("settings.instagram.expiredTitle")}</AlertTitle>
-            <AlertDescription>{t("settings.instagram.expiredBody")}</AlertDescription>
-          </Alert>
-        )}
 
         {connecting && (
-          <Alert variant="default">
-            <AlertTitle>{t("settings.instagram.connectingTitle")}</AlertTitle>
-            <AlertDescription>{t("settings.instagram.connectingBody")}</AlertDescription>
-          </Alert>
+          <div
+            role="status"
+            className="space-y-3 rounded-lg border border-voice-border bg-accent px-4 py-3"
+          >
+            <div className="flex items-start gap-3">
+              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-voice" aria-hidden />
+              <div className="min-w-0 space-y-0.5">
+                <p className="text-sm font-medium tracking-tight text-foreground">
+                  {t("settings.instagram.connectingTitle")}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {t("settings.instagram.connectingBody")}
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void abortConnect({ silent: true })}
+            >
+              {t("common.cancel")}
+            </Button>
+          </div>
         )}
 
         {connected && !connecting && account && (
           <div className="space-y-3">
-            {!expired && (
-              <Badge
-                variant="outline"
-                className="border-success/30 bg-success-soft text-success-foreground"
-              >
-                {t("settings.instagram.connected")}
-              </Badge>
-            )}
+            <Badge
+              variant="outline"
+              className={
+                expired
+                  ? "border-destructive/30 bg-destructive-soft text-destructive-foreground"
+                  : "border-success/30 bg-success-soft text-success-foreground"
+              }
+            >
+              {expired ? t("settings.instagram.expiredTitle") : t("settings.instagram.connected")}
+            </Badge>
             <dl className="grid gap-2 text-sm sm:grid-cols-[8rem_1fr]">
               <dt className="text-muted-foreground">{t("settings.instagram.igUserId")}</dt>
               <dd className="font-medium text-foreground">{account.ig_user_id}</dd>
@@ -273,13 +309,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
           </div>
         )}
 
-        {connecting ? (
-          <div className="flex flex-wrap items-center justify-start gap-2">
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void abortConnect()}>
-              {t("common.cancel")}
-            </Button>
-          </div>
-        ) : (
+        {!connecting && (
           <div
             className={
               connected

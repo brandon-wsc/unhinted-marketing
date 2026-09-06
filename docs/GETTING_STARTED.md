@@ -127,6 +127,8 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 | GET | `/api/sessions/{id}/events` | SSE stream (snapshot includes `interrupted` for Generate-image CTA) |
 | POST | `/api/sessions/{id}/confirm` | Confirm publish (stub by default; Instagram when `PUBLISH_ADAPTER=instagram`) |
 | GET | `/api/companies/{id}/social-accounts` | List org Instagram credentials (editor; `token_last4` only) |
+| POST | `/api/companies/{id}/social-accounts/oauth/start` | Start Instagram Login (popup URL + CSRF cookie) |
+| GET | `/api/social/oauth/callback` | Instagram Login redirect (public; `META_OAUTH_REDIRECT_URI`) |
 | PUT / DELETE | `/api/companies/{id}/social-accounts/instagram` | Save or disconnect the org IG token |
 
 ### Health

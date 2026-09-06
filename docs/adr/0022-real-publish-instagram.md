@@ -22,7 +22,7 @@ One Alembic hex revision adds `social_accounts`, mirroring the `byok_providers` 
 
 - `id`, `company_id` (FK `entities.id` ON DELETE CASCADE, indexed), `platform` (`CHECK platform IN ('instagram')`), `ig_user_id`, `access_token_encrypted` (Text, Fernet under `BYOK_ENCRYPTION_KEY`), `token_last4`, `expires_at`, `last_verified_at`, `last_error_kind`, `created_by` (FK `users.id` ON DELETE SET NULL), timestamps.
 - Raw tokens are never logged, never serialized to API/SSE/OpenAPI — `token_last4` only, same posture as BYOK keys.
-- Tokens are seeded via a worker CLI command (`python -m cmd.worker connect-social-account …`), following the `set-platform-role` bootstrap pattern.
+- Editors connect via Instagram Login on `/settings?tab=instagram` (see Consequences). CLI `python -m cmd.worker connect-social-account …` remains a bootstrap fallback, following the `set-platform-role` pattern.
 
 Explicitly **not** built in the original slice: OAuth connect flow (added 2026-09-05 — see below), token auto-refresh scheduler (long-lived tokens last ~60 days; expiry is handled manually), a multi-platform abstraction layer (`platform` CHECK constraint is enough for one platform), and platform webhooks.
 
@@ -30,7 +30,7 @@ Explicitly **not** built in the original slice: OAuth connect flow (added 2026-0
 
 - `internal/tools/publish.py` exposes `publish_social_post(PublishSocialPostRequest) -> PublishSocialPostResponse`, consuming the shapes already locked in [`schemas/tools.py`](../../schemas/tools.py).
 - Env `PUBLISH_ADAPTER=stub|instagram`, default `stub`. CI, dev, and tests never hit Meta unless explicitly opted in.
-- The Instagram adapter implements the Graph two-phase publish: `POST /{ig-user-id}/media` (container; requires a publicly reachable `image_url`) then `POST /{ig-user-id}/media_publish`. Token decryption reuses the BYOK Fernet helper ([`internal/llm/keys.py`](../../internal/llm/keys.py)).
+- The Instagram adapter implements the Graph two-phase publish on `graph.instagram.com`: `POST /{ig-user-id}/media` (container; requires a publicly reachable `image_url`) then `POST /{ig-user-id}/media_publish`. Token decryption reuses the BYOK Fernet helper ([`internal/llm/keys.py`](../../internal/llm/keys.py)).
 - The publish image is the draft's first `media_ids` entry, served via `S3_PUBLIC_BASE_URL`. Multi-image carousels are deferred. Local MinIO is unreachable by Meta; live verification requires a tunnel or real S3 — unit tests mock httpx.
 
 ### 3. Copy-only drafts are rejected at Confirm
@@ -55,7 +55,7 @@ Publishing still happens only in the Confirm handler with a valid per-revision `
 - New routes surface no token material; the receipt panel exposes `status` / `permalink` / error reason only.
 - Contracts (`docs/contracts/publish-social-post-*.schema.json`) are regenerated via `python -m scripts.export_contracts` when response fields change.
 - `.env.example` gains `PUBLISH_ADAPTER` and `META_GRAPH_API_VERSION`.
-**Added 2026-09-05 — Meta OAuth connect (PKCE):** `POST/GET …/social-accounts/oauth/start|status` + public `GET /api/social/oauth/callback`. Editor clicks Connect → dialog opens in a popup → callback exchanges the code server-side and upserts `social_accounts` (token + `ig_user_id`) → the settings panel polls `oauth/status` until `connected`. Connect-state + PKCE verifier + CSRF token are stored Fernet-encrypted on the `social_accounts` row; the callback recovers the org from the signed `state` and verifies the double-submit CSRF cookie (same browser that started the flow). **Update 2026-09-05:** abandoned connects do not poll forever — UI times out at 10 minutes with Cancel (`POST …/oauth/cancel`); `oauth/status` expires stale pending state.
+**Added 2026-09-05 — Meta OAuth connect:** editor popup + poll; encrypted connect-state + CSRF cookie. **Update 2026-09-06 — Instagram Login:** dialog is `https://www.instagram.com/oauth/authorize` (not Facebook Login). Scopes: `instagram_business_basic`, `instagram_business_content_publish`. Exchange short-lived token at `api.instagram.com/oauth/access_token`, then `GET graph.instagram.com/access_token?grant_type=ig_exchange_token`. `ig_user_id` from `GET graph.instagram.com/me` (`user_id`, else `id`). Publish host `graph.instagram.com`. Failures: `meta_oauth_not_professional`, `meta_oauth_missing_publish`. `META_APP_ID` / `META_APP_SECRET` are the Instagram App ID / Secret. Data migration deletes Facebook-era `social_accounts` rows.
 
 - Deferred (each needs its own slice, some a superseding ADR): token auto-refresh, FB/Threads platforms, carousels, per-day publish rate limits (ROADMAP Safety), container-status polling.
 - Changing the credential-storage rule (§1), the copy-only rejection (§3), or the Confirm-only publish boundary (§5) requires a superseding ADR; adapter internals and UI arrangement may iterate without one.

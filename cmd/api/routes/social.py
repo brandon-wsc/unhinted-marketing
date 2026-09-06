@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -36,6 +37,7 @@ from schemas.social import SocialAccountItem, SocialAccountList, SocialAccountUp
 
 router = APIRouter(prefix="/companies/{company_id}/social-accounts", tags=["social"])
 oauth_callback_router = APIRouter(prefix="/social", tags=["social"])
+logger = logging.getLogger(__name__)
 
 OAUTH_POLL_ROUTE = "/api/companies/{company_id}/social-accounts/oauth/status"
 
@@ -100,7 +102,7 @@ async def oauth_status(
     company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SocialOAuthInfo:
-    """Return the org's Meta OAuth connection state (no token material)."""
+    """Return the org's Instagram Login connection state (no token material)."""
     row = await repos.get_social_account(db, company_id, "instagram")
     if row is not None and row.oauth_connect_state and pending_connect_is_stale(
         row.oauth_connect_state
@@ -163,9 +165,10 @@ async def oauth_callback(
     state: str | None = None,
     error: str | None = None,
 ) -> RedirectResponse:
-    """Backend Meta callback — this exact URL goes into the Meta App Dashboard:
-    App Settings → Advanced → Security → Valid OAuth Redirect URIs."""
+    """Backend Instagram Login callback — this exact URL goes into the Meta
+    App Dashboard → Instagram → Valid OAuth Redirect URIs."""
     if error:
+        logger.warning("meta oauth callback denied: %s", error)
         await repos.clear_social_oauth_state_for_state(db, state)
         await db.commit()
         return _oauth_redirect(detail="access_denied")
@@ -183,11 +186,13 @@ async def oauth_callback(
             csrf_token=request.cookies.get(CSRF_COOKIE),
         )
     except MetaOAuthError as exc:
+        logger.warning("meta oauth callback failed: %s", exc.message)
         await repos.clear_social_oauth_state_for_state(db, state)
         await db.commit()
         return _oauth_redirect(detail=exc.message)
 
     await db.commit()
+    logger.info("meta oauth callback ok ig_user_id=%s", result.ig_user_id)
     return _oauth_redirect(
         detail="ok",
         missing_scopes=",".join(result.missing_scopes) if result.missing_scopes else None,
@@ -203,8 +208,13 @@ def _oauth_redirect(
 ) -> RedirectResponse:
     from urllib.parse import urlencode
 
-    base = (settings.meta_oauth_success_url or "").strip() or (settings.web_base_url or "").strip()
+    custom = (settings.meta_oauth_success_url or "").strip()
+    base = custom or (settings.web_base_url or "").strip()
     params: dict[str, str] = {"oauth": "done", "status": detail}
+    if not custom:
+        params["tab"] = "instagram"
+        if not base.rstrip("/").endswith("/settings"):
+            base = f"{base.rstrip('/')}/settings"
     if missing_scopes:
         params["missing_scopes"] = missing_scopes
     if ig_user_id:
