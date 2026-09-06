@@ -34,7 +34,7 @@ alembic upgrade head
 uvicorn cmd.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Frontend: `cd web && pnpm install && pnpm run dev` → [http://localhost:5173/login](http://localhost:5173/login)
+Frontend: `cd web && pnpm install && pnpm run dev` → [https://unhinted.localhost:5173/login](https://unhinted.localhost:5173/login)
 
 Frontend tests: `cd web && pnpm test` (also `pnpm run test:coverage`, `pnpm run build`).
 

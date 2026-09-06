@@ -22,6 +22,30 @@
       "default": "stub",
       "title": "Platform",
       "type": "string"
+    },
+    "permalink": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Permalink"
+    },
+    "error_kind": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Kind"
     }
   },
   "required": [

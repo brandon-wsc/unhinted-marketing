@@ -42,6 +42,7 @@ import {
   agentNodeFallbackKey,
   agentNodeLabelKey,
   agentTrailHeader,
+  isConfirmSuccessStatus,
   MAX_QUEUED_SESSION_MESSAGES,
   parseTurnDurationMs,
   QUEUE_TUCK_PX,
@@ -66,6 +67,7 @@ import { useContainerWidth } from "@/hooks/use-container-width";
 import { useNow } from "@/hooks/use-now";
 import { classifyRelativeTime, formatAbsoluteDateTime } from "@/lib/format-relative-time";
 import { formatWorkedDuration, workedDurationLocale } from "@/lib/format-worked-duration";
+import { mapApiError } from "@/lib/map-api-error";
 import { cn } from "@/lib/utils";
 
 const HISTORY_COLLAPSED_KEY = "unhinted.sessionHistory.collapsed";
@@ -154,6 +156,7 @@ export function ChatPanel() {
     }
   });
   const [pagedPane, setPagedPane] = useState<PagedPane>("chat");
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const [composerH, setComposerH] = useState(0);
@@ -172,6 +175,10 @@ export function ChatPanel() {
       setPagedPane("chat");
     }
   }, [previewMode, pagedPane]);
+
+  useEffect(() => {
+    setConfirmError(null);
+  }, [session?.id]);
 
   function goToChat() {
     setPagedPane("chat");
@@ -360,10 +367,13 @@ export function ChatPanel() {
   }
 
   async function onConfirmDraft(copy: DraftCopy) {
+    setConfirmError(null);
     try {
       await confirmPost(copy);
-    } catch {
-      showError(t("preview.error.confirmFailed"));
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "";
+      setConfirmError(detail);
+      showError(mapApiError(detail, t));
     }
   }
 
@@ -426,7 +436,8 @@ export function ChatPanel() {
   }
 
   const showLanding = messages.length === 0 && !sending && !stopping && streamingText === null;
-  const confirmed = session?.status === "confirmed" || !!confirmReceipt;
+  const confirmed =
+    session?.status === "confirmed" || isConfirmSuccessStatus(confirmReceipt?.status);
 
   const historyProps = {
     sessions: history,
@@ -739,6 +750,7 @@ export function ChatPanel() {
       confirmReceipt={confirmReceipt}
       draftSaving={draftSaving}
       confirming={confirming}
+      confirmError={confirmError}
       companyId={companyId}
       canPromoteExemplar={canPromoteExemplar}
       onApply={onApplyDraft}

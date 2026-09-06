@@ -14,6 +14,7 @@
     "save": "儲存",
     "saving": "儲存緊…",
     "close": "關閉",
+    "clear": "清除",
     "noMatches": "冇符合嘅選項"
   },
   "header": {
@@ -216,6 +217,25 @@
     "confirmDone": "出咗",
     "confirmReceipt": "回執：{{status}}",
     "confirmHint": "Chat 入面講「可以出」唔會真係出。確認會用已儲存修訂（有未儲存改動會先自動儲存）。",
+    "gate": {
+      "imageRequired": "Instagram 出帖要有圖",
+      "notConnected": "未連接 Instagram 帳號。",
+      "openSettings": "去設定"
+    },
+    "receipt": {
+      "publishedTitle": "出咗",
+      "publishedBody": "已發到 Instagram",
+      "publishedBadge": "已出",
+      "viewOnInstagram": "喺 Instagram 睇",
+      "failedTitle": "發佈唔到",
+      "failedHint": "未出街。改好圖或帳號之後再確認。",
+      "retry": "再確認",
+      "error": {
+        "token_expired": "Token 過咗期，去設定更新之後再確認。",
+        "permission": "Instagram 權限唔夠，檢查帳號設定之後再確認。",
+        "platform_error": "Instagram 暫時處理唔到，陣間再確認。"
+      }
+    },
     "exemplar": {
       "save": "將文案儲存做語氣範例",
       "working": "儲存緊…",
@@ -268,6 +288,8 @@
     "error": {
       "saveFailed": "草稿儲存唔到喎，再試一次。",
       "confirmFailed": "確認唔到喎，再試一次。",
+      "imageRequired": "Instagram 出帖要有圖，加張圖再開確認。",
+      "notConnected": "未連接 Instagram。去公司設定貼 token。",
       "planFailed": "圖像 Plan 儲存唔到喎，再試一次。",
       "regenFailed": "再出圖失敗，再試一次。",
       "addFailed": "加圖失敗，再試一次。",
@@ -284,7 +306,8 @@
       "products": "產品",
       "members": "成員",
       "approvals": "審批",
-      "models": "Models"
+      "models": "Models",
+      "instagram": "Instagram"
     },
     "noCompany": {
       "title": "未有公司",
@@ -437,6 +460,31 @@
         "sku": "SKU",
         "note": "備註"
       }
+    },
+    "instagram": {
+      "title": "Instagram",
+      "subtitle": "Confirm 出帖會用呢個專業帳號。",
+      "igUserId": "Instagram 用戶 ID",
+      "expiresAt": "到期（可選）",
+      "tokenMasked": "Token",
+      "connected": "已連接",
+      "expiredTitle": "Token 過咗期",
+      "rotate": "重新連接",
+      "disconnect": "解除連接",
+      "disconnectTitle": "解除 Instagram 連接？",
+      "disconnectBody": "之後確認出街會需要重新連接 Instagram。",
+      "disconnected": "已解除連接。",
+      "loadFailed": "載入唔到 Instagram 設定。",
+      "saveFailed": "儲存唔到，再試一次。",
+      "connect": "連接 Instagram",
+      "connectingTitle": "連接緊 Instagram…",
+      "connectingBody": "喺新視窗完成授權之後，呢度會自動更新。卡住可以取消再試。",
+      "oauthFailed": "連接失敗，請再試一次。",
+      "oauthAborted": "授權已取消或逾時，請重新連接。",
+      "oauthNotConfigured": "仲未設定 Instagram Login（META_APP_ID / META_APP_SECRET 要用 Instagram App ID／Secret）。",
+      "oauthNotProfessional": "呢個 Instagram 帳號唔係專業帳號（Business／Creator）。出帖要先喺 Instagram 轉做專業帳號。",
+      "oauthMissingPublish": "授權成功，但未批准出帖權限。請重新連接並批准 instagram_business_content_publish。",
+      "oauthCsrfMismatch": "授權視窗同呢個瀏覽器 session 對唔上，請再撳連接。"
     },
     "apiKeys": {
       "title": "Models",

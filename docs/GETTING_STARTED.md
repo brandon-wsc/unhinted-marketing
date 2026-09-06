@@ -52,7 +52,7 @@ pnpm install
 pnpm run dev
 ```
 
-Open [http://localhost:5173/login](http://localhost:5173/login). Vite proxies `/api` → `:8000`. SPA document routes (`/`, `/login`, `/admin`, …) are not proxied.
+Open [https://unhinted.localhost:5173/login](https://unhinted.localhost:5173/login) (not `http://localhost:5173` — Instagram OAuth CSRF is origin-bound). Vite proxies `/api` → `:8000` and serves HTTPS when `web/certs/` pems are present (gitignored). SPA document routes (`/`, `/login`, `/admin`, …) are not proxied. Restart uvicorn after changing `.env` (`--reload` does not reread env).
 
 ---
 
@@ -77,6 +77,9 @@ python -m cmd.worker all
 # Wipe all signal data (keeps auth, companies, personas); optional re-ingest
 python -m cmd.worker reset-signals
 python -m cmd.worker reset-signals --reingest
+
+# Org Instagram token for Confirm (ADR 0022; never prints the raw token)
+python -m cmd.worker connect-social-account --company UUID --ig-user-id ID --token TOKEN
 
 # Background scheduler (hourly ingest, 12h questions)
 python -m cmd.scheduler --once
@@ -122,7 +125,11 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 | POST | `/api/sessions/{id}/stop` | Discard in-flight or parked turn |
 | POST | `/api/sessions/{id}/draft` | Manual draft revision (no LLM) |
 | GET | `/api/sessions/{id}/events` | SSE stream (snapshot includes `interrupted` for Generate-image CTA) |
-| POST | `/api/sessions/{id}/confirm` | Confirm stub publish |
+| POST | `/api/sessions/{id}/confirm` | Confirm publish (stub by default; Instagram when `PUBLISH_ADAPTER=instagram`) |
+| GET | `/api/companies/{id}/social-accounts` | List org Instagram credentials (editor; `token_last4` only) |
+| POST | `/api/companies/{id}/social-accounts/oauth/start` | Start Instagram Login (popup URL + CSRF cookie) |
+| GET | `/api/social/oauth/callback` | Instagram Login redirect (public; `META_OAUTH_REDIRECT_URI`) |
+| PUT / DELETE | `/api/companies/{id}/social-accounts/instagram` | Save or disconnect the org IG token |
 
 ### Health
 

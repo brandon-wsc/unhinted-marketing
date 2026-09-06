@@ -149,6 +149,8 @@ class ConfirmSessionResponse(BaseModel):
     status: str
     tool_name: str
     idempotency_key: str
+    permalink: str | None = None
+    error_kind: str | None = None
 
 
 class UpdateDraftRequest(BaseModel):

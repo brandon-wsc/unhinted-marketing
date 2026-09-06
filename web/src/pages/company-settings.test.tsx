@@ -49,6 +49,9 @@ vi.mock("@/features/company-settings/components/approvals-panel", () => ({
 vi.mock("@/features/company-settings/components/api-keys-panel", () => ({
   ApiKeysPanel: () => <div>api-keys-panel</div>,
 }));
+vi.mock("@/features/company-settings/components/instagram-panel", () => ({
+  InstagramPanel: () => <div>instagram-panel</div>,
+}));
 
 function renderSettings(path: string) {
   return render(
@@ -95,6 +98,29 @@ describe("CompanySettingsPage BYOK tab", () => {
     renderSettings("/settings?tab=models");
     expect(screen.queryByRole("button", { name: "settings.nav.models" })).not.toBeInTheDocument();
     expect(screen.queryByText("api-keys-panel")).not.toBeInTheDocument();
+    expect(screen.getByText("voice-panel")).toBeInTheDocument();
+  });
+});
+
+describe("CompanySettingsPage Instagram tab", () => {
+  beforeEach(() => {
+    auth.loading = false;
+    auth.user = editorUser("owner");
+  });
+
+  it("shows the Instagram tab for owners and admins", () => {
+    renderSettings("/settings?tab=instagram");
+    expect(screen.getByRole("button", { name: "settings.nav.instagram" })).toBeInTheDocument();
+    expect(screen.getByText("instagram-panel")).toBeInTheDocument();
+  });
+
+  it("hides the Instagram tab for members and falls back to voice", () => {
+    auth.user = editorUser("member");
+    renderSettings("/settings?tab=instagram");
+    expect(
+      screen.queryByRole("button", { name: "settings.nav.instagram" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("instagram-panel")).not.toBeInTheDocument();
     expect(screen.getByText("voice-panel")).toBeInTheDocument();
   });
 });

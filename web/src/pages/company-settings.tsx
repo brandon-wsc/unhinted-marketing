@@ -5,16 +5,23 @@ import { AppShell } from "@/components/app-header";
 import { useAuth } from "@/context/auth-context";
 import { ApiKeysPanel } from "@/features/company-settings/components/api-keys-panel";
 import { ApprovalsPanel } from "@/features/company-settings/components/approvals-panel";
+import { InstagramPanel } from "@/features/company-settings/components/instagram-panel";
 import { MembersPanel } from "@/features/company-settings/components/members-panel";
 import { ProductsPanel } from "@/features/company-settings/components/products-panel";
 import { VoiceForm } from "@/features/company-settings/components/voice-form";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "voice" | "products" | "members" | "approvals" | "models";
+type SettingsTab = "voice" | "products" | "members" | "approvals" | "models" | "instagram";
 
 function parseTab(raw: string | null): SettingsTab {
   if (raw === "api-keys") return "models";
-  if (raw === "products" || raw === "members" || raw === "approvals" || raw === "models") {
+  if (
+    raw === "products" ||
+    raw === "members" ||
+    raw === "approvals" ||
+    raw === "models" ||
+    raw === "instagram"
+  ) {
     return raw;
   }
   return "voice";
@@ -87,9 +94,9 @@ export function CompanySettingsPage() {
 
   const editor = canManageTeam(org?.role);
   const nav: SettingsTab[] = editor
-    ? ["voice", "products", "members", "approvals", "models"]
+    ? ["voice", "products", "members", "approvals", "models", "instagram"]
     : ["voice", "products", "members"];
-  const editorOnly = tab === "approvals" || tab === "models";
+  const editorOnly = tab === "approvals" || tab === "models" || tab === "instagram";
   const activeTab = editorOnly && !editor ? "voice" : tab;
 
   return (
@@ -137,6 +144,7 @@ export function CompanySettingsPage() {
           )}
           {activeTab === "approvals" && <ApprovalsPanel companyId={companyId} />}
           {activeTab === "models" && <ApiKeysPanel companyId={companyId} />}
+          {activeTab === "instagram" && <InstagramPanel companyId={companyId} />}
         </div>
       </div>
     </AppShell>

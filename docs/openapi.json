@@ -1561,6 +1561,396 @@
         }
       }
     },
+    "/api/companies/{company_id}/social-accounts": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "summary": "List Accounts",
+        "operationId": "list_accounts_api_companies__company_id__social_accounts_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialAccountList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/social-accounts/oauth/status": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Oauth Status",
+        "description": "Return the org's Instagram Login connection state (no token material).",
+        "operationId": "oauth_status_api_companies__company_id__social_accounts_oauth_status_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialOAuthInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/social-accounts/oauth/start": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Oauth Start",
+        "description": "Start the Meta connect flow. Persists the encrypted pending state and\nreturns the authorization URL for a popup / new tab. The double-submit CSRF\ncookie is scoped to the public callback so Meta's redirect carries it back.",
+        "operationId": "oauth_start_api_companies__company_id__social_accounts_oauth_start_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialOAuthInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/social-accounts/oauth/cancel": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Oauth Cancel",
+        "description": "Abort an in-flight Meta connect (timeout, cancel, or closed popup).",
+        "operationId": "oauth_cancel_api_companies__company_id__social_accounts_oauth_cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialOAuthInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/social-accounts/{platform}": {
+      "put": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Upsert Account",
+        "operationId": "upsert_account_api_companies__company_id__social_accounts__platform__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Platform"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SocialAccountUpsert"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialAccountItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Disconnect Account",
+        "operationId": "disconnect_account_api_companies__company_id__social_accounts__platform__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Platform"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/social/oauth/callback": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Oauth Callback",
+        "description": "Backend Instagram Login callback — this exact URL goes into the Meta\nApp Dashboard → Instagram → Valid OAuth Redirect URIs.",
+        "operationId": "oauth_callback_api_social_oauth_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/invites/{token}": {
       "get": {
         "tags": [
@@ -3232,7 +3622,7 @@
           "sessions"
         ],
         "summary": "Confirm Session",
-        "description": "Traditional Confirm handler — no LLM. Stub platform adapter writes tool_receipts.",
+        "description": "Traditional Confirm handler — no LLM. Adapter writes tool_receipts (ADR 0003 / 0022).",
         "operationId": "confirm_session_api_sessions__session_id__confirm_post",
         "security": [
           {
@@ -4912,6 +5302,28 @@
           "idempotency_key": {
             "type": "string",
             "title": "Idempotency Key"
+          },
+          "permalink": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permalink"
+          },
+          "error_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Kind"
           }
         },
         "type": "object",
@@ -5944,6 +6356,16 @@
           "intent_out"
         ],
         "title": "NodeStepSummary"
+      },
+      "OAuthStatus": {
+        "type": "string",
+        "enum": [
+          "not_connected",
+          "connected",
+          "pending",
+          "failed"
+        ],
+        "title": "OAuthStatus"
       },
       "OrgInviteAcceptResponse": {
         "properties": {
@@ -7791,6 +8213,169 @@
           "ingested_at"
         ],
         "title": "SignalResponse"
+      },
+      "SocialAccountItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "platform": {
+            "type": "string",
+            "const": "instagram",
+            "title": "Platform"
+          },
+          "ig_user_id": {
+            "type": "string",
+            "title": "Ig User Id"
+          },
+          "token_last4": {
+            "type": "string",
+            "title": "Token Last4"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "last_error_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Kind"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "company_id",
+          "platform",
+          "ig_user_id",
+          "token_last4",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SocialAccountItem"
+      },
+      "SocialAccountList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SocialAccountItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "SocialAccountList"
+      },
+      "SocialAccountUpsert": {
+        "properties": {
+          "ig_user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Ig User Id"
+          },
+          "access_token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Access Token"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ig_user_id",
+          "access_token"
+        ],
+        "title": "SocialAccountUpsert"
+      },
+      "SocialOAuthInfo": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/OAuthStatus",
+            "default": "not_connected"
+          },
+          "authorization_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Url"
+          },
+          "poll_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll Url"
+          }
+        },
+        "type": "object",
+        "title": "SocialOAuthInfo",
+        "description": "Current connection state for an org's Instagram account."
       },
       "StopSessionResponse": {
         "properties": {

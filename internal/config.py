@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     jwt_refresh_expire_days: int = 7
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "https://unhinted.localhost:5173"
     refresh_cookie_secure: bool = False
     refresh_cookie_samesite: str = "lax"
 
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     byok_probe_rate_limit_window_seconds: int = 60
 
     # Invite links + optional email delivery (on-prem: link mode default)
-    web_base_url: str = "http://localhost:5173"
+    web_base_url: str = "https://unhinted.localhost:5173"
     email_backend: str = "link"  # link | smtp | console
     email_from: str = "noreply@localhost"
     smtp_host: str | None = None
@@ -98,6 +98,20 @@ class Settings(BaseSettings):
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )
     semantic_router_score_threshold: float = 0.5
+
+    # Real publish (ADR 0022) — stub never hits Meta; instagram uses social_accounts
+    publish_adapter: str = "stub"  # stub | instagram
+    meta_graph_api_version: str = "v22.0"
+
+    # Instagram Login connect (ADR 0022 OAuth slice). These are the Instagram App
+    # ID / Secret from App Dashboard → Instagram (often not the Facebook App ID).
+    meta_app_id: str | None = None
+    meta_app_secret: str | None = None
+    # Backend callback — Instagram product → Valid OAuth Redirect URIs:
+    # Dialog scopes: instagram_business_basic, instagram_business_content_publish.
+    meta_oauth_redirect_uri: str = "https://unhinted.localhost:5173/api/social/oauth/callback"
+    # Where the browser lands after a successful connect (defaults to WEB_BASE_URL)
+    meta_oauth_success_url: str | None = None
 
     # Product catalog embeddings (COLLECT K4) — same FastEmbed family as semantic gate
     product_embeddings_enabled: bool = True

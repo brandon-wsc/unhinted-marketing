@@ -719,3 +719,83 @@ export async function apiPutByokRouting(
   if (!res.ok) await throwApiError(res);
   return res.json();
 }
+
+export type SocialAccountItem = {
+  id: string;
+  company_id: string;
+  platform: "instagram";
+  ig_user_id: string;
+  token_last4: string;
+  expires_at: string | null;
+  last_verified_at: string | null;
+  last_error_kind: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SocialAccountList = {
+  items: SocialAccountItem[];
+};
+
+function socialPath(companyId: string, suffix = ""): string {
+  return `${API_BASE}/companies/${companyId}/social-accounts${suffix}`;
+}
+
+export async function apiListSocialAccounts(
+  accessToken: string | null,
+  companyId: string,
+): Promise<SocialAccountItem[]> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId));
+  if (!res.ok) await throwApiError(res);
+  const body = (await res.json()) as SocialAccountList;
+  return body.items ?? [];
+}
+
+export async function apiDisconnectInstagramAccount(
+  accessToken: string | null,
+  companyId: string,
+): Promise<void> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/instagram"), {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 404) await throwApiError(res);
+}
+
+export type SocialOAuthStatus = "not_connected" | "pending" | "connected";
+
+export type SocialOAuthInfo = {
+  status: SocialOAuthStatus;
+  authorization_url?: string | null;
+  poll_url?: string | null;
+};
+
+export async function apiStartInstagramOAuth(
+  accessToken: string | null,
+  companyId: string,
+): Promise<SocialOAuthInfo> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/oauth/start"), {
+    method: "POST",
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiGetInstagramOAuthStatus(
+  accessToken: string | null,
+  companyId: string,
+): Promise<SocialOAuthInfo> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/oauth/status"));
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiCancelInstagramOAuth(
+  accessToken: string | null,
+  companyId: string,
+): Promise<SocialOAuthInfo> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/oauth/cancel"), {
+    method: "POST",
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}

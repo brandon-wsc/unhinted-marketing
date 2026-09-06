@@ -22,6 +22,7 @@ build/
 node_modules/
 .pnpm-store/
 web/dist/
+web/certs/
 web/.vite/
 web/coverage/
 web/coverage-*/
@@ -56,3 +57,4 @@ logs/
 # PostgreSQL local
 pgdata/
 scripts/typescript_gen/node_modules
+scripts/dev-certs.sh

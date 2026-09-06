@@ -3,6 +3,7 @@ import type {
   AgentProgress,
   ChatMessage,
   ComposerDraft,
+  ConfirmSessionResponse,
   DraftCopy,
   PreviewDraft,
   PreviewMediaItem,
@@ -40,6 +41,27 @@ export function parseDraftCopy(data: unknown): DraftCopy | null {
   const cta = typeof raw.cta === "string" ? raw.cta : "";
   if (!caption && !hashtags.length && !cta) return null;
   return { caption, hashtags, cta };
+}
+
+const CONFIRM_SUCCESS_STATUSES = new Set(["stubbed", "published"]);
+
+export function isConfirmSuccessStatus(status: string | null | undefined): boolean {
+  return !!status && CONFIRM_SUCCESS_STATUSES.has(status);
+}
+
+export function parseConfirmReceipt(data: unknown): ConfirmSessionResponse | null {
+  if (!data || typeof data !== "object") return null;
+  const raw = data as Record<string, unknown>;
+  if (typeof raw.receipt_id !== "string" || !raw.receipt_id) return null;
+  if (typeof raw.status !== "string" || !raw.status) return null;
+  return {
+    receipt_id: raw.receipt_id,
+    status: raw.status,
+    tool_name: typeof raw.tool_name === "string" ? raw.tool_name : "publish_social_post",
+    idempotency_key: typeof raw.idempotency_key === "string" ? raw.idempotency_key : "",
+    permalink: typeof raw.permalink === "string" && raw.permalink ? raw.permalink : null,
+    error_kind: typeof raw.error_kind === "string" && raw.error_kind ? raw.error_kind : null,
+  };
 }
 
 export function parseAgentProgress(data: Record<string, unknown>): AgentProgress | null {

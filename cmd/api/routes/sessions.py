@@ -41,7 +41,13 @@ from internal.session.service import (
     update_session_image_plan,
     upload_session_image,
 )
-from schemas.contracts import PreviewMediaItem, SessionBriefData
+from internal.tools.publish import (
+    PUBLISHED_STATUS,
+    STUB_STATUS,
+    PublishPreconditionError,
+    publish_social_post,
+)
+from schemas.contracts import DraftCopy, PreviewMediaItem, SessionBriefData
 from schemas.session import (
     AddSessionImageRequest,
     ConfirmSessionRequest,
@@ -69,8 +75,11 @@ from schemas.session import (
     UpdateImagePlanRequest,
     UpdateSessionRequest,
 )
+from schemas.tools import PublishSocialPostRequest
 
 logger = logging.getLogger(__name__)
+
+_CONFIRM_SUCCESS = frozenset({STUB_STATUS, PUBLISHED_STATUS})
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -592,6 +601,9 @@ async def session_events(
         "platform": platform,
         "interrupted": interrupted,
     }
+    receipt_row = await repos.get_latest_publish_receipt(db, session.id)
+    if receipt_row:
+        snapshot_data["confirm_receipt"] = _confirm_response(receipt_row).model_dump(mode="json")
 
     async def event_stream() -> AsyncIterator[str]:
         yield format_sse("session.snapshot", snapshot_data)
@@ -810,6 +822,44 @@ async def post_session_image_upload(
     return _media_mutation_response(result)
 
 
+def _draft_has_image(draft) -> bool:
+    # media_ids is the publish image (ADR 0008). A leftover placeholder://
+    # image_url is not an image — copy-only Confirm must 400 (ADR 0022).
+    if list(draft.media_ids or []):
+        return True
+    url = (draft.image_url or "").strip()
+    return url.startswith("http://") or url.startswith("https://")
+
+
+async def _publish_image_url(db: AsyncSession, draft) -> str | None:
+    ids = list(draft.media_ids or [])
+    if ids:
+        images = await repos.get_preview_images_by_ids(db, [ids[0]])
+        if images:
+            url = (images[0].url or "").strip()
+            if url:
+                return url
+    url = (draft.image_url or "").strip()
+    return url or None
+
+
+def _optional_str(payload: dict, key: str) -> str | None:
+    value = payload.get(key)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _confirm_response(receipt) -> ConfirmSessionResponse:
+    payload = receipt.response if isinstance(receipt.response, dict) else {}
+    return ConfirmSessionResponse(
+        receipt_id=receipt.id,
+        status=receipt.status,
+        tool_name=receipt.tool_name,
+        idempotency_key=receipt.idempotency_key,
+        permalink=_optional_str(payload, "permalink"),
+        error_kind=_optional_str(payload, "error_kind"),
+    )
+
+
 @router.post("/{session_id}/confirm", response_model=ConfirmSessionResponse)
 async def confirm_session(
     session_id: uuid.UUID,
@@ -817,7 +867,7 @@ async def confirm_session(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ConfirmSessionResponse:
-    """Traditional Confirm handler — no LLM. Stub platform adapter writes tool_receipts."""
+    """Traditional Confirm handler — no LLM. Adapter writes tool_receipts (ADR 0003 / 0022)."""
     session = await _require_owned_session(db, session_id, user)
 
     existing = await repos.get_tool_receipt_by_idempotency(db, body.idempotency_key)
@@ -828,12 +878,7 @@ async def confirm_session(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Idempotency key already used",
             )
-        return ConfirmSessionResponse(
-            receipt_id=existing.id,
-            status=existing.status,
-            tool_name=existing.tool_name,
-            idempotency_key=existing.idempotency_key,
-        )
+        return _confirm_response(existing)
 
     draft = await repos.get_preview_draft_by_token(db, session.id, body.approval_token)
     if not draft:
@@ -841,6 +886,29 @@ async def confirm_session(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid approval_token for session",
         )
+    if not _draft_has_image(draft):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="image_required",
+        )
+
+    image_url = await _publish_image_url(db, draft)
+    req = PublishSocialPostRequest(
+        session_id=session.id,
+        approval_token=body.approval_token,
+        idempotency_key=body.idempotency_key,
+        platform=body.platform,
+        draft_copy=DraftCopy.model_validate(normalize_draft_copy(draft.copy)),
+        image_url=image_url,
+        revision=draft.revision,
+    )
+    try:
+        outcome = await publish_social_post(db, req, company_id=session.company_id)
+    except PublishPreconditionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.detail,
+        ) from exc
 
     receipt = await repos.create_tool_receipt(
         db,
@@ -848,15 +916,22 @@ async def confirm_session(
         user_id=user.id,
         tool_name="publish_social_post",
         idempotency_key=body.idempotency_key,
-        status="stubbed",
+        status=outcome.status,
         request={
             "platform": body.platform,
             "approval_token": body.approval_token,
             "revision": draft.revision,
         },
-        response={"message": "Platform adapter stub — no publish performed"},
+        response={
+            "message": outcome.message,
+            "platform": outcome.platform,
+            "permalink": outcome.permalink,
+            "error_kind": outcome.error_kind,
+            "media_id": outcome.media_id,
+        },
     )
-    session.status = "confirmed"
+    if outcome.status in _CONFIRM_SUCCESS:
+        session.status = "confirmed"
     await db.commit()
     await session_event_bus.publish(
         session.id,
@@ -864,12 +939,10 @@ async def confirm_session(
         {
             "receipt_id": str(receipt.id),
             "status": receipt.status,
+            "tool_name": receipt.tool_name,
             "idempotency_key": receipt.idempotency_key,
+            "permalink": outcome.permalink,
+            "error_kind": outcome.error_kind,
         },
     )
-    return ConfirmSessionResponse(
-        receipt_id=receipt.id,
-        status=receipt.status,
-        tool_name=receipt.tool_name,
-        idempotency_key=receipt.idempotency_key,
-    )
+    return _confirm_response(receipt)

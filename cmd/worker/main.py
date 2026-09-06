@@ -5,14 +5,22 @@ import asyncio
 import json
 import logging
 import sys
+import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
 from internal.auth.roles import parse_platform_level
+from internal.llm.keys import ByokEncryptionError, encrypt_key, mask_key
 from internal.llm.recorder import drain as drain_llm_records
 from internal.memory.database import SessionLocal
 from internal.memory.models import User
-from internal.memory.repos import get_company, list_top_signals, reset_market_signals
+from internal.memory.repos import (
+    get_company,
+    list_top_signals,
+    reset_market_signals,
+    upsert_social_account,
+)
 from internal.perception.hot_search import ingest_hot_search
 from internal.perception.news_promoter import promote_signals
 from internal.perception.question_generator import (
@@ -38,9 +46,7 @@ async def _cmd_hot_search() -> int:
 async def _cmd_questions(force: bool, company_id: str | None) -> int:
     async with SessionLocal() as db:
         if company_id:
-            from uuid import UUID
-
-            company = await get_company(db, UUID(company_id))
+            company = await get_company(db, uuid.UUID(company_id))
             if not company:
                 logger.error("Company not found: %s", company_id)
                 return 1
@@ -125,6 +131,75 @@ async def _cmd_set_platform_role(email: str, level: str) -> int:
     return 0
 
 
+def _parse_expires_at(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    text = raw.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    stamp = datetime.fromisoformat(text)
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=UTC)
+    return stamp
+
+
+async def _cmd_connect_social_account(
+    *,
+    company_id: str,
+    ig_user_id: str,
+    token: str,
+    expires_at: str | None,
+    platform: str,
+) -> int:
+    """Store an org Instagram token for Confirm (ADR 0022). Never prints the raw token."""
+    platform = (platform or "instagram").strip().lower()
+    if platform != "instagram":
+        logger.error("Unsupported platform %r (only instagram)", platform)
+        return 2
+    try:
+        cid = uuid.UUID(company_id)
+    except ValueError:
+        logger.error("Invalid company UUID: %s", company_id)
+        return 2
+    try:
+        expires = _parse_expires_at(expires_at)
+    except ValueError:
+        logger.error("Invalid --expires-at (use ISO-8601)")
+        return 2
+    try:
+        encrypted = encrypt_key(token)
+    except (ByokEncryptionError, ValueError) as exc:
+        logger.error("%s", exc)
+        return 1
+    last4 = mask_key(token)
+    async with SessionLocal() as db:
+        company = await get_company(db, cid)
+        if not company:
+            logger.error("Company not found: %s", company_id)
+            return 1
+        row = await upsert_social_account(
+            db,
+            company_id=cid,
+            platform=platform,
+            ig_user_id=ig_user_id.strip(),
+            access_token_encrypted=encrypted,
+            token_last4=last4,
+            expires_at=expires,
+            created_by=None,
+        )
+        await db.commit()
+        payload = {
+            "id": str(row.id),
+            "company_id": str(cid),
+            "platform": platform,
+            "ig_user_id": ig_user_id.strip(),
+            "token_last4": last4,
+            "expires_at": expires.isoformat() if expires else None,
+        }
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Unhinted marketing workers")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -154,6 +229,15 @@ def main() -> None:
         required=True,
         help="Rung name (member / admin / superadmin) or number (3 / 6 / 9)",
     )
+    cs = sub.add_parser(
+        "connect-social-account",
+        help="Store an org Instagram token for Confirm (ADR 0022)",
+    )
+    cs.add_argument("--company", required=True, help="Company UUID")
+    cs.add_argument("--ig-user-id", required=True, help="Instagram professional account id")
+    cs.add_argument("--token", required=True, help="Long-lived Graph access token")
+    cs.add_argument("--expires-at", help="ISO-8601 expiry (optional)")
+    cs.add_argument("--platform", default="instagram")
 
     args = parser.parse_args()
     commands = {
@@ -164,6 +248,13 @@ def main() -> None:
         "all": lambda: _cmd_all(args.force),
         "reset-signals": lambda: _cmd_reset_signals(getattr(args, "reingest", False)),
         "set-platform-role": lambda: _cmd_set_platform_role(args.email, args.level),
+        "connect-social-account": lambda: _cmd_connect_social_account(
+            company_id=args.company,
+            ig_user_id=args.ig_user_id,
+            token=args.token,
+            expires_at=getattr(args, "expires_at", None),
+            platform=args.platform,
+        ),
     }
 
     async def _run() -> int:

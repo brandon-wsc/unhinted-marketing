@@ -138,6 +138,16 @@ def test_confirm_and_draft_responses() -> None:
         idempotency_key="idem-1",
     )
     assert receipt.status == "stubbed"
+    assert receipt.permalink is None
+    assert receipt.error_kind is None
+    published = ConfirmSessionResponse(
+        receipt_id=uuid.uuid4(),
+        status="published",
+        tool_name="publish_social_post",
+        idempotency_key="idem-2",
+        permalink="https://www.instagram.com/p/ABC/",
+    )
+    assert published.permalink.endswith("/ABC/")
     draft = UpdateDraftResponse(
         revision=2,
         approval_token="new-token",

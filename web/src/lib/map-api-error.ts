@@ -12,6 +12,15 @@ const API_ERROR_KEYS: Record<string, string> = {
   "A pending invite already exists for this email": "settings.members.invite.alreadyPending",
   "A pending proposal already exists for this product code": "settings.products.alreadyPending",
   "A product with this product code already exists": "settings.products.fields.skuConflict",
+  image_required: "preview.error.imageRequired",
+  social_account_not_connected: "preview.error.notConnected",
+  meta_oauth_not_professional: "settings.instagram.oauthNotProfessional",
+  meta_oauth_missing_publish: "settings.instagram.oauthMissingPublish",
+  meta_oauth_csrf_mismatch: "settings.instagram.oauthCsrfMismatch",
+  meta_oauth_exchange_failed: "settings.instagram.oauthFailed",
+  meta_oauth_invalid_state: "settings.instagram.oauthFailed",
+  meta_oauth_no_pending_connect: "settings.instagram.oauthAborted",
+  access_denied: "settings.instagram.oauthAborted",
 };
 
 export function mapApiError(message: string, t: TFunction): string {
