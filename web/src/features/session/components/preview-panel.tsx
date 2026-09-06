@@ -100,8 +100,8 @@ export function PreviewPanel({
     return isRenderableImageUrl(draft.image_url) ? [draft.image_url] : [];
   }, [draft.media, draft.image_url]);
   const hasImage =
-    (draft.media ?? []).some((item) => !!(item.url || "").trim()) ||
-    !!(draft.image_url || "").trim();
+    (draft.media ?? []).some((item) => isRenderableImageUrl(item.url)) ||
+    isRenderableImageUrl(draft.image_url);
   const canConfirm =
     !!draft.approval_token && !confirmed && local.caption.trim().length > 0 && hasImage;
   const failedReceipt = confirmReceipt?.status === "failed";

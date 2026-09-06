@@ -1,6 +1,6 @@
-import { MemoryRouter } from "react-router-dom";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -74,7 +74,9 @@ describe("InstagramPanel", () => {
     api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "not_connected" });
     renderPanel();
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "settings.instagram.connect" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "settings.instagram.connect" }),
+      ).toBeInTheDocument();
     });
     expect(screen.queryByLabelText("settings.instagram.igUserId")).not.toBeInTheDocument();
   });
@@ -87,8 +89,12 @@ describe("InstagramPanel", () => {
       expect(screen.getByText("settings.instagram.connectingTitle")).toBeInTheDocument();
     });
     expect(screen.queryByText("settings.instagram.connected")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "settings.instagram.connect" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "settings.instagram.rotate" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "settings.instagram.connect" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "settings.instagram.rotate" }),
+    ).not.toBeInTheDocument();
     const status = screen.getByRole("status");
     expect(within(status).getByText("settings.instagram.connectingTitle")).toBeInTheDocument();
     expect(within(status).getByText("settings.instagram.connectingBody")).toBeInTheDocument();
@@ -109,7 +115,9 @@ describe("InstagramPanel", () => {
       expect(api.apiCancelInstagramOAuth).toHaveBeenCalledWith("tok", "c1");
     });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "settings.instagram.connect" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "settings.instagram.connect" }),
+      ).toBeInTheDocument();
     });
     expect(screen.queryByText("settings.instagram.oauthAborted")).not.toBeInTheDocument();
   });
@@ -133,9 +141,7 @@ describe("InstagramPanel", () => {
   it("surfaces a failed oauth callback from the redirect query", async () => {
     api.apiListSocialAccounts.mockResolvedValue([]);
     api.apiGetInstagramOAuthStatus.mockResolvedValue({ status: "not_connected" });
-    renderPanel(
-      "/settings?tab=instagram&oauth=done&status=meta_oauth_not_professional",
-    );
+    renderPanel("/settings?tab=instagram&oauth=done&status=meta_oauth_not_professional");
     await waitFor(() => {
       expect(screen.getByText("settings.instagram.oauthNotProfessional")).toBeInTheDocument();
     });
@@ -187,7 +193,9 @@ describe("InstagramPanel", () => {
     const openSpy = vi.spyOn(window, "open").mockReturnValue({ closed: false } as Window);
     renderPanel();
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "settings.instagram.connect" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "settings.instagram.connect" }),
+      ).toBeInTheDocument();
     });
     await user.click(screen.getByRole("button", { name: "settings.instagram.connect" }));
     await waitFor(() => {
@@ -231,14 +239,14 @@ describe("InstagramPanel", () => {
     });
     // The destructive action inside the AlertDialog carries the same label; grab it from the dialog.
     const dialog = screen.getByRole("alertdialog");
-    await user.click(
-      within(dialog).getByRole("button", { name: "settings.instagram.disconnect" }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "settings.instagram.disconnect" }));
     await waitFor(() => {
       expect(api.apiDisconnectInstagramAccount).toHaveBeenCalledWith("tok", "c1");
     });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "settings.instagram.connect" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "settings.instagram.connect" }),
+      ).toBeInTheDocument();
     });
     expect(screen.getByText("settings.instagram.disconnected")).toBeInTheDocument();
   });

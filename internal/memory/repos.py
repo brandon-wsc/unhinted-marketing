@@ -1663,7 +1663,6 @@ async def upsert_social_account(
 def social_pending_state_clear(row: SocialAccount) -> None:
     """Clear OAuth pending state after the exchange ends (success or failure)."""
     row.oauth_connect_state = None
-    row.oauth_pending_scopes = None
 
 
 async def abort_social_oauth_row(db: AsyncSession, row: SocialAccount) -> None:

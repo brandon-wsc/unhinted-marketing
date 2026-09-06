@@ -232,7 +232,7 @@ async def exchange_code(
         token_payload = _json(token_resp)
         if not token_resp.is_success:
             raise MetaOAuthError(_graph_error_hint(token_payload, token_resp.status_code))
-        short_token, exchange_user_id, granted_scopes = _parse_short_lived(token_payload)
+        short_token, _, granted_scopes = _parse_short_lived(token_payload)
         if not short_token:
             raise MetaOAuthError("meta_oauth_exchange_failed")
 
@@ -270,9 +270,7 @@ async def exchange_code(
             raise MetaOAuthError("meta_oauth_not_professional")
 
         ig_user_id = (
-            str(me_payload.get("user_id") or "").strip()
-            or exchange_user_id
-            or str(me_payload.get("id") or "").strip()
+            str(me_payload.get("user_id") or "").strip() or str(me_payload.get("id") or "").strip()
         )
         if not ig_user_id:
             logger.warning(
@@ -282,7 +280,7 @@ async def exchange_code(
             )
             raise MetaOAuthError("meta_oauth_not_professional")
 
-        if granted_scopes and PUBLISH_SCOPE not in granted_scopes:
+        if PUBLISH_SCOPE not in granted_scopes:
             raise MetaOAuthError("meta_oauth_missing_publish")
 
     required = {s.strip() for s in META_OAUTH_SCOPES.split(",") if s.strip()}

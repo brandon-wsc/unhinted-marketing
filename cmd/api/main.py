@@ -14,7 +14,8 @@ from cmd.api.routes.proposals import router as proposals_router
 from cmd.api.routes.questions import router as questions_router
 from cmd.api.routes.sessions import router as sessions_router
 from cmd.api.routes.signals import router as signals_router
-from cmd.api.routes.social import oauth_callback_router, router as social_router
+from cmd.api.routes.social import oauth_callback_router
+from cmd.api.routes.social import router as social_router
 from internal.auth.rate_limit import assert_jwt_secret_safe
 from internal.config import settings
 from internal.llm.keys import assert_byok_encryption_key_safe

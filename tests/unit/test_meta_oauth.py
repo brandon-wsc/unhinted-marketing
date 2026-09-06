@@ -86,7 +86,6 @@ def _account() -> SocialAccount:
         token_last4="",
         created_by=None,
         oauth_connect_state=None,
-        oauth_pending_scopes=None,
     )
 
 
@@ -194,6 +193,37 @@ async def test_exchange_code_prefers_user_id_over_id(monkeypatch: pytest.MonkeyP
     assert result.ig_user_id == IG_USER
 
 
+async def test_exchange_code_falls_back_to_me_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 0022: ig_user_id is GET /me user_id, else /me id — not the short-lived user_id."""
+    _configure(monkeypatch)
+    from internal.auth import meta_oauth as mod
+
+    row = _account()
+    monkeypatch.setattr(mod.repos, "get_social_account", AsyncMock(return_value=row))
+    monkeypatch.setattr(mod.repos, "get_social_account_by_id", AsyncMock(return_value=row))
+    monkeypatch.setattr(mod.repos, "upsert_social_account", AsyncMock(return_value=row))
+    client = ScriptedClient(
+        token_payload={
+            "access_token": "IGQW-short",
+            "user_id": "short-lived-other",
+            "permissions": META_OAUTH_SCOPES,
+        },
+        me_payload={"id": IG_USER, "account_type": "BUSINESS"},
+    )
+    monkeypatch.setattr(mod.httpx, "AsyncClient", lambda *a, **k: client)
+    db = AsyncMock()
+    db.flush = AsyncMock()
+    started = await start_oauth(db, company_id=row.company_id)
+    row.oauth_connect_state = started.connect_state
+    result = await exchange_code(
+        db,
+        code="auth-code",
+        state=f"{row.id}:{started.connect_state}",
+        csrf_token=started.csrf_token,
+    )
+    assert result.ig_user_id == IG_USER
+
+
 async def test_exchange_code_not_professional(monkeypatch: pytest.MonkeyPatch) -> None:
     _configure(monkeypatch)
     from internal.auth import meta_oauth as mod
@@ -231,6 +261,32 @@ async def test_exchange_code_missing_publish(monkeypatch: pytest.MonkeyPatch) ->
             "user_id": IG_USER,
             "permissions": "instagram_business_basic",
         },
+        me_payload={"user_id": IG_USER, "account_type": "BUSINESS"},
+    )
+    monkeypatch.setattr(mod.httpx, "AsyncClient", lambda *a, **k: client)
+    db = AsyncMock()
+    started = await start_oauth(db, company_id=row.company_id)
+    row.oauth_connect_state = started.connect_state
+    with pytest.raises(MetaOAuthError, match="meta_oauth_missing_publish"):
+        await exchange_code(
+            db,
+            code="auth-code",
+            state=f"{row.id}:{started.connect_state}",
+            csrf_token=started.csrf_token,
+        )
+
+
+async def test_exchange_code_omitted_permissions_is_missing_publish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    from internal.auth import meta_oauth as mod
+
+    row = _account()
+    monkeypatch.setattr(mod.repos, "get_social_account", AsyncMock(return_value=row))
+    monkeypatch.setattr(mod.repos, "get_social_account_by_id", AsyncMock(return_value=row))
+    client = ScriptedClient(
+        token_payload={"access_token": "IGQW-short", "user_id": IG_USER},
         me_payload={"user_id": IG_USER, "account_type": "BUSINESS"},
     )
     monkeypatch.setattr(mod.httpx, "AsyncClient", lambda *a, **k: client)

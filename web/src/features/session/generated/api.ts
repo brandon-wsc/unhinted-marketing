@@ -434,7 +434,7 @@ export type paths = {
         };
         /**
          * Oauth Status
-         * @description Return the org's Meta OAuth connection state (no token material).
+         * @description Return the org's Instagram Login connection state (no token material).
          */
         get: operations["oauth_status_api_companies__company_id__social_accounts_oauth_status_get"];
         put?: never;
@@ -514,8 +514,8 @@ export type paths = {
         };
         /**
          * Oauth Callback
-         * @description Backend Meta callback — this exact URL goes into the Meta App Dashboard:
-         *     App Settings → Advanced → Security → Valid OAuth Redirect URIs.
+         * @description Backend Instagram Login callback — this exact URL goes into the Meta
+         *     App Dashboard → Instagram → Valid OAuth Redirect URIs.
          */
         get: operations["oauth_callback_api_social_oauth_callback_get"];
         put?: never;

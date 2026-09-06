@@ -27,11 +27,3 @@ class SocialOAuthInfo(BaseModel):
     authorization_url: str | None = None
     # Present when connecting (fetch this URL to poll the result).
     poll_url: str | None = None
-
-
-class SocialOAuthPoll(BaseModel):
-    status: OAuthStatus
-    # OAuth error codes (instagram_business_basic | instagram_business_content_publish |
-    # meta_oauth_not_professional | meta_oauth_missing_publish | access_denied).
-    missing_scope: str | None = None
-    message: str | None = None

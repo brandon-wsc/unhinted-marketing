@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 
+from internal.memory import repos
 from tests.api.helpers import auth_header, register_user, seed_preview_session
 
 
@@ -173,6 +174,38 @@ async def test_confirm_copy_only_requires_image(client, db_session) -> None:
     listed = await client.get("/api/sessions", headers=auth_header(data["access_token"]))
     row = next(s for s in listed.json()["sessions"] if s["id"] == str(session_id))
     assert row["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_confirm_placeholder_image_url_without_media_is_copy_only(client, db_session) -> None:
+    """Leftover placeholder:// image_url is not a publish image (ADR 0022)."""
+    data = await register_user(client)
+    user_id = uuid.UUID(data["user"]["id"])
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    token = "placeholder-url-token-jjjj"
+    session_id = await seed_preview_session(
+        db_session,
+        user_id=user_id,
+        company_id=company_id,
+        approval_token=token,
+        with_media=False,
+    )
+    draft = await repos.get_preview_draft_by_token(db_session, session_id, token)
+    assert draft is not None
+    draft.image_url = "placeholder://seed"
+    await db_session.commit()
+
+    res = await client.post(
+        f"/api/sessions/{session_id}/confirm",
+        headers=auth_header(data["access_token"]),
+        json={
+            "approval_token": token,
+            "idempotency_key": f"idem-{uuid.uuid4().hex}",
+            "platform": "stub",
+        },
+    )
+    assert res.status_code == 400
+    assert res.json()["detail"] == "image_required"
 
 
 @pytest.mark.asyncio

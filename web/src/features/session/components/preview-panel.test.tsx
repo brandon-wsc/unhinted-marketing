@@ -91,6 +91,14 @@ describe("PreviewPanel receipts", () => {
     expect(screen.queryByText("preview.receipt.publishedBadge")).not.toBeInTheDocument();
   });
 
+  it("treats a leftover placeholder image_url as copy-only", () => {
+    renderPanel({
+      draft: draft({ image_url: "placeholder://seed", media: [] }),
+    });
+    expect(screen.getByRole("button", { name: "preview.confirm" })).toBeDisabled();
+    expect(screen.getByText("preview.gate.imageRequired")).toBeInTheDocument();
+  });
+
   it("shows a failed receipt instead of a success wash", () => {
     renderPanel({
       draft: draft(),

@@ -823,9 +823,12 @@ async def post_session_image_upload(
 
 
 def _draft_has_image(draft) -> bool:
+    # media_ids is the publish image (ADR 0008). A leftover placeholder://
+    # image_url is not an image — copy-only Confirm must 400 (ADR 0022).
     if list(draft.media_ids or []):
         return True
-    return bool((draft.image_url or "").strip())
+    url = (draft.image_url or "").strip()
+    return url.startswith("http://") or url.startswith("https://")
 
 
 async def _publish_image_url(db: AsyncSession, draft) -> str | None:

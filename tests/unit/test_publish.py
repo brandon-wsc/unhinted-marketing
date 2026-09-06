@@ -270,3 +270,21 @@ async def test_instagram_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     outcome = await publish_social_post(AsyncMock(), _req(), company_id=account.company_id)
     assert outcome.status == FAILED_STATUS
     assert outcome.error_kind == ERROR_PLATFORM
+
+
+@pytest.mark.asyncio
+async def test_instagram_graph_http_5xx(monkeypatch: pytest.MonkeyPatch) -> None:
+    account = _account(monkeypatch)
+    _patch_account(monkeypatch, account)
+    client = ScriptedClient(
+        posts=[(500, {"error": {"code": 1, "message": "An unknown error occurred"}})]
+    )
+    monkeypatch.setattr(
+        "internal.tools.publish.httpx.AsyncClient",
+        lambda *a, **k: client,
+    )
+    outcome = await publish_social_post(AsyncMock(), _req(), company_id=account.company_id)
+    assert outcome.status == FAILED_STATUS
+    assert outcome.error_kind == ERROR_PLATFORM
+    assert account.last_error_kind == ERROR_PLATFORM
+    assert TOKEN not in (outcome.message or "")

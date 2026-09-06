@@ -737,12 +737,6 @@ export type SocialAccountList = {
   items: SocialAccountItem[];
 };
 
-export type SocialAccountUpsert = {
-  ig_user_id: string;
-  access_token: string;
-  expires_at?: string | null;
-};
-
 function socialPath(companyId: string, suffix = ""): string {
   return `${API_BASE}/companies/${companyId}/social-accounts${suffix}`;
 }
@@ -755,20 +749,6 @@ export async function apiListSocialAccounts(
   if (!res.ok) await throwApiError(res);
   const body = (await res.json()) as SocialAccountList;
   return body.items ?? [];
-}
-
-export async function apiUpsertInstagramAccount(
-  accessToken: string | null,
-  companyId: string,
-  body: SocialAccountUpsert,
-): Promise<SocialAccountItem> {
-  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/instagram"), {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
 }
 
 export async function apiDisconnectInstagramAccount(
