@@ -1,7 +1,16 @@
+import fs from "node:fs";
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+
+const certDir = path.resolve(import.meta.dirname, "./certs");
+const certFile = path.join(certDir, "unhinted.localhost.pem");
+const keyFile = path.join(certDir, "unhinted.localhost-key.pem");
+const https =
+  fs.existsSync(certFile) && fs.existsSync(keyFile)
+    ? { cert: fs.readFileSync(certFile), key: fs.readFileSync(keyFile) }
+    : undefined;
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -10,6 +19,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    https,
+    // Instagram Login needs a stable HTTPS origin; enable TLS when web/certs pems exist.
+    allowedHosts: ["unhinted.localhost", "localhost"],
     proxy: {
       // Single reserved API prefix (ADR 0006) — SPA owns all other paths.
       "/api": { target: "http://localhost:8000", changeOrigin: true },

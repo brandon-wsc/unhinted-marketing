@@ -52,7 +52,7 @@ pnpm install
 pnpm run dev
 ```
 
-Open [http://localhost:5173/login](http://localhost:5173/login). Vite proxies `/api` → `:8000`. SPA document routes (`/`, `/login`, `/admin`, …) are not proxied.
+Open [https://unhinted.localhost:5173/login](https://unhinted.localhost:5173/login) (not `http://localhost:5173` — Instagram OAuth CSRF is origin-bound). Vite proxies `/api` → `:8000` and serves HTTPS when `web/certs/` pems are present (gitignored). SPA document routes (`/`, `/login`, `/admin`, …) are not proxied. Restart uvicorn after changing `.env` (`--reload` does not reread env).
 
 ---
 

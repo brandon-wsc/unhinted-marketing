@@ -419,7 +419,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 cd web && pnpm install && pnpm run dev
 ```
 
-App: http://localhost:5173/login (Vite proxies `/api` → `:8000`; SPA owns `/`, `/login`, `/system`, …)
+App: https://unhinted.localhost:5173/login (Vite TLS when `web/certs/` pems exist; proxies `/api` → `:8000`; SPA owns `/`, `/login`, `/system`, …)
 
 ---
 
@@ -471,7 +471,8 @@ unhinted-marketing/
 | `AUTH_RATE_LIMIT_ENABLED` | Rate-limit `/api/auth/register|login|refresh` (default true) |
 | `AUTH_RATE_LIMIT_MAX` | Max requests per client IP per window (default 30) |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Sliding window length (default 60) |
-| `CORS_ORIGINS` | Default `http://localhost:5173` |
+| `CORS_ORIGINS` | Default `https://unhinted.localhost:5173` |
+| `WEB_BASE_URL` | Invite links + OAuth return origin (default `https://unhinted.localhost:5173`) |
 | `OPENAI_API_KEY` | LLM for questions + session nodes + `python -m scripts.eval_agent` |
 | `LLM_API_BASE` | Optional OpenAI-compatible proxy base URL (OpenRouter, DeepSeek, Azure, …). When set, model ids go through the OpenAI-compatible client (`openai/` prefix); OpenRouter `org/model` slugs are kept intact |
 | `ANTHROPIC_API_KEY` | Optional alternate provider |
@@ -486,7 +487,7 @@ unhinted-marketing/
 | `PUBLISH_ADAPTER` | Confirm adapter: `stub` (default, never hits Meta) or `instagram` ([ADR 0022](./adr/0022-real-publish-instagram.md)) |
 | `META_GRAPH_API_VERSION` | Instagram Graph version pin (default `v22.0`) |
 | `META_APP_ID` / `META_APP_SECRET` | Instagram App ID / Secret (App Dashboard → Instagram; not the Facebook App ID) |
-| `META_OAUTH_REDIRECT_URI` | Instagram Login Valid OAuth Redirect URI (local: `http://localhost:5173/api/social/oauth/callback`) |
+| `META_OAUTH_REDIRECT_URI` | Instagram Login Valid OAuth Redirect URI (local: `https://unhinted.localhost:5173/api/social/oauth/callback`) |
 | `META_OAUTH_SUCCESS_URL` | Optional post-connect SPA URL (defaults to `WEB_BASE_URL` + `/settings?tab=instagram`) |
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |
 | `LLM_RECORD_ENABLED` | Persist every LLM call to `llm_call_records` (default true; [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
