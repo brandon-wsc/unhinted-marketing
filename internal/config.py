@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,6 +8,10 @@ class Settings(BaseSettings):
 
     # development | production — non-development refuses known-default / short JWT_SECRET
     app_env: str = "development"
+    # cloud | onprem (ADR 0023) — read once at process start and treated as
+    # immutable for the process lifetime. On-prem Docker images bake it via
+    # build ARG; changing it requires a restart (or rebuild), never a toggle.
+    deployment_mode: Literal["cloud", "onprem"] = "onprem"
     allow_insecure_jwt: bool = False
 
     database_url: str = "postgresql+asyncpg://unhinted:unhinted@localhost:5432/unhinted"

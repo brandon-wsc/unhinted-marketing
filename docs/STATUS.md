@@ -45,6 +45,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Copy-only drafts rejected at Confirm** (`400 image_required`); missing IG account → `400 social_account_not_connected`; receipt `stubbed` / `published` / `failed` with optional `permalink` / `error_kind`; failed publish does **not** set `session.status=confirmed`
 - **Boundaries unchanged** — Confirm-only publish ([ADR 0003](./adr/0003-confirm-without-llm.md)); per-revision `approval_token`; user/session-scoped idempotency
 
+**Decision (2026-09-07) — Deployment mode flag (cloud | onprem):** → [ADR 0023](./adr/0023-deployment-mode-flag.md). `DEPLOYMENT_MODE` env (default `onprem`) read once at process start; baked into Docker images via build ARG (`Dockerfile` api, `web/Dockerfile` + nginx SPA). SPA mirror: `VITE_DEPLOYMENT_MODE` build-time via `web/src/lib/deployment.ts`. `GET /api/meta` exposes `{ deployment_mode, app_env, version }` as the runtime source of truth. Flag + plumbing only — no behavior branches yet.
+
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
 - **Native `provider_type` only when the wire is not Chat Completions + Images.** Enum is `openai` \| `anthropic` \| `openai_compatible` \| `gemini` \| `vertex_ai`. Clones stay `openai_compatible` (DeepSeek, OpenRouter, Groq, …). Vertex **OAuth** / Bedrock / Cohere / Ollama-native / Azure-as-type deferred

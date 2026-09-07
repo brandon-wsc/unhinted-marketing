@@ -4335,6 +4335,27 @@
         }
       }
     },
+    "/api/meta": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Get Meta",
+        "operationId": "get_meta_api_meta_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -6094,6 +6115,33 @@
           "password"
         ],
         "title": "LoginRequest"
+      },
+      "MetaResponse": {
+        "properties": {
+          "deployment_mode": {
+            "type": "string",
+            "enum": [
+              "cloud",
+              "onprem"
+            ],
+            "title": "Deployment Mode"
+          },
+          "app_env": {
+            "type": "string",
+            "title": "App Env"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deployment_mode",
+          "app_env",
+          "version"
+        ],
+        "title": "MetaResponse"
       },
       "NodeStepDetail": {
         "properties": {

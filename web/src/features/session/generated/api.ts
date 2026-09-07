@@ -1152,6 +1152,23 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Meta */
+        get: operations["get_meta_api_meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1781,6 +1798,18 @@ export type components = {
             email: string;
             /** Password */
             password: string;
+        };
+        /** MetaResponse */
+        MetaResponse: {
+            /**
+             * Deployment Mode
+             * @enum {string}
+             */
+            deployment_mode: "cloud" | "onprem";
+            /** App Env */
+            app_env: string;
+            /** Version */
+            version: string;
         };
         /** NodeStepDetail */
         NodeStepDetail: {
@@ -5412,6 +5441,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_meta_api_meta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetaResponse"];
                 };
             };
         };
