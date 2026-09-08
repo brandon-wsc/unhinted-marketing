@@ -20,7 +20,12 @@ from internal.media.backends import (
     resolve_media_store,
 )
 
+MAX_MEDIA_BYTES = 10 * 1024 * 1024
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+_JPEG_MAGIC = b"\xff\xd8\xff"
+
 __all__ = [
+    "MAX_MEDIA_BYTES",
     "MediaStorageError",
     "assert_media_store_ready",
     "is_stored_image_ref",
@@ -45,10 +50,14 @@ def parse_data_url(data_url: str) -> tuple[bytes, str]:
     content_type = meta.split(";", 1)[0] or "application/octet-stream"
     if ";base64" not in meta:
         raise MediaStorageError("Only base64 data: URLs are supported")
+    if len(payload) * 3 // 4 > MAX_MEDIA_BYTES:
+        raise MediaStorageError("Image too large (max 10MB)")
     try:
         raw = base64.b64decode(payload, validate=False)
     except Exception as exc:
         raise MediaStorageError("Invalid base64 in data: URL") from exc
+    if len(raw) > MAX_MEDIA_BYTES:
+        raise MediaStorageError("Image too large (max 10MB)")
     return raw, content_type
 
 
@@ -145,15 +154,27 @@ async def persist_generated_image(image_ref: str, *, key: str) -> str:
         return image_ref
     if image_ref.startswith("data:"):
         raw, content_type = parse_data_url(image_ref)
-        # Sniff JPEG mislabelled as png
-        if raw.startswith(b"\xff\xd8\xff") and content_type == "image/png":
-            content_type = "image/jpeg"
-            if key.endswith(".png"):
-                key = key[:-4] + ".jpg"
+        content_type, key = _sniff_image_type(raw, content_type, key)
         await put_bytes(key=key, data=raw, content_type=content_type)
         return key
     snippet = image_ref[:32] if image_ref else ""
     raise MediaStorageError(f"Unsupported image ref scheme: {snippet!r}")
+
+
+def _sniff_image_type(raw: bytes, content_type: str, key: str) -> tuple[str, str]:
+    """Correct content type / extension when magic bytes disagree with the label."""
+    if raw.startswith(_JPEG_MAGIC) and content_type == "image/png":
+        content_type = "image/jpeg"
+        if key.endswith(".png"):
+            key = key[:-4] + ".jpg"
+        return content_type, key
+    if raw.startswith(_PNG_MAGIC) and content_type in ("image/jpeg", "image/jpg"):
+        content_type = "image/png"
+        if key.endswith(".jpeg"):
+            key = key[:-5] + ".png"
+        elif key.endswith(".jpg"):
+            key = key[:-4] + ".png"
+    return content_type, key
 
 
 def media_object_key(*, session_id: str, revision: int, ext: str = "png") -> str:

@@ -1,6 +1,7 @@
 """Media asset storage (ADR 0024 — local on-prem / AWS S3 cloud)."""
 
 from internal.media.storage import (
+    MAX_MEDIA_BYTES,
     MediaStorageError,
     assert_media_store_ready,
     is_stored_image_ref,
@@ -14,6 +15,7 @@ from internal.media.storage import (
 )
 
 __all__ = [
+    "MAX_MEDIA_BYTES",
     "MediaStorageError",
     "assert_media_store_ready",
     "is_stored_image_ref",

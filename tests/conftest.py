@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from internal.config import settings
+from internal.media.backends import _s3_client_for
 
 
 @pytest.fixture(autouse=True)
@@ -22,3 +23,4 @@ def _disable_llm_record_persistence(
     # ADR 0024: on-prem local store into a tmp dir (never the repo data/media).
     monkeypatch.setattr(settings, "deployment_mode", "onprem")
     monkeypatch.setattr(settings, "media_root", str(tmp_path / "media"))
+    _s3_client_for.cache_clear()

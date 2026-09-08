@@ -38,4 +38,8 @@ async def get_media(key: str) -> FileResponse:
         ) from exc
     if path is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return FileResponse(path, media_type=_media_type(path))
+    return FileResponse(
+        path,
+        media_type=_media_type(path),
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )

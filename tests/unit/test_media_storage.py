@@ -58,6 +58,16 @@ def test_assert_media_store_ready_onprem_needs_nothing() -> None:
     S.assert_media_store_ready()
 
 
+def test_assert_media_store_ready_onprem_file_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bad = tmp_path / "not-a-dir"
+    bad.write_text("x")
+    monkeypatch.setattr(settings, "media_root", str(bad))
+    with pytest.raises(RuntimeError, match="MEDIA_ROOT"):
+        S.assert_media_store_ready()
+
+
 def test_assert_media_store_ready_cloud_requires_bucket(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -115,6 +125,17 @@ def test_s3_public_url_custom_base(cloud_s3: None, monkeypatch: pytest.MonkeyPat
     assert url == "https://cdn.example/media/sessions/abc/r1.png"
 
 
+def test_public_url_quotes_space() -> None:
+    url = B.resolve_media_store().public_url("sessions/a b.png")
+    assert "a%20b.png" in url
+    assert "a b.png" not in url
+
+
+def test_s3_public_url_quotes_space(cloud_s3: None) -> None:
+    url = B.S3Store().public_url("sessions/a b.png")
+    assert url.endswith("sessions/a%20b.png")
+
+
 def test_parse_data_url_png() -> None:
     b64 = base64.b64encode(TINY_PNG).decode()
     data_url = f"data:image/png;base64,{b64}"
@@ -126,6 +147,26 @@ def test_parse_data_url_png() -> None:
 def test_parse_data_url_rejects_non_data() -> None:
     with pytest.raises(S.MediaStorageError):
         S.parse_data_url("https://cdn.example/a.png")
+
+
+def test_parse_data_url_rejects_oversize_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(S, "MAX_MEDIA_BYTES", 16)
+    with pytest.raises(S.MediaStorageError, match="too large"):
+        S.parse_data_url("data:image/png;base64," + "A" * 32)
+
+
+def test_parse_data_url_rejects_oversize_decoded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(S, "MAX_MEDIA_BYTES", 8)
+    monkeypatch.setattr(
+        "internal.media.storage.base64.b64decode",
+        lambda *args, **kwargs: b"x" * 16,
+    )
+    with pytest.raises(S.MediaStorageError, match="too large"):
+        S.parse_data_url("data:image/png;base64,AAAA")
 
 
 @pytest.mark.asyncio
@@ -170,6 +211,22 @@ async def test_persist_generated_image_sniffs_jpeg_mislabeled_png() -> None:
     path = S.local_media_path(jpg_key)
     assert path is not None
     assert path.read_bytes() == jpeg
+
+
+@pytest.mark.asyncio
+async def test_persist_generated_image_sniffs_png_mislabeled_jpeg() -> None:
+    b64 = base64.b64encode(TINY_PNG).decode()
+    key = S.media_object_key(session_id="s1", revision=1, ext="jpg")
+    out = await S.persist_generated_image(
+        f"data:image/jpeg;base64,{b64}",
+        key=key,
+    )
+    png_key = key[:-4] + ".png"
+    assert out == png_key
+    assert re.search(r"^sessions/s1/r1-[0-9a-f]{8}\.png$", out)
+    path = S.local_media_path(png_key)
+    assert path is not None
+    assert path.read_bytes() == TINY_PNG
 
 
 @pytest.mark.asyncio
@@ -258,6 +315,28 @@ async def test_put_bytes_s3_no_custom_endpoint(
 
 
 @pytest.mark.asyncio
+async def test_s3_client_reused_across_puts(
+    cloud_s3: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clients: list[object] = []
+
+    class FakeClient:
+        def put_object(self, **kwargs):
+            return None
+
+    class CapturingSession:
+        def client(self, service: str, **kwargs):
+            fake = FakeClient()
+            clients.append(fake)
+            return fake
+
+    monkeypatch.setattr(B.boto3.session, "Session", lambda: CapturingSession())
+    await S.put_bytes(key="sessions/s1/r1.png", data=TINY_PNG, content_type="image/png")
+    await S.put_bytes(key="sessions/s1/r2.png", data=TINY_PNG, content_type="image/png")
+    assert len(clients) == 1
+
+
+@pytest.mark.asyncio
 async def test_s3_put_wraps_client_error(
     cloud_s3: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -290,6 +369,7 @@ def test_get_media_roundtrip() -> None:
     assert resp.status_code == 200
     assert resp.content == TINY_PNG
     assert resp.headers["content-type"].startswith("image/png")
+    assert resp.headers["cache-control"] == "public, max-age=31536000, immutable"
 
 
 def test_get_media_missing_404() -> None:
@@ -306,6 +386,21 @@ def test_get_media_traversal_404() -> None:
     client = TestClient(app)
     resp = client.get("/api/media/../storage.py")
     assert resp.status_code == 404
+
+
+def test_get_media_encoded_traversal_404() -> None:
+    app = FastAPI()
+    app.include_router(media_router, prefix="/api")
+    client = TestClient(app)
+    resp = client.get("/api/media/%2e%2e/storage.py")
+    assert resp.status_code == 404
+
+
+def test_local_media_path_rejects_traversal() -> None:
+    with pytest.raises(S.MediaStorageError, match="Invalid"):
+        S.local_media_path("../x")
+    with pytest.raises(S.MediaStorageError, match="Invalid"):
+        S.local_media_path("sessions/../../x")
 
 
 def test_get_media_cloud_404(cloud_s3: None) -> None:

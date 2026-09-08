@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from functools import lru_cache
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import quote
 
 import boto3
 from botocore.client import BaseClient
@@ -44,7 +46,8 @@ class LocalStore:
         self._public_base = public_base.rstrip("/")
 
     def public_url(self, key: str) -> str:
-        return f"{self._public_base}/{normalize_key(key)}"
+        rel = quote(normalize_key(key), safe="/")
+        return f"{self._public_base}/{rel}"
 
     def local_path(self, key: str) -> Path:
         rel = normalize_key(key)
@@ -65,21 +68,28 @@ class LocalStore:
         return await asyncio.to_thread(self._put_sync, key=key, data=data)
 
 
-def _s3_client() -> BaseClient:
-    kwargs: dict[str, str] = {"region_name": settings.s3_region or "us-east-1"}
-    access = (settings.s3_access_key or "").strip()
-    secret = (settings.s3_secret_key or "").strip()
+@lru_cache(maxsize=4)
+def _s3_client_for(region: str, access: str, secret: str) -> BaseClient:
+    kwargs: dict[str, str] = {"region_name": region}
     if access and secret:
         kwargs["aws_access_key_id"] = access
         kwargs["aws_secret_access_key"] = secret
     return boto3.session.Session().client("s3", **kwargs)
 
 
+def _s3_client() -> BaseClient:
+    return _s3_client_for(
+        settings.s3_region or "us-east-1",
+        (settings.s3_access_key or "").strip(),
+        (settings.s3_secret_key or "").strip(),
+    )
+
+
 class S3Store:
     """Cloud AWS S3 (no custom endpoint)."""
 
     def public_url(self, key: str) -> str:
-        rel = normalize_key(key)
+        rel = quote(normalize_key(key), safe="/")
         base = (settings.s3_public_base_url or "").strip().rstrip("/")
         if base:
             return f"{base}/{rel}"
@@ -124,21 +134,36 @@ def resolve_media_store() -> MediaStore:
 
 
 def assert_media_store_ready() -> None:
-    """Fail at process start when cloud media is misconfigured (ADR 0024)."""
-    if settings.deployment_mode != "cloud":
+    """Fail at process start when media is misconfigured (ADR 0024)."""
+    if settings.deployment_mode == "cloud":
+        if not (settings.s3_bucket or "").strip():
+            raise RuntimeError(
+                "DEPLOYMENT_MODE=cloud requires S3_BUCKET. Set the AWS bucket name, "
+                "or DEPLOYMENT_MODE=onprem to write media to local disk."
+            )
+        access = (settings.s3_access_key or "").strip()
+        secret = (settings.s3_secret_key or "").strip()
+        if bool(access) != bool(secret):
+            raise RuntimeError(
+                "S3_ACCESS_KEY and S3_SECRET_KEY must both be set, or both omitted "
+                "to use the default AWS credential chain (instance role)."
+            )
         return
-    if not (settings.s3_bucket or "").strip():
+    root = Path(settings.media_root or "data/media")
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        if not root.is_dir():
+            raise RuntimeError(
+                f"MEDIA_ROOT={root} exists but is not a directory."
+            )
+        probe = root / ".writable"
+        probe.write_text("ok")
+        probe.unlink()
+    except OSError as exc:
         raise RuntimeError(
-            "DEPLOYMENT_MODE=cloud requires S3_BUCKET. Set the AWS bucket name, "
-            "or DEPLOYMENT_MODE=onprem to write media to local disk."
-        )
-    access = (settings.s3_access_key or "").strip()
-    secret = (settings.s3_secret_key or "").strip()
-    if bool(access) != bool(secret):
-        raise RuntimeError(
-            "S3_ACCESS_KEY and S3_SECRET_KEY must both be set, or both omitted "
-            "to use the default AWS credential chain (instance role)."
-        )
+            f"MEDIA_ROOT={root} is not writable. Create the directory or set "
+            "MEDIA_ROOT to a writable path."
+        ) from exc
 
 
 def local_media_path(key: str) -> Path | None:

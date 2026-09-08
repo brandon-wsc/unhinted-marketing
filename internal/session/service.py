@@ -18,7 +18,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from internal.llm.resolve import company_llm_scope
 from internal.llm.router import LlmProviderError
-from internal.media.storage import resolve_stored_url
+from internal.media.storage import MAX_MEDIA_BYTES, resolve_stored_url
 from internal.memory import repos
 from internal.memory.models import Session
 from internal.session.context import session_db
@@ -1332,7 +1332,6 @@ async def add_session_image(
     )
 
 
-_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 _UPLOAD_CONTENT_TYPES = {
     "image/jpeg": "jpg",
     "image/jpg": "jpg",
@@ -1405,7 +1404,7 @@ async def upload_session_image(
         raise ValueError("File must be an image (jpeg, png, webp, or gif)")
     if not data:
         raise ValueError("Empty upload")
-    if len(data) > _UPLOAD_MAX_BYTES:
+    if len(data) > MAX_MEDIA_BYTES:
         raise ValueError("Image too large (max 10MB)")
 
     plan = dict(old.plan or {})
