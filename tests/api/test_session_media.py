@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import pytest
 
+from internal.memory import repos
 from tests.api.helpers import auth_header, register_user, seed_preview_session
 
 
@@ -143,6 +144,11 @@ async def test_session_media_remove_and_upload(client, db_session, monkeypatch) 
     fetched = await client.get(media_path)
     assert fetched.status_code == 200
     assert fetched.content == png
+    stored = await repos.get_preview_image(db_session, uuid.UUID(slot["id"]))
+    assert stored is not None
+    assert stored.url is not None
+    assert stored.url.startswith("sessions/")
+    assert not stored.url.startswith("http")
 
     bad = await client.post(
         f"/api/sessions/{session_id}/media/{slot['id']}/upload",

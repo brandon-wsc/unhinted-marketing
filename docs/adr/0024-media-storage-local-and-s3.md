@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-08
 - **Supersedes:** —
-- **Related:** [ADR 0023](./0023-deployment-mode-flag.md) (deployment mode selects the backend), [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (`GET /api/media/{key}`), [ADR 0008](./0008-preview-images-append-only.md) (`preview_images.url`), [ADR 0022](./0022-real-publish-instagram.md) (Confirm image URL)
+- **Related:** [ADR 0023](./0023-deployment-mode-flag.md) (deployment mode selects the backend), [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (`GET /api/media/{key}`), [ADR 0008](./0008-preview-images-append-only.md) (`preview_images.url`), [ADR 0022](./0022-real-publish-instagram.md) (Confirm image URL), [ADR 0025](./0025-store-media-object-keys.md) (store keys, derive URLs at read)
 
 ## Context
 

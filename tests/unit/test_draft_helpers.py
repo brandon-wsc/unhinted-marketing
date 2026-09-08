@@ -76,3 +76,14 @@ def test_preview_updated_payload_custom_platform() -> None:
     assert payload["platform"] == "threads"
     assert payload["image_url"] == "placeholder://x"
     assert payload["copy"] == {"caption": "", "hashtags": [], "cta": ""}
+
+
+def test_preview_updated_payload_derives_object_key() -> None:
+    payload = preview_updated_payload(
+        revision=1,
+        approval_token="tok",
+        image_url="sessions/s1/r1-abcd1234.png",
+        copy=None,
+    )
+    assert payload["image_url"] is not None
+    assert payload["image_url"].endswith("/api/media/sessions/s1/r1-abcd1234.png")

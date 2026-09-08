@@ -111,10 +111,10 @@ async def publish_social_post(
 
 ## 4. Media public URL
 
-- Publish image = draft's first `media_ids` entry; the handler uses the store-returned
-  `preview_images.url` ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)) as
-  `PublishSocialPostRequest.image_url`. Cloud: S3 / `S3_PUBLIC_BASE_URL`. On-prem:
-  `{WEB_BASE_URL}/api/media/{key}`.
+- Publish image = draft's first `media_ids` entry; Confirm derives
+  `PublishSocialPostRequest.image_url` via `resolve_stored_url` ([ADR 0025](./adr/0025-store-media-object-keys.md)).
+  Store-backed rows hold an object key; the read path applies the current origin
+  (cloud S3 / `S3_PUBLIC_BASE_URL`, on-prem `{WEB_BASE_URL}/api/media/{key}`).
 - On-prem local files are unreachable by Meta — live verification needs a tunnel
   (public `WEB_BASE_URL`) or cloud S3. Unit tests mock httpx; this constraint is
   documented, not coded around.

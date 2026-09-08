@@ -148,7 +148,8 @@ async def test_persist_generated_image_uploads_data_url() -> None:
         f"data:image/png;base64,{b64}",
         key=key,
     )
-    assert re.search(r"/api/media/sessions/s1/r1-[0-9a-f]{8}\.png$", out)
+    assert out == key
+    assert re.search(r"^sessions/s1/r1-[0-9a-f]{8}\.png$", out)
     path = S.local_media_path(key)
     assert path is not None
     assert path.read_bytes() == TINY_PNG
@@ -163,8 +164,9 @@ async def test_persist_generated_image_sniffs_jpeg_mislabeled_png() -> None:
         f"data:image/png;base64,{b64}",
         key=key,
     )
-    assert re.search(r"/api/media/sessions/s1/r1-[0-9a-f]{8}\.jpg$", out)
     jpg_key = key[:-4] + ".jpg"
+    assert out == jpg_key
+    assert re.search(r"^sessions/s1/r1-[0-9a-f]{8}\.jpg$", out)
     path = S.local_media_path(jpg_key)
     assert path is not None
     assert path.read_bytes() == jpeg
@@ -312,3 +314,54 @@ def test_get_media_cloud_404(cloud_s3: None) -> None:
     client = TestClient(app)
     resp = client.get("/api/media/sessions/abc/r1.png")
     assert resp.status_code == 404
+
+
+def test_resolve_stored_url_key_uses_current_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "web_base_url", "https://old.example")
+    key = "sessions/s1/r1-abcd1234.png"
+    assert S.resolve_stored_url(key) == "https://old.example/api/media/" + key
+    monkeypatch.setattr(settings, "web_base_url", "https://new.example")
+    assert S.resolve_stored_url(key) == "https://new.example/api/media/" + key
+
+
+def test_resolve_stored_url_rewrites_baked_api_media(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "web_base_url", "https://new.example")
+    baked = "https://old.example/api/media/sessions/s1/r1-abcd1234.png"
+    assert (
+        S.resolve_stored_url(baked)
+        == "https://new.example/api/media/sessions/s1/r1-abcd1234.png"
+    )
+    assert (
+        S.resolve_stored_url("/api/media/sessions/s1/r1-abcd1234.png")
+        == "https://new.example/api/media/sessions/s1/r1-abcd1234.png"
+    )
+
+
+def test_resolve_stored_url_rewrites_s3_virtual_hosted(
+    cloud_s3: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    baked = "https://unhinted-media.s3.ap-east-1.amazonaws.com/sessions/s1/r1.png"
+    assert S.resolve_stored_url(baked) == baked
+    monkeypatch.setattr(settings, "s3_public_base_url", "https://cdn.example/media")
+    assert (
+        S.resolve_stored_url(baked) == "https://cdn.example/media/sessions/s1/r1.png"
+    )
+
+
+def test_resolve_stored_url_passthrough_external_and_placeholder() -> None:
+    assert S.resolve_stored_url("https://cdn.openai.com/a.png") == "https://cdn.openai.com/a.png"
+    assert S.resolve_stored_url("placeholder://local/x") == "placeholder://local/x"
+    assert S.resolve_stored_url(None) is None
+    assert S.resolve_stored_url("") is None
+
+
+def test_is_stored_image_ref() -> None:
+    assert S.is_stored_image_ref("sessions/s1/r1-abcd1234.png")
+    assert S.is_stored_image_ref("https://cdn.example/a.png")
+    assert not S.is_stored_image_ref("placeholder://seed")
+    assert not S.is_stored_image_ref(None)
+    assert not S.is_stored_image_ref("")

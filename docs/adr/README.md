@@ -11,7 +11,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0005](./0005-platform-levels-and-llm-records.md) | Platform levels + LLM call records | Accepted |
 | [0006](./0006-api-path-prefix-and-spa-proxy.md) | API `/api` prefix vs SPA same-origin proxy | Accepted (migration pending) |
 | [0007](./0007-admin-trace-viewer.md) | Admin Trace viewer (node-steps + session) | Accepted |
-| [0008](./0008-preview-images-append-only.md) | Append-only preview images + draft `media_ids` | Accepted |
+| [0008](./0008-preview-images-append-only.md) | Append-only preview images + draft `media_ids` | Accepted (`url` storage amended by 0025) |
 | [0009](./0009-research-gate-and-tavily-ingest.md) | Unified intent + research gate; Tavily∪PG ingest | Accepted |
 | [0010](./0010-org-membership-invites-and-shared-assets.md) | Org membership, invite links, shared-asset scope | Accepted (§4 amended by 0013; §2 by 0014) |
 | [0011](./0011-knowledge-commit-without-llm.md) | Knowledge commit without LLM (K6 Approvals) | Accepted |
@@ -26,7 +26,8 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0021](./0021-org-byok-native-gemini.md) | Org BYOK: native Gemini + Vertex Express | Accepted |
 | [0022](./0022-real-publish-instagram.md) | Real publish: Instagram adapter, org social accounts, receipt status | Accepted |
 | [0023](./0023-deployment-mode-flag.md) | Deployment mode flag (cloud vs on-prem) | Accepted |
-| [0024](./0024-media-storage-local-and-s3.md) | Media storage: local on-prem, AWS S3 in cloud | Accepted |
+| [0024](./0024-media-storage-local-and-s3.md) | Media storage: local on-prem, AWS S3 in cloud | Accepted (§2 URL-in-DB superseded by 0025) |
+| [0025](./0025-store-media-object-keys.md) | Store media object keys; derive URLs at read | Accepted |
 
 ## Format
 

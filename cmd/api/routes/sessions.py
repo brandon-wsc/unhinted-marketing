@@ -19,7 +19,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
-from internal.media.storage import MediaStorageError
+from internal.media.storage import (
+    MediaStorageError,
+    is_stored_image_ref,
+    resolve_stored_url,
+)
 from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import Session, User
@@ -595,7 +599,9 @@ async def session_events(
         "state": state,
         "revision": draft.revision if draft else state.get("revision"),
         "approval_token": draft.approval_token if draft else state.get("approval_token"),
-        "image_url": draft.image_url if draft else state.get("image_url"),
+        "image_url": resolve_stored_url(
+            draft.image_url if draft else state.get("image_url")
+        ),
         "media": media_items,
         "copy": copy,
         "platform": platform,
@@ -825,10 +831,10 @@ async def post_session_image_upload(
 def _draft_has_image(draft) -> bool:
     # media_ids is the publish image (ADR 0008). A leftover placeholder://
     # image_url is not an image — copy-only Confirm must 400 (ADR 0022).
+    # Object keys count (ADR 0025); they resolve to a fetchable URL at read.
     if list(draft.media_ids or []):
         return True
-    url = (draft.image_url or "").strip()
-    return url.startswith("http://") or url.startswith("https://")
+    return is_stored_image_ref(draft.image_url)
 
 
 async def _publish_image_url(db: AsyncSession, draft) -> str | None:
@@ -836,11 +842,10 @@ async def _publish_image_url(db: AsyncSession, draft) -> str | None:
     if ids:
         images = await repos.get_preview_images_by_ids(db, [ids[0]])
         if images:
-            url = (images[0].url or "").strip()
+            url = resolve_stored_url(images[0].url)
             if url:
                 return url
-    url = (draft.image_url or "").strip()
-    return url or None
+    return resolve_stored_url(draft.image_url)
 
 
 def _optional_str(payload: dict, key: str) -> str | None:

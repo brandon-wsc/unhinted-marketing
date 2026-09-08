@@ -9,6 +9,7 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.roles import PlatformLevel, require_platform_level
+from internal.media.storage import resolve_stored_url
 from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import (
@@ -259,7 +260,7 @@ async def get_session_trace(
                 id=d.id,
                 revision=d.revision,
                 draft_copy=d.copy or {},
-                image_url=d.image_url,
+                image_url=resolve_stored_url(d.image_url),
                 image_plan=d.image_plan,
                 source_signal_ids=list(d.source_signal_ids or []),
                 approval_token=_truncate_token(d.approval_token),
