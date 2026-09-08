@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-07
 - **Supersedes:** —
-- **Related:** [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (API prefix / SPA proxy), [ADR 0010](./0010-org-membership-invites-and-shared-assets.md) (on-prem as a target environment)
+- **Related:** [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (API prefix / SPA proxy), [ADR 0010](./0010-org-membership-invites-and-shared-assets.md) (on-prem as a target environment), [ADR 0024](./0024-media-storage-local-and-s3.md) (first behavior branch: media backend)
 
 ## Context
 
@@ -65,3 +65,4 @@ This ADR introduces the flag and plumbing only. Any feature that branches on
   `web`; the only difference is the baked flag.
 - `GET /api/meta` is public; it must never grow sensitive fields — mode, env
   name, and version only.
+- First behavior branch: media storage ([ADR 0024](./0024-media-storage-local-and-s3.md)).

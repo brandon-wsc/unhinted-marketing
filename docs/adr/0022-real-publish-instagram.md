@@ -31,7 +31,7 @@ Explicitly **not** built in the original slice: OAuth connect flow (added 2026-0
 - `internal/tools/publish.py` exposes `publish_social_post(PublishSocialPostRequest) -> PublishSocialPostResponse`, consuming the shapes already locked in [`schemas/tools.py`](../../schemas/tools.py).
 - Env `PUBLISH_ADAPTER=stub|instagram`, default `stub`. CI, dev, and tests never hit Meta unless explicitly opted in.
 - The Instagram adapter implements the Graph two-phase publish on `graph.instagram.com`: `POST /{ig-user-id}/media` (container; requires a publicly reachable `image_url`) then `POST /{ig-user-id}/media_publish`. Token decryption reuses the BYOK Fernet helper ([`internal/llm/keys.py`](../../internal/llm/keys.py)).
-- The publish image is the draft's first `media_ids` entry, served via `S3_PUBLIC_BASE_URL`. Multi-image carousels are deferred. Local MinIO is unreachable by Meta; live verification requires a tunnel or real S3 — unit tests mock httpx.
+- The publish image is the draft's first `media_ids` entry; Confirm uses the URL the media store returned (`preview_images.url`). Cloud is AWS S3 / `S3_PUBLIC_BASE_URL`; on-prem is `{WEB_BASE_URL}/api/media/{key}` ([ADR 0024](./0024-media-storage-local-and-s3.md)). Multi-image carousels are deferred. On-prem local files are unreachable by Meta unless `WEB_BASE_URL` is public; live verification needs a tunnel or cloud S3 — unit tests mock httpx.
 
 ### 3. Copy-only drafts are rejected at Confirm
 

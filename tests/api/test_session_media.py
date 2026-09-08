@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import uuid
+from urllib.parse import urlparse
 
 import pytest
 
@@ -69,9 +70,7 @@ async def test_session_media_list_plan_regen_add(client, db_session, monkeypatch
 
 @pytest.mark.asyncio
 async def test_session_media_remove_and_upload(client, db_session, monkeypatch) -> None:
-    monkeypatch.setattr(
-        "internal.media.storage.media_storage_configured", lambda: False
-    )
+    monkeypatch.setattr("internal.llm.router.has_llm_credentials", lambda: False)
 
     data = await register_user(client)
     token = data["access_token"]
@@ -139,7 +138,11 @@ async def test_session_media_remove_and_upload(client, db_session, monkeypatch) 
     slot = up_body["media"][1]
     assert slot["id"] != pending_id
     assert slot["status"] == "ready"
-    assert slot["url"].startswith("placeholder://")
+    media_path = urlparse(slot["url"]).path
+    assert media_path.startswith("/api/media/")
+    fetched = await client.get(media_path)
+    assert fetched.status_code == 200
+    assert fetched.content == png
 
     bad = await client.post(
         f"/api/sessions/{session_id}/media/{slot['id']}/upload",

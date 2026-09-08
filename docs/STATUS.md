@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-09-06  
+> **Last updated:** 2026-09-08  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -45,7 +45,9 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Copy-only drafts rejected at Confirm** (`400 image_required`); missing IG account → `400 social_account_not_connected`; receipt `stubbed` / `published` / `failed` with optional `permalink` / `error_kind`; failed publish does **not** set `session.status=confirmed`
 - **Boundaries unchanged** — Confirm-only publish ([ADR 0003](./adr/0003-confirm-without-llm.md)); per-revision `approval_token`; user/session-scoped idempotency
 
-**Decision (2026-09-07) — Deployment mode flag (cloud | onprem):** → [ADR 0023](./adr/0023-deployment-mode-flag.md). `DEPLOYMENT_MODE` env (default `onprem`) read once at process start; baked into Docker images via build ARG (`Dockerfile` api, `web/Dockerfile` + nginx SPA). SPA mirror: `VITE_DEPLOYMENT_MODE` build-time via `web/src/lib/deployment.ts`. `GET /api/meta` exposes `{ deployment_mode, app_env, version }` as the runtime source of truth. Flag + plumbing only — no behavior branches yet.
+**Decision (2026-09-08) — Media storage (local on-prem / AWS S3 cloud):** → [ADR 0024](./adr/0024-media-storage-local-and-s3.md). Backend follows `DEPLOYMENT_MODE` (no `STORAGE_BACKEND`, no MinIO / `S3_ENDPOINT_URL`). On-prem writes `MEDIA_ROOT` and serves `GET /api/media/{key}`; cloud writes real AWS S3 (`S3_BUCKET` required at start; keys or instance role). Uploads and `data:` gen results always persist. Object keys include a short token (`r{revision}-{hex}.{ext}`) so concurrent regen/upload cannot overwrite the same bytes; `persist_generated_image` rejects unknown schemes (not `http(s)` / `data:`). **Held:** `preview_images.url` still stores the browser-facing URL, so on-prem rows bake `WEB_BASE_URL` — changing origin 404s old images. Candidate: store the object key and derive the URL at read time (superseding ADR to 0008/0024).
+
+**Decision (2026-09-07) — Deployment mode flag (cloud | onprem):** → [ADR 0023](./adr/0023-deployment-mode-flag.md). `DEPLOYMENT_MODE` env (default `onprem`) read once at process start; baked into Docker images via build ARG (`Dockerfile` api, `web/Dockerfile` + nginx SPA). SPA mirror: `VITE_DEPLOYMENT_MODE` build-time via `web/src/lib/deployment.ts`. `GET /api/meta` exposes `{ deployment_mode, app_env, version }` as the runtime source of truth. First behavior branch: media storage ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)).
 
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
@@ -260,7 +262,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | Alembic `8791b607d5bc` (auth) | ✅ | `users`, `entities`, `organization_members`, `refresh_tokens` |
 | React web app | ✅ | Vite + React 19 + Tailwind v4 |
 | README | ✅ | Project intro; setup in GETTING_STARTED |
-| `docker-compose.yml` | ✅ | Local `db` (pgvector) + `minio` / `minio-init` (S3-compatible media) + adminer |
+| `docker-compose.yml` | ✅ | Local `db` (pgvector) + adminer (media is on-prem disk / cloud S3 — [ADR 0024](./adr/0024-media-storage-local-and-s3.md)) |
 | Auth rate limiting | ✅ | In-memory sliding window on register/login/refresh (`AUTH_RATE_LIMIT_*`); Redis later |
 | Automated tests | ✅ Backend + FE Tier 1/2 + CI + on-demand live eval | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && pnpm test` (Vitest + RTL — lib utils + `session-helpers` / `session-layout` / `useSession` + PasswordBox / UserMenuDropdown). Live LLM: `python -m scripts.eval_agent` (not CI). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
@@ -290,9 +292,9 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /resume-image` ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)); Stop mid-resume re-parks CTA; Stop while parked discards turn |
 | Postgres checkpointer | ✅ | `AsyncPostgresSaver` + pool (`check` / keepalives / idle recycle); `setup()` on API lifespan; `thread_id = session.id` |
 | Node logic | ✅ | LiteLLM + structured I/O; heuristic fallbacks; PG load/grounding |
-| Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}`, `/messages`, `/draft`, `/media` (+ plan/regen/remove/upload), `/confirm` |
+| Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}`, `/messages`, `/draft`, `/media` (+ plan/regen/remove/upload), `GET /api/media/{key}` (on-prem bytes), `/confirm` |
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform` + `media[]`; snapshot hydrates `media` from latest draft |
-| Image generation worker | 🟡 Soft | LiteLLM ``aimage_generation`` via ``LLM_IMAGE_MODEL``; chat-only / unset → ``llm.failed``. ``data:`` results upload to S3-compatible store (MinIO) when ``S3_*`` configured; else remain data URLs. ``placeholder`` / no credentials → mock URL |
+| Image generation worker | 🟡 Soft | LiteLLM ``aimage_generation`` via ``LLM_IMAGE_MODEL``; chat-only / unset → ``llm.failed``. ``data:`` results persist via the media store (local disk on-prem, AWS S3 in cloud — [ADR 0024](./adr/0024-media-storage-local-and-s3.md)). ``placeholder`` / no credentials → mock URL |
 | `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
 | Chat research + Tavily ingest | ✅ | ADR 0009; semantic gate + multi-query + gloss; Tavily adapter; admin Research tab; `TAVILY_API_KEY` for live search |
 | Curl exit-criteria script | ⏸ **Held** | Manual/API path works; formal curl checklist later |
@@ -333,7 +335,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 - **Signals:** `GET /api/signals/top` — latest HK market signals from PostgreSQL
 - **Questions:** `GET /api/companies/{id}/recommended-questions` — 200 cache / 202 generating (ADR 0018 fill); `POST …/refresh` failed-empty retry (CLI `--force` / scheduler for routine fill)
 
-- **Sessions:** `GET /api/sessions`, `POST /api/sessions`, `PATCH /api/sessions/{id}` (title / pinned), `DELETE /api/sessions/{id}`, `POST /api/sessions/{id}/messages`, `GET /api/sessions/{id}/messages`, `POST /api/sessions/{id}/resume-image`, `POST /api/sessions/{id}/stop`, `POST /api/sessions/{id}/draft`, `GET/POST /api/sessions/{id}/media`, `PATCH /api/sessions/{id}/media/{image_id}/plan`, `POST /api/sessions/{id}/media/{image_id}/regen`, `POST /api/sessions/{id}/media/{image_id}/remove`, `POST /api/sessions/{id}/media/{image_id}/upload`, `GET /api/sessions/{id}/events` (SSE), `POST /api/sessions/{id}/confirm`
+- **Sessions:** `GET /api/sessions`, `POST /api/sessions`, `PATCH /api/sessions/{id}` (title / pinned), `DELETE /api/sessions/{id}`, `POST /api/sessions/{id}/messages`, `GET /api/sessions/{id}/messages`, `POST /api/sessions/{id}/resume-image`, `POST /api/sessions/{id}/stop`, `POST /api/sessions/{id}/draft`, `GET/POST /api/sessions/{id}/media`, `PATCH /api/sessions/{id}/media/{image_id}/plan`, `POST /api/sessions/{id}/media/{image_id}/regen`, `POST /api/sessions/{id}/media/{image_id}/remove`, `POST /api/sessions/{id}/media/{image_id}/upload`, `GET /api/media/{key}` (on-prem bytes), `GET /api/sessions/{id}/events` (SSE), `POST /api/sessions/{id}/confirm`
 - **LangGraph:** Session nodes + Postgres checkpointer; image URL still placeholder
 - **Security:** Argon2 password hashing, refresh token rotation + revoke on logout
 - **Multi-tenant bootstrap:** Register auto-creates `entities` (type `company`) + `organization_members` (role `owner`)
@@ -484,8 +486,10 @@ unhinted-marketing/
 | `GOOGLE_GENAI_USE_VERTEXAI` | Read-only: `true` routes env `GOOGLE_API_KEY` as Express. `GEMINI_API_KEY` alone is not Express |
 | `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `gpt-4o-mini`, `deepseek/deepseek-v4-flash-0731`) |
 | `LLM_IMAGE_MODEL` | Image-capable id (e.g. `dall-e-3` / OpenRouter image model). Unset with credentials → error on gen; `placeholder` = mock URL |
-| `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |
-| `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`). Instagram publish needs a Meta-reachable HTTPS URL (local MinIO is not) |
+| `MEDIA_ROOT` | On-prem media directory (default `data/media`). Ignored when `DEPLOYMENT_MODE=cloud` |
+| `S3_BUCKET` / `S3_REGION` | Cloud AWS S3 ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). Required at start in cloud; on-prem ignores |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Cloud only; omit both to use the default AWS credential chain (instance role) |
+| `S3_PUBLIC_BASE_URL` | Optional CloudFront / virtual-hosted base. Default `https://{bucket}.s3.{region}.amazonaws.com`. Instagram publish needs a Meta-reachable HTTPS URL (on-prem `WEB_BASE_URL` must be public) |
 | `PUBLISH_ADAPTER` | Confirm adapter: `stub` (default, never hits Meta) or `instagram` ([ADR 0022](./adr/0022-real-publish-instagram.md)) |
 | `META_GRAPH_API_VERSION` | Instagram Graph version pin (default `v22.0`) |
 | `META_APP_ID` / `META_APP_SECRET` | Instagram App ID / Secret (App Dashboard → Instagram; not the Facebook App ID) |
@@ -515,10 +519,10 @@ See `.env.example`. Local `.env` is gitignored.
 ### Other gaps
 
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
-2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + MinIO (`S3_*`) when configured; formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
+2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + media store (local / S3, [ADR 0024](./adr/0024-media-storage-local-and-s3.md)); formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page; FB/Threads preview skins. LLM call **records** + admin Trace viewer landed ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md), [ADR 0007](./adr/0007-admin-trace-viewer.md)) — ops guide: [PROMPT_TUNING.md](./PROMPT_TUNING.md). Next: retention/purge policy. `/api` prefix shipped ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)).
 4. **Knowledge:** Settings through **K6 Approvals** shipped ([docs/knowledge/](./knowledge/), [ADR 0011](./adr/0011-knowledge-commit-without-llm.md)). Chat scratch still not org KB.
-5. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; ~~persist LLM call records ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md))~~; ~~`/api` path prefix ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md))~~; ~~on-demand live eval CLI (`python -m scripts.eval_agent`)~~; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks.
+5. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; ~~persist LLM call records ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md))~~; ~~`/api` path prefix ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md))~~; ~~on-demand live eval CLI (`python -m scripts.eval_agent`)~~; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; store object key (not baked origin URL) on `preview_images` so on-prem origin changes do not 404 old rows; re-check org membership on session access after revoke; enable branch protection requiring CI checks.
 
 ---
 

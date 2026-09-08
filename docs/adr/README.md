@@ -25,6 +25,8 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0020](./0020-org-byok-keys-models-routing.md) | Org BYOK: provider keys, model registry, per-tier routing | Accepted (enum + Completions-only surface amended by 0021) |
 | [0021](./0021-org-byok-native-gemini.md) | Org BYOK: native Gemini + Vertex Express | Accepted |
 | [0022](./0022-real-publish-instagram.md) | Real publish: Instagram adapter, org social accounts, receipt status | Accepted |
+| [0023](./0023-deployment-mode-flag.md) | Deployment mode flag (cloud vs on-prem) | Accepted |
+| [0024](./0024-media-storage-local-and-s3.md) | Media storage: local on-prem, AWS S3 in cloud | Accepted |
 
 ## Format
 

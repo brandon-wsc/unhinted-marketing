@@ -22,5 +22,10 @@ COPY migrations ./migrations
 COPY alembic.ini ./
 RUN pip install .
 
+# On-prem media files (ADR 0024). Cloud images ignore this and write to S3.
+# Bind-mount a volume here so generated/uploaded images survive container recreate.
+ENV MEDIA_ROOT=/var/lib/unhinted/media
+VOLUME ["/var/lib/unhinted/media"]
+
 EXPOSE 8000
 CMD ["uvicorn", "cmd.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

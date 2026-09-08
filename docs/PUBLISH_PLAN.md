@@ -111,10 +111,13 @@ async def publish_social_post(
 
 ## 4. Media public URL
 
-- Publish image = draft's first `media_ids` entry; the handler resolves it to a public
-  URL via `S3_PUBLIC_BASE_URL` and fills `PublishSocialPostRequest.image_url`.
-- Local MinIO is unreachable by Meta — live verification needs a tunnel or real S3.
-  Unit tests mock httpx; this constraint is documented, not coded around.
+- Publish image = draft's first `media_ids` entry; the handler uses the store-returned
+  `preview_images.url` ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)) as
+  `PublishSocialPostRequest.image_url`. Cloud: S3 / `S3_PUBLIC_BASE_URL`. On-prem:
+  `{WEB_BASE_URL}/api/media/{key}`.
+- On-prem local files are unreachable by Meta — live verification needs a tunnel
+  (public `WEB_BASE_URL`) or cloud S3. Unit tests mock httpx; this constraint is
+  documented, not coded around.
 - Multi-image carousels deferred (IG supports `CAROUSEL` containers; separate slice).
 
 ---
@@ -211,7 +214,8 @@ row (`status` + `response.permalink` / `response.error_kind`) — same source as
 - **Contracts:** `export_contracts` output committed; schema tests in
   `tests/unit/test_schemas_session.py` / `test_schemas_contracts.py` / `test_schemas_social.py`.
 - **Live acceptance (manual, not CI):** curl flow question → draft → image → confirm
-  → real IG post + permalink in receipt. Requires tunnel/real S3 for media.
+  → real IG post + permalink in receipt. Requires a Meta-reachable media URL
+  (cloud S3 / CDN, or on-prem tunnel to `WEB_BASE_URL`).
 
 ---
 

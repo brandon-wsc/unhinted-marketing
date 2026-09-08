@@ -126,6 +126,7 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 | POST | `/api/sessions/{id}/draft` | Manual draft revision (no LLM) |
 | GET | `/api/sessions/{id}/events` | SSE stream (snapshot includes `interrupted` for Generate-image CTA) |
 | POST | `/api/sessions/{id}/confirm` | Confirm publish (stub by default; Instagram when `PUBLISH_ADAPTER=instagram`) |
+| GET | `/api/media/{key}` | On-prem preview bytes (unauthenticated; cloud serves from S3) |
 | GET | `/api/companies/{id}/social-accounts` | List org Instagram credentials (editor; `token_last4` only) |
 | POST | `/api/companies/{id}/social-accounts/oauth/start` | Start Instagram Login (popup URL + CSRF cookie) |
 | GET | `/api/social/oauth/callback` | Instagram Login redirect (public; `META_OAUTH_REDIRECT_URI`) |

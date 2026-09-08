@@ -1440,9 +1440,7 @@ async def upload_session_image(
     """Upload user image → new preview_images row + replace slot in draft."""
     from internal.media.storage import (
         MediaStorageError,
-        ensure_bucket,
         media_object_key,
-        media_storage_configured,
         put_bytes,
     )
 
@@ -1471,17 +1469,12 @@ async def upload_session_image(
     fmt = image_format_from_plan(plan, fallback=old.format)
     plan["format"] = fmt
 
-    if media_storage_configured():
-        rev = (existing.revision if existing else 0) + 1
-        key = media_object_key(session_id=str(session.id), revision=rev, ext=ext)
-        try:
-            await ensure_bucket()
-            url = await put_bytes(key=key, data=data, content_type=ct)
-        except MediaStorageError as exc:
-            raise MediaStorageError(str(exc)) from exc
-    else:
-        # Dev/tests without S3 — keep a renderable-enough placeholder URL.
-        url = f"placeholder://local/{session.id}/upload-{secrets.token_hex(4)}.{ext}"
+    rev = (existing.revision if existing else 0) + 1
+    key = media_object_key(session_id=str(session.id), revision=rev, ext=ext)
+    try:
+        url = await put_bytes(key=key, data=data, content_type=ct)
+    except MediaStorageError as exc:
+        raise MediaStorageError(str(exc)) from exc
 
     row = await repos.insert_preview_image(
         db,

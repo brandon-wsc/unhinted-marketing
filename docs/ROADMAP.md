@@ -445,7 +445,7 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 - [ ] Real Meta/IG Graph API integration in Confirm handler
 - [ ] Budget circuit breaker (atomic PG updates)
 - [ ] Redis for queue + question cache (if not already)
-- [ ] S3 for media assets
+- [x] S3 for media assets (cloud AWS S3; on-prem local disk — [ADR 0024](./adr/0024-media-storage-local-and-s3.md))
 - [ ] OAuth providers (Google) for login
 
 ### Phase 5 — Autonomous Extensions (Optional)

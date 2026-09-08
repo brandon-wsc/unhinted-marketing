@@ -1,9 +1,8 @@
-# Local Postgres (pgvector) + MinIO (S3-compatible media).
+# Local Postgres (pgvector). Media is on-prem disk (MEDIA_ROOT) or cloud AWS S3
+# — no MinIO sidecar (ADR 0024).
 # Usage:
-#   docker compose up -d db minio minio-init
-#   docker compose up -d          # everything including adminer
-# MinIO API: http://localhost:9000  Console: http://localhost:9001
-#   user/pass: minioadmin / minioadmin  (dev only)
+#   docker compose up -d db
+#   docker compose up -d          # db + adminer
 
 services:
   db:
@@ -34,41 +33,5 @@ services:
       db:
         condition: service_healthy
 
-  minio:
-    image: minio/minio:latest
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
-  # Create bucket + anonymous download (preview <img src>). Idempotent.
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      - minio
-    restart: on-failure
-    entrypoint: >
-      /bin/sh -c "
-      set -e;
-      echo 'Waiting for MinIO…';
-      until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
-      mc mb --ignore-existing local/unhinted-media;
-      mc anonymous set download local/unhinted-media;
-      echo 'MinIO bucket unhinted-media ready (public download).';
-      "
-
 volumes:
   pgdata18:
-  minio_data:

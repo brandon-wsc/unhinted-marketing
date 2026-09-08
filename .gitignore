@@ -43,9 +43,8 @@ credentials.json
 # Agent design scratch (baoyu-design HTML boards) — not product SSOT
 designs/
 
-# Media cache (generated)
-.cache/
-uploads/
+# Generated / uploaded preview media (on-prem local store, ADR 0024)
+data/media/
 
 # Live eval reports (may contain prompts / model output)
 reports/eval/

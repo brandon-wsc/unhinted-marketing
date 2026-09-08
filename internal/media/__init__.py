@@ -1,10 +1,10 @@
-"""Media asset storage (S3-compatible: MinIO locally)."""
+"""Media asset storage (ADR 0024 — local on-prem / AWS S3 cloud)."""
 
 from internal.media.storage import (
     MediaStorageError,
-    ensure_bucket,
+    assert_media_store_ready,
+    local_media_path,
     media_object_key,
-    media_storage_configured,
     parse_data_url,
     persist_generated_image,
     put_bytes,
@@ -12,9 +12,9 @@ from internal.media.storage import (
 
 __all__ = [
     "MediaStorageError",
-    "ensure_bucket",
+    "assert_media_store_ready",
+    "local_media_path",
     "media_object_key",
-    "media_storage_configured",
     "parse_data_url",
     "persist_generated_image",
     "put_bytes",
