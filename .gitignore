@@ -46,6 +46,7 @@ designs/
 # Media cache (generated)
 .cache/
 uploads/
+data/media/
 
 # Live eval reports (may contain prompts / model output)
 reports/eval/

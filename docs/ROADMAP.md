@@ -233,7 +233,7 @@ company_id, user_id, thread_id
 brief                 # brainstormer output (can_do[], cannot_do[], angles, persona)
 draft                 # post copy (caption, hashtags, CTA)
 image_plan            # structured image prompt / composition
-image_url             # placeholder/local path in Phase 2; S3 in Phase 4
+image_url             # store object key or provider/placeholder URL; HTTP/SSE emit fetchable URL (ADR 0024)
 revision              # integer revision counter
 source_signal_ids     # grounding citations
 reviewer_feedback     # last fail reasons (or empty on pass)
@@ -274,7 +274,7 @@ awaiting_image_ok     # bool — mirrored into sessions.state when graph is park
 | Agent | LangGraph + LiteLLM | Structured output via Pydantic |
 | DB | PostgreSQL 16+ | pgvector for signal similarity (MVP) |
 | Cache / queue | Redis (optional MVP) | Question cache, job queue, rate limits |
-| Media | Placeholder / local path (Phase 2); S3 (Phase 4) | Phase 2 stores URL string on `preview_drafts`; archive later |
+| Media | Local disk default on-prem; optional S3-compatible; AWS S3 in cloud ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)) | Postgres stores object keys; URLs derived at read |
 | Frontend | React + Vite + Tailwind + Streamdown | Session UI; Streamdown for streaming MD; shadcn optional later |
 | Hot search | pytrends / SerpAPI | Meta Graph API Phase 3 |
 
@@ -445,7 +445,7 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 - [ ] Real Meta/IG Graph API integration in Confirm handler
 - [ ] Budget circuit breaker (atomic PG updates)
 - [ ] Redis for queue + question cache (if not already)
-- [ ] S3 for media assets
+- [x] Media storage: local disk default on-prem; optional S3-compatible; AWS S3 in cloud ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). Signed/private URLs remain STATUS hardening
 - [ ] OAuth providers (Google) for login
 
 ### Phase 5 — Autonomous Extensions (Optional)

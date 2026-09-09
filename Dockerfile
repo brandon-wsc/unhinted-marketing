@@ -12,6 +12,8 @@ WORKDIR /app
 
 ARG DEPLOYMENT_MODE=onprem
 ENV DEPLOYMENT_MODE=${DEPLOYMENT_MODE}
+# On-prem local media lives under MEDIA_ROOT (default data/media). Mount a
+# volume there for persistence / multi-worker; or set S3_* (ADR 0024).
 
 # Install dependencies first for layer caching, then the source.
 COPY pyproject.toml README.md ./

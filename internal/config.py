@@ -71,13 +71,14 @@ class Settings(BaseSettings):
     # Persist graph node-step I/O to session_node_steps (admin Trace viewer).
     node_trace_enabled: bool = True
 
-    # S3-compatible media (MinIO locally — see docker-compose `minio` service)
+    # Media (ADR 0024). On-prem default is local disk; S3 is env-presence opt-in.
+    media_root: str = "data/media"
     s3_endpoint_url: str | None = None
     s3_access_key: str | None = None
     s3_secret_key: str | None = None
-    s3_bucket: str = "unhinted-media"
+    s3_bucket: str | None = None
     s3_region: str = "us-east-1"
-    # Browser-facing base (path-style). Default derived as {endpoint}/{bucket}.
+    # Browser-facing base. Default derived from endpoint/bucket or AWS virtual-host.
     s3_public_base_url: str | None = None
 
     # Perception / workers

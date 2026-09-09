@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-09-12  
+> **Last updated:** 2026-09-12 
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -47,7 +47,14 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-09-12) — Compat image path from catalog shape:** amends [ADR 0020](./adr/0020-org-byok-keys-models-routing.md). `openai_compatible` / custom `api_base` image gen is **not** always OpenAI `/images/generations`. `GET {api_base}/images/models` 200 JSON → `POST {api_base}/images` with the catalog id (Seedream-style clones); body is `{model, prompt}` — do **not** send DALL·E `size=1024x1024` (catalog `size` is `1K`/`2K`/`4K` or omit). 404 / error → LiteLLM `/images/generations`. No `provider_type=openrouter`; env/registry ids stay catalog slugs (`bytedance-seed/seedream-4.5`). Org bases use SSRF; env `LLM_API_BASE` is operator-trusted. Chat `openai/` LiteLLM prefix is unchanged.
 
-**Decision (2026-09-07) — Deployment mode flag (cloud | onprem):** → [ADR 0023](./adr/0023-deployment-mode-flag.md). `DEPLOYMENT_MODE` env (default `onprem`) read once at process start; baked into Docker images via build ARG (`Dockerfile` api, `web/Dockerfile` + nginx SPA). SPA mirror: `VITE_DEPLOYMENT_MODE` build-time via `web/src/lib/deployment.ts`. `GET /api/meta` exposes `{ deployment_mode, app_env, version }` as the runtime source of truth. Flag + plumbing only — no behavior branches yet.
+**Decision (2026-09-07) — Deployment mode flag (cloud | onprem):** → [ADR 0023](./adr/0023-deployment-mode-flag.md). `DEPLOYMENT_MODE` env (default `onprem`) read once at process start; baked into Docker images via build ARG (`Dockerfile` api, `web/Dockerfile` + nginx SPA). SPA mirror: `VITE_DEPLOYMENT_MODE` build-time via `web/src/lib/deployment.ts`. `GET /api/meta` exposes `{ deployment_mode, app_env, version }` as the runtime source of truth. First behavior branch: media storage ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)).
+
+**Decision (2026-09-09) — Media storage (local default on-prem, optional S3-compatible, AWS S3 in cloud):** → [ADR 0024](./adr/0024-media-storage-local-and-s3.md)
+
+- **Backend follows `DEPLOYMENT_MODE`** — no `STORAGE_BACKEND` flag. `onprem` defaults to local disk under `MEDIA_ROOT` (`data/media`); `onprem` + both `S3_BUCKET` and `S3_ENDPOINT_URL` opts into the shared S3 driver (path-style); `cloud` requires `S3_BUCKET` (`S3_ENDPOINT_URL` optional, e.g. R2). Incomplete S3 env (one of bucket/endpoint, or only one of the two keys) fails at process start
+- **Postgres stores the object key** — `preview_images.url` / `preview_drafts.image_url` hold `sessions/{id}/r{revision}-{hex}.{ext}` (or leftover provider/`placeholder://` URLs). HTTP/SSE still emit a fetchable `url` via `resolve_stored_url`. Unauthenticated `GET /api/media/{key}` streams local files
+- **Always persist real bytes** — uploads and `data:` generation results always write the store; `placeholder` / no-credentials stay mock URLs (not a storage fallback)
+- **Eager GC on session delete** — after commit, refcount keys against remaining preview rows (forks share URLs; [ADR 0017](./adr/0017-session-fork.md)); refcount-zero keys deleted best-effort. No sweeper. Signed/private URLs stay hardening
 
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
@@ -262,7 +269,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | Alembic `8791b607d5bc` (auth) | ✅ | `users`, `entities`, `organization_members`, `refresh_tokens` |
 | React web app | ✅ | Vite + React 19 + Tailwind v4 |
 | README | ✅ | Project intro; setup in GETTING_STARTED |
-| `docker-compose.yml` | ✅ | Local `db` (pgvector) + `minio` / `minio-init` (S3-compatible media) + adminer |
+| `docker-compose.yml` | ✅ | Local `db` (pgvector) + adminer. Media is on-disk `MEDIA_ROOT` ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)); no object-storage sidecar |
 | Auth rate limiting | ✅ | In-memory sliding window on register/login/refresh (`AUTH_RATE_LIMIT_*`); Redis later |
 | Automated tests | ✅ Backend + FE Tier 1/2 + CI + on-demand live eval | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && pnpm test` (Vitest + RTL — lib utils + `session-helpers` / `session-layout` / `useSession` + PasswordBox / UserMenuDropdown). Live LLM: `python -m scripts.eval_agent` (not CI). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
@@ -294,7 +301,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Node logic | ✅ | LiteLLM + structured I/O; heuristic fallbacks; PG load/grounding |
 | Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}`, `/messages`, `/draft`, `/media` (+ plan/regen/remove/upload), `/confirm` |
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform` + `media[]`; snapshot hydrates `media` from latest draft |
-| Image generation worker | 🟡 Soft | ``LLM_IMAGE_MODEL`` catalog id; compat bases with ``GET {base}/images/models`` → ``POST {base}/images`` ``{model, prompt}`` (no DALL·E size), else LiteLLM ``aimage_generation``. Chat-only / unset → ``llm.failed``. ``data:`` results upload to S3-compatible store (MinIO) when ``S3_*`` configured; else remain data URLs. ``placeholder`` / no credentials → mock URL |
+| Image generation worker | 🟡 Soft | ``LLM_IMAGE_MODEL`` catalog id; compat bases with ``GET {base}/images/models`` → ``POST {base}/images`` ``{model, prompt}`` (no DALL·E size), else LiteLLM ``aimage_generation``. Chat-only / unset → ``llm.failed``. ``data:`` results always persist to the media store ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). ``placeholder`` / no credentials → mock URL |
 | `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
 | Chat research + Tavily ingest | ✅ | ADR 0009; semantic gate + multi-query + gloss; Tavily adapter; admin Research tab; `TAVILY_API_KEY` for live search |
 | Curl exit-criteria script | ⏸ **Held** | Manual/API path works; formal curl checklist later |
@@ -385,7 +392,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `sessions` | Chat session (mode, user_id, company_id, title, pinned, state JSONB) |
 | `session_messages` | Chat log (user always; assistant for chat / ack / LLM errors — not every Agent node) |
 | `preview_drafts` | Revision chain + approval_token + `media_ids` |
-| `preview_images` | Append-only image versions (url + plan) ([ADR 0008](./adr/0008-preview-images-append-only.md)) |
+| `preview_images` | Append-only image versions (object key or external/`placeholder://` in `url` + plan) ([ADR 0008](./adr/0008-preview-images-append-only.md), [ADR 0024](./adr/0024-media-storage-local-and-s3.md)) |
 | `tool_receipts` | Idempotent Confirm / tool receipts |
 | `llm_call_records` | Per-call LLM record: correlation, prompts, response, tokens, latency, status, `parse_ok`/`fallback_used` ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | `products` | Org / user product catalog (`owner_scope`, `sku`, `search_document`, `profile` JSONB, `embedding vector(384)`) — Alembic `1f96a702125c` + `12d5c92e3f74` |
@@ -469,6 +476,7 @@ unhinted-marketing/
 | `TEST_DATABASE_URL` | Isolated Postgres for `pytest tests/api` (skipped if unset) |
 | `DATABASE_URL` | Async PG URL → dev DB `192.168.5.20:5434/unhinted` |
 | `APP_ENV` | `development` (default) or `production` — production refuses weak JWT and a missing/invalid `BYOK_ENCRYPTION_KEY` |
+| `DEPLOYMENT_MODE` | `onprem` (default) or `cloud` — read once at process start ([ADR 0023](./adr/0023-deployment-mode-flag.md)). First behavior branch: media store ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)) |
 | `ALLOW_INSECURE_JWT` | Escape hatch for local/tests only (`true` skips JWT secret check) |
 | `JWT_SECRET` | Sign access/refresh tokens — **≥32 chars + unique** (prod rejects the published `.env.example` default) |
 | `BYOK_ENCRYPTION_KEY` | Fernet KEK for org provider keys **and** Instagram tokens at rest ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md), [ADR 0022](./adr/0022-real-publish-instagram.md)). Required in production; generate with `Fernet.generate_key()` |
@@ -476,7 +484,7 @@ unhinted-marketing/
 | `AUTH_RATE_LIMIT_MAX` | Max requests per client IP per window (default 30) |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Sliding window length (default 60) |
 | `CORS_ORIGINS` | Default `https://unhinted.localhost:5173` |
-| `WEB_BASE_URL` | Invite links + OAuth return origin (default `https://unhinted.localhost:5173`) |
+| `WEB_BASE_URL` | Invite links + OAuth return origin; also prefixes local `GET /api/media/{key}` URLs (default `https://unhinted.localhost:5173`) |
 | `OPENAI_API_KEY` | LLM for questions + session nodes + `python -m scripts.eval_agent` |
 | `LLM_API_BASE` | Optional OpenAI-compatible proxy base URL (OpenRouter, DeepSeek, Azure, …). When set, model ids go through the OpenAI-compatible client (`openai/` prefix); OpenRouter `org/model` slugs are kept intact |
 | `ANTHROPIC_API_KEY` | Optional alternate provider |
@@ -486,8 +494,10 @@ unhinted-marketing/
 | `GOOGLE_GENAI_USE_VERTEXAI` | Read-only: `true` routes env `GOOGLE_API_KEY` as Express. `GEMINI_API_KEY` alone is not Express |
 | `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `gpt-4o-mini`, `deepseek/deepseek-v4-flash-0731`) |
 | `LLM_IMAGE_MODEL` | Image-capable catalog id (e.g. `dall-e-3`, `bytedance-seed/seedream-4.5`). Unset with credentials → error on gen; `placeholder` = mock URL |
-| `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |
-| `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`). Instagram publish needs a Meta-reachable HTTPS URL (local MinIO is not) |
+| `MEDIA_ROOT` | On-prem local media directory (default `data/media`). Unused when the S3 driver is selected |
+| `S3_BUCKET` / `S3_ENDPOINT_URL` | Object storage opt-in ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). On-prem: both set → S3-compatible (path-style); neither → local disk; only one → fail at start. Cloud: `S3_BUCKET` required; endpoint optional (R2 / custom) |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Both set, or both omitted (boto3 default chain / instance role). Only one → fail at start |
+| `S3_PUBLIC_BASE_URL` | Browser/CDN base for object keys. Empty → `{endpoint}/{bucket}` (path-style) or AWS virtual-host. Instagram publish needs a Meta-reachable HTTPS URL |
 | `PUBLISH_ADAPTER` | Confirm adapter: `stub` (default, never hits Meta) or `instagram` ([ADR 0022](./adr/0022-real-publish-instagram.md)) |
 | `META_GRAPH_API_VERSION` | Instagram Graph version pin (default `v22.0`) |
 | `META_APP_ID` / `META_APP_SECRET` | Instagram App ID / Secret (App Dashboard → Instagram; not the Facebook App ID) |
@@ -517,7 +527,7 @@ See `.env.example`. Local `.env` is gitignored.
 ### Other gaps
 
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image CTA rehydrates from graph/SSE after fail or refresh.
-2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` + MinIO (`S3_*`) when configured; formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
+2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` (bytes always persist to the media store; [ADR 0024](./adr/0024-media-storage-local-and-s3.md)); formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page; FB/Threads preview skins. LLM call **records** + admin Trace viewer landed ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md), [ADR 0007](./adr/0007-admin-trace-viewer.md)) — ops guide: [PROMPT_TUNING.md](./PROMPT_TUNING.md). Next: retention/purge policy. `/api` prefix shipped ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)).
 4. **Knowledge:** Settings through **K6 Approvals** shipped ([docs/knowledge/](./knowledge/), [ADR 0011](./adr/0011-knowledge-commit-without-llm.md)). Chat scratch still not org KB.
 5. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; ~~persist LLM call records ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md))~~; ~~`/api` path prefix ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md))~~; ~~on-demand live eval CLI (`python -m scripts.eval_agent`)~~; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks.

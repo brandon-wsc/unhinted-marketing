@@ -1,10 +1,7 @@
-"""Optional live MinIO check — skipped unless S3_ENDPOINT_URL is reachable.
+"""Optional live S3-compatible check — skipped unless S3_ENDPOINT_URL is reachable.
 
-Run after: docker compose up -d minio minio-init
-  S3_ENDPOINT_URL=http://127.0.0.1:9000 \\
-  S3_ACCESS_KEY=minioadmin S3_SECRET_KEY=minioadmin \\
-  S3_BUCKET=unhinted-media \\
-  pytest tests/unit/test_media_storage_live.py -m minio -q
+  S3_ENDPOINT_URL=… S3_BUCKET=… S3_ACCESS_KEY=… S3_SECRET_KEY=… \\
+  pytest tests/unit/test_media_storage_live.py -m s3 -q
 """
 
 from __future__ import annotations
@@ -19,7 +16,7 @@ import pytest
 from internal.config import settings
 from internal.media import storage as S
 
-pytestmark = pytest.mark.minio
+pytestmark = pytest.mark.s3
 
 TINY_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -41,9 +38,9 @@ def _endpoint_reachable() -> bool:
 
 
 @pytest.fixture(autouse=True)
-def _require_minio() -> None:
+def _require_s3() -> None:
     if not S.media_storage_configured() or not _endpoint_reachable():
-        pytest.skip("MinIO not configured/reachable — start docker compose minio first")
+        pytest.skip("S3-compatible endpoint not configured/reachable")
 
 
 @pytest.mark.asyncio

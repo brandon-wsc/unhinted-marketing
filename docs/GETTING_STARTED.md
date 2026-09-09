@@ -26,7 +26,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:YOUR_PASSWORD@192.168.5.20:5434/unhin
 
 **pgvector:** install on the server; Phase 1 migrations run `CREATE EXTENSION vector` when needed.
 
-Other variables: see `.env.example` and the [Environment](./STATUS.md#environment) section in STATUS.
+Other variables: see `.env.example` and the [Environment](./STATUS.md#environment) section in STATUS. Media defaults to local disk (`MEDIA_ROOT=data/media`); no object-storage sidecar ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)).
 
 ---
 
@@ -118,7 +118,7 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 | GET | `/api/sessions?company_id=` | History list (pinned first; title or first-message preview) |
 | POST | `/api/sessions` | Create session |
 | PATCH | `/api/sessions/{id}` | Rename (`title` / `clear_title`) and/or `pinned` |
-| DELETE | `/api/sessions/{id}` | Delete session (+ cascaded messages/drafts) |
+| DELETE | `/api/sessions/{id}` | Delete session (+ cascaded messages/drafts; unreferenced store objects GC'd, [ADR 0024](./adr/0024-media-storage-local-and-s3.md)) |
 | POST | `/api/sessions/{id}/messages` | User turn (LangGraph); 409 if busy or parked awaiting image |
 | GET | `/api/sessions/{id}/messages` | Hydrate transcript (`metadata.agent_actions` + `duration_ms` on user turns) |
 | POST | `/api/sessions/{id}/resume-image` | Resume parked graph into image plan/gen ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)) |
@@ -136,6 +136,12 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Liveness → `{"status":"ok"}` |
+
+### Media (ADR 0024)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/media/{key}` | Unauthenticated stream of a local-store object (path traversal rejected). S3-backed objects are fetched from the public/CDN URL instead |
 
 Full auth and session specs: [ROADMAP.md](./ROADMAP.md); what’s shipped: [STATUS.md](./STATUS.md). Agent SSOT map: [AGENTS.md](../AGENTS.md). Refresh OpenAPI / JSON Schema mirrors: `python -m scripts.export_contracts`; regenerate FE session TS mirrors: `cd scripts/typescript_gen && npm install && npm run generate`.
 

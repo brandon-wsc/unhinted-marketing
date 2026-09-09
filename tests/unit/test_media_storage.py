@@ -1,4 +1,4 @@
-"""Media storage (S3-compatible / MinIO) — unit tests with mocked boto3."""
+"""Media storage (S3-compatible) — unit tests with mocked boto3."""
 
 from __future__ import annotations
 

@@ -92,7 +92,7 @@ testpaths = ["tests"]
 # imports pdb → stdlib cmd.Cmd and crashes. Disable that plugin for local/CI runs.
 addopts = "-p no:debugging"
 markers = [
-    "minio: needs local MinIO (docker compose up -d minio minio-init)",
+    "s3: optional live S3-compatible endpoint (not required in CI)",
     "live_llm: optional live provider calls (never required in CI)",
 ]
 
