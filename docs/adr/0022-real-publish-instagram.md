@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-02
-- **Related:** [ADR 0003](./0003-confirm-without-llm.md) (Confirm / publish stay HTTP, zero LLM — unchanged); [ADR 0008](./0008-preview-images-append-only.md) (`media_ids` supply the publish image); [ADR 0020](./0020-org-byok-keys-models-routing.md) (Fernet credential-at-rest pattern reused for platform tokens)
+- **Related:** [ADR 0003](./0003-confirm-without-llm.md) (Confirm / publish stay HTTP, zero LLM — unchanged); [ADR 0008](./0008-preview-images-append-only.md) (`media_ids` supply the publish image); [ADR 0020](./0020-org-byok-keys-models-routing.md) (Fernet credential-at-rest pattern reused for platform tokens); [ADR 0024](./0024-media-storage-local-and-s3.md) (Confirm derives publish URL from stored key)
 - **Plan:** [docs/PUBLISH_PLAN.md](../PUBLISH_PLAN.md) (full design: schema, protocol, testing, PR slicing)
 
 ## Context
@@ -31,11 +31,11 @@ Explicitly **not** built in the original slice: OAuth connect flow (added 2026-0
 - `internal/tools/publish.py` exposes `publish_social_post(PublishSocialPostRequest) -> PublishSocialPostResponse`, consuming the shapes already locked in [`schemas/tools.py`](../../schemas/tools.py).
 - Env `PUBLISH_ADAPTER=stub|instagram`, default `stub`. CI, dev, and tests never hit Meta unless explicitly opted in.
 - The Instagram adapter implements the Graph two-phase publish on `graph.instagram.com`: `POST /{ig-user-id}/media` (container; requires a publicly reachable `image_url`) then `POST /{ig-user-id}/media_publish`. Token decryption reuses the BYOK Fernet helper ([`internal/llm/keys.py`](../../internal/llm/keys.py)).
-- The publish image is the draft's first `media_ids` entry, served via `S3_PUBLIC_BASE_URL`. Multi-image carousels are deferred. Local MinIO is unreachable by Meta; live verification requires a tunnel or real S3 — unit tests mock httpx.
+- The publish image is the draft's first `media_ids` entry; Confirm derives a fetchable URL via `resolve_stored_url` (object key or leftover baked URL → current origin/CDN; [ADR 0024](./0024-media-storage-local-and-s3.md)). Multi-image carousels are deferred. On-prem local disk is unreachable by Meta unless `WEB_BASE_URL` is public; on-prem S3-compatible behind `S3_PUBLIC_BASE_URL` or cloud S3/CDN satisfies it — unit tests mock httpx.
 
 ### 3. Copy-only drafts are rejected at Confirm
 
-Instagram requires media. Confirm returns **400** for a draft without images, with a clear "add an image first" message. We do not silently fall back to a brand-default image and do not keep the old stub behavior of accepting everything.
+Instagram requires media. Confirm returns **400** for a draft without images, with a clear "add an image first" message. A stored object key counts as an image; `placeholder://` does not ([ADR 0024](./0024-media-storage-local-and-s3.md)). We do not silently fall back to a brand-default image and do not keep the old stub behavior of accepting everything.
 
 ### 4. Receipt status machine
 

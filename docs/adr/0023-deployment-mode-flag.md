@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-07
 - **Supersedes:** —
-- **Related:** [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (API prefix / SPA proxy), [ADR 0010](./0010-org-membership-invites-and-shared-assets.md) (on-prem as a target environment)
+- **Related:** [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (API prefix / SPA proxy), [ADR 0010](./0010-org-membership-invites-and-shared-assets.md) (on-prem as a target environment), [ADR 0024](./0024-media-storage-local-and-s3.md) (first behavior branch on this flag)
 
 ## Context
 
@@ -51,10 +51,11 @@ trusting only its own bundle — the two are built separately and could drift.
 When they disagree, the **backend** wins (it owns the behavior that matters:
 publishing, invites, billing).
 
-### 5. No behavior branches yet
+### 5. Behavior branches land in their own ADRs
 
 This ADR introduces the flag and plumbing only. Any feature that branches on
-`deployment_mode` should say so in its own ADR/STATUS entry.
+`deployment_mode` says so in its own ADR/STATUS entry. Media storage is the
+first ([ADR 0024](./0024-media-storage-local-and-s3.md)).
 
 ## Consequences
 
