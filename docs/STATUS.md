@@ -299,7 +299,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | LangGraph graph + interrupt | ✅ | `interrupt_before=executor_image_plan`; resume via `POST /resume-image` ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)); Stop mid-resume re-parks CTA; Stop while parked discards turn |
 | Postgres checkpointer | ✅ | `AsyncPostgresSaver` + pool (`check` / keepalives / idle recycle); `setup()` on API lifespan; `thread_id = session.id` |
 | Node logic | ✅ | LiteLLM + structured I/O; heuristic fallbacks; PG load/grounding |
-| Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}`, `/messages`, `/draft`, `/media` (+ plan/regen/remove/upload), `/confirm` |
+| Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}` (delete GCs unreferenced store objects), `/messages`, `/draft`, `/media` (+ plan/regen/remove/upload), `/confirm`; `GET /api/media/{key}` local stream
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform` + `media[]`; snapshot hydrates `media` from latest draft |
 | Image generation worker | 🟡 Soft | ``LLM_IMAGE_MODEL`` catalog id; compat bases with ``GET {base}/images/models`` → ``POST {base}/images`` ``{model, prompt}`` (no DALL·E size), else LiteLLM ``aimage_generation``. Chat-only / unset → ``llm.failed``. ``data:`` results always persist to the media store ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). ``placeholder`` / no credentials → mock URL |
 | `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
@@ -338,12 +338,13 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 ### Backend (`cmd/api`)
 
 - **Health:** `GET /api/health` → `{"status":"ok"}`
+- **Media:** `GET /api/media/{key}` — unauthenticated local-store stream; S3 objects use the public/CDN URL ([ADR 0024](./adr/0024-media-storage-local-and-s3.md))
 - **Auth:** Full email/password flow with JWT access token (15 min) + refresh token (7 days, httpOnly cookie on `/api/auth`)
 - **Signals:** `GET /api/signals/top` — latest HK market signals from PostgreSQL
 - **Questions:** `GET /api/companies/{id}/recommended-questions` — 200 cache / 202 generating (ADR 0018 fill); `POST …/refresh` failed-empty retry (CLI `--force` / scheduler for routine fill)
 
 - **Sessions:** `GET /api/sessions`, `POST /api/sessions`, `PATCH /api/sessions/{id}` (title / pinned), `DELETE /api/sessions/{id}`, `POST /api/sessions/{id}/messages`, `GET /api/sessions/{id}/messages`, `POST /api/sessions/{id}/resume-image`, `POST /api/sessions/{id}/stop`, `POST /api/sessions/{id}/draft`, `GET/POST /api/sessions/{id}/media`, `PATCH /api/sessions/{id}/media/{image_id}/plan`, `POST /api/sessions/{id}/media/{image_id}/regen`, `POST /api/sessions/{id}/media/{image_id}/remove`, `POST /api/sessions/{id}/media/{image_id}/upload`, `GET /api/sessions/{id}/events` (SSE), `POST /api/sessions/{id}/confirm`
-- **LangGraph:** Session nodes + Postgres checkpointer; image URL still placeholder
+- **LangGraph:** Session nodes + Postgres checkpointer; uploads / `data:` persist object keys; `placeholder` / no-credentials stay mock URLs
 - **Security:** Argon2 password hashing, refresh token rotation + revoke on logout
 - **Multi-tenant bootstrap:** Register auto-creates `entities` (type `company`) + `organization_members` (role `owner`)
 - **Platform levels:** `users.platform_level` ladder ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)); grant via worker CLI `set-platform-role`; `require_platform_level(ADMIN)` gates `/api/admin/*`

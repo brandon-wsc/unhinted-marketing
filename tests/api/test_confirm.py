@@ -209,6 +209,38 @@ async def test_confirm_placeholder_image_url_without_media_is_copy_only(client, 
 
 
 @pytest.mark.asyncio
+async def test_confirm_object_key_counts_as_image(client, db_session) -> None:
+    """Bare object key is an image for Confirm (ADR 0024)."""
+    data = await register_user(client)
+    user_id = uuid.UUID(data["user"]["id"])
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    token = "object-key-token-kkkk"
+    session_id = await seed_preview_session(
+        db_session,
+        user_id=user_id,
+        company_id=company_id,
+        approval_token=token,
+        with_media=False,
+    )
+    draft = await repos.get_preview_draft_by_token(db_session, session_id, token)
+    assert draft is not None
+    draft.image_url = "sessions/abc/r1-deadbeef.png"
+    await db_session.commit()
+
+    res = await client.post(
+        f"/api/sessions/{session_id}/confirm",
+        headers=auth_header(data["access_token"]),
+        json={
+            "approval_token": token,
+            "idempotency_key": f"idem-{uuid.uuid4().hex}",
+            "platform": "stub",
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "stubbed"
+
+
+@pytest.mark.asyncio
 async def test_confirm_instagram_without_account(client, db_session, monkeypatch) -> None:
     from internal.config import settings
 

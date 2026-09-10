@@ -18,8 +18,9 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from internal.llm.resolve import company_llm_scope
 from internal.llm.router import LlmProviderError
+from internal.media.storage import resolve_stored_url, sniff_image_bytes
 from internal.memory import repos
-from internal.memory.models import Session
+from internal.memory.models import PreviewImage, Session
 from internal.session.context import session_db
 from internal.session.events import session_event_bus
 from internal.session.graph import get_session_graph
@@ -133,7 +134,7 @@ def preview_updated_payload(
     media: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     items = [PreviewMediaItem.model_validate(m) for m in (media or [])]
-    primary = image_url
+    primary = resolve_stored_url(image_url)
     if primary is None and items:
         primary = items[0].url
     return PreviewUpdatedData(
@@ -144,6 +145,28 @@ def preview_updated_payload(
         draft_copy=DraftCopy.model_validate(normalize_draft_copy(copy)),
         platform=platform or DEFAULT_PLATFORM,
     ).model_dump(by_alias=True)
+
+
+def _payloads_from_image_rows(
+    rows: list[PreviewImage],
+) -> tuple[list[dict[str, Any]], str | None, dict[str, Any] | None]:
+    """HTTP media payloads (resolved URLs) plus raw stored primary for Postgres/graph."""
+    media = [
+        media_item_payload(
+            image_id=r.id,
+            url=r.url,
+            plan=r.plan,
+            format=r.format,
+            role=r.role,
+            seq=r.seq,
+            status=r.status,
+        )
+        for r in rows
+    ]
+    if not rows:
+        return media, None, None
+    primary = rows[0]
+    return media, primary.url, dict(primary.plan or {})
 
 
 async def _media_for_new_draft(
@@ -190,20 +213,11 @@ async def _media_for_new_draft(
 
     ids = list(reuse_media_ids or [])
     rows = await repos.get_preview_images_by_ids(db, ids)
-    media = [
-        media_item_payload(
-            image_id=r.id,
-            url=r.url,
-            plan=r.plan,
-            format=r.format,
-            role=r.role,
-            seq=r.seq,
-            status=r.status,
-        )
-        for r in rows
-    ]
-    primary_url = media[0]["url"] if media else image_url
-    primary_plan = media[0]["plan"] if media else image_plan
+    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
+    if primary_url is None:
+        primary_url = image_url
+    if primary_plan is None:
+        primary_plan = image_plan
     return ids, media, primary_url, primary_plan
 
 
@@ -563,7 +577,10 @@ async def _persist_after_invoke(
             )
         if not still_interrupted and values.get("image_url"):
             events.append(
-                {"type": "draft.updated", "data": {"image_url": values["image_url"]}}
+                {
+                    "type": "draft.updated",
+                    "data": {"image_url": resolve_stored_url(values["image_url"])},
+                }
             )
 
         if (
@@ -1160,7 +1177,7 @@ async def _bump_preview_revision(
         "revision": rev,
         "approval_token": token,
         "copy": draft_copy,
-        "image_url": primary_url,
+        "image_url": resolve_stored_url(primary_url),
         "media": media,
         "platform": platform,
         "mode": MODE_PREVIEW,
@@ -1177,18 +1194,8 @@ async def list_latest_session_media(
         state_ids = (session.state or {}).get("media_ids") or []
         ids = [uuid.UUID(str(i)) for i in state_ids]
     rows = await repos.get_preview_images_by_ids(db, ids)
-    return [
-        media_item_payload(
-            image_id=r.id,
-            url=r.url,
-            plan=r.plan,
-            format=r.format,
-            role=r.role,
-            seq=r.seq,
-            status=r.status,
-        )
-        for r in rows
-    ]
+    media, _, _ = _payloads_from_image_rows(rows)
+    return media
 
 
 def _replace_media_id(
@@ -1232,26 +1239,14 @@ async def update_session_image_plan(
     )
     new_ids = _replace_media_id(media_ids, image_id, row.id)
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media = [
-        media_item_payload(
-            image_id=r.id,
-            url=r.url,
-            plan=r.plan,
-            format=r.format,
-            role=r.role,
-            seq=r.seq,
-            status=r.status,
-        )
-        for r in rows
-    ]
-    primary = media[0] if media else None
+    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
     return await _bump_preview_revision(
         db,
         session,
         media_ids=new_ids,
         media=media,
-        primary_url=primary["url"] if primary else None,
-        primary_plan=primary["plan"] if primary else None,
+        primary_url=primary_url,
+        primary_plan=primary_plan,
     )
 
 
@@ -1317,26 +1312,14 @@ async def regen_session_image(
     )
     new_ids = _replace_media_id(media_ids, image_id, row.id)
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media = [
-        media_item_payload(
-            image_id=r.id,
-            url=r.url,
-            plan=r.plan,
-            format=r.format,
-            role=r.role,
-            seq=r.seq,
-            status=r.status,
-        )
-        for r in rows
-    ]
-    primary = media[0] if media else None
+    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
     return await _bump_preview_revision(
         db,
         session,
         media_ids=new_ids,
         media=media,
-        primary_url=primary["url"] if primary else None,
-        primary_plan=primary["plan"] if primary else None,
+        primary_url=primary_url,
+        primary_plan=primary_plan,
     )
 
 
@@ -1377,37 +1360,18 @@ async def add_session_image(
     )
     new_ids = media_ids + [row.id]
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media = [
-        media_item_payload(
-            image_id=r.id,
-            url=r.url,
-            plan=r.plan,
-            format=r.format,
-            role=r.role,
-            seq=r.seq,
-            status=r.status,
-        )
-        for r in rows
-    ]
-    primary = media[0] if media else None
+    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
     return await _bump_preview_revision(
         db,
         session,
         media_ids=new_ids,
         media=media,
-        primary_url=primary["url"] if primary else None,
-        primary_plan=primary["plan"] if primary else None,
+        primary_url=primary_url,
+        primary_plan=primary_plan,
     )
 
 
 _UPLOAD_MAX_BYTES = 10 * 1024 * 1024
-_UPLOAD_CONTENT_TYPES = {
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-}
 
 
 async def remove_session_image(
@@ -1429,26 +1393,14 @@ async def remove_session_image(
         raise ValueError("Cannot remove the last remaining image")
     new_ids = [i for i in media_ids if i != image_id]
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media = [
-        media_item_payload(
-            image_id=r.id,
-            url=r.url,
-            plan=r.plan,
-            format=r.format,
-            role=r.role,
-            seq=r.seq,
-            status=r.status,
-        )
-        for r in rows
-    ]
-    primary = media[0] if media else None
+    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
     return await _bump_preview_revision(
         db,
         session,
         media_ids=new_ids,
         media=media,
-        primary_url=primary["url"] if primary else None,
-        primary_plan=primary["plan"] if primary else None,
+        primary_url=primary_url,
+        primary_plan=primary_plan,
     )
 
 
@@ -1461,13 +1413,7 @@ async def upload_session_image(
     content_type: str,
 ) -> dict[str, Any]:
     """Upload user image → new preview_images row + replace slot in draft."""
-    from internal.media.storage import (
-        MediaStorageError,
-        ensure_bucket,
-        media_object_key,
-        media_storage_configured,
-        put_bytes,
-    )
+    from internal.media.storage import MediaStorageError, media_object_key, put_bytes
 
     if session.mode != MODE_PREVIEW:
         raise ValueError("Session is not in PREVIEW mode")
@@ -1481,35 +1427,30 @@ async def upload_session_image(
     if old is None or old.session_id != session.id:
         raise ValueError("Image not found")
 
-    ct = (content_type or "").split(";", 1)[0].strip().lower()
-    ext = _UPLOAD_CONTENT_TYPES.get(ct)
-    if not ext:
-        raise ValueError("File must be an image (jpeg, png, webp, or gif)")
     if not data:
         raise ValueError("Empty upload")
     if len(data) > _UPLOAD_MAX_BYTES:
         raise ValueError("Image too large (max 10MB)")
+    sniffed = sniff_image_bytes(data)
+    if not sniffed:
+        raise ValueError("File must be an image (jpeg, png, webp, or gif)")
+    ct, ext = sniffed
 
     plan = dict(old.plan or {})
     fmt = image_format_from_plan(plan, fallback=old.format)
     plan["format"] = fmt
 
-    if media_storage_configured():
-        rev = (existing.revision if existing else 0) + 1
-        key = media_object_key(session_id=str(session.id), revision=rev, ext=ext)
-        try:
-            await ensure_bucket()
-            url = await put_bytes(key=key, data=data, content_type=ct)
-        except MediaStorageError as exc:
-            raise MediaStorageError(str(exc)) from exc
-    else:
-        # Dev/tests without S3 — keep a renderable-enough placeholder URL.
-        url = f"placeholder://local/{session.id}/upload-{secrets.token_hex(4)}.{ext}"
+    rev = (existing.revision if existing else 0) + 1
+    key = media_object_key(session_id=str(session.id), revision=rev, ext=ext)
+    try:
+        await put_bytes(key=key, data=data, content_type=ct)
+    except MediaStorageError as exc:
+        raise MediaStorageError(str(exc)) from exc
 
     row = await repos.insert_preview_image(
         db,
         session_id=session.id,
-        url=url,
+        url=key,
         plan=plan,
         format=fmt,
         role=old.role,
@@ -1518,24 +1459,12 @@ async def upload_session_image(
     )
     new_ids = _replace_media_id(media_ids, image_id, row.id)
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media = [
-        media_item_payload(
-            image_id=r.id,
-            url=r.url,
-            plan=r.plan,
-            format=r.format,
-            role=r.role,
-            seq=r.seq,
-            status=r.status,
-        )
-        for r in rows
-    ]
-    primary = media[0] if media else None
+    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
     return await _bump_preview_revision(
         db,
         session,
         media_ids=new_ids,
         media=media,
-        primary_url=primary["url"] if primary else None,
-        primary_plan=primary["plan"] if primary else None,
+        primary_url=primary_url,
+        primary_plan=primary_plan,
     )

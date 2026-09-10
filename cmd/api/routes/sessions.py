@@ -19,7 +19,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
-from internal.media.storage import MediaStorageError
+from internal.media.gc import collect_session_store_keys, reclaim_unreferenced_keys
+from internal.media.storage import MediaStorageError, resolve_stored_url, stored_ref_is_image
 from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import Session, User
@@ -354,8 +355,18 @@ async def delete_session(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     session = await _require_owned_session(db, session_id, user)
+    keys: list[str] | None
+    try:
+        keys = await collect_session_store_keys(db, session.id)
+    except Exception:
+        logger.warning(
+            "media GC collect failed session=%s", session_id, exc_info=True
+        )
+        keys = None
     await repos.delete_session(db, session)
     await db.commit()
+    if keys:
+        await reclaim_unreferenced_keys(db, keys)
 
 
 @router.post("/{session_id}/messages", response_model=PostMessageResponse)
@@ -595,7 +606,9 @@ async def session_events(
         "state": state,
         "revision": draft.revision if draft else state.get("revision"),
         "approval_token": draft.approval_token if draft else state.get("approval_token"),
-        "image_url": draft.image_url if draft else state.get("image_url"),
+        "image_url": resolve_stored_url(
+            draft.image_url if draft else state.get("image_url")
+        ),
         "media": media_items,
         "copy": copy,
         "platform": platform,
@@ -825,10 +838,10 @@ async def post_session_image_upload(
 def _draft_has_image(draft) -> bool:
     # media_ids is the publish image (ADR 0008). A leftover placeholder://
     # image_url is not an image — copy-only Confirm must 400 (ADR 0022).
+    # A stored object key counts as an image (ADR 0024).
     if list(draft.media_ids or []):
         return True
-    url = (draft.image_url or "").strip()
-    return url.startswith("http://") or url.startswith("https://")
+    return stored_ref_is_image(draft.image_url)
 
 
 async def _publish_image_url(db: AsyncSession, draft) -> str | None:
@@ -838,9 +851,9 @@ async def _publish_image_url(db: AsyncSession, draft) -> str | None:
         if images:
             url = (images[0].url or "").strip()
             if url:
-                return url
+                return resolve_stored_url(url)
     url = (draft.image_url or "").strip()
-    return url or None
+    return resolve_stored_url(url) if url else None
 
 
 def _optional_str(payload: dict, key: str) -> str | None:

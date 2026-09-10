@@ -931,6 +931,47 @@ async def get_preview_images_by_ids(
     return [by_id[i] for i in image_ids if i in by_id]
 
 
+async def list_session_media_refs(db: AsyncSession, session_id: uuid.UUID) -> list[str]:
+    """All stored preview_images.url + preview_drafts.image_url for a session (ADR 0024 GC)."""
+    images = (
+        await db.scalars(
+            select(PreviewImage.url).where(
+                PreviewImage.session_id == session_id,
+                PreviewImage.url.is_not(None),
+            )
+        )
+    ).all()
+    drafts = (
+        await db.scalars(
+            select(PreviewDraft.image_url).where(
+                PreviewDraft.session_id == session_id,
+                PreviewDraft.image_url.is_not(None),
+            )
+        )
+    ).all()
+    return [u for u in (*images, *drafts) if u]
+
+
+async def list_matching_media_refs(db: AsyncSession, key: str) -> list[str]:
+    """Candidate remaining refs that may peel to ``key`` (refcount after session delete)."""
+    like = f"%{key}"
+    images = (
+        await db.scalars(
+            select(PreviewImage.url).where(
+                or_(PreviewImage.url == key, PreviewImage.url.like(like))
+            )
+        )
+    ).all()
+    drafts = (
+        await db.scalars(
+            select(PreviewDraft.image_url).where(
+                or_(PreviewDraft.image_url == key, PreviewDraft.image_url.like(like))
+            )
+        )
+    ).all()
+    return [u for u in (*images, *drafts) if u]
+
+
 async def upsert_preview_draft(
     db: AsyncSession,
     *,

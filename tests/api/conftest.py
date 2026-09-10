@@ -93,7 +93,9 @@ async def session_factory(engine):
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def clean_db(engine, migrated_database: str, monkeypatch: pytest.MonkeyPatch):
+async def clean_db(
+    engine, migrated_database: str, monkeypatch: pytest.MonkeyPatch, tmp_path
+):
     """Truncate app tables before each API test."""
     from cryptography.fernet import Fernet
 
@@ -103,6 +105,13 @@ async def clean_db(engine, migrated_database: str, monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(settings, "byok_encryption_key", Fernet.generate_key().decode())
     monkeypatch.setattr(settings, "publish_adapter", "stub")
+    monkeypatch.setattr(settings, "deployment_mode", "onprem")
+    monkeypatch.setattr(settings, "s3_endpoint_url", None)
+    monkeypatch.setattr(settings, "s3_bucket", None)
+    monkeypatch.setattr(settings, "s3_access_key", None)
+    monkeypatch.setattr(settings, "s3_secret_key", None)
+    monkeypatch.setattr(settings, "s3_public_base_url", None)
+    monkeypatch.setattr(settings, "media_root", str(tmp_path / "media"))
     reset_auth_rate_limiter()
     reset_model_list_cache()
     async with engine.begin() as conn:
@@ -124,7 +133,7 @@ async def _noop_lifespan(app):
 
 
 @pytest_asyncio.fixture
-async def app(session_factory):
+async def app(session_factory, clean_db):
     application = create_app(lifespan_fn=_noop_lifespan)
 
     async def _override_get_db() -> AsyncIterator[AsyncSession]:

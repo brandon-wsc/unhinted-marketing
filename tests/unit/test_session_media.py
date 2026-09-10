@@ -18,3 +18,22 @@ def test_media_item_payload() -> None:
     )
     assert item["id"] == str(iid)
     assert item["plan"]["prompt"] == "x"
+
+
+def test_media_item_payload_resolves_store_key(monkeypatch) -> None:
+    from internal.media import storage as S
+
+    monkeypatch.setattr(S.settings, "deployment_mode", "onprem")
+    monkeypatch.setattr(S.settings, "s3_endpoint_url", None)
+    monkeypatch.setattr(S.settings, "s3_bucket", None)
+    monkeypatch.setattr(S.settings, "s3_access_key", None)
+    monkeypatch.setattr(S.settings, "s3_secret_key", None)
+    monkeypatch.setattr(S.settings, "web_base_url", "https://example.test")
+    iid = uuid.UUID("00000000-0000-0000-0000-000000000099")
+    item = media_item_payload(
+        image_id=iid,
+        url="sessions/abc/r1-deadbeef.png",
+        plan={},
+        format="single",
+    )
+    assert item["url"] == "https://example.test/api/media/sessions/abc/r1-deadbeef.png"

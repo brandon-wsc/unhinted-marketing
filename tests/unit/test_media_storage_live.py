@@ -40,7 +40,7 @@ def _endpoint_reachable() -> bool:
 @pytest.fixture(autouse=True)
 def _require_s3() -> None:
     if not S.media_storage_configured() or not _endpoint_reachable():
-        pytest.skip("S3-compatible endpoint not configured/reachable")
+        pytest.skip("S3 driver not selected or endpoint not reachable")
 
 
 @pytest.mark.asyncio
