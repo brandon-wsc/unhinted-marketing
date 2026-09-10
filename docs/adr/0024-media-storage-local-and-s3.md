@@ -1,9 +1,9 @@
 # ADR 0024 — Media storage: local default on-prem (optional S3-compatible), AWS S3 in cloud
 
-- **Status:** Accepted
+- **Status:** Accepted (§1 superseded by [ADR 0025](./0025-db-storage-config-and-portal-migration.md))
 - **Date:** 2026-09-09
 - **Supersedes:** —
-- **Related:** [ADR 0023](./0023-deployment-mode-flag.md) (deployment mode selects the backend), [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (`GET /api/media/{key}`), [ADR 0008](./0008-preview-images-append-only.md) (append-only `preview_images`), [ADR 0017](./0017-session-fork.md) (fork shares asset URLs; GC refcounts), [ADR 0022](./0022-real-publish-instagram.md) (Confirm image URL)
+- **Related:** [ADR 0023](./0023-deployment-mode-flag.md) (deployment mode selects the backend), [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (`GET /api/media/{key}`), [ADR 0008](./0008-preview-images-append-only.md) (append-only `preview_images`), [ADR 0017](./0017-session-fork.md) (fork shares asset URLs; GC refcounts), [ADR 0022](./0022-real-publish-instagram.md) (Confirm image URL), [ADR 0025](./0025-db-storage-config-and-portal-migration.md) (DB config + portal migrate)
 
 ## Context
 

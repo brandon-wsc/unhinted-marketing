@@ -55,3 +55,12 @@ async def test_live_put_and_fetch_roundtrip() -> None:
     with urllib.request.urlopen(url, timeout=5) as resp:
         body = resp.read()
     assert body == TINY_PNG
+    await S.delete_key(key)
+
+
+@pytest.mark.asyncio
+async def test_live_probe_put_head_delete() -> None:
+    from internal.media.config import snapshot_from_env
+    from internal.media.migrate import probe_s3
+
+    probe_s3(snapshot_from_env())

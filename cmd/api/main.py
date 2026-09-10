@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -18,11 +19,11 @@ from cmd.api.routes.sessions import router as sessions_router
 from cmd.api.routes.signals import router as signals_router
 from cmd.api.routes.social import oauth_callback_router
 from cmd.api.routes.social import router as social_router
+from cmd.api.routes.storage import router as storage_router
 from internal.auth.rate_limit import assert_jwt_secret_safe
 from internal.config import settings
 from internal.llm.keys import assert_byok_encryption_key_safe
 from internal.llm.recorder import drain as drain_llm_records
-from internal.media.storage import assert_media_storage_config
 from internal.session.checkpointer import close_postgres_checkpointer, open_postgres_checkpointer
 from internal.session.graph import build_session_graph, set_session_graph
 from internal.session.trace import drain as drain_node_steps
@@ -39,6 +40,21 @@ async def lifespan(app: FastAPI):
     from internal.session.semantic_gate import start_semantic_router_warmup
 
     start_semantic_router_warmup()
+    from internal.media.config import ensure_storage_config_seeded
+    from internal.media.migrate import resume_open_migration
+    from internal.memory.database import open_session
+
+    async with open_session() as db:
+        try:
+            await ensure_storage_config_seeded(db)
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "storage config seed failed", exc_info=True
+            )
+    try:
+        await resume_open_migration()
+    except Exception:
+        logging.getLogger(__name__).warning("resume storage migration failed", exc_info=True)
     try:
         yield
     finally:
@@ -52,7 +68,6 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     """Build the API app. Tests pass a noop lifespan to skip Postgres checkpointer."""
     assert_jwt_secret_safe()
     assert_byok_encryption_key_safe()
-    assert_media_storage_config()
     application = FastAPI(
         title="Unhinted Marketing API",
         version="0.1.0",
@@ -76,6 +91,7 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(byok_router, prefix="/api")
     application.include_router(social_router, prefix="/api")
     application.include_router(oauth_callback_router, prefix="/api")
+    application.include_router(storage_router, prefix="/api")
     application.include_router(invites_router, prefix="/api")
     application.include_router(products_router, prefix="/api")
     application.include_router(proposals_router, prefix="/api")

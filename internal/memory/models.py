@@ -8,11 +8,13 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -620,4 +622,90 @@ class SocialAccount(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class StorageConfig(Base):
+    """Active media backend + S3 credentials (ADR 0025). Deployment-wide v1."""
+
+    __tablename__ = "storage_configs"
+    __table_args__ = (
+        CheckConstraint("backend IN ('local', 's3')", name="ck_storage_configs_backend"),
+        Index(
+            "uq_storage_configs_one_active",
+            "active",
+            unique=True,
+            postgresql_where=text("active"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Unused in v1 (deployment-wide); present so a later ADR can split buckets.
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    backend: Mapped[str] = mapped_column(String(16), nullable=False)
+    bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    endpoint_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    region: Mapped[str] = mapped_column(String(64), nullable=False, default="us-east-1")
+    public_base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    access_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    secret_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    secret_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    seeded_from_env: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class StorageMigration(Base):
+    """Leased local→S3 copy (ADR 0025). At most one in-flight row."""
+
+    __tablename__ = "storage_migrations"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ("
+            "'validating', 'copying', 'verifying', 'ready_to_flip', "
+            "'flipping', 'completed', 'cleaning', 'done', 'failed'"
+            ")",
+            name="ck_storage_migrations_state",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="validating")
+    target_config_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("storage_configs.id", ondelete="SET NULL"), nullable=True
+    )
+    source_config_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("storage_configs.id", ondelete="SET NULL"), nullable=True
+    )
+    cursor: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stats: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    error_keys: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class MigrationDoneKey(Base):
+    """Per-key copy truth for an in-flight migrate (ADR 0025)."""
+
+    __tablename__ = "migration_done_keys"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    migrated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )

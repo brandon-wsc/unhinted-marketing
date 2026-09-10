@@ -71,7 +71,8 @@ class Settings(BaseSettings):
     # Persist graph node-step I/O to session_node_steps (admin Trace viewer).
     node_trace_enabled: bool = True
 
-    # Media (ADR 0024). On-prem default is local disk; S3 is env-presence opt-in.
+    # Media (ADR 0024 + 0025). On-prem default is local disk; S3_* seeds the
+    # first storage_configs row only. Portal config is the source of truth.
     media_root: str = "data/media"
     s3_endpoint_url: str | None = None
     s3_access_key: str | None = None

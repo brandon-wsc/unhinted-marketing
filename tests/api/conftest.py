@@ -41,6 +41,9 @@ TRUNCATE_TABLES = (
     "byok_models",
     "byok_providers",
     "social_accounts",
+    "migration_done_keys",
+    "storage_migrations",
+    "storage_configs",
     "refresh_tokens",
     "organization_members",
     "entities",
@@ -112,6 +115,9 @@ async def clean_db(
     monkeypatch.setattr(settings, "s3_secret_key", None)
     monkeypatch.setattr(settings, "s3_public_base_url", None)
     monkeypatch.setattr(settings, "media_root", str(tmp_path / "media"))
+    from internal.media.config import reset_snapshot_cache
+
+    reset_snapshot_cache()
     reset_auth_rate_limiter()
     reset_model_list_cache()
     async with engine.begin() as conn:
@@ -134,6 +140,9 @@ async def _noop_lifespan(app):
 
 @pytest_asyncio.fixture
 async def app(session_factory, clean_db):
+    from internal.memory.database import set_session_factory
+
+    set_session_factory(session_factory)
     application = create_app(lifespan_fn=_noop_lifespan)
 
     async def _override_get_db() -> AsyncIterator[AsyncSession]:
@@ -143,6 +152,7 @@ async def app(session_factory, clean_db):
     application.dependency_overrides[get_db] = _override_get_db
     yield application
     application.dependency_overrides.clear()
+    set_session_factory(None)
 
 
 @pytest_asyncio.fixture

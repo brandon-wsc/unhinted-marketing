@@ -1,4 +1,4 @@
-"""Media asset storage (local disk / S3-compatible, ADR 0024)."""
+"""Media asset storage (local disk / S3-compatible, ADR 0024 + 0025)."""
 
 from internal.media.storage import (
     MediaStorageError,

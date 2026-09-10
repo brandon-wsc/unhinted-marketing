@@ -49,12 +49,15 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-09-07) — Deployment mode flag (cloud | onprem):** → [ADR 0023](./adr/0023-deployment-mode-flag.md). `DEPLOYMENT_MODE` env (default `onprem`) read once at process start; baked into Docker images via build ARG (`Dockerfile` api, `web/Dockerfile` + nginx SPA). SPA mirror: `VITE_DEPLOYMENT_MODE` build-time via `web/src/lib/deployment.ts`. `GET /api/meta` exposes `{ deployment_mode, app_env, version }` as the runtime source of truth. First behavior branch: media storage ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)).
 
-**Decision (2026-09-09) — Media storage (local default on-prem, optional S3-compatible, AWS S3 in cloud):** → [ADR 0024](./adr/0024-media-storage-local-and-s3.md)
+**Decision (2026-09-09) — Media storage (local default on-prem, optional S3-compatible, AWS S3 in cloud):** → [ADR 0024](./adr/0024-media-storage-local-and-s3.md) · config + migrate: [ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)
 
-- **Backend follows `DEPLOYMENT_MODE`** — no `STORAGE_BACKEND` flag. `onprem` defaults to local disk under `MEDIA_ROOT` (`data/media`); `onprem` + both `S3_BUCKET` and `S3_ENDPOINT_URL` opts into the shared S3 driver (path-style); `cloud` requires `S3_BUCKET` (`S3_ENDPOINT_URL` optional, e.g. R2). Incomplete S3 env (one of bucket/endpoint, or only one of the two keys) fails at process start
+- **Backend family follows `DEPLOYMENT_MODE`** — no `STORAGE_BACKEND` flag. `onprem` defaults to local disk under `MEDIA_ROOT` (`data/media`); `cloud` is S3. Active backend + credentials live in `storage_configs` ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)); env `S3_*` only seeds the first row
 - **Postgres stores the object key** — `preview_images.url` / `preview_drafts.image_url` hold `sessions/{id}/r{revision}-{hex}.{ext}` (or leftover provider/`placeholder://` URLs). HTTP/SSE still emit a fetchable `url` via `resolve_stored_url`. Unauthenticated `GET /api/media/{key}` streams local files
 - **Always persist real bytes** — uploads and `data:` generation results always write the store; `placeholder` / no-credentials stay mock URLs (not a storage fallback)
 - **Eager GC on session delete** — after commit, refcount keys against remaining preview rows (forks share URLs; [ADR 0017](./adr/0017-session-fork.md)); refcount-zero keys deleted best-effort. No sweeper. Signed/private URLs stay hardening
+- **Portal local→S3 migrate** — editor HTTP under `/api/companies/{id}/storage` (settings UI later); dual-write so reads/writes never block; human flip gate; rollback free until local cleanup
+
+**Decision (2026-09-10) — DB-backed storage config + portal local→S3 migration:** → [ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md). Supersedes ADR 0024 §1 (env-presence backend). Dual-write from migrate start until cleanup; leased in-process copy; `ready_to_flip` is a human gate. Deployment-wide flip (schema has unused `company_id` for a later per-company bucket ADR).
 
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
@@ -329,6 +332,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Admin Trace viewer (node-steps + session) | ✅ | [ADR 0007](./adr/0007-admin-trace-viewer.md) — `session_node_steps` + `turn_id`; admin tabs Node steps / Session Trace |
 | Meta Graph API hot search | ⏸ | Next after core UI |
 | BYOK settings page | ✅ | Editor-only keys / models / routing tab ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md), native Gemini + Vertex Express [ADR 0021](./adr/0021-org-byok-native-gemini.md)) |
+| Storage settings page | ⏸ Backend | Editor HTTP for config + migrate shipped ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)); portal UI deferred |
 | Trace viewer | ✅ | Admin Session Trace tab ([ADR 0007](./adr/0007-admin-trace-viewer.md)) — not end-user UI |
 
 ---
@@ -338,7 +342,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 ### Backend (`cmd/api`)
 
 - **Health:** `GET /api/health` → `{"status":"ok"}`
-- **Media:** `GET /api/media/{key}` — unauthenticated local-store stream; S3 objects use the public/CDN URL ([ADR 0024](./adr/0024-media-storage-local-and-s3.md))
+- **Media:** `GET /api/media/{key}` — unauthenticated local-store stream; S3 objects use the public/CDN URL ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). Editor `GET/PUT /api/companies/{id}/storage/config` + migrate/flip/rollback/clean ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md))
 - **Auth:** Full email/password flow with JWT access token (15 min) + refresh token (7 days, httpOnly cookie on `/api/auth`)
 - **Signals:** `GET /api/signals/top` — latest HK market signals from PostgreSQL
 - **Questions:** `GET /api/companies/{id}/recommended-questions` — 200 cache / 202 generating (ADR 0018 fill); `POST …/refresh` failed-empty retry (CLI `--force` / scheduler for routine fill)
@@ -394,6 +398,9 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `session_messages` | Chat log (user always; assistant for chat / ack / LLM errors — not every Agent node) |
 | `preview_drafts` | Revision chain + approval_token + `media_ids` |
 | `preview_images` | Append-only image versions (object key or external/`placeholder://` in `url` + plan) ([ADR 0008](./adr/0008-preview-images-append-only.md), [ADR 0024](./adr/0024-media-storage-local-and-s3.md)) |
+| `storage_configs` | Active media backend + S3 credentials (Fernet secret) ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)) |
+| `storage_migrations` | Local→S3 migrate state machine + lease |
+| `migration_done_keys` | Per-key copy truth during a migrate |
 | `tool_receipts` | Idempotent Confirm / tool receipts |
 | `llm_call_records` | Per-call LLM record: correlation, prompts, response, tokens, latency, status, `parse_ok`/`fallback_used` ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
 | `products` | Org / user product catalog (`owner_scope`, `sku`, `search_document`, `profile` JSONB, `embedding vector(384)`) — Alembic `1f96a702125c` + `12d5c92e3f74` |
@@ -408,7 +415,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/login` | Email/password login |
 | `/register` | Sign up + default workspace |
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
-| `/settings` | Company settings — Voice · Products (Org \| Mine) · Members · Approvals |
+| `/settings` | Company settings — Voice · Products (Org \| Mine) · Members · Approvals · Models · Instagram |
 | `/invite/:token` | Invite accept (public page; POST accept requires auth) |
 | `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace; `/admin` redirects here |
 
@@ -495,10 +502,10 @@ unhinted-marketing/
 | `GOOGLE_GENAI_USE_VERTEXAI` | Read-only: `true` routes env `GOOGLE_API_KEY` as Express. `GEMINI_API_KEY` alone is not Express |
 | `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `gpt-4o-mini`, `deepseek/deepseek-v4-flash-0731`) |
 | `LLM_IMAGE_MODEL` | Image-capable catalog id (e.g. `dall-e-3`, `bytedance-seed/seedream-4.5`). Unset with credentials → error on gen; `placeholder` = mock URL |
-| `MEDIA_ROOT` | On-prem local media directory (default `data/media`). Unused when the S3 driver is selected |
-| `S3_BUCKET` / `S3_ENDPOINT_URL` | Object storage opt-in ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). On-prem: both set → S3-compatible (path-style); neither → local disk; only one → fail at start. Cloud: `S3_BUCKET` required; endpoint optional (R2 / custom) |
-| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Both set, or both omitted (boto3 default chain / instance role). Only one → fail at start |
-| `S3_PUBLIC_BASE_URL` | Browser/CDN base for object keys. Empty → `{endpoint}/{bucket}` (path-style) or AWS virtual-host. Instagram publish needs a Meta-reachable HTTPS URL |
+| `MEDIA_ROOT` | On-prem local media directory (default `data/media`). Unused when the active config backend is S3 |
+| `S3_BUCKET` / `S3_ENDPOINT_URL` | Seed-only for the first `storage_configs` row ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)). After that, portal config wins. On-prem default is local disk with no S3 row |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Seed-only; stored Fernet-encrypted on the config row. Both set or both omitted (instance role) |
+| `S3_PUBLIC_BASE_URL` | Seed-only public/CDN base. Empty → `{endpoint}/{bucket}` (path-style) or AWS virtual-host. Instagram publish needs a Meta-reachable HTTPS URL |
 | `PUBLISH_ADAPTER` | Confirm adapter: `stub` (default, never hits Meta) or `instagram` ([ADR 0022](./adr/0022-real-publish-instagram.md)) |
 | `META_GRAPH_API_VERSION` | Instagram Graph version pin (default `v22.0`) |
 | `META_APP_ID` / `META_APP_SECRET` | Instagram App ID / Secret (App Dashboard → Instagram; not the Facebook App ID) |

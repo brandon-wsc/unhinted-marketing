@@ -15,6 +15,7 @@ from internal.memory.models import (
     ByokRouting,
     Edge,
     Entity,
+    MigrationDoneKey,
     OrganizationMember,
     OrgInvite,
     PreviewDraft,
@@ -28,6 +29,8 @@ from internal.memory.models import (
     Session,
     SessionMessage,
     SocialAccount,
+    StorageConfig,
+    StorageMigration,
     ToolReceipt,
     User,
 )
@@ -1761,3 +1764,181 @@ async def delete_social_account(
         return False
     await db.delete(row)
     return True
+
+
+# --- Media storage config / migrate (ADR 0025) ---
+
+OPEN_MIGRATION_STATES = (
+    "validating",
+    "copying",
+    "verifying",
+    "ready_to_flip",
+    "flipping",
+    "completed",
+    "cleaning",
+)
+
+
+async def get_active_storage_config(db: AsyncSession) -> StorageConfig | None:
+    return await db.scalar(select(StorageConfig).where(StorageConfig.active.is_(True)))
+
+
+async def get_storage_config(db: AsyncSession, config_id: uuid.UUID) -> StorageConfig | None:
+    return await db.get(StorageConfig, config_id)
+
+
+async def list_storage_configs(db: AsyncSession) -> list[StorageConfig]:
+    return list((await db.scalars(select(StorageConfig))).all())
+
+
+async def insert_storage_config(
+    db: AsyncSession,
+    *,
+    backend: str,
+    bucket: str | None = None,
+    endpoint_url: str | None = None,
+    region: str = "us-east-1",
+    public_base_url: str | None = None,
+    access_key: str | None = None,
+    secret_key_encrypted: str | None = None,
+    secret_last4: str | None = None,
+    seeded_from_env: bool = False,
+    active: bool = False,
+    company_id: uuid.UUID | None = None,
+) -> StorageConfig:
+    row = StorageConfig(
+        company_id=company_id,
+        backend=backend,
+        bucket=bucket,
+        endpoint_url=endpoint_url,
+        region=region or "us-east-1",
+        public_base_url=public_base_url,
+        access_key=access_key,
+        secret_key_encrypted=secret_key_encrypted,
+        secret_last4=secret_last4,
+        seeded_from_env=seeded_from_env,
+        active=active,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def deactivate_storage_configs(db: AsyncSession) -> None:
+    rows = (await db.scalars(select(StorageConfig).where(StorageConfig.active.is_(True)))).all()
+    for row in rows:
+        row.active = False
+    await db.flush()
+
+
+async def get_open_storage_migration(db: AsyncSession) -> StorageMigration | None:
+    return await db.scalar(
+        select(StorageMigration)
+        .where(StorageMigration.state.in_(OPEN_MIGRATION_STATES))
+        .order_by(StorageMigration.created_at.desc())
+        .limit(1)
+    )
+
+
+async def get_latest_storage_migration(db: AsyncSession) -> StorageMigration | None:
+    return await db.scalar(
+        select(StorageMigration).order_by(StorageMigration.created_at.desc()).limit(1)
+    )
+
+
+async def get_storage_migration(
+    db: AsyncSession, migration_id: uuid.UUID
+) -> StorageMigration | None:
+    return await db.get(StorageMigration, migration_id)
+
+
+async def insert_storage_migration(
+    db: AsyncSession,
+    *,
+    target_config_id: uuid.UUID,
+    source_config_id: uuid.UUID | None,
+) -> StorageMigration:
+    row = StorageMigration(
+        state="validating",
+        target_config_id=target_config_id,
+        source_config_id=source_config_id,
+        stats={"scanned": 0, "copied": 0, "skipped": 0, "bytes": 0, "orphans": 0},
+        error_keys=[],
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def claim_storage_migration_lease(
+    db: AsyncSession,
+    migration_id: uuid.UUID,
+    *,
+    lease_until: datetime,
+) -> StorageMigration | None:
+    """Claim or renew a lease. NULL or expired leases are claimable."""
+    now = datetime.now(UTC)
+    result = await db.execute(
+        select(StorageMigration)
+        .where(
+            StorageMigration.id == migration_id,
+            or_(
+                StorageMigration.lease_expires_at.is_(None),
+                StorageMigration.lease_expires_at < now,
+            ),
+        )
+        .with_for_update(skip_locked=True)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return None
+    row.lease_expires_at = lease_until
+    await db.flush()
+    return row
+
+
+async def renew_storage_migration_lease(
+    db: AsyncSession,
+    migration_id: uuid.UUID,
+    *,
+    lease_until: datetime,
+) -> None:
+    row = await db.get(StorageMigration, migration_id)
+    if row is None:
+        return
+    row.lease_expires_at = lease_until
+    await db.flush()
+
+
+async def mark_migration_key_done(db: AsyncSession, key: str, size: int) -> None:
+    await db.execute(
+        insert(MigrationDoneKey)
+        .values(key=key, size=size)
+        .on_conflict_do_nothing(index_elements=["key"])
+    )
+
+
+async def is_migration_key_done(db: AsyncSession, key: str) -> bool:
+    row = await db.get(MigrationDoneKey, key)
+    return row is not None
+
+
+async def list_done_migration_keys(db: AsyncSession) -> list[str]:
+    return list((await db.scalars(select(MigrationDoneKey.key))).all())
+
+
+async def clear_migration_done_keys(db: AsyncSession) -> None:
+    await db.execute(delete(MigrationDoneKey))
+
+
+async def list_all_media_refs(db: AsyncSession) -> list[str]:
+    """All stored preview_images.url + preview_drafts.image_url (ADR 0025 enumerate)."""
+    images = (
+        await db.scalars(select(PreviewImage.url).where(PreviewImage.url.is_not(None)))
+    ).all()
+    drafts = (
+        await db.scalars(
+            select(PreviewDraft.image_url).where(PreviewDraft.image_url.is_not(None))
+        )
+    ).all()
+    return [u for u in (*images, *drafts) if u]

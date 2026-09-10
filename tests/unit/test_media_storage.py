@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from internal.media import storage as S
+from internal.media.config import reset_snapshot_cache
 
 TINY_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -32,6 +33,7 @@ def local_media(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(S.settings, "s3_region", "us-east-1")
     monkeypatch.setattr(S.settings, "media_root", str(root))
     monkeypatch.setattr(S.settings, "web_base_url", "https://example.test")
+    reset_snapshot_cache()
     return root
 
 
@@ -46,6 +48,7 @@ def s3_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         S.settings, "s3_public_base_url", "http://127.0.0.1:9000/unhinted-media"
     )
+    reset_snapshot_cache()
 
 
 def test_onprem_defaults_to_local() -> None:
@@ -59,22 +62,21 @@ def test_onprem_s3_when_bucket_and_endpoint(s3_settings: None) -> None:
     assert S.media_storage_configured() is True
 
 
-def test_onprem_bucket_without_endpoint_fails_at_start(
+def test_onprem_incomplete_s3_env_stays_local(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(S.settings, "s3_bucket", "unhinted-media")
     monkeypatch.setattr(S.settings, "s3_endpoint_url", None)
-    with pytest.raises(S.MediaStorageError, match="S3_BUCKET"):
-        S.media_backend()
-    with pytest.raises(RuntimeError, match="S3_BUCKET"):
-        S.assert_media_storage_config()
+    reset_snapshot_cache()
+    assert S.media_backend() == "local"
+    S.assert_media_storage_config()
 
 
-def test_single_s3_key_fails_at_start(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_single_s3_key_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(S.settings, "s3_access_key", "only-access")
     monkeypatch.setattr(S.settings, "s3_secret_key", None)
-    with pytest.raises(S.MediaStorageError, match="S3_ACCESS_KEY"):
-        S.media_backend()
+    reset_snapshot_cache()
+    assert S.media_backend() == "local"
 
 
 def test_cloud_requires_bucket(monkeypatch: pytest.MonkeyPatch) -> None:

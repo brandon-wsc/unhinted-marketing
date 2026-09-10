@@ -5,7 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
-from internal.media.storage import MediaStorageError, local_abs_path, media_backend
+from internal.media.storage import (
+    MediaStorageError,
+    local_abs_path,
+    local_read_grace,
+    media_backend,
+)
 
 router = APIRouter(tags=["media"])
 
@@ -21,7 +26,7 @@ _EXT_CONTENT_TYPES = {
 @router.get("/media/{key:path}")
 async def get_media(key: str) -> FileResponse:
     try:
-        if media_backend() != "local":
+        if media_backend() != "local" and not local_read_grace():
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found")
         path = local_abs_path(key)
     except MediaStorageError as exc:

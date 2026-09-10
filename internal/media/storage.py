@@ -1,4 +1,4 @@
-"""Media storage: local default on-prem; optional S3-compatible; AWS S3 in cloud (ADR 0024)."""
+"""Media storage: local default on-prem; optional S3-compatible; AWS S3 in cloud (ADR 0024 + 0025)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import base64
 import logging
 import re
 import secrets
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -17,6 +18,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from internal.config import settings
+from internal.media.config import StorageSnapshot, get_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -41,36 +43,15 @@ def _strip(value: str | None) -> str:
 
 
 def media_backend() -> Literal["local", "s3"]:
-    """Derive the store from DEPLOYMENT_MODE + S3 env (no STORAGE_BACKEND flag)."""
-    mode = settings.deployment_mode
-    bucket = _strip(settings.s3_bucket)
-    endpoint = _strip(settings.s3_endpoint_url)
-    access = _strip(settings.s3_access_key)
-    secret = _strip(settings.s3_secret_key)
-
-    if bool(access) != bool(secret):
-        raise MediaStorageError(
-            "S3_ACCESS_KEY and S3_SECRET_KEY must both be set, or both omitted "
-            "(instance role / default boto3 chain)."
-        )
-
-    if mode == "cloud":
-        if not bucket:
-            raise MediaStorageError("S3_BUCKET is required when DEPLOYMENT_MODE=cloud.")
-        return "s3"
-
-    if bucket and endpoint:
-        return "s3"
-    if bucket or endpoint:
-        raise MediaStorageError(
-            "On-prem S3-compatible storage requires both S3_BUCKET and "
-            "S3_ENDPOINT_URL (or neither, to use local disk)."
-        )
-    return "local"
+    """Active store from the published snapshot (DB) or env fallback (ADR 0025)."""
+    try:
+        return get_snapshot().backend
+    except RuntimeError as exc:
+        raise MediaStorageError(str(exc)) from exc
 
 
 def assert_media_storage_config() -> None:
-    """Refuse incomplete S3 env at process start (ADR 0024)."""
+    """First-use / portal check. Incomplete env no longer fails at process start."""
     try:
         media_backend()
     except MediaStorageError as exc:
@@ -83,6 +64,22 @@ def media_storage_configured() -> bool:
         return media_backend() == "s3"
     except MediaStorageError:
         return False
+
+
+def dual_write_active() -> bool:
+    try:
+        return get_snapshot().dual_write
+    except RuntimeError:
+        return False
+
+
+def local_read_grace() -> bool:
+    """Serve leftover local files after flip, until cleanup (ADR 0025)."""
+    try:
+        snap = get_snapshot()
+    except RuntimeError:
+        return False
+    return snap.backend == "s3" and snap.dual_write
 
 
 def sniff_image_bytes(data: bytes) -> tuple[str, str] | None:
@@ -120,22 +117,27 @@ def local_abs_path(key: str) -> Path:
     return path
 
 
-def public_url(key: str) -> str:
-    """Browser-fetchable URL for an object key (not stored in Postgres)."""
+def public_url_for(key: str, snap: StorageSnapshot) -> str:
+    """Browser-fetchable URL for an object key under ``snap``."""
     key = key.lstrip("/")
-    if media_backend() == "local":
+    if snap.backend == "local":
         base = _strip(settings.web_base_url).rstrip("/")
         path = f"{_API_MEDIA_PREFIX}{key}"
         return f"{base}{path}" if base else path
-    pub = _strip(settings.s3_public_base_url).rstrip("/")
+    pub = _strip(snap.public_base_url).rstrip("/")
     if pub:
         return f"{pub}/{key}"
-    endpoint = _strip(settings.s3_endpoint_url).rstrip("/")
-    bucket = _strip(settings.s3_bucket)
+    endpoint = _strip(snap.endpoint_url).rstrip("/")
+    bucket = _strip(snap.bucket)
     if endpoint:
         return f"{endpoint}/{bucket}/{key}"
-    region = _strip(settings.s3_region) or "us-east-1"
+    region = _strip(snap.region) or "us-east-1"
     return f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
+
+
+def public_url(key: str) -> str:
+    """Browser-fetchable URL for an object key (not stored in Postgres)."""
+    return public_url_for(key, get_snapshot())
 
 
 def public_object_url(key: str) -> str:
@@ -144,16 +146,23 @@ def public_object_url(key: str) -> str:
 
 def _s3_peel_prefixes() -> list[str]:
     prefixes: list[str] = []
-    pub = _strip(settings.s3_public_base_url).rstrip("/")
+    try:
+        snap = get_snapshot()
+    except RuntimeError:
+        snap = None
+    pub = _strip(snap.public_base_url if snap else settings.s3_public_base_url).rstrip("/")
     if pub:
         prefixes.append(pub + "/")
-    endpoint = _strip(settings.s3_endpoint_url).rstrip("/")
-    bucket = _strip(settings.s3_bucket)
+    endpoint = _strip(snap.endpoint_url if snap else settings.s3_endpoint_url).rstrip("/")
+    bucket = _strip(snap.bucket if snap else settings.s3_bucket)
     if endpoint and bucket:
         prefixes.append(f"{endpoint}/{bucket}/")
-    region = _strip(settings.s3_region) or "us-east-1"
+    region = _strip((snap.region if snap else settings.s3_region) or "us-east-1")
     if bucket:
         prefixes.append(f"https://{bucket}.s3.{region}.amazonaws.com/")
+    env_pub = _strip(settings.s3_public_base_url).rstrip("/")
+    if env_pub and env_pub + "/" not in prefixes:
+        prefixes.append(env_pub + "/")
     return prefixes
 
 
@@ -232,13 +241,11 @@ def _boto3_session():
     return boto3.session.Session()
 
 
-def _s3_client() -> BaseClient:
-    if media_backend() != "s3":
-        raise MediaStorageError("S3 media storage is not selected.")
-    endpoint = _strip(settings.s3_endpoint_url) or None
-    access = _strip(settings.s3_access_key)
-    secret = _strip(settings.s3_secret_key)
-    kwargs: dict = {"region_name": _strip(settings.s3_region) or "us-east-1"}
+def s3_client_for(snap: StorageSnapshot) -> BaseClient:
+    endpoint = _strip(snap.endpoint_url) or None
+    access = _strip(snap.access_key)
+    secret = _strip(snap.secret_key)
+    kwargs: dict = {"region_name": _strip(snap.region) or "us-east-1"}
     if endpoint:
         kwargs["endpoint_url"] = endpoint
         kwargs["config"] = Config(s3={"addressing_style": "path"})
@@ -246,6 +253,15 @@ def _s3_client() -> BaseClient:
         kwargs["aws_access_key_id"] = access
         kwargs["aws_secret_access_key"] = secret
     return _boto3_session().client("s3", **kwargs)
+
+
+def _s3_client() -> BaseClient:
+    snap = get_snapshot()
+    if snap.backend != "s3" and not snap.dual_write:
+        raise MediaStorageError("S3 media storage is not selected.")
+    if not _strip(snap.bucket):
+        raise MediaStorageError("S3 bucket is not configured.")
+    return s3_client_for(snap)
 
 
 def _prune_empty_parents(start: Path, root: Path) -> None:
@@ -258,44 +274,113 @@ def _prune_empty_parents(start: Path, root: Path) -> None:
         current = current.parent
 
 
-def _put_bytes_sync(*, key: str, data: bytes, content_type: str) -> str:
-    if media_backend() == "local":
-        path = local_abs_path(key)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_bytes(data)
-        tmp.replace(path)
-        return public_url(key)
-    client = _s3_client()
+def _put_local_sync(*, key: str, data: bytes) -> None:
+    path = local_abs_path(key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+
+
+def _put_s3_sync(*, snap: StorageSnapshot, key: str, data: bytes, content_type: str) -> None:
+    client = s3_client_for(snap)
     client.put_object(
-        Bucket=_strip(settings.s3_bucket),
+        Bucket=_strip(snap.bucket),
         Key=key,
         Body=data,
         ContentType=content_type,
     )
-    return public_url(key)
 
 
-def _delete_key_sync(key: str) -> None:
-    if media_backend() == "local":
-        path = local_abs_path(key)
-        path.unlink(missing_ok=True)
-        _prune_empty_parents(path.parent, Path(settings.media_root).expanduser().resolve())
-        return
-    client = _s3_client()
+def _head_s3_size_sync(*, snap: StorageSnapshot, key: str) -> int | None:
+    client = s3_client_for(snap)
     try:
-        client.delete_object(Bucket=_strip(settings.s3_bucket), Key=key)
+        resp = client.head_object(Bucket=_strip(snap.bucket), Key=key)
+    except ClientError:
+        return None
+    length = resp.get("ContentLength")
+    return int(length) if length is not None else None
+
+
+def _delete_local_sync(key: str) -> None:
+    path = local_abs_path(key)
+    path.unlink(missing_ok=True)
+    _prune_empty_parents(path.parent, Path(settings.media_root).expanduser().resolve())
+
+
+def _delete_s3_sync(*, snap: StorageSnapshot, key: str) -> None:
+    client = s3_client_for(snap)
+    try:
+        client.delete_object(Bucket=_strip(snap.bucket), Key=key)
     except ClientError as exc:
         code = str(exc.response.get("Error", {}).get("Code", ""))
         if code not in {"NotFound", "NoSuchKey", "404"}:
             raise MediaStorageError(f"delete_object failed: {exc}") from exc
 
 
+@dataclass
+class _PutOutcome:
+    url: str
+    dual_s3_copied: bool = False
+
+
+def _put_bytes_sync(*, key: str, data: bytes, content_type: str) -> _PutOutcome:
+    snap = get_snapshot()
+    write_local = snap.backend == "local" or snap.dual_write
+    write_s3 = snap.backend == "s3" or snap.dual_write
+    dual_s3_copied = False
+
+    if snap.backend == "local" and write_local:
+        _put_local_sync(key=key, data=data)
+        target = snap.dual_s3()
+        if write_s3 and _strip(target.bucket):
+            try:
+                _put_s3_sync(snap=target, key=key, data=data, content_type=content_type)
+                dual_s3_copied = True
+            except Exception:
+                logger.warning("dual-write S3 put failed for key=%s", key, exc_info=True)
+        return _PutOutcome(url=public_url_for(key, snap), dual_s3_copied=dual_s3_copied)
+
+    if not write_s3:
+        raise MediaStorageError("S3 media storage is not selected.")
+    _put_s3_sync(snap=snap, key=key, data=data, content_type=content_type)
+    dual_s3_copied = True
+    if write_local:
+        try:
+            _put_local_sync(key=key, data=data)
+        except Exception:
+            logger.warning("dual-write local put failed for key=%s", key, exc_info=True)
+    return _PutOutcome(url=public_url_for(key, snap), dual_s3_copied=dual_s3_copied)
+
+
+def _delete_key_sync(key: str) -> None:
+    snap = get_snapshot()
+    write_local = snap.backend == "local" or snap.dual_write
+    write_s3 = snap.backend == "s3" or snap.dual_write
+    if write_local:
+        _delete_local_sync(key)
+    if write_s3:
+        target = snap.dual_s3() if snap.backend == "local" else snap
+        if _strip(target.bucket):
+            _delete_s3_sync(snap=target, key=key)
+
+
 async def put_bytes(*, key: str, data: bytes, content_type: str) -> str:
     """Write bytes; return a browser-fetchable URL (Postgres stores the key, not this)."""
-    return await asyncio.to_thread(
+    outcome = await asyncio.to_thread(
         _put_bytes_sync, key=key, data=data, content_type=content_type
     )
+    if outcome.dual_s3_copied and get_snapshot().dual_write:
+        try:
+            from internal.memory.database import open_session
+            from internal.memory.repos import mark_migration_key_done
+
+            async with open_session() as db:
+                await mark_migration_key_done(db, key, len(data))
+                await db.commit()
+        except Exception:
+            logger.warning("migration_done_keys insert failed for key=%s", key, exc_info=True)
+    return outcome.url
 
 
 async def delete_key(key: str) -> None:

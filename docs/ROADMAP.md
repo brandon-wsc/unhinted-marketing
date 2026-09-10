@@ -445,7 +445,7 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 - [ ] Real Meta/IG Graph API integration in Confirm handler
 - [ ] Budget circuit breaker (atomic PG updates)
 - [ ] Redis for queue + question cache (if not already)
-- [x] Media storage: local disk default on-prem; optional S3-compatible; AWS S3 in cloud ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). Signed/private URLs remain STATUS hardening
+- [x] Media storage: local disk default on-prem; optional S3-compatible; AWS S3 in cloud ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). Portal-driven local→S3 migrate ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)). Signed/private URLs remain STATUS hardening
 - [ ] OAuth providers (Google) for login
 
 ### Phase 5 — Autonomous Extensions (Optional)
