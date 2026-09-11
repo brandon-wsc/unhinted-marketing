@@ -799,3 +799,154 @@ export async function apiCancelInstagramOAuth(
   if (!res.ok) await throwApiError(res);
   return res.json();
 }
+
+export type StorageBackend = "local" | "s3";
+
+export type StorageMigrationState =
+  | "validating"
+  | "copying"
+  | "verifying"
+  | "ready_to_flip"
+  | "flipping"
+  | "completed"
+  | "cleaning"
+  | "done"
+  | "failed";
+
+export type StorageMigration = {
+  id: string;
+  state: StorageMigrationState;
+  stats: {
+    scanned?: number;
+    copied?: number;
+    skipped?: number;
+    bytes?: number;
+    orphans?: number;
+  };
+  error_keys: { key?: string; error?: string }[];
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StorageConfig = {
+  backend: StorageBackend;
+  bucket: string | null;
+  endpoint_url: string | null;
+  region: string;
+  public_base_url: string | null;
+  access_key: string | null;
+  secret_last4: string | null;
+  seeded_from_env: boolean;
+  dual_write: boolean;
+  can_migrate: boolean;
+  migration: StorageMigration | null;
+};
+
+export type StorageConfigUpdate = {
+  bucket: string;
+  endpoint_url?: string | null;
+  region?: string | null;
+  public_base_url?: string | null;
+  access_key?: string | null;
+  secret_key?: string | null;
+};
+
+export type StorageTestResult = {
+  ok: boolean;
+  error: string | null;
+};
+
+function storagePath(companyId: string, suffix = "") {
+  return `${API_BASE}/companies/${companyId}/storage${suffix}`;
+}
+
+export async function apiGetStorageConfig(
+  accessToken: string | null,
+  companyId: string,
+): Promise<StorageConfig> {
+  const res = await fetchWithAuth(accessToken, storagePath(companyId, "/config"));
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiPutStorageConfig(
+  accessToken: string | null,
+  companyId: string,
+  body: StorageConfigUpdate,
+): Promise<StorageConfig> {
+  const res = await fetchWithAuth(accessToken, storagePath(companyId, "/config"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiTestStorageConnection(
+  accessToken: string | null,
+  companyId: string,
+  body: StorageConfigUpdate,
+): Promise<StorageTestResult> {
+  const res = await fetchWithAuth(accessToken, storagePath(companyId, "/test"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiStartStorageMigration(
+  accessToken: string | null,
+  companyId: string,
+): Promise<StorageMigration> {
+  const res = await fetchWithAuth(accessToken, storagePath(companyId, "/migrations"), {
+    method: "POST",
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiFlipStorageMigration(
+  accessToken: string | null,
+  companyId: string,
+  migrationId: string,
+): Promise<StorageMigration> {
+  const res = await fetchWithAuth(
+    accessToken,
+    storagePath(companyId, `/migrations/${migrationId}/flip`),
+    { method: "POST" },
+  );
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiRollbackStorageMigration(
+  accessToken: string | null,
+  companyId: string,
+  migrationId: string,
+): Promise<StorageMigration> {
+  const res = await fetchWithAuth(
+    accessToken,
+    storagePath(companyId, `/migrations/${migrationId}/rollback`),
+    { method: "POST" },
+  );
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
+export async function apiCleanStorageMigration(
+  accessToken: string | null,
+  companyId: string,
+  migrationId: string,
+): Promise<StorageMigration> {
+  const res = await fetchWithAuth(
+    accessToken,
+    storagePath(companyId, `/migrations/${migrationId}/clean`),
+    { method: "POST" },
+  );
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}

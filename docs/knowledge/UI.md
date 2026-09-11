@@ -35,6 +35,7 @@ Shell settings collect human-provided knowledge. Session craft does **not** sile
 | `Invite accept` | ✅ Drawn — A logged out · B ready · C email mismatch · D invalid · **E already in org (409)** |
 | `Company settings · Approvals` | Pending proposals · field diff · Approve / Decline — owner/admin |
 | `Company settings · Instagram` | ✅ Drawn — empty (Connect Instagram, left) · connecting (voice-soft cluster + Cancel inside; Connect/Reconnect hidden) · connected (last4 + Reconnect / Disconnect) · expired (destructive badge + Reconnect). Dialogs: Disconnect confirm. Editor-only; Instagram Login |
+| `Company settings · Storage` | ✅ Drawn — `local` (form + Start move) · `copying` (read-only form + voice-soft cluster, no cancel) · `ready` (Switch to S3) · `s3 grace` (Switch back / Clean) · `s3` (done). Dialogs: Switch to S3 · Clean local files. Editor-only; [ADR 0025](../adr/0025-db-storage-config-and-portal-migration.md) |
 
 Entry: UserMenu → **公司設定** (desktop dropdown + mobile dialog; above **系統** when platform level ≥ 6). Penpot frames are desktop 1440 only; mobile uses same `/settings` routes (layout follows shell). UserMenu copy is zh-HK; only **登出** is destructive red.
 
@@ -51,7 +52,8 @@ UserMenu
   │     ├─ Members             ← org team (slice 4)
   │     ├─ Approvals           ← K6 — owner/admin queue
   │     ├─ Models              ← BYOK keys / models / routing (ADR 0020)
-  │     └─ Instagram           ← org publish account (ADR 0022; editor-only; Instagram Login)
+  │     ├─ Instagram           ← org publish account (ADR 0022; editor-only; Instagram Login)
+  │     └─ Storage             ← media backend + local→S3 migrate (ADR 0025; editor-only)
   ├─ 系統                      ← SPA `/system` (platform ops; API `/api/admin/*`; en: System)
   └─ 登出                      ← destructive
 
@@ -84,6 +86,7 @@ UserMenu
 | Confirm / draft promote | Save caption → prepend `exemplar_captions` | Org (manual) | owner/admin | **K5** ✅ |
 | **Approvals** | Proposal diff → approve / reject | Org × New → Old | owner/admin | **K6** ✅ |
 | **Instagram** | Instagram Login connect; show `ig_user_id` + `token_last4` + `expires_at`; reconnect / disconnect | Org → `social_accounts` | owner/admin | **ADR 0022** ✅ `/settings?tab=instagram` |
+| **Storage** | S3 target (bucket / endpoint / keys, last4 only); test connection; migrate copy → flip → rollback → clean | Deployment-wide `storage_configs` | owner/admin | **ADR 0025** ✅ `/settings?tab=storage` |
 
 **Not collected in UI (MVP):** per-company persona CRUD, offer-snippet dedicated page, brand PDF upload, pain points, market signals, platform craft ([VOICE.md](../VOICE.md)).
 
@@ -145,6 +148,20 @@ Flexible headers: no required column names; store raw row in `profile`. **Import
 
 Confirm still 400 `social_account_not_connected` if none is saved.
 
+### Storage (media backend — ADR 0025)
+
+**Route:** `/settings?tab=storage` · sidebar label **Storage** (i18n `settings.nav.storage`). Editor-only, same gate as Instagram / Models. Members never see the tab. Cloud: S3 form only, no migrate card.
+
+**Layout** (two cards; no wizard stepper):
+
+1. **Local** — badge Local · S3 form (bucket, endpoint, region, public URL, access key, secret `••••last4`) · **Test connection** (outline, left) · **Save** (primary). Second card: **Start move to S3**.
+2. **Copying** — badges Local + Dual-write · form `readOnly` (`bg-secondary`) · voice-soft cluster (spinner + copied / bytes / orphans). **No cancel** (API has none).
+3. **Ready** — copy finished; **Switch to S3** (primary). Confirm dialog: Cancel · Switch to S3 (ink, not destructive).
+4. **S3 grace** (`completed`) — badges S3 + Dual-write · **Switch back to local** (outline, no dialog) · **Clean local files** (destructive outline + confirm).
+5. **S3** (`done`) — badge S3 · note that switching back needs a new copy.
+
+Failed reuses **Local** with a destructive alert + **Try again**. Do not draw a file/key list, env editor, or per-company bucket.
+
 ### Invite accept (slice 4)
 
 **Route:** `/invite/:token` · **not** under `/settings`. The page is public (logged-out CTA is a real state). **Accept** (`POST`) requires a session; login/register return via `?next=`.
@@ -186,6 +203,7 @@ Title + body sit **inside** the AuthLayout card (Penpot AuthCard), left-aligned.
 | **Session isolation** | Cross-member session API tests; routes stay `user_id`-scoped | ✅ CI `backend-api` |
 | **K6** | Approvals tab + Mine propose + HTTP approve/reject | ✅ |
 | **Instagram** | Settings tab empty / connecting / connected / expired | ✅ `/settings?tab=instagram` |
+| **Storage** | Settings tab local / copying / ready / s3 grace / s3 + flip/clean dialogs | ✅ `/settings?tab=storage` |
 
 ---
 

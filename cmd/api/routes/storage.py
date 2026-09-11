@@ -86,7 +86,7 @@ async def _config_out(db: AsyncSession) -> StorageConfigOut:
         seeded_from_env=bool(display.seeded_from_env) if display else False,
         dual_write=open_m is not None,
         can_migrate=can_migrate,
-        migration=_migration_out(latest if latest and latest.state != "done" else open_m),
+        migration=_migration_out(latest),
     )
 
 

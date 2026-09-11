@@ -55,7 +55,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Postgres stores the object key** — `preview_images.url` / `preview_drafts.image_url` hold `sessions/{id}/r{revision}-{hex}.{ext}` (or leftover provider/`placeholder://` URLs). HTTP/SSE still emit a fetchable `url` via `resolve_stored_url`. Unauthenticated `GET /api/media/{key}` streams local files
 - **Always persist real bytes** — uploads and `data:` generation results always write the store; `placeholder` / no-credentials stay mock URLs (not a storage fallback)
 - **Eager GC on session delete** — after commit, refcount keys against remaining preview rows (forks share URLs; [ADR 0017](./adr/0017-session-fork.md)); refcount-zero keys deleted best-effort. No sweeper. Signed/private URLs stay hardening
-- **Portal local→S3 migrate** — editor HTTP under `/api/companies/{id}/storage` (settings UI later); dual-write so reads/writes never block; human flip gate; rollback free until local cleanup
+- **Portal local→S3 migrate** — editor HTTP under `/api/companies/{id}/storage` + `/settings?tab=storage`; dual-write so reads/writes never block; human flip gate; rollback free until local cleanup
 
 **Decision (2026-09-10) — DB-backed storage config + portal local→S3 migration:** → [ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md). Supersedes ADR 0024 §1 (env-presence backend). Dual-write from migrate start until cleanup; leased in-process copy; `ready_to_flip` is a human gate. Deployment-wide flip (schema has unused `company_id` for a later per-company bucket ADR).
 
@@ -332,7 +332,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Admin Trace viewer (node-steps + session) | ✅ | [ADR 0007](./adr/0007-admin-trace-viewer.md) — `session_node_steps` + `turn_id`; admin tabs Node steps / Session Trace |
 | Meta Graph API hot search | ⏸ | Next after core UI |
 | BYOK settings page | ✅ | Editor-only keys / models / routing tab ([ADR 0020](./adr/0020-org-byok-keys-models-routing.md), native Gemini + Vertex Express [ADR 0021](./adr/0021-org-byok-native-gemini.md)) |
-| Storage settings page | ⏸ Backend | Editor HTTP for config + migrate shipped ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)); portal UI deferred |
+| Storage settings page | ✅ | Editor-only `/settings?tab=storage` — S3 form + migrate copy → flip → rollback → clean ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)) |
 | Trace viewer | ✅ | Admin Session Trace tab ([ADR 0007](./adr/0007-admin-trace-viewer.md)) — not end-user UI |
 
 ---
@@ -415,7 +415,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/login` | Email/password login |
 | `/register` | Sign up + default workspace |
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
-| `/settings` | Company settings — Voice · Products (Org \| Mine) · Members · Approvals · Models · Instagram |
+| `/settings` | Company settings — Voice · Products (Org \| Mine) · Members · Approvals · Models · Instagram · Storage |
 | `/invite/:token` | Invite accept (public page; POST accept requires auth) |
 | `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace; `/admin` redirects here |
 

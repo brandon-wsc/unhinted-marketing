@@ -26,7 +26,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:YOUR_PASSWORD@192.168.5.20:5434/unhin
 
 **pgvector:** install on the server; Phase 1 migrations run `CREATE EXTENSION vector` when needed.
 
-Other variables: see `.env.example` and the [Environment](./STATUS.md#environment) section in STATUS. Media defaults to local disk (`MEDIA_ROOT=data/media`); no object-storage sidecar. Local→S3 migrate is editor HTTP ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)); the settings UI comes later.
+Other variables: see `.env.example` and the [Environment](./STATUS.md#environment) section in STATUS. Media defaults to local disk (`MEDIA_ROOT=data/media`); no object-storage sidecar. Local→S3 migrate is editor `/settings?tab=storage` ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)).
 
 ---
 
