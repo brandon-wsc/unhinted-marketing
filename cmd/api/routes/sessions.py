@@ -12,17 +12,19 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from internal.auth.deps import get_current_user
+from internal.auth.deps import bearer_scheme, get_current_user, resolve_current_user
 from internal.media.gc import collect_session_store_keys, reclaim_unreferenced_keys
 from internal.media.storage import MediaStorageError, resolve_stored_url, stored_ref_is_image
 from internal.memory import repos
-from internal.memory.database import get_db
+from internal.memory.database import get_db, open_session
 from internal.memory.models import Session, User
 from internal.session.events import format_sse, session_event_bus
 from internal.session.graph import INTERRUPT_BEFORE
@@ -575,52 +577,65 @@ async def get_session_messages(
 @router.get("/{session_id}/events")
 async def session_events(
     session_id: uuid.UUID,
-    user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
+    ],
 ) -> StreamingResponse:
-    """SSE stream: initial snapshot, then live session events + heartbeats."""
-    session = await _require_owned_session(db, session_id, user)
-    draft = await repos.get_latest_preview_draft(db, session.id)
-    state = session.state or {}
-    copy = normalize_draft_copy(
-        (draft.copy if draft else None) or state.get("draft")
-    )
-    platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
-    media_items = await list_latest_session_media(db, session)
+    """SSE stream: initial snapshot, then live session events + heartbeats.
 
-    interrupted = _image_interrupt_from_snapshot(state, ())
-    try:
-        from internal.session.graph import get_session_graph
+    Auth + snapshot use a short-lived session and release the pool connection
+    before the stream starts. ``Depends(get_db)`` / ``get_current_user`` would
+    hold a connection for the whole SSE lifetime (idle tab / session switch).
+    """
+    async with open_session() as db:
+        user = await resolve_current_user(credentials, db)
+        session = await _require_owned_session(db, session_id, user)
+        draft = await repos.get_latest_preview_draft(db, session.id)
+        state = session.state or {}
+        copy = normalize_draft_copy(
+            (draft.copy if draft else None) or state.get("draft")
+        )
+        platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
+        media_items = await list_latest_session_media(db, session)
 
-        graph = get_session_graph()
-        snap = await graph.aget_state({"configurable": {"thread_id": str(session.id)}})
-        interrupted = _image_interrupt_from_snapshot(state, snap.next)
-    except Exception:
-        # Graph/checkpointer may be unavailable in tests / early boot.
-        logger.debug("session events: could not read graph interrupt state", exc_info=True)
+        interrupted = _image_interrupt_from_snapshot(state, ())
+        try:
+            from internal.session.graph import get_session_graph
 
-    snapshot_data = {
-        "session_id": str(session.id),
-        "mode": session.mode,
-        "status": session.status,
-        "state": state,
-        "revision": draft.revision if draft else state.get("revision"),
-        "approval_token": draft.approval_token if draft else state.get("approval_token"),
-        "image_url": resolve_stored_url(
-            draft.image_url if draft else state.get("image_url")
-        ),
-        "media": media_items,
-        "copy": copy,
-        "platform": platform,
-        "interrupted": interrupted,
-    }
-    receipt_row = await repos.get_latest_publish_receipt(db, session.id)
-    if receipt_row:
-        snapshot_data["confirm_receipt"] = _confirm_response(receipt_row).model_dump(mode="json")
+            graph = get_session_graph()
+            snap = await graph.aget_state({"configurable": {"thread_id": str(session.id)}})
+            interrupted = _image_interrupt_from_snapshot(state, snap.next)
+        except Exception:
+            # Graph/checkpointer may be unavailable in tests / early boot.
+            logger.debug("session events: could not read graph interrupt state", exc_info=True)
+
+        snapshot_data = {
+            "session_id": str(session.id),
+            "mode": session.mode,
+            "status": session.status,
+            "state": state,
+            "revision": draft.revision if draft else state.get("revision"),
+            "approval_token": draft.approval_token if draft else state.get("approval_token"),
+            "image_url": resolve_stored_url(
+                draft.image_url if draft else state.get("image_url")
+            ),
+            "media": media_items,
+            "copy": copy,
+            "platform": platform,
+            "interrupted": interrupted,
+        }
+        receipt_row = await repos.get_latest_publish_receipt(db, session.id)
+        if receipt_row:
+            snapshot_data["confirm_receipt"] = _confirm_response(receipt_row).model_dump(
+                mode="json"
+            )
 
     async def event_stream() -> AsyncIterator[str]:
         yield format_sse("session.snapshot", snapshot_data)
         async for ev in session_event_bus.subscribe(session_id):
+            if await request.is_disconnected():
+                break
             yield format_sse(str(ev["type"]), ev.get("data") or {})
 
     return StreamingResponse(

@@ -13,10 +13,16 @@ from internal.memory.models import User
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+async def resolve_current_user(
+    credentials: HTTPAuthorizationCredentials | None,
+    db: AsyncSession,
 ) -> User:
+    """Load the bearer user inside an already-open session.
+
+    SSE must call this from a short-lived ``open_session()`` rather than
+    ``Depends(get_current_user)`` — FastAPI keeps dependency sessions open
+    until the response finishes, which for a stream is the whole connection.
+    """
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -40,3 +46,10 @@ async def get_current_user(
             detail="User not found or inactive",
         )
     return user
+
+
+async def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> User:
+    return await resolve_current_user(credentials, db)
