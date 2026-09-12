@@ -38,6 +38,20 @@ attach_pgvector(engine)
 
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+# Background jobs (migrate loop) open their own session. Tests may replace
+# this so they hit TEST_DATABASE_URL instead of DATABASE_URL.
+_session_factory = SessionLocal
+
+
+def set_session_factory(factory) -> None:
+    global _session_factory
+    _session_factory = factory or SessionLocal
+
+
+def open_session():
+    """Context-manager session for out-of-request work (migrate loop)."""
+    return _session_factory()
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as session:

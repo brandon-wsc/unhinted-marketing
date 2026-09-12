@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -9,6 +10,7 @@ from cmd.api.routes.auth import router as auth_router
 from cmd.api.routes.byok import router as byok_router
 from cmd.api.routes.companies import router as companies_router
 from cmd.api.routes.invites import router as invites_router
+from cmd.api.routes.media import router as media_router
 from cmd.api.routes.meta import router as meta_router
 from cmd.api.routes.products import router as products_router
 from cmd.api.routes.proposals import router as proposals_router
@@ -17,6 +19,7 @@ from cmd.api.routes.sessions import router as sessions_router
 from cmd.api.routes.signals import router as signals_router
 from cmd.api.routes.social import oauth_callback_router
 from cmd.api.routes.social import router as social_router
+from cmd.api.routes.storage import router as storage_router
 from internal.auth.rate_limit import assert_jwt_secret_safe
 from internal.config import settings
 from internal.llm.keys import assert_byok_encryption_key_safe
@@ -37,6 +40,21 @@ async def lifespan(app: FastAPI):
     from internal.session.semantic_gate import start_semantic_router_warmup
 
     start_semantic_router_warmup()
+    from internal.media.config import ensure_storage_config_seeded
+    from internal.media.migrate import resume_open_migration
+    from internal.memory.database import open_session
+
+    async with open_session() as db:
+        try:
+            await ensure_storage_config_seeded(db)
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "storage config seed failed", exc_info=True
+            )
+    try:
+        await resume_open_migration()
+    except Exception:
+        logging.getLogger(__name__).warning("resume storage migration failed", exc_info=True)
     try:
         yield
     finally:
@@ -73,10 +91,12 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(byok_router, prefix="/api")
     application.include_router(social_router, prefix="/api")
     application.include_router(oauth_callback_router, prefix="/api")
+    application.include_router(storage_router, prefix="/api")
     application.include_router(invites_router, prefix="/api")
     application.include_router(products_router, prefix="/api")
     application.include_router(proposals_router, prefix="/api")
     application.include_router(sessions_router, prefix="/api")
+    application.include_router(media_router, prefix="/api")
     application.include_router(admin_router, prefix="/api")
     application.include_router(meta_router, prefix="/api")
 

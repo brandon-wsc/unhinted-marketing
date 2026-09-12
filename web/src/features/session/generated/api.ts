@@ -526,6 +526,126 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/companies/{company_id}/storage/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Storage Config */
+        get: operations["get_storage_config_api_companies__company_id__storage_config_get"];
+        /** Put Storage Config */
+        put: operations["put_storage_config_api_companies__company_id__storage_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/storage/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Storage Connection */
+        post: operations["test_storage_connection_api_companies__company_id__storage_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/storage/migrations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Current Migration */
+        get: operations["get_current_migration_api_companies__company_id__storage_migrations_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/storage/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Migration */
+        post: operations["start_migration_api_companies__company_id__storage_migrations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/storage/migrations/{migration_id}/flip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Flip Storage Migration */
+        post: operations["flip_storage_migration_api_companies__company_id__storage_migrations__migration_id__flip_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/storage/migrations/{migration_id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rollback Storage Migration */
+        post: operations["rollback_storage_migration_api_companies__company_id__storage_migrations__migration_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/storage/migrations/{migration_id}/clean": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clean Storage Migration */
+        post: operations["clean_storage_migration_api_companies__company_id__storage_migrations__migration_id__clean_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/invites/{token}": {
         parameters: {
             query?: never;
@@ -1007,6 +1127,23 @@ export type paths = {
          * @description Traditional Confirm handler — no LLM. Adapter writes tool_receipts (ADR 0003 / 0022).
          */
         post: operations["confirm_session_api_sessions__session_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Media */
+        get: operations["get_media_api_media__key__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2773,6 +2910,113 @@ export type components = {
              */
             awaiting_image_ok: boolean;
         };
+        /** StorageConfigOut */
+        StorageConfigOut: {
+            /**
+             * Backend
+             * @enum {string}
+             */
+            backend: "local" | "s3";
+            /** Bucket */
+            bucket?: string | null;
+            /** Endpoint Url */
+            endpoint_url?: string | null;
+            /**
+             * Region
+             * @default us-east-1
+             */
+            region: string;
+            /** Public Base Url */
+            public_base_url?: string | null;
+            /** Access Key */
+            access_key?: string | null;
+            /** Secret Last4 */
+            secret_last4?: string | null;
+            /**
+             * Seeded From Env
+             * @default false
+             */
+            seeded_from_env: boolean;
+            /**
+             * Dual Write
+             * @default false
+             */
+            dual_write: boolean;
+            /**
+             * Can Migrate
+             * @default false
+             */
+            can_migrate: boolean;
+            migration?: components["schemas"]["StorageMigrationOut"] | null;
+        };
+        /** StorageConfigUpdate */
+        StorageConfigUpdate: {
+            /** Bucket */
+            bucket: string;
+            /** Endpoint Url */
+            endpoint_url?: string | null;
+            /** Region */
+            region?: string | null;
+            /** Public Base Url */
+            public_base_url?: string | null;
+            /** Access Key */
+            access_key?: string | null;
+            /** Secret Key */
+            secret_key?: string | null;
+        };
+        /** StorageMigrationOut */
+        StorageMigrationOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "validating" | "copying" | "verifying" | "ready_to_flip" | "flipping" | "completed" | "cleaning" | "done" | "failed";
+            /** Stats */
+            stats?: {
+                [key: string]: unknown;
+            };
+            /** Error Keys */
+            error_keys?: unknown[];
+            /** Error */
+            error?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** StorageTestRequest */
+        StorageTestRequest: {
+            /** Bucket */
+            bucket: string;
+            /** Endpoint Url */
+            endpoint_url?: string | null;
+            /** Region */
+            region?: string | null;
+            /** Public Base Url */
+            public_base_url?: string | null;
+            /** Access Key */
+            access_key?: string | null;
+            /** Secret Key */
+            secret_key?: string | null;
+        };
+        /** StorageTestResult */
+        StorageTestResult: {
+            /** Ok */
+            ok: boolean;
+            /** Error */
+            error?: string | null;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -4181,6 +4425,265 @@ export interface operations {
             };
         };
     };
+    get_storage_config_api_companies__company_id__storage_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConfigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_storage_config_api_companies__company_id__storage_config_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConfigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_storage_connection_api_companies__company_id__storage_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_migration_api_companies__company_id__storage_migrations_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigrationOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_migration_api_companies__company_id__storage_migrations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigrationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flip_storage_migration_api_companies__company_id__storage_migrations__migration_id__flip_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                migration_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigrationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollback_storage_migration_api_companies__company_id__storage_migrations__migration_id__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                migration_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigrationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clean_storage_migration_api_companies__company_id__storage_migrations__migration_id__clean_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                migration_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigrationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     preview_company_invite_api_invites__token__get: {
         parameters: {
             query?: never;
@@ -5166,6 +5669,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfirmSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_media_api_media__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

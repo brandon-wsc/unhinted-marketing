@@ -44,6 +44,7 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 7. Product proposals (K6): Mine propose → list → approve upserts org / reject leaves org empty; 409 pending SKU; cannot propose org or others' Mine; member cannot approve; reject then re-propose; proposer can cancel then re-propose; snapshot frozen after propose; approve replaces existing org SKU (`tests/api/test_product_proposals.py`)
 8. Product catalog: PATCH keeps extra import columns; create/patch SKU clash → 409 `sku_taken` + `suggested_sku` (no silent overwrite) (`tests/api/test_company_products.py`)
 9. Social accounts (ADR 0022): editor CRUD; member 403; response never leaks the raw token (`tests/api/test_company_social.py`). Instagram Login start/status/cancel/callback (happy path + `meta_oauth_not_professional` / `meta_oauth_missing_publish` redirects); Graph mocked, never live Meta (`tests/api/test_social_oauth.py`). Connect helpers: `tests/unit/test_meta_oauth.py`.
+10. Storage config (ADR 0025): editor GET/PUT `/storage/config` + `/test`; migrate copy → flip → rollback → clean; member 403; secret never in the response (`tests/api/test_company_storage.py`).
 
 Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from internal.media.storage import resolve_stored_url
+
 
 def image_format_from_plan(plan: dict[str, Any] | None, fallback: str = "single") -> str:
     if not plan:
@@ -27,7 +29,7 @@ def media_item_payload(
 ) -> dict[str, Any]:
     return {
         "id": str(image_id),
-        "url": url,
+        "url": resolve_stored_url(url),
         "plan": dict(plan or {}),
         "format": format,
         "role": role,

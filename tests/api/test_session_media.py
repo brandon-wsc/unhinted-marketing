@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import io
 import uuid
+from urllib.parse import urlparse
 
 import pytest
 
+from internal.memory import repos
 from tests.api.helpers import auth_header, register_user, seed_preview_session
 
 
@@ -68,10 +70,7 @@ async def test_session_media_list_plan_regen_add(client, db_session, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_session_media_remove_and_upload(client, db_session, monkeypatch) -> None:
-    monkeypatch.setattr(
-        "internal.media.storage.media_storage_configured", lambda: False
-    )
+async def test_session_media_remove_and_upload(client, db_session) -> None:
 
     data = await register_user(client)
     token = data["access_token"]
@@ -139,7 +138,17 @@ async def test_session_media_remove_and_upload(client, db_session, monkeypatch) 
     slot = up_body["media"][1]
     assert slot["id"] != pending_id
     assert slot["status"] == "ready"
-    assert slot["url"].startswith("placeholder://")
+    assert "/api/media/" in (slot["url"] or "")
+    parsed = urlparse(slot["url"])
+    fetched = await client.get(parsed.path)
+    assert fetched.status_code == 200
+    assert fetched.content == png
+    db_session.expire_all()
+    image_row = await repos.get_preview_image(db_session, uuid.UUID(slot["id"]))
+    assert image_row is not None
+    assert image_row.url is not None
+    assert image_row.url.startswith("sessions/")
+    assert not image_row.url.startswith("http")
 
     bad = await client.post(
         f"/api/sessions/{session_id}/media/{slot['id']}/upload",
@@ -147,3 +156,39 @@ async def test_session_media_remove_and_upload(client, db_session, monkeypatch) 
         files={"file": ("notes.txt", io.BytesIO(b"not-an-image"), "text/plain")},
     )
     assert bad.status_code == 400, bad.text
+
+
+@pytest.mark.asyncio
+async def test_session_media_upload_size_and_empty_guards(client, db_session) -> None:
+    """ADR 0024 §4: uploads capped at 10 MB; empty rejected."""
+    data = await register_user(client)
+    headers = auth_header(data["access_token"])
+    user_id = uuid.UUID(data["user"]["id"])
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    session_id = await seed_preview_session(
+        db_session, user_id=user_id, company_id=company_id
+    )
+
+    added = await client.post(
+        f"/api/sessions/{session_id}/media",
+        headers=headers,
+        json={"format": "single"},
+    )
+    assert added.status_code == 200, added.text
+    pending_id = added.json()["media"][1]["id"]
+
+    too_big = b"\x89PNG\r\n\x1a\n" + b"0" * (10 * 1024 * 1024)
+    big = await client.post(
+        f"/api/sessions/{session_id}/media/{pending_id}/upload",
+        headers=headers,
+        files={"file": ("big.png", io.BytesIO(too_big), "image/png")},
+    )
+    assert big.status_code == 400, big.text
+    assert "too large" in big.json()["detail"].lower()
+
+    empty = await client.post(
+        f"/api/sessions/{session_id}/media/{pending_id}/upload",
+        headers=headers,
+        files={"file": ("empty.png", io.BytesIO(b""), "image/png")},
+    )
+    assert empty.status_code == 400, empty.text

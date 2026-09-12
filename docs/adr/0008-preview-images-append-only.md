@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-05
 - **Supersedes:** Partial — extends [ADR 0001](./0001-preview-canonical-draft.md) media shape (`image_url` → `media_ids` + `preview_images`); copy fields unchanged
+- **Amended by:** [ADR 0024](./0024-media-storage-local-and-s3.md) — `url` stores an object key (or external/placeholder URL); HTTP/SSE still expose a fetchable `url`; session delete reclaims unreferenced store objects
 
 ## Context
 

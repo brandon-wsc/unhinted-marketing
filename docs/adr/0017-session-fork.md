@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-24
+- **Related:** [ADR 0008](./0008-preview-images-append-only.md) (append-only preview images), [ADR 0024](./0024-media-storage-local-and-s3.md) (session-delete GC refcounts shared fork asset keys)
 
 ## Context
 
@@ -25,6 +26,6 @@ Constraints from existing ADRs: confirm/publish stays HTTP-only with a per-revis
 - Two sessions never share an `approval_token`; confirm safety (ADR 0003) is preserved by construction.
 - Fork preview is message-anchored: forking at an older message never carries newer draft edits, and forking before any preview existed carries none. The client surfaces both via `preview_note` toasts instead of silently diverging.
 - Time-alignment relies on `preview_drafts.created_at` ordering; same-transaction writes (turn persist) share a timestamp, so `<=` is the correct inclusive bound.
-- Deleting the source session leaves forks intact (`SET NULL` + title snapshot); the source's "Forked to" chips disappear with it.
+- Deleting the source session leaves forks intact (`SET NULL` + title snapshot); the source's "Forked to" chips disappear with it. Shared preview object keys stay until the last referencing session is deleted ([ADR 0024](./0024-media-storage-local-and-s3.md) refcount GC).
 - Fork lineage is queryable in both directions from `sessions` alone; no separate table.
 - Fork count/title resolution adds one indexed query to `GET …/messages`.

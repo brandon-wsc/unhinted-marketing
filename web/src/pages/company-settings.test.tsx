@@ -52,6 +52,9 @@ vi.mock("@/features/company-settings/components/api-keys-panel", () => ({
 vi.mock("@/features/company-settings/components/instagram-panel", () => ({
   InstagramPanel: () => <div>instagram-panel</div>,
 }));
+vi.mock("@/features/company-settings/components/storage-panel", () => ({
+  StoragePanel: () => <div>storage-panel</div>,
+}));
 
 function renderSettings(path: string) {
   return render(
@@ -121,6 +124,27 @@ describe("CompanySettingsPage Instagram tab", () => {
       screen.queryByRole("button", { name: "settings.nav.instagram" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("instagram-panel")).not.toBeInTheDocument();
+    expect(screen.getByText("voice-panel")).toBeInTheDocument();
+  });
+});
+
+describe("CompanySettingsPage Storage tab", () => {
+  beforeEach(() => {
+    auth.loading = false;
+    auth.user = editorUser("owner");
+  });
+
+  it("shows the Storage tab for owners and admins", () => {
+    renderSettings("/settings?tab=storage");
+    expect(screen.getByRole("button", { name: "settings.nav.storage" })).toBeInTheDocument();
+    expect(screen.getByText("storage-panel")).toBeInTheDocument();
+  });
+
+  it("hides the Storage tab for members and falls back to voice", () => {
+    auth.user = editorUser("member");
+    renderSettings("/settings?tab=storage");
+    expect(screen.queryByRole("button", { name: "settings.nav.storage" })).not.toBeInTheDocument();
+    expect(screen.queryByText("storage-panel")).not.toBeInTheDocument();
     expect(screen.getByText("voice-panel")).toBeInTheDocument();
   });
 });

@@ -8,10 +8,18 @@ import { ApprovalsPanel } from "@/features/company-settings/components/approvals
 import { InstagramPanel } from "@/features/company-settings/components/instagram-panel";
 import { MembersPanel } from "@/features/company-settings/components/members-panel";
 import { ProductsPanel } from "@/features/company-settings/components/products-panel";
+import { StoragePanel } from "@/features/company-settings/components/storage-panel";
 import { VoiceForm } from "@/features/company-settings/components/voice-form";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "voice" | "products" | "members" | "approvals" | "models" | "instagram";
+type SettingsTab =
+  | "voice"
+  | "products"
+  | "members"
+  | "approvals"
+  | "models"
+  | "instagram"
+  | "storage";
 
 function parseTab(raw: string | null): SettingsTab {
   if (raw === "api-keys") return "models";
@@ -20,7 +28,8 @@ function parseTab(raw: string | null): SettingsTab {
     raw === "members" ||
     raw === "approvals" ||
     raw === "models" ||
-    raw === "instagram"
+    raw === "instagram" ||
+    raw === "storage"
   ) {
     return raw;
   }
@@ -94,9 +103,10 @@ export function CompanySettingsPage() {
 
   const editor = canManageTeam(org?.role);
   const nav: SettingsTab[] = editor
-    ? ["voice", "products", "members", "approvals", "models", "instagram"]
+    ? ["voice", "products", "members", "approvals", "models", "instagram", "storage"]
     : ["voice", "products", "members"];
-  const editorOnly = tab === "approvals" || tab === "models" || tab === "instagram";
+  const editorOnly =
+    tab === "approvals" || tab === "models" || tab === "instagram" || tab === "storage";
   const activeTab = editorOnly && !editor ? "voice" : tab;
 
   return (
@@ -145,6 +155,7 @@ export function CompanySettingsPage() {
           {activeTab === "approvals" && <ApprovalsPanel companyId={companyId} />}
           {activeTab === "models" && <ApiKeysPanel companyId={companyId} />}
           {activeTab === "instagram" && <InstagramPanel companyId={companyId} />}
+          {activeTab === "storage" && <StoragePanel companyId={companyId} />}
         </div>
       </div>
     </AppShell>
