@@ -1,4 +1,4 @@
-"""Media storage (ADR 0024) — local disk default, optional S3, key resolve."""
+"""Media storage (ADR 0024 + 0025) — local disk + S3 driver via snapshot, not env."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from internal.media import storage as S
-from internal.media.config import reset_snapshot_cache
+from internal.media.config import StorageSnapshot, publish_snapshot, reset_snapshot_cache
 
 TINY_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -19,6 +19,8 @@ TINY_JPEG = (
 )
 
 KEY = "sessions/abc/r1-deadbeef.png"
+S3_ENDPOINT = "https://s3.example.test"
+S3_PUBLIC = "https://cdn.example.test/media"
 
 
 @pytest.fixture(autouse=True)
@@ -37,63 +39,22 @@ def local_media(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-@pytest.fixture
-def s3_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(S.settings, "deployment_mode", "onprem")
-    monkeypatch.setattr(S.settings, "s3_endpoint_url", "http://127.0.0.1:9000")
-    monkeypatch.setattr(S.settings, "s3_access_key", "garage")
-    monkeypatch.setattr(S.settings, "s3_secret_key", "garage")
-    monkeypatch.setattr(S.settings, "s3_bucket", "unhinted-media")
-    monkeypatch.setattr(S.settings, "s3_region", "us-east-1")
-    monkeypatch.setattr(
-        S.settings, "s3_public_base_url", "http://127.0.0.1:9000/unhinted-media"
+def _s3_snap(**kwargs) -> StorageSnapshot:
+    defaults = dict(
+        backend="s3",
+        bucket="unhinted-media",
+        endpoint_url=S3_ENDPOINT,
+        region="us-east-1",
+        public_base_url=S3_PUBLIC,
+        access_key="ak",
+        secret_key="sk",
     )
-    reset_snapshot_cache()
+    defaults.update(kwargs)
+    return StorageSnapshot(**defaults)
 
 
 def test_onprem_defaults_to_local() -> None:
     assert S.media_backend() == "local"
-    assert S.media_storage_configured() is False
-    S.assert_media_storage_config()  # does not raise
-
-
-def test_onprem_s3_when_bucket_and_endpoint(s3_settings: None) -> None:
-    assert S.media_backend() == "s3"
-    assert S.media_storage_configured() is True
-
-
-def test_onprem_incomplete_s3_env_stays_local(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(S.settings, "s3_bucket", "unhinted-media")
-    monkeypatch.setattr(S.settings, "s3_endpoint_url", None)
-    reset_snapshot_cache()
-    assert S.media_backend() == "local"
-    S.assert_media_storage_config()
-
-
-def test_single_s3_key_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(S.settings, "s3_access_key", "only-access")
-    monkeypatch.setattr(S.settings, "s3_secret_key", None)
-    reset_snapshot_cache()
-    assert S.media_backend() == "local"
-
-
-def test_cloud_requires_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(S.settings, "deployment_mode", "cloud")
-    with pytest.raises(S.MediaStorageError, match="S3_BUCKET"):
-        S.media_backend()
-
-
-def test_cloud_without_endpoint_uses_virtual_host(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(S.settings, "deployment_mode", "cloud")
-    monkeypatch.setattr(S.settings, "s3_bucket", "prod-media")
-    monkeypatch.setattr(S.settings, "s3_region", "ap-east-1")
-    assert S.media_backend() == "s3"
-    assert (
-        S.public_url(KEY)
-        == f"https://prod-media.s3.ap-east-1.amazonaws.com/{KEY}"
-    )
 
 
 def test_parse_data_url_png() -> None:
@@ -120,15 +81,21 @@ def test_public_url_local_relative_when_web_base_empty(
     assert S.public_url(KEY) == f"/api/media/{KEY}"
 
 
-def test_public_object_url_s3(s3_settings: None) -> None:
-    assert S.public_object_url(KEY) == f"http://127.0.0.1:9000/unhinted-media/{KEY}"
+def test_public_url_s3_uses_snapshot() -> None:
+    publish_snapshot(_s3_snap())
+    assert S.public_object_url(KEY) == f"{S3_PUBLIC}/{KEY}"
 
 
-def test_s3_path_style_when_public_base_empty(
-    s3_settings: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(S.settings, "s3_public_base_url", None)
-    assert S.public_url(KEY) == f"http://127.0.0.1:9000/unhinted-media/{KEY}"
+def test_s3_path_style_when_public_base_empty() -> None:
+    publish_snapshot(_s3_snap(public_base_url=""))
+    assert S.public_url(KEY) == f"{S3_ENDPOINT}/unhinted-media/{KEY}"
+
+
+def test_cloud_virtual_host_when_no_endpoint() -> None:
+    publish_snapshot(
+        _s3_snap(endpoint_url="", public_base_url="", region="ap-east-1", bucket="prod-media")
+    )
+    assert S.public_url(KEY) == f"https://prod-media.s3.ap-east-1.amazonaws.com/{KEY}"
 
 
 def test_extract_and_resolve_store_key() -> None:
@@ -143,11 +110,11 @@ def test_extract_legacy_api_media_url() -> None:
     assert S.resolve_stored_url(baked) == f"https://example.test/api/media/{KEY}"
 
 
-def test_extract_legacy_s3_bases(s3_settings: None) -> None:
-    baked = f"http://127.0.0.1:9000/unhinted-media/{KEY}"
-    assert S.extract_store_key(baked) == KEY
-    monkeypatch_url = f"https://unhinted-media.s3.us-east-1.amazonaws.com/{KEY}"
-    assert S.extract_store_key(monkeypatch_url) == KEY
+def test_extract_legacy_s3_bases() -> None:
+    publish_snapshot(_s3_snap())
+    assert S.extract_store_key(f"{S3_PUBLIC}/{KEY}") == KEY
+    virtual = f"https://unhinted-media.s3.us-east-1.amazonaws.com/{KEY}"
+    assert S.extract_store_key(virtual) == KEY
 
 
 def test_extract_skips_provider_placeholder_data() -> None:
@@ -189,15 +156,12 @@ async def test_put_bytes_local_and_delete(local_media: Path) -> None:
     assert path.read_bytes() == TINY_PNG
     await S.delete_key(KEY)
     assert not path.exists()
-    # empty parents pruned up to MEDIA_ROOT
     assert not (local_media / "sessions" / "abc").exists()
     assert local_media.exists()
 
 
 @pytest.mark.asyncio
-async def test_put_bytes_s3_uploads(
-    s3_settings: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_put_bytes_s3_uploads(monkeypatch: pytest.MonkeyPatch) -> None:
     put_calls: list[dict] = []
 
     class FakeClient:
@@ -206,23 +170,22 @@ async def test_put_bytes_s3_uploads(
 
     class FakeSession:
         def client(self, *args, **kwargs):
-            assert kwargs.get("endpoint_url") == "http://127.0.0.1:9000"
+            assert kwargs.get("endpoint_url") == S3_ENDPOINT
             assert kwargs.get("config").s3["addressing_style"] == "path"
             return FakeClient()
 
     monkeypatch.setattr(S, "_boto3_session", lambda: FakeSession())
+    publish_snapshot(_s3_snap())
 
     url = await S.put_bytes(key=KEY, data=TINY_PNG, content_type="image/png")
-    assert url == f"http://127.0.0.1:9000/unhinted-media/{KEY}"
+    assert url == f"{S3_PUBLIC}/{KEY}"
     assert put_calls[0]["Bucket"] == "unhinted-media"
     assert put_calls[0]["Key"] == KEY
     assert put_calls[0]["Body"] == TINY_PNG
 
 
 @pytest.mark.asyncio
-async def test_s3_delete_treats_missing_as_success(
-    s3_settings: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_s3_delete_treats_missing_as_success(monkeypatch: pytest.MonkeyPatch) -> None:
     from botocore.exceptions import ClientError
 
     class FakeClient:
@@ -237,6 +200,7 @@ async def test_s3_delete_treats_missing_as_success(
             return FakeClient()
 
     monkeypatch.setattr(S, "_boto3_session", lambda: FakeSession())
+    publish_snapshot(_s3_snap())
     await S.delete_key(KEY)
 
 

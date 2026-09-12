@@ -110,7 +110,7 @@ async def test_put_config_never_leaks_secret(client: AsyncClient, fake_s3: FakeS
         headers=headers,
         json={
             "bucket": "unhinted-media",
-            "endpoint_url": "http://127.0.0.1:9000",
+            "endpoint_url": "https://s3.example.test",
             "region": "us-east-1",
             "access_key": "garage",
             "secret_key": SECRET,
@@ -134,7 +134,7 @@ async def test_put_config_never_leaks_secret(client: AsyncClient, fake_s3: FakeS
         headers=headers,
         json={
             "bucket": "unhinted-media-2",
-            "endpoint_url": "http://127.0.0.1:9000",
+            "endpoint_url": "https://s3.example.test",
             "region": "ap-east-1",
             "access_key": "garage2",
         },
@@ -155,7 +155,7 @@ async def test_test_connection_ok(client: AsyncClient, fake_s3: FakeS3) -> None:
         headers=headers,
         json={
             "bucket": "unhinted-media",
-            "endpoint_url": "http://127.0.0.1:9000",
+            "endpoint_url": "https://s3.example.test",
             "access_key": "garage",
             "secret_key": SECRET,
         },
@@ -181,7 +181,7 @@ async def test_migrate_copy_flip_rollback_clean(
         headers=headers,
         json={
             "bucket": "unhinted-media",
-            "endpoint_url": "http://127.0.0.1:9000",
+            "endpoint_url": "https://s3.example.test",
             "access_key": "garage",
             "secret_key": SECRET,
         },

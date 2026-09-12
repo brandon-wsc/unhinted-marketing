@@ -9,7 +9,12 @@ import pytest
 from botocore.exceptions import ClientError
 
 from internal.media import storage as S
-from internal.media.config import StorageSnapshot, publish_snapshot, reset_snapshot_cache
+from internal.media.config import (
+    StorageSnapshot,
+    publish_snapshot,
+    reset_snapshot_cache,
+    snapshot_from_env,
+)
 from internal.media.migrate import count_orphan_files, enumerate_store_keys
 
 TINY_PNG = base64.b64decode(
@@ -72,10 +77,10 @@ def _dual_snap() -> StorageSnapshot:
         backend="local",
         dual_write=True,
         dual_bucket="unhinted-media",
-        dual_endpoint_url="http://127.0.0.1:9000",
+        dual_endpoint_url="https://s3.example.test",
         dual_region="us-east-1",
-        dual_access_key="garage",
-        dual_secret_key="garage",
+        dual_access_key="ak",
+        dual_secret_key="sk",
     )
 
 
@@ -170,3 +175,26 @@ def test_count_orphan_files(local_media: Path) -> None:
     orphan = local_media / "sessions" / "abc" / "leftover.png"
     orphan.write_bytes(TINY_PNG)
     assert count_orphan_files({KEY}) == 1
+
+
+def test_env_seed_onprem_incomplete_stays_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    """S3_* is seed-only (ADR 0025); a half-set env must not select S3."""
+    monkeypatch.setattr(S.settings, "s3_bucket", "unhinted-media")
+    monkeypatch.setattr(S.settings, "s3_endpoint_url", None)
+    reset_snapshot_cache()
+    assert snapshot_from_env().backend == "local"
+
+
+def test_env_seed_ignores_single_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(S.settings, "s3_access_key", "only-access")
+    monkeypatch.setattr(S.settings, "s3_secret_key", None)
+    reset_snapshot_cache()
+    assert snapshot_from_env().backend == "local"
+    assert snapshot_from_env().access_key == ""
+
+
+def test_env_seed_cloud_requires_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(S.settings, "deployment_mode", "cloud")
+    reset_snapshot_cache()
+    with pytest.raises(RuntimeError, match="S3_BUCKET"):
+        snapshot_from_env()

@@ -43,27 +43,11 @@ def _strip(value: str | None) -> str:
 
 
 def media_backend() -> Literal["local", "s3"]:
-    """Active store from the published snapshot (DB) or env fallback (ADR 0025)."""
+    """Active store from the published snapshot (DB) or env seed fallback (ADR 0025)."""
     try:
         return get_snapshot().backend
     except RuntimeError as exc:
         raise MediaStorageError(str(exc)) from exc
-
-
-def assert_media_storage_config() -> None:
-    """First-use / portal check. Incomplete env no longer fails at process start."""
-    try:
-        media_backend()
-    except MediaStorageError as exc:
-        raise RuntimeError(str(exc)) from exc
-
-
-def media_storage_configured() -> bool:
-    """True when the S3 driver is selected (live S3 tests)."""
-    try:
-        return media_backend() == "s3"
-    except MediaStorageError:
-        return False
 
 
 def dual_write_active() -> bool:
@@ -145,24 +129,22 @@ def public_object_url(key: str) -> str:
 
 
 def _s3_peel_prefixes() -> list[str]:
+    """Peel keys from URLs under the *active* snapshot bases (not leftover env)."""
     prefixes: list[str] = []
     try:
         snap = get_snapshot()
     except RuntimeError:
-        snap = None
-    pub = _strip(snap.public_base_url if snap else settings.s3_public_base_url).rstrip("/")
+        return prefixes
+    pub = _strip(snap.public_base_url).rstrip("/")
     if pub:
         prefixes.append(pub + "/")
-    endpoint = _strip(snap.endpoint_url if snap else settings.s3_endpoint_url).rstrip("/")
-    bucket = _strip(snap.bucket if snap else settings.s3_bucket)
+    endpoint = _strip(snap.endpoint_url).rstrip("/")
+    bucket = _strip(snap.bucket)
     if endpoint and bucket:
         prefixes.append(f"{endpoint}/{bucket}/")
-    region = _strip((snap.region if snap else settings.s3_region) or "us-east-1")
+    region = _strip(snap.region) or "us-east-1"
     if bucket:
         prefixes.append(f"https://{bucket}.s3.{region}.amazonaws.com/")
-    env_pub = _strip(settings.s3_public_base_url).rstrip("/")
-    if env_pub and env_pub + "/" not in prefixes:
-        prefixes.append(env_pub + "/")
     return prefixes
 
 

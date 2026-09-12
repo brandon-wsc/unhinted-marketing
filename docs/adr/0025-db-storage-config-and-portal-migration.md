@@ -28,8 +28,8 @@ reads or writes.
 `storage_configs` is the only source of truth for the active media backend.
 Env `S3_*` vars may insert the first row on boot (`seeded_from_env`) when no
 row exists; after that they are ignored. Incomplete env no longer fails at
-process start — `assert_media_storage_config` becomes a first-use / portal
-test-connection check.
+process start. Portal `/storage/test` probes the target with put + head +
+delete.
 
 `DEPLOYMENT_MODE` still selects the family ([ADR 0023](./0023-deployment-mode-flag.md)):
 
