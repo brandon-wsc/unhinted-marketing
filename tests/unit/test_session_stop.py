@@ -210,6 +210,102 @@ async def test_stop_mid_resume_image_reparks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_resume_image_provider_error_keeps_parked() -> None:
+    """Image-gen LLM error must re-park so Retry can resume-image, not send a new turn."""
+    from internal.llm.router import LlmProviderError
+
+    discard = {
+        "pre_state": {"brief": {"summary": "x"}},
+        "user_message_id": str(uuid.uuid4()),
+        "message_ids": [],
+    }
+    session = _session(awaiting=True, turn_discard=discard)
+    session.state["draft"] = {"caption": "hi", "hashtags": [], "cta": ""}
+    session.state["brief"] = {"summary": "x", "can_do": [], "cannot_do": [], "angles": []}
+    err = LlmProviderError("bad model", model="img", kind="bad_request")
+    db = AsyncMock()
+    persist_kwargs: dict = {}
+
+    async def fake_persist(_db, sess, **kwargs):
+        persist_kwargs.update(kwargs)
+        sess.state = {
+            **dict(sess.state or {}),
+            "awaiting_image_ok": kwargs["still_interrupted"],
+            "error": err.message,
+        }
+        return {
+            "interrupted": kwargs["still_interrupted"],
+            "values": kwargs["values"],
+            "events": [],
+        }
+
+    with (
+        patch("internal.session.service.session_is_parked", AsyncMock(return_value=True)),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch(
+            "internal.session.service._invoke_graph",
+            AsyncMock(return_value=({}, False, err, [], 10)),
+        ),
+        patch("internal.session.service._persist_after_invoke", fake_persist),
+        patch(
+            "internal.session.service._repark_graph_at_image_interrupt",
+            AsyncMock(),
+        ) as repark,
+    ):
+        result = await resume_image_turn(db, session)
+
+    assert persist_kwargs["still_interrupted"] is True
+    assert persist_kwargs["provider_error"] is err
+    repark.assert_awaited_once()
+    assert result["interrupted"] is True
+    assert session.state["awaiting_image_ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_persist_resume_keeps_turn_discard_and_emits_parked_on_llm_error() -> None:
+    from internal.llm.router import LlmProviderError
+    from internal.session.service import _persist_after_invoke
+
+    discard = {
+        "pre_state": {"brief": {"summary": "keep"}},
+        "user_message_id": str(uuid.uuid4()),
+        "message_ids": [],
+    }
+    session = _session(awaiting=True, turn_discard=discard)
+    session.state["draft"] = {"caption": "hi", "hashtags": [], "cta": ""}
+    err = LlmProviderError("nope", model="img", kind="bad_request")
+    db = AsyncMock()
+    published: list = []
+
+    with patch(
+        "internal.session.service.session_event_bus.publish_many",
+        AsyncMock(side_effect=lambda _sid, evs: published.extend(evs)),
+    ):
+        await _persist_after_invoke(
+            db,
+            session,
+            user_msg=None,
+            message_dicts=[],
+            values={"error": err.message, "messages": [], "draft": session.state["draft"]},
+            still_interrupted=True,
+            progress_events=[],
+            provider_error=err,
+            user_content="",
+            pre_state={"draft": session.state["draft"]},
+            entry=None,
+        )
+
+    assert session.state["awaiting_image_ok"] is True
+    assert session.state["turn_discard"] == discard
+    types = [e["type"] for e in published]
+    assert "llm.failed" in types
+    assert "draft.awaiting_image_ok" in types
+
+
+@pytest.mark.asyncio
 async def test_restore_parked_after_resume_cancel_sets_flag() -> None:
     from internal.session.service import _restore_parked_after_resume_cancel
 

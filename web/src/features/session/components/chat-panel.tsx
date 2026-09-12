@@ -43,9 +43,11 @@ import {
   agentNodeLabelKey,
   agentTrailHeader,
   isConfirmSuccessStatus,
+  lastAgentActionNode,
   MAX_QUEUED_SESSION_MESSAGES,
   parseTurnDurationMs,
   QUEUE_TUCK_PX,
+  shouldRetryResumeImage,
 } from "@/features/session/session-helpers";
 import {
   getSessionChatRatio,
@@ -311,10 +313,20 @@ export function ChatPanel() {
     setEditInsertAt(null);
   }
 
-  async function onRetryUserMessage(content: string) {
-    if (!content.trim() || stopping) return;
+  async function onRetryLlmError(content?: string | null) {
+    if (stopping) return;
     if (sending && queueFull) return;
     try {
+      if (
+        shouldRetryResumeImage({
+          awaitingImageOk,
+          lastAgentNode: lastAgentActionNode(agentActions),
+        })
+      ) {
+        await resumeImage();
+        return;
+      }
+      if (!content?.trim()) return;
       await sendMessage(content);
     } catch {
       showError(t("chat.error.sendFailed"));
@@ -531,9 +543,12 @@ export function ChatPanel() {
                     <ChatMessageItem
                       message={m}
                       now={now}
-                      retryContent={prevUser}
                       retryDisabled={stopping || (sending && queueFull)}
-                      onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
+                      onRetry={
+                        prevUser || awaitingImageOk
+                          ? () => void onRetryLlmError(prevUser)
+                          : undefined
+                      }
                       onFork={() => void onForkMessage(m.id)}
                       forkDisabled={forking || stopping || sending}
                       onOpenFork={(id) => handleSelectSession(id)}
@@ -611,8 +626,8 @@ export function ChatPanel() {
                 message={llmError}
                 retryDisabled={stopping || (sending && queueFull)}
                 onRetry={
-                  findLastUserContent(messages)
-                    ? () => void onRetryUserMessage(findLastUserContent(messages)!)
+                  findLastUserContent(messages) || awaitingImageOk
+                    ? () => void onRetryLlmError(findLastUserContent(messages))
                     : undefined
                 }
               />
@@ -1044,7 +1059,6 @@ function ChatMessageItem({
   message,
   now,
   onRetry,
-  retryContent,
   retryDisabled,
   onFork,
   forkDisabled,
@@ -1053,7 +1067,6 @@ function ChatMessageItem({
   message: ChatMessage;
   now: Date;
   onRetry?: () => void;
-  retryContent?: string | null;
   retryDisabled?: boolean;
   onFork?: () => void;
   forkDisabled?: boolean;
@@ -1078,11 +1091,7 @@ function ChatMessageItem({
   }
   if (isLlmErrorContent(message.content)) {
     return (
-      <LlmErrorCard
-        message={message.content}
-        onRetry={retryContent ? onRetry : undefined}
-        retryDisabled={retryDisabled}
-      />
+      <LlmErrorCard message={message.content} onRetry={onRetry} retryDisabled={retryDisabled} />
     );
   }
   return (

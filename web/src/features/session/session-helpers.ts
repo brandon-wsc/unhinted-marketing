@@ -213,6 +213,25 @@ export function agentActionsFromMessages(messages: ChatMessage[]): AgentActionRe
   return out;
 }
 
+const IMAGE_RETRY_NODES = new Set(["executor_image_plan", "executor_image_gen"]);
+
+/** Image-gen LLM errors should resume-image, not resend the last chat turn. */
+export function shouldRetryResumeImage(opts: {
+  awaitingImageOk: boolean;
+  lastAgentNode?: string | null;
+}): boolean {
+  if (opts.awaitingImageOk) return true;
+  return IMAGE_RETRY_NODES.has(opts.lastAgentNode ?? "");
+}
+
+export function lastAgentActionNode(actions: AgentActionRecord[]): string | null {
+  for (let i = actions.length - 1; i >= 0; i -= 1) {
+    const node = actions[i]?.node;
+    if (node) return node;
+  }
+  return null;
+}
+
 /** User message id that owns the preview turn (`executor_image_gen`), else last user. */
 export function previewAnchorFromActions(
   actions: AgentActionRecord[],

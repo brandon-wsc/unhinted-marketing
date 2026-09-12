@@ -508,14 +508,18 @@ async def _persist_after_invoke(
         # UI hydrate: interrupt_before executor_image_plan
         "awaiting_image_ok": still_interrupted,
     }
-    if still_interrupted and user_msg is not None:
-        next_state["turn_discard"] = {
-            "pre_state": _strip_discard_meta(pre_state),
-            "user_message_id": str(user_msg.id),
-            "message_ids": [
-                str(mid) for mid in (entry.message_ids if entry else [user_msg.id])
-            ],
-        }
+    if still_interrupted:
+        if user_msg is not None:
+            next_state["turn_discard"] = {
+                "pre_state": _strip_discard_meta(pre_state),
+                "user_message_id": str(user_msg.id),
+                "message_ids": [
+                    str(mid) for mid in (entry.message_ids if entry else [user_msg.id])
+                ],
+            }
+        elif isinstance((session.state or {}).get("turn_discard"), dict):
+            # resume-image: keep the original park discard metadata (ADR 0004).
+            next_state["turn_discard"] = dict(session.state["turn_discard"])
     session.state = next_state
 
     events: list[dict[str, Any]] = list(progress_events)
@@ -533,6 +537,14 @@ async def _persist_after_invoke(
                 }
             )
 
+    if still_interrupted:
+        events.append(
+            {
+                "type": "draft.awaiting_image_ok",
+                "data": {"awaiting": True},
+            }
+        )
+
     if not provider_error:
         if values.get("brief"):
             events.append({"type": "brief.updated", "data": values["brief"]})
@@ -549,14 +561,7 @@ async def _persist_after_invoke(
             events.append(
                 {"type": "draft.image_plan_updated", "data": values["image_plan"]}
             )
-        if still_interrupted:
-            events.append(
-                {
-                    "type": "draft.awaiting_image_ok",
-                    "data": {"awaiting": True},
-                }
-            )
-        elif values.get("image_url"):
+        if not still_interrupted and values.get("image_url"):
             events.append(
                 {"type": "draft.updated", "data": {"image_url": values["image_url"]}}
             )
@@ -871,6 +876,18 @@ async def resume_image_turn(
             user_content="",
             message_dicts=message_dicts,
         )
+        if provider_error:
+            # Keep Generate-image CTA so Retry can POST /resume-image instead of
+            # a new chat turn. Checkpoint after a failed gen node may have no
+            # interrupt; re-seat like Stop mid-resume.
+            still_interrupted = True
+            values = {
+                **_strip_discard_meta(parked_restore),
+                **values,
+                "need_image": True,
+                "error": values.get("error") or provider_error.message,
+                "messages": values.get("messages") or message_dicts,
+            }
         result = await _persist_after_invoke(
             db,
             session,
@@ -885,6 +902,12 @@ async def resume_image_turn(
             entry=entry,
             duration_ms=duration_ms,
         )
+        if provider_error:
+            await _repark_graph_at_image_interrupt(db, session)
+            parked = dict(session.state or {})
+            parked["awaiting_image_ok"] = True
+            session.state = parked
+            result["interrupted"] = True
         return result
     except asyncio.CancelledError:
         await _restore_parked_after_resume_cancel(
