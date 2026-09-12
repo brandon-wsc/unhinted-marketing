@@ -123,3 +123,63 @@ async def test_delete_session_skips_keys_still_used_by_fork(client, db_session) 
     root = Path(settings.media_root)
     leftover = list(root.rglob("*.png")) if root.exists() else []
     assert leftover == []
+
+
+@pytest.mark.asyncio
+async def test_delete_session_still_commits_when_gc_collect_fails(
+    client, db_session, monkeypatch
+) -> None:
+    """Failed key collect skips reclaim but never blocks the delete (ADR 0024 §5)."""
+    import cmd.api.routes.sessions as session_routes
+
+    async def boom(db, session_id):
+        raise RuntimeError("collect exploded")
+
+    monkeypatch.setattr(session_routes, "collect_session_store_keys", boom)
+
+    data = await register_user(client)
+    headers = auth_header(data["access_token"])
+    user_id = uuid.UUID(data["user"]["id"])
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    session_id = await seed_preview_session(
+        db_session, user_id=user_id, company_id=company_id
+    )
+    _url, path = await _upload_second_slot(client, headers, session_id)
+
+    deleted = await client.delete(f"/api/sessions/{session_id}", headers=headers)
+    assert deleted.status_code == 204
+    # Orphan bytes are acceptable — the object is left behind, not a dangling ref.
+    assert (await client.get(path)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_delete_session_object_delete_runs_after_commit(
+    client, db_session, session_factory, monkeypatch
+) -> None:
+    """Crash-safety invariant: object delete runs after the DB commit (ADR 0024 §5)."""
+    from internal.media import gc as gc_mod
+    from internal.memory import repos
+
+    real_delete = gc_mod.delete_key
+    seen_committed: list[bool] = []
+
+    async def spy_delete(key: str) -> None:
+        async with session_factory() as db:
+            seen_committed.append(await repos.get_session(db, session_id) is None)
+        await real_delete(key)
+
+    monkeypatch.setattr(gc_mod, "delete_key", spy_delete)
+
+    data = await register_user(client)
+    headers = auth_header(data["access_token"])
+    user_id = uuid.UUID(data["user"]["id"])
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    session_id = await seed_preview_session(
+        db_session, user_id=user_id, company_id=company_id
+    )
+    _url, path = await _upload_second_slot(client, headers, session_id)
+
+    deleted = await client.delete(f"/api/sessions/{session_id}", headers=headers)
+    assert deleted.status_code == 204
+    assert seen_committed and all(seen_committed)
+    assert (await client.get(path)).status_code == 404

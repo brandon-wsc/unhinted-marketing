@@ -249,3 +249,35 @@ def test_sniff_image_bytes() -> None:
     assert S.sniff_image_bytes(TINY_PNG) == ("image/png", "png")
     assert S.sniff_image_bytes(TINY_JPEG) == ("image/jpeg", "jpg")
     assert S.sniff_image_bytes(b"not-an-image") is None
+
+
+def test_sniff_image_bytes_gif_webp() -> None:
+    assert S.sniff_image_bytes(b"GIF87a" + b"\x00" * 8) == ("image/gif", "gif")
+    assert S.sniff_image_bytes(b"GIF89a" + b"\x00" * 8) == ("image/gif", "gif")
+    webp = b"RIFF" + b"\x00" * 4 + b"WEBP" + b"\x00" * 4
+    assert S.sniff_image_bytes(webp) == ("image/webp", "webp")
+    assert S.sniff_image_bytes(b"RIFF" + b"\x00" * 4 + b"AVI ") is None
+
+
+def test_media_object_key_unique_per_call() -> None:
+    """r{revision}-{hex}: concurrent regen/upload never overwrites the same bytes."""
+    first = S.media_object_key(session_id="s1", revision=3, ext="png")
+    second = S.media_object_key(session_id="s1", revision=3, ext="png")
+    assert first != second
+
+
+def test_extract_store_key_rejects_non_key_under_media_prefix() -> None:
+    """A /api/media/ URL whose tail is not a store key is a provider ref, not ours."""
+    assert S.extract_store_key("/api/media/not-a-key.png") is None
+    assert S.extract_store_key("https://cdn.example/api/media/not-a-key.png") is None
+    assert S.extract_store_key("/api/media/../etc/passwd") is None
+
+
+def test_resolve_re_derives_after_web_base_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Changing WEB_BASE_URL applies to old rows on the next read (no backfill)."""
+    stored = KEY
+    assert S.resolve_stored_url(stored) == f"https://example.test/api/media/{KEY}"
+    monkeypatch.setattr(S.settings, "web_base_url", "https://new.example")
+    assert S.resolve_stored_url(stored) == f"https://new.example/api/media/{KEY}"
