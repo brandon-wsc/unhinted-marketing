@@ -381,6 +381,7 @@ def _wrap_http_image_error(response: httpx.Response, *, model: str) -> LlmProvid
             kind="unsupported",
         )
     if 400 <= code < 500:
+        logger.warning("image HTTP %s for %s: %s", code, model, text[:500])
         return LlmProviderError(
             f"LLM rejected the request for {model} (bad model id or unsupported params). Check LLM_*_MODEL.",
             model=model,
@@ -810,7 +811,6 @@ async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
                         source=source,
                         model=catalog,
                         prompt=prompt,
-                        size=size,
                         timeout=timeout,
                     )
                 except Exception as exc:

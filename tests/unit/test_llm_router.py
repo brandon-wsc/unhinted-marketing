@@ -564,6 +564,7 @@ async def test_generate_image_dedicated_catalog_skips_litellm(
     assert url == "data:image/png;base64,iVBORw0KGgo"
     assert posted["model"] == "bytedance-seed/seedream-4.5"
     assert posted["prompt"] == "HK cafe"
+    assert "size" not in posted
     rec = recorded[0]
     assert rec.model == "bytedance-seed/seedream-4.5"
     assert rec.status == "ok"

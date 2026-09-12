@@ -535,3 +535,4 @@ async def test_probe_image_model_live_dedicated_skips_litellm(
     result = await probe_image_model_live(P(), "bytedance-seed/seedream-4.5")  # type: ignore[arg-type]
     assert result.ok is True
     assert posted["model"] == "bytedance-seed/seedream-4.5"
+    assert "size" not in posted

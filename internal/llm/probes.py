@@ -492,7 +492,6 @@ async def probe_image_model_live(provider: ByokProvider, model_id: str) -> ByokP
                     source="org",
                     model=catalog,
                     prompt="ping",
-                    size="1024x1024",
                     timeout=timeout,
                 )
             except Exception as exc:  # noqa: BLE001 — httpx / SSRF

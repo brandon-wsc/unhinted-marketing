@@ -158,14 +158,34 @@ async def post_dedicated_image(
     source: Source,
     model: str,
     prompt: str,
-    size: str,
     timeout: float,
+    size: str | None = None,
 ) -> httpx.Response:
+    """POST ``{base}/images``. Drop the DALL·E default ``1024x1024``.
+
+    Catalog clones (Seedream) take ``1K`` / ``2K`` / ``4K`` or omit size.
+    """
+    body: dict[str, Any] = {"model": model, "prompt": prompt}
+    sized = _dedicated_size(size)
+    if sized:
+        body["size"] = sized
     return await compat_http(
         "POST",
         compat_images_generate_url(api_base),
         source=source,
         api_key=api_key,
-        json={"model": model, "prompt": prompt, "size": size},
+        json=body,
         timeout=timeout,
     )
+
+
+def _dedicated_size(size: str | None) -> str | None:
+    raw = (size or "").strip()
+    if not raw:
+        return None
+    upper = raw.upper()
+    if upper in {"512", "1K", "2K", "4K"}:
+        return upper
+    if raw.lower() == "1024x1024":
+        return None
+    return raw

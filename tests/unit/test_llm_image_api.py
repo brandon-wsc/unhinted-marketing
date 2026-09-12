@@ -146,3 +146,45 @@ async def test_env_compat_http_skips_ssrf(monkeypatch: pytest.MonkeyPatch) -> No
     )
     assert response.status_code == 200
     assert response.json() == {"ok": True}
+
+
+def test_dedicated_size_drops_dalle_default() -> None:
+    assert I._dedicated_size(None) is None
+    assert I._dedicated_size("1024x1024") is None
+    assert I._dedicated_size("2K") == "2K"
+    assert I._dedicated_size("2048x2048") == "2048x2048"
+
+
+@pytest.mark.asyncio
+async def test_post_dedicated_image_omits_dalle_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bodies: list[dict[str, object]] = []
+
+    async def fake_http(method: str, url: str, **kwargs: Any) -> httpx.Response:
+        bodies.append(kwargs.get("json") or {})
+        return httpx.Response(200, json={"data": []}, request=httpx.Request(method, url))
+
+    monkeypatch.setattr(I, "compat_http", fake_http)
+    await I.post_dedicated_image(
+        api_base="https://openrouter.ai/api/v1",
+        api_key="sk",
+        source="env",
+        model="bytedance-seed/seedream-4.5",
+        prompt="a rabbit",
+        timeout=8.0,
+        size="1024x1024",
+    )
+    assert bodies == [
+        {"model": "bytedance-seed/seedream-4.5", "prompt": "a rabbit"},
+    ]
+    await I.post_dedicated_image(
+        api_base="https://openrouter.ai/api/v1",
+        api_key="sk",
+        source="env",
+        model="bytedance-seed/seedream-4.5",
+        prompt="a rabbit",
+        timeout=8.0,
+        size="2K",
+    )
+    assert bodies[-1]["size"] == "2K"
