@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
+import { InterruptCard } from "@/features/session/components/interrupt-card";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
@@ -43,9 +44,11 @@ import {
   agentNodeLabelKey,
   agentTrailHeader,
   isConfirmSuccessStatus,
+  lastAgentActionNode,
   MAX_QUEUED_SESSION_MESSAGES,
   parseTurnDurationMs,
   QUEUE_TUCK_PX,
+  shouldRetryResumeImage,
 } from "@/features/session/session-helpers";
 import {
   getSessionChatRatio,
@@ -311,10 +314,20 @@ export function ChatPanel() {
     setEditInsertAt(null);
   }
 
-  async function onRetryUserMessage(content: string) {
-    if (!content.trim() || stopping) return;
+  async function onRetryLlmError(content?: string | null) {
+    if (stopping) return;
     if (sending && queueFull) return;
     try {
+      if (
+        shouldRetryResumeImage({
+          awaitingImageOk,
+          lastAgentNode: lastAgentActionNode(agentActions),
+        })
+      ) {
+        await resumeImage();
+        return;
+      }
+      if (!content?.trim()) return;
       await sendMessage(content);
     } catch {
       showError(t("chat.error.sendFailed"));
@@ -531,9 +544,12 @@ export function ChatPanel() {
                     <ChatMessageItem
                       message={m}
                       now={now}
-                      retryContent={prevUser}
                       retryDisabled={stopping || (sending && queueFull)}
-                      onRetry={prevUser ? () => void onRetryUserMessage(prevUser) : undefined}
+                      onRetry={
+                        prevUser || awaitingImageOk
+                          ? () => void onRetryLlmError(prevUser)
+                          : undefined
+                      }
                       onFork={() => void onForkMessage(m.id)}
                       forkDisabled={forking || stopping || sending}
                       onOpenFork={(id) => handleSelectSession(id)}
@@ -611,8 +627,8 @@ export function ChatPanel() {
                 message={llmError}
                 retryDisabled={stopping || (sending && queueFull)}
                 onRetry={
-                  findLastUserContent(messages)
-                    ? () => void onRetryUserMessage(findLastUserContent(messages)!)
+                  findLastUserContent(messages) || awaitingImageOk
+                    ? () => void onRetryLlmError(findLastUserContent(messages))
                     : undefined
                 }
               />
@@ -932,65 +948,6 @@ function BriefCard({ brief }: { brief: SessionBrief }) {
   );
 }
 
-function InterruptCard({
-  sending,
-  onResume,
-}: {
-  sending: boolean;
-  onResume: (format?: "single" | "comic_4panel") => void;
-}) {
-  const { t } = useTranslation();
-  const [format, setFormat] = useState<"single" | "comic_4panel">("single");
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-primary/40 bg-card p-4 text-sm shadow-sm">
-      <div>
-        <p className="font-medium text-foreground">{t("chat.agent.interrupt.title")}</p>
-        <p className="mt-0.5 text-muted-foreground">{t("chat.agent.interrupt.subtitle")}</p>
-      </div>
-      <div
-        className="flex flex-wrap gap-2"
-        role="group"
-        aria-label={t("chat.agent.interrupt.formatLabel")}
-      >
-        <Button
-          type="button"
-          variant={format === "single" ? "default" : "outline"}
-          disabled={sending}
-          className={
-            format === "single" ? "ring-2 ring-primary ring-offset-2 ring-offset-card" : undefined
-          }
-          onClick={() => setFormat("single")}
-          aria-pressed={format === "single"}
-        >
-          {t("chat.agent.interrupt.formatSingle")}
-        </Button>
-        <Button
-          type="button"
-          variant={format === "comic_4panel" ? "default" : "outline"}
-          disabled={sending}
-          className={
-            format === "comic_4panel"
-              ? "ring-2 ring-primary ring-offset-2 ring-offset-card"
-              : undefined
-          }
-          onClick={() => setFormat("comic_4panel")}
-          aria-pressed={format === "comic_4panel"}
-        >
-          {t("chat.agent.interrupt.formatComic")}
-        </Button>
-      </div>
-      <Button
-        type="button"
-        disabled={sending}
-        className="shrink-0 self-start"
-        onClick={() => onResume(format)}
-      >
-        {t("chat.agent.interrupt.confirm")}
-      </Button>
-    </div>
-  );
-}
-
 function isLlmErrorContent(content: string): boolean {
   return content.startsWith("AI 服務暫時唔可用") || content.startsWith("AI service unavailable");
 }
@@ -1044,7 +1001,6 @@ function ChatMessageItem({
   message,
   now,
   onRetry,
-  retryContent,
   retryDisabled,
   onFork,
   forkDisabled,
@@ -1053,7 +1009,6 @@ function ChatMessageItem({
   message: ChatMessage;
   now: Date;
   onRetry?: () => void;
-  retryContent?: string | null;
   retryDisabled?: boolean;
   onFork?: () => void;
   forkDisabled?: boolean;
@@ -1078,11 +1033,7 @@ function ChatMessageItem({
   }
   if (isLlmErrorContent(message.content)) {
     return (
-      <LlmErrorCard
-        message={message.content}
-        onRetry={retryContent ? onRetry : undefined}
-        retryDisabled={retryDisabled}
-      />
+      <LlmErrorCard message={message.content} onRetry={onRetry} retryDisabled={retryDisabled} />
     );
   }
   return (

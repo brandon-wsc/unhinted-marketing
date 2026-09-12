@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from internal.llm.probes import (
@@ -491,3 +492,47 @@ def test_express_client_vertexai_true_no_project(monkeypatch: pytest.MonkeyPatch
     assert "location" not in captured
     assert captured["http_options"].timeout == VE.VERTEX_EXPRESS_PROBE_TIMEOUT_MS
     assert captured["http_options"].retry_options.attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_probe_image_model_live_dedicated_skips_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from internal.llm.image_api import reset_compat_image_api_cache
+    from internal.llm.probes import probe_image_model_live
+
+    reset_compat_image_api_cache()
+    monkeypatch.setattr("internal.llm.probes.decrypt_key", lambda _: "sk-org")
+    monkeypatch.setattr(
+        "internal.llm.image_api.resolve_compat_image_api",
+        AsyncMock(return_value="dedicated"),
+    )
+
+    posted: dict[str, object] = {}
+
+    async def fake_post(**kwargs: object) -> httpx.Response:
+        posted.update(kwargs)
+        return httpx.Response(
+            200,
+            json={"data": [{"b64_json": "abc"}]},
+            request=httpx.Request("POST", "https://openrouter.ai/api/v1/images"),
+        )
+
+    monkeypatch.setattr("internal.llm.image_api.post_dedicated_image", fake_post)
+
+    async def boom(**_kwargs: object) -> None:
+        raise AssertionError("LiteLLM must not run")
+
+    monkeypatch.setattr("litellm.aimage_generation", boom)
+
+    class P:
+        provider_type = "openai_compatible"
+        api_base = "https://openrouter.ai/api/v1"
+        api_key_encrypted = "cipher"
+
+    result = await probe_image_model_live(P(), "bytedance-seed/seedream-4.5")  # type: ignore[arg-type]
+    assert result.ok is True
+    assert posted["model"] == "bytedance-seed/seedream-4.5"
+    assert "size" not in posted

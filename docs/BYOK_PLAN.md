@@ -59,7 +59,7 @@ Everything today runs on **Chat Completions + Images API** — no Responses API 
 - Router: `litellm.acompletion` (`messages` array, streamed deltas) for all chat/JSON calls.
 - Harness: `OpenAIChatModel` / `AnthropicModel` — Pydantic AI's Chat Completions path,
   not `OpenAIResponsesModel`.
-- Images: `litellm.aimage_generation` (`/v1/images/generations`).
+- Images: `GET {api_base}/images/models` 200 JSON → `POST {api_base}/images` (catalog id, httpx, `{model, prompt}` — no DALL·E `size`). Otherwise LiteLLM `aimage_generation` (`/v1/images/generations`). No `openrouter/` model prefix; clones stay `openai_compatible`.
 
 This is BYOK-friendly **by accident, and we now treat it as deliberate**: third-party
 OpenAI-compatible providers (DeepSeek, OpenRouter, Azure, local gateways) almost

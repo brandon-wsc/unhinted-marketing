@@ -7,11 +7,36 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from litellm.exceptions import BadRequestError, NotFoundError
 
 from internal.llm import recorder
 from internal.llm import router as R
+from internal.llm.resolve import ResolvedModel
+
+
+def _openai_image(
+    model_id: str,
+    *,
+    api_base: str | None = None,
+    provider_type: str = "openai",
+    source: str = "env",
+) -> ResolvedModel:
+    return ResolvedModel(
+        model_id=model_id,
+        api_key="sk-test",
+        api_base=api_base,
+        provider_type=provider_type,  # type: ignore[arg-type]
+        source=source,  # type: ignore[arg-type]
+        key_last4="test",
+    )
+
+
+def _stub_image(monkeypatch: pytest.MonkeyPatch, resolved: ResolvedModel) -> None:
+    monkeypatch.setattr(R, "resolve_image_model", lambda: resolved.model_id)
+    monkeypatch.setattr(R, "resolve_image", lambda: resolved)
+    monkeypatch.setattr(R, "configure_litellm", lambda: None)
 
 
 def test_wrap_unsupported_image_bad_request() -> None:
@@ -47,9 +72,7 @@ async def test_generate_image_requires_model(monkeypatch: pytest.MonkeyPatch) ->
 async def test_generate_image_rejects_chat_only_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(R, "resolve_image_model", lambda: "deepseek-v4-flash")
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    _stub_image(monkeypatch, _openai_image("deepseek-v4-flash"))
 
     async def boom(**_kwargs):
         raise BadRequestError(
@@ -67,9 +90,7 @@ async def test_generate_image_rejects_chat_only_model(
 
 @pytest.mark.asyncio
 async def test_generate_image_returns_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(R, "resolve_image_model", lambda: "dall-e-3")
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    _stub_image(monkeypatch, _openai_image("dall-e-3"))
 
     item = MagicMock()
     item.url = "https://cdn.example/a.png"
@@ -88,9 +109,13 @@ async def test_generate_image_returns_url(monkeypatch: pytest.MonkeyPatch) -> No
 async def test_generate_image_normalizes_gemini_inline_b64(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(R, "resolve_image_model", lambda: "imagen-3.0-generate-002")
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    _stub_image(
+        monkeypatch,
+        _openai_image(
+            "imagen-3.0-generate-002",
+            provider_type="gemini",
+        ),
+    )
 
     response = {
         "candidates": [
@@ -386,9 +411,7 @@ async def test_record_picks_up_call_context(
 async def test_generate_image_records_provider_error(
     monkeypatch: pytest.MonkeyPatch, recorded: list
 ) -> None:
-    monkeypatch.setattr(R, "resolve_image_model", lambda: "deepseek-v4-flash")
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    _stub_image(monkeypatch, _openai_image("deepseek-v4-flash"))
 
     async def boom(**_kwargs):
         raise BadRequestError(
@@ -503,3 +526,74 @@ async def test_generate_image_config_error_not_recorded(
     with pytest.raises(R.LlmProviderError):
         await R.generate_image(prompt="x")
     assert recorded == []
+
+
+@pytest.mark.asyncio
+async def test_generate_image_dedicated_catalog_skips_litellm(
+    monkeypatch: pytest.MonkeyPatch, recorded: list
+) -> None:
+    _stub_image(
+        monkeypatch,
+        _openai_image(
+            "openrouter/bytedance-seed/seedream-4.5",
+            api_base="https://openrouter.ai/api/v1",
+            provider_type="openai_compatible",
+            source="env",
+        ),
+    )
+    monkeypatch.setattr(R, "resolve_compat_image_api", AsyncMock(return_value="dedicated"))
+
+    posted: dict[str, object] = {}
+
+    async def fake_post(**kwargs):
+        posted.update(kwargs)
+        return httpx.Response(
+            200,
+            json={"data": [{"b64_json": "iVBORw0KGgo"}]},
+            request=httpx.Request("POST", "https://openrouter.ai/api/v1/images"),
+        )
+
+    monkeypatch.setattr(R, "post_dedicated_image", fake_post)
+
+    async def boom(**_kwargs):
+        raise AssertionError("LiteLLM must not run for dedicated images")
+
+    monkeypatch.setattr(R.litellm, "aimage_generation", boom)
+
+    url = await R.generate_image(prompt="HK cafe")
+    assert url == "data:image/png;base64,iVBORw0KGgo"
+    assert posted["model"] == "bytedance-seed/seedream-4.5"
+    assert posted["prompt"] == "HK cafe"
+    assert "size" not in posted
+    rec = recorded[0]
+    assert rec.model == "bytedance-seed/seedream-4.5"
+    assert rec.status == "ok"
+
+
+@pytest.mark.asyncio
+async def test_generate_image_compat_without_catalog_uses_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_image(
+        monkeypatch,
+        _openai_image(
+            "dall-e-3",
+            api_base="https://api.deepseek.com",
+            provider_type="openai_compatible",
+        ),
+    )
+    monkeypatch.setattr(R, "resolve_compat_image_api", AsyncMock(return_value="generations"))
+
+    item = MagicMock()
+    item.url = "https://cdn.example/a.png"
+    item.b64_json = None
+    response = MagicMock()
+    response.data = [item]
+    monkeypatch.setattr(R.litellm, "aimage_generation", AsyncMock(return_value=response))
+
+    async def no_post(**_kwargs):
+        raise AssertionError("dedicated POST must not run")
+
+    monkeypatch.setattr(R, "post_dedicated_image", no_post)
+    url = await R.generate_image(prompt="x")
+    assert url == "https://cdn.example/a.png"

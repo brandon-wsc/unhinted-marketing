@@ -22,7 +22,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0017](./0017-session-fork.md) | Session fork (branch a chat at an assistant message) | Accepted |
 | [0018](./0018-recommended-questions-worker-graph.md) | Recommended questions worker graph + fill contract | Accepted |
 | [0019](./0019-pydantic-ai-inner-harness.md) | Pydantic AI inner harness; session graph narrows to mode/lifecycle | Accepted |
-| [0020](./0020-org-byok-keys-models-routing.md) | Org BYOK: provider keys, model registry, per-tier routing | Accepted (enum + Completions-only surface amended by 0021) |
+| [0020](./0020-org-byok-keys-models-routing.md) | Org BYOK: provider keys, model registry, per-tier routing | Accepted (enum + Completions-only surface amended by 0021; compat image path 2026-09-12) |
 | [0021](./0021-org-byok-native-gemini.md) | Org BYOK: native Gemini + Vertex Express | Accepted |
 | [0022](./0022-real-publish-instagram.md) | Real publish: Instagram adapter, org social accounts, receipt status | Accepted |
 

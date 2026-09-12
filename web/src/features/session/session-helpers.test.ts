@@ -9,6 +9,7 @@ import {
   EMPTY_COMPOSER_DRAFT,
   isConfirmSuccessStatus,
   isUserFacingAgentNode,
+  lastAgentActionNode,
   MAX_QUEUED_SESSION_MESSAGES,
   mergePreviewDraft,
   newActionId,
@@ -21,6 +22,7 @@ import {
   parseTurnDurationMs,
   previewAnchorFromActions,
   readComposerDraft,
+  shouldRetryResumeImage,
   sortSessionHistory,
   stashComposerDraft,
   waitForSseReady,
@@ -152,6 +154,59 @@ describe("parseTurnDurationMs", () => {
     expect(parseTurnDurationMs({})).toBeNull();
     expect(parseTurnDurationMs({ duration_ms: -1 })).toBeNull();
     expect(parseTurnDurationMs({ duration_ms: "41" })).toBeNull();
+  });
+});
+
+describe("shouldRetryResumeImage", () => {
+  it("resumes image when parked at the Generate-image CTA", () => {
+    expect(shouldRetryResumeImage({ awaitingImageOk: true })).toBe(true);
+    expect(shouldRetryResumeImage({ awaitingImageOk: true, lastAgentNode: "chat" })).toBe(true);
+  });
+
+  it("resumes image after a failed image-plan / image-gen node", () => {
+    expect(
+      shouldRetryResumeImage({
+        awaitingImageOk: false,
+        lastAgentNode: "executor_image_gen",
+      }),
+    ).toBe(true);
+    expect(
+      shouldRetryResumeImage({
+        awaitingImageOk: false,
+        lastAgentNode: "executor_image_plan",
+      }),
+    ).toBe(true);
+  });
+
+  it("resends chat when the error is not an image-gen failure", () => {
+    expect(shouldRetryResumeImage({ awaitingImageOk: false })).toBe(false);
+    expect(shouldRetryResumeImage({ awaitingImageOk: false, lastAgentNode: "chat" })).toBe(false);
+  });
+});
+
+describe("lastAgentActionNode", () => {
+  it("returns the last action node", () => {
+    expect(lastAgentActionNode([])).toBeNull();
+    expect(
+      lastAgentActionNode([
+        {
+          id: "1",
+          node: "chat",
+          model_tier: null,
+          model: null,
+          status: "done",
+          afterMessageId: "u1",
+        },
+        {
+          id: "2",
+          node: "executor_image_gen",
+          model_tier: null,
+          model: null,
+          status: "done",
+          afterMessageId: "u1",
+        },
+      ]),
+    ).toBe("executor_image_gen");
   });
 });
 

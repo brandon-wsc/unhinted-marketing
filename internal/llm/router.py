@@ -23,7 +23,10 @@ from litellm.exceptions import (
     UnsupportedParamsError,
 )
 
+import httpx
+
 from internal.config import settings
+from internal.llm.image_api import post_dedicated_image, resolve_compat_image_api
 from internal.llm.recorder import track
 from internal.llm.resolve import (
     bundle_has_credentials,
@@ -31,9 +34,11 @@ from internal.llm.resolve import (
     env_has_llm_credentials,
     gemini_catalog_id,
     litellm_model_id,
+    openai_compat_model_id,
     resolve_image,
     resolve_llm_model,
 )
+from internal.llm.ssrf import BYOK_PROBE_TIMEOUT_SECONDS, UnsafeUrlError
 from internal.llm.vertex_express import express_client
 
 logger = logging.getLogger(__name__)
@@ -351,6 +356,64 @@ def _wrap_provider_error(exc: BaseException, *, model: str) -> LlmProviderError:
         model=model,
         kind="provider",
     )
+
+
+def _wrap_http_image_error(response: httpx.Response, *, model: str) -> LlmProviderError:
+    text = (response.text or "")[:500]
+    code = int(response.status_code)
+    if code in (401, 403):
+        return LlmProviderError(
+            f"LLM authentication failed for {model}. Check API key / LLM_API_BASE.",
+            model=model,
+            kind="auth",
+        )
+    if code == 429:
+        return LlmProviderError(
+            f"LLM rate limit hit for {model}. Try again shortly.",
+            model=model,
+            kind="rate_limit",
+        )
+    if code == 404 or _looks_like_unsupported_image(text):
+        return LlmProviderError(
+            f"Model {model} cannot generate images (wrong or chat-only model). "
+            "Set LLM_IMAGE_MODEL to an image-capable id (e.g. dall-e-3).",
+            model=model,
+            kind="unsupported",
+        )
+    if 400 <= code < 500:
+        logger.warning("image HTTP %s for %s: %s", code, model, text[:500])
+        return LlmProviderError(
+            f"LLM rejected the request for {model} (bad model id or unsupported params). Check LLM_*_MODEL.",
+            model=model,
+            kind="bad_request",
+        )
+    return LlmProviderError(
+        f"LLM call failed for {model}: {text[:240]}",
+        model=model,
+        kind="provider",
+    )
+
+
+def _wrap_compat_http_exc(exc: BaseException, *, model: str) -> LlmProviderError:
+    if isinstance(exc, UnsafeUrlError):
+        return LlmProviderError(
+            f"Could not connect to LLM endpoint for {model}. Check LLM_API_BASE / network.",
+            model=model,
+            kind="connection",
+        )
+    if isinstance(exc, (httpx.TimeoutException, TimeoutError)):
+        return LlmProviderError(
+            f"LLM timed out talking to {model}. Check network, LLM_API_BASE, and that the model is reachable.",
+            model=model,
+            kind="timeout",
+        )
+    if isinstance(exc, httpx.HTTPError):
+        return LlmProviderError(
+            f"Could not connect to LLM endpoint for {model}. Check LLM_API_BASE / network.",
+            model=model,
+            kind="connection",
+        )
+    return _wrap_provider_error(exc, model=model)
 
 
 def _is_provider_failure(exc: BaseException) -> bool:
@@ -726,6 +789,52 @@ async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
         effective_api_base(ptype, resolved.api_base) if resolved is not None else None
     )
     api_key = resolved.api_key if resolved is not None else None
+    source = resolved.source if resolved is not None else "env"
+    catalog = openai_compat_model_id(raw)
+    timeout = float(settings.llm_timeout_seconds)
+
+    if api_base and ptype in ("openai", "openai_compatible"):
+        kind = await resolve_compat_image_api(
+            api_base=api_base,
+            api_key=api_key,
+            source=source,
+            timeout=float(BYOK_PROBE_TIMEOUT_SECONDS),
+        )
+        if kind == "dedicated":
+            with track(
+                kind="image", tier=None, model=catalog, temperature=None, system=None, user=prompt
+            ) as rec:
+                try:
+                    response = await post_dedicated_image(
+                        api_base=api_base,
+                        api_key=api_key,
+                        source=source,
+                        model=catalog,
+                        prompt=prompt,
+                        timeout=timeout,
+                    )
+                except Exception as exc:
+                    if isinstance(
+                        exc, (UnsafeUrlError, httpx.HTTPError, TimeoutError, OSError)
+                    ) or _is_provider_failure(exc):
+                        raise _wrap_compat_http_exc(exc, model=catalog) from exc
+                    raise
+                if response.status_code >= 400:
+                    raise _wrap_http_image_error(response, model=catalog)
+                try:
+                    payload = response.json()
+                except ValueError:
+                    payload = None
+                url = image_result_to_url(payload)
+                if url:
+                    rec.response_text = url
+                    return rec.response_text
+                raise LlmProviderError(
+                    f"Image model {catalog} response had neither url nor b64_json.",
+                    model=catalog,
+                    kind="provider",
+                )
+
     model = _litellm_model(raw, api_base, ptype)
     kwargs: dict = {
         "model": model,
