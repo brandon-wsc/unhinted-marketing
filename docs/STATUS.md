@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-09-06  
+> **Last updated:** 2026-09-12  
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -45,6 +45,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Copy-only drafts rejected at Confirm** (`400 image_required`); missing IG account → `400 social_account_not_connected`; receipt `stubbed` / `published` / `failed` with optional `permalink` / `error_kind`; failed publish does **not** set `session.status=confirmed`
 - **Boundaries unchanged** — Confirm-only publish ([ADR 0003](./adr/0003-confirm-without-llm.md)); per-revision `approval_token`; user/session-scoped idempotency
 
+**Decision (2026-09-12) — Compat image path from catalog shape:** amends [ADR 0020](./adr/0020-org-byok-keys-models-routing.md). `openai_compatible` / custom `api_base` image gen is **not** always OpenAI `/images/generations`. `GET {api_base}/images/models` 200 JSON → `POST {api_base}/images` with the catalog id (Seedream-style clones). 404 / error → LiteLLM `/images/generations`. No `provider_type=openrouter`; env/registry ids stay catalog slugs (`bytedance-seed/seedream-4.5`). Org bases use SSRF; env `LLM_API_BASE` is operator-trusted. Chat `openai/` LiteLLM prefix is unchanged.
+
 **Decision (2026-09-07) — Deployment mode flag (cloud | onprem):** → [ADR 0023](./adr/0023-deployment-mode-flag.md). `DEPLOYMENT_MODE` env (default `onprem`) read once at process start; baked into Docker images via build ARG (`Dockerfile` api, `web/Dockerfile` + nginx SPA). SPA mirror: `VITE_DEPLOYMENT_MODE` build-time via `web/src/lib/deployment.ts`. `GET /api/meta` exposes `{ deployment_mode, app_env, version }` as the runtime source of truth. Flag + plumbing only — no behavior branches yet.
 
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
@@ -61,7 +63,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Editor-only** (owner/admin); **two-phase delete** (409 + dependents → `?force=true` cascade); **hybrid model-id fetch** (provider list proxy + `openai`/`openai_compatible` `{base}/images/models` merge; capability from modality metadata; typed id valid if unlisted; inference fallback); **SSRF guard** on user-supplied base URLs; **per-provider-row model-list cache**; **background auto-probe after save**; **add-model dedupe attaches**
 - **Settings UI** — editor-only `?tab=models` (old `?tab=api-keys` rewrites). Three unmixed surfaces, no wizard. Add key (Keys heading, key-only dialog) and Add model (Models heading, searchable model-id combobox) each save-and-close; neither offers the next layer. Add model is disabled until a key exists and never creates a key. Routing is the four slot dropdowns on the page — the only place slots are assigned. Credential dialogs do not dismiss on overlay click; their errors render inside the dialog.
 - **Slot capability match is app-level** (`PUT /routing` + resolver skip-to-env); enum columns + `openai_compatible` requires `api_base` are CHECK-constrained (`gemini` / `vertex_ai` added in [ADR 0021](./adr/0021-org-byok-native-gemini.md)). Models have no `created_by`/`updated_by`; routing has no `created_at` (intentional)
-- **API surface premise** — Chat Completions + Images for `openai` / `anthropic` / `openai_compatible`; `litellm.drop_params = True` is the compatibility backstop and must not be removed; native Gemini + Vertex Express are the Completions exceptions ([ADR 0021](./adr/0021-org-byok-native-gemini.md)); Responses API adoption is a separate future ADR
+- **API surface premise** — Chat Completions + Images for `openai` / `anthropic` / `openai_compatible`; compat Images path is catalog-shaped (`{base}/images` when `{base}/images/models` exists, else `/images/generations`); `litellm.drop_params = True` is the compatibility backstop and must not be removed; native Gemini + Vertex Express are the Completions exceptions ([ADR 0021](./adr/0021-org-byok-native-gemini.md)); Responses API adoption is a separate future ADR
 
 **Decision (2026-08-19) — Queue send while turn in-flight:** → [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md) (supersedes ADR 0004 composer lock). Composer stays open; Send enqueues in the SPA (max 3); Stop discards the running turn only; drain after idle unless parked at image OK.
 
@@ -292,7 +294,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Node logic | ✅ | LiteLLM + structured I/O; heuristic fallbacks; PG load/grounding |
 | Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}`, `/messages`, `/draft`, `/media` (+ plan/regen/remove/upload), `/confirm` |
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform` + `media[]`; snapshot hydrates `media` from latest draft |
-| Image generation worker | 🟡 Soft | LiteLLM ``aimage_generation`` via ``LLM_IMAGE_MODEL``; chat-only / unset → ``llm.failed``. ``data:`` results upload to S3-compatible store (MinIO) when ``S3_*`` configured; else remain data URLs. ``placeholder`` / no credentials → mock URL |
+| Image generation worker | 🟡 Soft | ``LLM_IMAGE_MODEL`` catalog id; compat bases with ``GET {base}/images/models`` → ``POST {base}/images``, else LiteLLM ``aimage_generation``. Chat-only / unset → ``llm.failed``. ``data:`` results upload to S3-compatible store (MinIO) when ``S3_*`` configured; else remain data URLs. ``placeholder`` / no credentials → mock URL |
 | `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
 | Chat research + Tavily ingest | ✅ | ADR 0009; semantic gate + multi-query + gloss; Tavily adapter; admin Research tab; `TAVILY_API_KEY` for live search |
 | Curl exit-criteria script | ⏸ **Held** | Manual/API path works; formal curl checklist later |
@@ -483,7 +485,7 @@ unhinted-marketing/
 | `GOOGLE_API_KEY` | Optional Vertex Express key when `GOOGLE_GENAI_USE_VERTEXAI=true` (SDK pair; never treated as AI Studio). Do not set the flag in-process |
 | `GOOGLE_GENAI_USE_VERTEXAI` | Read-only: `true` routes env `GOOGLE_API_KEY` as Express. `GEMINI_API_KEY` alone is not Express |
 | `LLM_CHEAP_MODEL` / `LLM_MEDIUM_MODEL` / `LLM_STRONG_MODEL` | Provider model ids (e.g. `gpt-4o-mini`, `deepseek/deepseek-v4-flash-0731`) |
-| `LLM_IMAGE_MODEL` | Image-capable id (e.g. `dall-e-3` / OpenRouter image model). Unset with credentials → error on gen; `placeholder` = mock URL |
+| `LLM_IMAGE_MODEL` | Image-capable catalog id (e.g. `dall-e-3`, `bytedance-seed/seedream-4.5`). Unset with credentials → error on gen; `placeholder` = mock URL |
 | `S3_ENDPOINT_URL` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | S3-compatible media (MinIO: `docker compose up -d minio minio-init`). Empty endpoint → skip upload |
 | `S3_PUBLIC_BASE_URL` | Browser base for object URLs (default `{endpoint}/{bucket}`). Instagram publish needs a Meta-reachable HTTPS URL (local MinIO is not) |
 | `PUBLISH_ADAPTER` | Confirm adapter: `stub` (default, never hits Meta) or `instagram` ([ADR 0022](./adr/0022-real-publish-instagram.md)) |

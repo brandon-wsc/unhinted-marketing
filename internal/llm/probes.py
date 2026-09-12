@@ -18,9 +18,10 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import httpx
 
 from internal.config import settings
+from internal.llm.image_api import compat_images_models_url
 from internal.llm.keys import ByokEncryptionError, decrypt_key
-from internal.llm.ssrf import UnsafeUrlError, guarded_request
 from internal.llm.resolve import VERTEX_AI_EXPRESS_API_BASE, gemini_catalog_id
+from internal.llm.ssrf import UnsafeUrlError, guarded_request
 from internal.llm.vertex_express import (
     VERTEX_EXPRESS_PROBE_MODEL,
     VERTEX_EXPRESS_PROBE_TIMEOUT_MS,
@@ -230,7 +231,7 @@ def images_models_url(provider: ByokProvider) -> str | None:
     models = models_list_url(provider)
     if not models.endswith("/models"):
         return None
-    return f"{models[: -len('/models')]}/images/models"
+    return compat_images_models_url(models[: -len("/models")])
 
 
 def merge_listed_models(*groups: list[ByokListedModel]) -> list[ByokListedModel]:
@@ -454,8 +455,15 @@ async def probe_chat_model_live(provider: ByokProvider, model_id: str) -> ByokPr
 
 
 async def probe_image_model_live(provider: ByokProvider, model_id: str) -> ByokProbeResult:
-    from internal.llm.resolve import effective_api_base, litellm_model_id
-    from internal.llm.router import _wrap_provider_error, configure_litellm
+    from internal.llm.image_api import post_dedicated_image, resolve_compat_image_api
+    from internal.llm.resolve import effective_api_base, litellm_model_id, openai_compat_model_id
+    from internal.llm.router import (
+        _wrap_compat_http_exc,
+        _wrap_http_image_error,
+        _wrap_provider_error,
+        configure_litellm,
+    )
+    from internal.llm.ssrf import BYOK_PROBE_TIMEOUT_SECONDS
 
     try:
         api_key = decrypt_key(provider.api_key_encrypted)
@@ -466,8 +474,35 @@ async def probe_image_model_live(provider: ByokProvider, model_id: str) -> ByokP
         return await _probe_vertex_express_generate(
             api_key, model_id, max_output_tokens=None
         )
-    configure_litellm()
     api_base = effective_api_base(ptype, provider.api_base)
+    catalog = openai_compat_model_id(model_id)
+    timeout = float(settings.llm_timeout_seconds)
+    if api_base and ptype in ("openai", "openai_compatible"):
+        kind = await resolve_compat_image_api(
+            api_base=api_base,
+            api_key=api_key,
+            source="org",
+            timeout=float(BYOK_PROBE_TIMEOUT_SECONDS),
+        )
+        if kind == "dedicated":
+            try:
+                response = await post_dedicated_image(
+                    api_base=api_base,
+                    api_key=api_key,
+                    source="org",
+                    model=catalog,
+                    prompt="ping",
+                    size="1024x1024",
+                    timeout=timeout,
+                )
+            except Exception as exc:  # noqa: BLE001 — httpx / SSRF
+                wrapped = _wrap_compat_http_exc(exc, model=catalog)
+                return ByokProbeResult(ok=False, error_kind=wrapped.kind)
+            if response.status_code >= 400:
+                wrapped = _wrap_http_image_error(response, model=catalog)
+                return ByokProbeResult(ok=False, error_kind=wrapped.kind)
+            return ByokProbeResult(ok=True)
+    configure_litellm()
     model = litellm_model_id(model_id, ptype, api_base)
     kwargs: dict[str, Any] = {
         "model": model,
