@@ -154,6 +154,7 @@
         "title": "Copy is ready",
         "subtitle": "Pick a visual format, then generate (default: single image).",
         "confirm": "Generate image",
+        "working": "Generating…",
         "formatLabel": "Image format",
         "formatSingle": "Single image",
         "formatComic": "4-panel comic"
