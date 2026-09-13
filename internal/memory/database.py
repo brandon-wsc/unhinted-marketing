@@ -49,7 +49,11 @@ def set_session_factory(factory) -> None:
 
 
 def open_session():
-    """Context-manager session for out-of-request work (migrate loop)."""
+    """Short-lived session for work that must not span a FastAPI response.
+
+    Used by background jobs and SSE snapshot (stream must not hold a pool
+    connection). Prefer this over ``Depends(get_db)`` on StreamingResponse.
+    """
     return _session_factory()
 
 

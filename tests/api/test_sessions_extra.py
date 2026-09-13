@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
@@ -320,6 +321,46 @@ async def test_session_events_snapshot(client, monkeypatch) -> None:
     assert res.status_code == 200
     assert "session.snapshot" in res.text
     assert session_id in res.text
+
+
+@pytest.mark.asyncio
+async def test_session_events_releases_db_while_streaming(client, engine, monkeypatch) -> None:
+    """Idle SSE must not keep a QueuePool connection checked out."""
+    from collections.abc import AsyncIterator
+
+    from internal.session import events as events_mod
+
+    hang = asyncio.Event()
+    entered = asyncio.Event()
+    checked_out_during_stream: dict[str, int] = {}
+
+    async def _hang_subscribe(_session_id: uuid.UUID) -> AsyncIterator[dict]:
+        checked_out_during_stream["n"] = engine.sync_engine.pool.checkedout()
+        entered.set()
+        await hang.wait()
+        if False:  # pragma: no cover — make this an async generator
+            yield {}
+
+    monkeypatch.setattr(events_mod.session_event_bus, "subscribe", _hang_subscribe)
+
+    data = await register_user(client)
+    headers = auth_header(data["access_token"])
+    company_id = data["user"]["organizations"][0]["id"]
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+    idle = engine.sync_engine.pool.checkedout()
+
+    task = asyncio.create_task(client.get(f"/api/sessions/{session_id}/events", headers=headers))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        assert checked_out_during_stream["n"] == idle
+        me = await client.get("/api/auth/me", headers=headers)
+        assert me.status_code == 200
+    finally:
+        hang.set()
+        res = await asyncio.wait_for(task, timeout=5)
+    assert res.status_code == 200
+    assert "session.snapshot" in res.text
 
 
 @pytest.mark.asyncio

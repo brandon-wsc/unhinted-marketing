@@ -979,6 +979,10 @@ export type paths = {
         /**
          * Session Events
          * @description SSE stream: initial snapshot, then live session events + heartbeats.
+         *
+         *     Auth + snapshot use a short-lived session and release the pool connection
+         *     before the stream starts. ``Depends(get_db)`` / ``get_current_user`` would
+         *     hold a connection for the whole SSE lifetime (idle tab / session switch).
          */
         get: operations["session_events_api_sessions__session_id__events_get"];
         put?: never;
