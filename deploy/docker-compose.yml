@@ -5,12 +5,16 @@
 #
 # AUTO_SECRETS generates JWT_SECRET / BYOK_ENCRYPTION_KEY on first boot and
 # persists them in the `appdata` volume (docker/api-entrypoint.sh). Set them
-# explicitly in .env to pin your own. See deploy/README.md and .env.example.
+# in .env to pin your own — the pin applies on first boot only; afterwards
+# .secrets.env in the volume wins (delete it to rotate). See deploy/README.md.
 
 x-backend-env: &backend-env
   APP_ENV: production
   DEPLOYMENT_MODE: onprem
   AUTO_SECRETS: "true"
+  # Optional pins — empty means AUTO_SECRETS generates + persists them.
+  JWT_SECRET: ${JWT_SECRET:-}
+  BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY:-}
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-unhinted}:${POSTGRES_PASSWORD:-unhinted-local-only}@db:5432/${POSTGRES_DB:-unhinted}
   MEDIA_ROOT: /app/data/media
   WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:8484}
@@ -35,7 +39,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-unhinted}
     volumes:
       - pgdata:/var/lib/postgresql
-    # No published port — reachable only inside this compose network.
+    # No published port — reachable only inside this compose network. Keep it
+    # that way: POSTGRES_PASSWORD defaults to a public value (unhinted-local-only).
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s

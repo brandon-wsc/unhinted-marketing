@@ -58,7 +58,9 @@ docker compose -f docker-compose.external-db.yml run --rm migrate
 
 Services carry both `image:` and `build:` — inside a repo checkout
 `up -d --build` builds locally; `docker compose pull` works once images are
-published. Coordinates default to `ghcr.io/brandon-wsc/unhinted-{api,web}:onprem`
+published. Until then `pull` (or `up` without `--build`) fails — the GHCR
+coordinates do not exist yet (publishing is follow-up CI, ADR 0027).
+Coordinates default to `ghcr.io/brandon-wsc/unhinted-{api,web}:onprem`
 and are overridable:
 
 ```bash
