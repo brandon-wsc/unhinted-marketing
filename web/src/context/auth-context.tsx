@@ -27,6 +27,7 @@ type AuthContextValue = {
     password: string;
     display_name: string;
     organization_name?: string;
+    invite_token?: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
   refreshAccessToken: () => Promise<string | null>;
@@ -80,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string;
       display_name: string;
       organization_name?: string;
+      invite_token?: string;
     }) => {
       const data = await apiRegister(input);
       applySession(setAccessToken, setUser, data);

@@ -13,8 +13,6 @@ class SetupStatusResponse(BaseModel):
     deployment_mode: DeploymentMode
     setup_required: bool
     web_base_url: str
-    env_llm_configured: bool
-    env_smtp_configured: bool
 
 
 class SetupEmailConfig(BaseModel):

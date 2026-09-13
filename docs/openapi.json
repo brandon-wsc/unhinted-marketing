@@ -9069,23 +9069,13 @@
           "web_base_url": {
             "type": "string",
             "title": "Web Base Url"
-          },
-          "env_llm_configured": {
-            "type": "boolean",
-            "title": "Env Llm Configured"
-          },
-          "env_smtp_configured": {
-            "type": "boolean",
-            "title": "Env Smtp Configured"
           }
         },
         "type": "object",
         "required": [
           "deployment_mode",
           "setup_required",
-          "web_base_url",
-          "env_llm_configured",
-          "env_smtp_configured"
+          "web_base_url"
         ],
         "title": "SetupStatusResponse"
       },

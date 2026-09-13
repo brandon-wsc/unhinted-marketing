@@ -44,7 +44,8 @@ must not await a DB load.
 ### 2. First-run setup claims the only SUPERADMIN
 
 - `GET /api/setup/status` — public; `{deployment_mode, setup_required,
-  web_base_url, env_llm_configured, env_smtp_configured}`.
+  web_base_url}`. The payload does **not** report env credentials — the
+  wizard treats the environment as opaque.
 - `POST /api/setup` — on-prem only (404 on cloud), rate-limited like
   register. Row is locked `FOR UPDATE`; a completed row returns 409, so the
   first-user claim cannot race. One request creates the user
@@ -77,9 +78,9 @@ non-invite visitors to `/login` (or `/setup` when pending).
 ### 4. Non-blocking integrations
 
 LLM keys and SMTP are deliberately optional in the wizard: an install is
-usable (invites via `link` mode) without either. `env_llm_configured` /
-`env_smtp_configured` in the status payload let the wizard hint "already set
-via env — safe to skip".
+usable (invites via `link` mode) without either. The wizard never inspects
+env credentials — each optional step is skipped manually, no "already set
+via env" hints.
 
 ## Consequences
 

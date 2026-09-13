@@ -28,6 +28,15 @@ vi.mock("@/context/auth-context", () => ({
   }),
 }));
 
+vi.mock("@/context/setup-context", () => ({
+  useSetup: () => ({
+    status: { setup_required: false },
+    loading: false,
+    deploymentMode: "cloud",
+    refresh: vi.fn(),
+  }),
+}));
+
 vi.mock("@/context/toast-context", () => ({
   useToast: () => ({ showError: vi.fn() }),
 }));

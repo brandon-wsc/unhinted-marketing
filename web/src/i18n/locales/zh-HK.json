@@ -26,7 +26,7 @@
     }
   },
   "auth": {
-    "craftTagline": "腦細要Growth 我哋秒Post",
+    "craftCorner": "腦細要Growth 我哋秒Post",
     "login": {
       "title": "登入",
       "subtitle": "用你個帳戶入 Unhinted Marketing",
@@ -631,6 +631,59 @@
       }
     }
   },
+  "setup": {
+    "title": "設定你嘅 instance",
+    "stepIndicator": "步驟 {{step}} / {{total}} · {{label}}",
+    "stepLabels": {
+      "account": "帳戶",
+      "instance": "Instance",
+      "llm": "AI 模型"
+    },
+    "account": {
+      "title": "建立管理員帳戶",
+      "subtitle": "第一位用戶會成為平台 Superadmin"
+    },
+    "instance": {
+      "title": "Instance 設定",
+      "subtitle": "設定網站網址同邀請電郵方式 — 可以跳過呢步",
+      "baseUrl": "網站網址",
+      "baseUrlHint": "邀請連結同媒體 URL 會用呢個地址。已經由瀏覽器偵測 — 有需要先改。",
+      "emailBackend": "邀請電郵發送方式",
+      "emailLink": "只複製連結（手動傳送）",
+      "emailSmtp": "SMTP（發送邀請電郵）",
+      "smtpHost": "SMTP host",
+      "smtpPort": "Port",
+      "smtpUser": "使用者名稱",
+      "smtpPassword": "密碼",
+      "smtpTls": "啟用 TLS（STARTTLS）",
+      "emailFrom": "寄件人地址",
+      "linkNote": "邀請會以連結形式俾你複製 — 唔會寄出電郵。之後可以喺「系統 → Instance」設定 SMTP。"
+    },
+    "llm": {
+      "title": "連接 AI 模型",
+      "subtitle": "設定對話同圖像生成嘅預設模型 — 可以跳過呢步",
+      "provider": "供應商",
+      "apiKey": "API Key",
+      "apiBase": "Base URL",
+      "chatModel": "預設模型",
+      "chatModelHint": "會用喺所有對話層級；之後可以喺「設定 → API Keys」調 routing。",
+      "save": "儲存並完成",
+      "requiredHint": "請填晒供應商欄位，或者跳過呢步。"
+    },
+    "done": {
+      "banner": "設定完成",
+      "title": "你嘅 instance 已經 ready",
+      "subtitle": "而家可以開始用 — 設定隨時可以喺「設定」調整",
+      "nextTitle": "下一步",
+      "nextModels": "連接或調整模型 — 設定 → API Keys",
+      "nextMembers": "邀請成員 — 設定 → Members",
+      "nextInstance": "電郵同網站網址 — 系統 → Instance",
+      "cta": "開始使用"
+    },
+    "next": "繼續",
+    "skip": "略過",
+    "submitting": "儲存緊…"
+  },
   "system": {
     "menuEntry": "系統",
     "title": "系統",
@@ -638,6 +691,14 @@
       "title": "未授權",
       "body": "系統工具要夠高平台權限先入到。",
       "back": "返回主頁"
+    },
+    "instance": {
+      "saved": "Instance 設定已儲存。",
+      "readOnly": "得 superadmin 先改到 instance 設定。",
+      "baseUrl": "Instance URL",
+      "baseUrlHint": "邀請連結同 OAuth redirect 會用呢個地址。",
+      "emailBackend": "邀請電郵發送方式",
+      "smtpPasswordSet": "已儲存（…{{last4}}）— 輸入新密碼先會更新"
     }
   },
   "admin": {
@@ -652,7 +713,8 @@
       "llm": "LLM 呼叫",
       "steps": "Node steps",
       "research": "Research",
-      "trace": "Session Trace"
+      "trace": "Session Trace",
+      "instance": "Instance"
     },
     "filters": {
       "node": "節點",
@@ -782,6 +844,9 @@
     "invalidCredentials": "電郵或密碼不正確",
     "accountDisabled": "呢個帳戶已被停用",
     "invalidRefreshToken": "登入已過期，請重新登入",
+    "setupFailed": "設定失敗，請再試一次",
+    "inviteRequired": "註冊需要有效嘅邀請",
+    "setupAlreadyCompleted": "初始設定已經完成",
     "requestFailed": "請求失敗（{{status}}）"
   }
 }

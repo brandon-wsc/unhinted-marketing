@@ -7,6 +7,7 @@ import { PasswordBox } from "@/components/password-box";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
+import { useSetup } from "@/context/setup-context";
 import { useToast } from "@/context/toast-context";
 import { useInvitePreview } from "@/features/company-settings/use-invite-preview";
 import { inviteTokenFromPath } from "@/lib/invite-path";
@@ -16,6 +17,7 @@ import { safeInternalPath } from "@/lib/safe-internal-path";
 export function RegisterPage() {
   const { t } = useTranslation();
   const { register, user, loading } = useAuth();
+  const { status: setupStatus, loading: setupLoading, deploymentMode } = useSetup();
   const { showError } = useToast();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -38,6 +40,13 @@ export function RegisterPage() {
 
   if (!loading && user) return <Navigate to={nextPath} replace />;
 
+  // On-prem self-serve register is invite-only (ADR 0026). Fresh installs route
+  // to the setup wizard; later visitors without an invite go back to login.
+  if (!setupLoading && deploymentMode === "onprem" && !inviteToken) {
+    if (setupStatus?.setup_required) return <Navigate to="/setup" replace />;
+    return <Navigate to="/login" replace />;
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (invitePending) return;
@@ -59,6 +68,7 @@ export function RegisterPage() {
         password,
         display_name: displayName,
         organization_name: emailLocked ? undefined : organizationName || undefined,
+        invite_token: inviteToken ?? undefined,
       });
       navigate(nextPath, { replace: true });
     } catch (err) {

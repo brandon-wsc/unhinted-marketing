@@ -1310,6 +1310,58 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/setup/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Setup Status */
+        get: operations["setup_status_api_setup_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Setup */
+        post: operations["run_setup_api_setup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/instance/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Instance Settings */
+        get: operations["get_instance_settings_api_instance_settings_get"];
+        /** Put Instance Settings */
+        put: operations["put_instance_settings_api_instance_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1808,6 +1860,40 @@ export type components = {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** InstanceSettingsResponse */
+        InstanceSettingsResponse: {
+            /** Web Base Url */
+            web_base_url: string;
+            /**
+             * Email Backend
+             * @enum {string}
+             */
+            email_backend: "link" | "smtp" | "console";
+            /** Email From */
+            email_from: string;
+            /** Smtp Host */
+            smtp_host: string;
+            /** Smtp Port */
+            smtp_port: number;
+            /** Smtp User */
+            smtp_user: string;
+            /** Smtp Password Last4 */
+            smtp_password_last4: string | null;
+            /** Smtp Tls */
+            smtp_tls: boolean;
+            /** Setup Completed */
+            setup_completed: boolean;
+        };
+        /**
+         * InstanceSettingsUpdate
+         * @description PUT semantics: omitted fields keep their current value; smtp_password
+         *     only rotates when a non-empty value is sent (never returned back).
+         */
+        InstanceSettingsUpdate: {
+            /** Web Base Url */
+            web_base_url?: string | null;
+            email_config?: components["schemas"]["SetupEmailConfig"] | null;
         };
         /**
          * LlmCallRecordDetail
@@ -2555,6 +2641,8 @@ export type components = {
             display_name: string;
             /** Organization Name */
             organization_name?: string | null;
+            /** Invite Token */
+            invite_token?: string | null;
         };
         /** ResearchSignalHit */
         ResearchSignalHit: {
@@ -2810,6 +2898,62 @@ export type components = {
             signals?: components["schemas"]["TraceSignal"][];
             /** Turns */
             turns?: components["schemas"]["TraceTurn"][];
+        };
+        /** SetupEmailConfig */
+        SetupEmailConfig: {
+            /**
+             * Backend
+             * @default link
+             * @enum {string}
+             */
+            backend: "link" | "smtp" | "console";
+            /** Email From */
+            email_from?: string | null;
+            /** Smtp Host */
+            smtp_host?: string | null;
+            /**
+             * Smtp Port
+             * @default 587
+             */
+            smtp_port: number;
+            /** Smtp User */
+            smtp_user?: string | null;
+            /** Smtp Password */
+            smtp_password?: string | null;
+            /**
+             * Smtp Tls
+             * @default true
+             */
+            smtp_tls: boolean;
+        };
+        /** SetupRequest */
+        SetupRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+            /** Display Name */
+            display_name: string;
+            /** Organization Name */
+            organization_name: string;
+            /** Web Base Url */
+            web_base_url?: string | null;
+            email_config?: components["schemas"]["SetupEmailConfig"] | null;
+        };
+        /** SetupStatusResponse */
+        SetupStatusResponse: {
+            /**
+             * Deployment Mode
+             * @enum {string}
+             */
+            deployment_mode: "cloud" | "onprem";
+            /** Setup Required */
+            setup_required: boolean;
+            /** Web Base Url */
+            web_base_url: string;
         };
         /** SignalResponse */
         SignalResponse: {
@@ -5999,6 +6143,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetaResponse"];
+                };
+            };
+        };
+    };
+    setup_status_api_setup_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusResponse"];
+                };
+            };
+        };
+    };
+    run_setup_api_setup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_instance_settings_api_instance_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceSettingsResponse"];
+                };
+            };
+        };
+    };
+    put_instance_settings_api_instance_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstanceSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

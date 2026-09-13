@@ -30,6 +30,7 @@ export async function apiRegister(input: {
   password: string;
   display_name: string;
   organization_name?: string;
+  invite_token?: string;
 }): Promise<TokenResponse> {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",

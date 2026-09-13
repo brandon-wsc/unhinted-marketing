@@ -41,17 +41,6 @@ AdminRead = Annotated[User, Depends(require_platform_level(PlatformLevel.ADMIN))
 SuperAdmin = Annotated[User, Depends(require_platform_level(PlatformLevel.SUPERADMIN))]
 
 
-def _env_llm_configured() -> bool:
-    return bool(
-        settings.openai_api_key
-        or settings.anthropic_api_key
-        or settings.gemini_api_key
-        or settings.vertex_ai_api_key
-        or settings.google_api_key
-        or settings.llm_api_base
-    )
-
-
 async def _setup_pending(db: AsyncSession) -> bool:
     row = await repos.get_instance_settings(db)
     return row is None or row.setup_completed_at is None
@@ -111,8 +100,6 @@ async def setup_status(db: Annotated[AsyncSession, Depends(get_db)]) -> SetupSta
         deployment_mode=settings.deployment_mode,
         setup_required=settings.deployment_mode == "onprem" and pending,
         web_base_url=snap.web_base_url,
-        env_llm_configured=_env_llm_configured(),
-        env_smtp_configured=bool(settings.smtp_host),
     )
 
 

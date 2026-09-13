@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
+import { useSetup } from "@/context/setup-context";
 import { useInvitePreview } from "@/features/company-settings/use-invite-preview";
 import { inviteTokenFromPath } from "@/lib/invite-path";
 import { mapApiError } from "@/lib/map-api-error";
@@ -17,6 +18,7 @@ import { safeInternalPath } from "@/lib/safe-internal-path";
 export function LoginPage() {
   const { t } = useTranslation();
   const { login, user, loading } = useAuth();
+  const { status: setupStatus, loading: setupLoading, deploymentMode } = useSetup();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const nextPath = safeInternalPath(params.get("next")) ?? "/";
@@ -34,6 +36,11 @@ export function LoginPage() {
   useEffect(() => {
     if (preview?.email) setEmail(preview.email);
   }, [preview]);
+
+  // On-prem first run: no accounts exist yet — send visitors to the wizard.
+  if (!setupLoading && setupStatus?.setup_required) {
+    return <Navigate to="/setup" replace />;
+  }
 
   if (!loading && user) return <Navigate to={nextPath} replace />;
 
@@ -69,12 +76,14 @@ export function LoginPage() {
       subtitle={subtitle}
       craftSignal
       footer={
-        <>
-          {t("auth.login.noAccount")}{" "}
-          <Link to={registerHref} className="text-primary hover:underline">
-            {t("auth.login.registerLink")}
-          </Link>
-        </>
+        deploymentMode === "cloud" || inviteToken ? (
+          <>
+            {t("auth.login.noAccount")}{" "}
+            <Link to={registerHref} className="text-primary hover:underline">
+              {t("auth.login.registerLink")}
+            </Link>
+          </>
+        ) : undefined
       }
     >
       <form onSubmit={onSubmit} className="space-y-4">
