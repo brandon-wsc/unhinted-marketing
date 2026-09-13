@@ -27,7 +27,7 @@ export type SetupRequestBody = {
   email: string;
   password: string;
   display_name: string;
-  organization_name: string;
+  organization_name?: string;
   web_base_url?: string;
   email_config?: SetupEmailConfig;
 };

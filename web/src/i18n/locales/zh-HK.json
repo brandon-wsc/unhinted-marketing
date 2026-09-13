@@ -667,8 +667,7 @@
       "apiBase": "Base URL",
       "chatModel": "預設模型",
       "chatModelHint": "會用喺所有對話層級；之後可以喺「設定 → API Keys」調 routing。",
-      "save": "儲存並完成",
-      "requiredHint": "請填晒供應商欄位，或者跳過呢步。"
+      "save": "儲存並完成"
     },
     "done": {
       "banner": "設定完成",
@@ -835,6 +834,12 @@
     "invalidBody": "連結可能已過期、已被撤銷，或已用過。請聯絡公司管理員重新發送。"
   },
   "errors": {
+    "displayNameRequired": "要填暱稱。",
+    "emailRequired": "要填電郵。",
+    "passwordRequired": "要填密碼。",
+    "confirmPasswordRequired": "要填確認密碼。",
+    "smtpHostRequired": "要填 SMTP host。",
+    "chatModelRequired": "要填預設模型。",
     "loginFailed": "登入失敗",
     "registrationFailed": "註冊失敗",
     "invalidEmail": "電郵格式不正確",

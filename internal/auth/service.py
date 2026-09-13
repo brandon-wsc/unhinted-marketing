@@ -59,7 +59,7 @@ async def register_user(
     db.add(user)
     await db.flush()
 
-    org_name = (organization_name or f"{user.display_name}'s Company").strip()
+    org_name = (organization_name or "").strip() or f"{user.display_name}'s Company"
     base_slug = _slugify(org_name)
     slug = base_slug
     suffix = 1

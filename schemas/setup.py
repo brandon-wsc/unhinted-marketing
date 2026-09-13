@@ -38,7 +38,7 @@ class SetupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     display_name: str = Field(min_length=1, max_length=120)
-    organization_name: str = Field(min_length=1, max_length=200)
+    organization_name: str | None = Field(default=None, max_length=200)
     web_base_url: str | None = Field(default=None, max_length=500)
     email_config: SetupEmailConfig | None = None
 

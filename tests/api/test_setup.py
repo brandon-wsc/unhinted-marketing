@@ -73,6 +73,16 @@ async def test_setup_creates_superadmin_and_seals(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_setup_organization_name_optional(client: AsyncClient) -> None:
+    body = _setup_body(f"admin-{uuid.uuid4().hex[:8]}@example.com")
+    del body["organization_name"]
+    res = await client.post("/api/setup", json=body)
+    assert res.status_code == 201, res.text
+    org = res.json()["user"]["organizations"][0]
+    assert org["name"] == "First Admin's Company"
+
+
+@pytest.mark.asyncio
 async def test_setup_rejected_on_cloud(client: AsyncClient, cloud_mode) -> None:
     res = await client.post("/api/setup", json=_setup_body(f"admin-{uuid.uuid4().hex[:8]}@example.com"))
     assert res.status_code == 404

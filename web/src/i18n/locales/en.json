@@ -667,8 +667,7 @@
       "apiBase": "Base URL",
       "chatModel": "Default model",
       "chatModelHint": "Used for all chat tiers; change routing later in Settings → API Keys.",
-      "save": "Save & finish",
-      "requiredHint": "Fill in the provider fields, or skip this step."
+      "save": "Save & finish"
     },
     "done": {
       "banner": "Setup complete",
@@ -835,6 +834,12 @@
     "invalidBody": "This link may have expired, been revoked, or already been used. Ask an admin to send a new invite."
   },
   "errors": {
+    "displayNameRequired": "Enter a display name.",
+    "emailRequired": "Enter an email address.",
+    "passwordRequired": "Enter a password.",
+    "confirmPasswordRequired": "Confirm your password.",
+    "smtpHostRequired": "Enter an SMTP host.",
+    "chatModelRequired": "Enter a default model.",
     "loginFailed": "Sign in failed",
     "registrationFailed": "Registration failed",
     "invalidEmail": "Invalid email address",

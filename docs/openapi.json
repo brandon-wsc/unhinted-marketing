@@ -9015,9 +9015,15 @@
             "title": "Display Name"
           },
           "organization_name": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 1,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Organization Name"
           },
           "web_base_url": {
@@ -9047,8 +9053,7 @@
         "required": [
           "email",
           "password",
-          "display_name",
-          "organization_name"
+          "display_name"
         ],
         "title": "SetupRequest"
       },

@@ -27,6 +27,7 @@ import {
 import { BYOK_PROVIDER_TYPES } from "@/features/company-settings/byok-helpers";
 import { apiRunSetup, type SetupEmailBackend } from "@/features/setup/api";
 import { mapApiError } from "@/lib/map-api-error";
+import { isValidEmail } from "@/lib/simple-email";
 import { cn } from "@/lib/utils";
 
 type Step = "account" | "instance" | "llm" | "done";
@@ -68,6 +69,7 @@ export function SetupPage() {
 
   const [step, setStep] = useState<Step>("account");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   // Step 1 — admin account + company
@@ -112,17 +114,35 @@ export function SetupPage() {
     baseUrlTouched ? webBaseUrl : status?.web_base_url || window.location.origin
   ).trim();
 
+  function clearFieldError(id: string) {
+    setFieldErrors((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function applyFieldErrors(errors: Record<string, string>) {
+    setFieldErrors(errors);
+    const firstId = Object.keys(errors)[0];
+    if (firstId) document.getElementById(firstId)?.focus();
+    return Object.keys(errors).length === 0;
+  }
+
   function onAccountNext(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (password.length < 8) {
-      setError(t("errors.passwordTooShort"));
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError(t("errors.passwordMismatch"));
-      return;
-    }
+    const errors: Record<string, string> = {};
+    if (!displayName.trim()) errors["setup-displayName"] = t("errors.displayNameRequired");
+    if (!email.trim()) errors["setup-email"] = t("errors.emailRequired");
+    else if (!isValidEmail(email)) errors["setup-email"] = t("errors.invalidEmail");
+    if (!password) errors["setup-password"] = t("errors.passwordRequired");
+    else if (password.length < 8) errors["setup-password"] = t("errors.passwordTooShort");
+    if (!confirmPassword) errors["setup-confirm"] = t("errors.confirmPasswordRequired");
+    else if (password && confirmPassword !== password)
+      errors["setup-confirm"] = t("errors.passwordMismatch");
+    if (!applyFieldErrors(errors)) return;
     setStep("instance");
   }
 
@@ -134,7 +154,7 @@ export function SetupPage() {
         email: email.trim(),
         password,
         display_name: displayName.trim(),
-        organization_name: organizationName.trim(),
+        organization_name: organizationName.trim() || undefined,
         web_base_url: effectiveBaseUrl || undefined,
         email_config:
           !useDefaults && emailBackend === "smtp"
@@ -162,20 +182,24 @@ export function SetupPage() {
 
   function onInstanceNext(e: FormEvent) {
     e.preventDefault();
+    setError("");
+    if (emailBackend === "smtp" && !smtpHost.trim()) {
+      applyFieldErrors({ "setup-smtp-host": t("errors.smtpHostRequired") });
+      return;
+    }
+    setFieldErrors({});
     void submitSetup(false);
   }
 
   async function onLlmNext(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (
-      !apiKey.trim() ||
-      !chatModel.trim() ||
-      (providerType === "openai_compatible" && !apiBase.trim())
-    ) {
-      setError(t("setup.llm.requiredHint"));
-      return;
-    }
+    const errors: Record<string, string> = {};
+    if (!apiKey.trim()) errors["setup-llm-key"] = t("settings.apiKeys.errors.keyRequired");
+    if (providerType === "openai_compatible" && !apiBase.trim())
+      errors["setup-llm-base"] = t("settings.apiKeys.errors.apiBaseRequired");
+    if (!chatModel.trim()) errors["setup-chat-model"] = t("errors.chatModelRequired");
+    if (!applyFieldErrors(errors)) return;
     const companyId = user?.organizations[0]?.id;
     if (!companyId || !accessToken) {
       setError(t("errors.setupFailed"));
@@ -240,41 +264,71 @@ export function SetupPage() {
       )}
 
       {step === "account" && (
-        <form onSubmit={onAccountNext} className="space-y-4">
-          <FormField id="setup-displayName" label={t("auth.register.displayName")}>
+        <form onSubmit={onAccountNext} noValidate className="space-y-4">
+          <FormField
+            id="setup-displayName"
+            label={t("auth.register.displayName")}
+            error={fieldErrors["setup-displayName"]}
+            required
+          >
             <Input
               id="setup-displayName"
               value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
+              onChange={(e) => {
+                setDisplayName(e.target.value);
+                clearFieldError("setup-displayName");
+              }}
               autoComplete="name"
               required
+              aria-invalid={Boolean(fieldErrors["setup-displayName"])}
+              aria-describedby={
+                fieldErrors["setup-displayName"] ? "setup-displayName-error" : undefined
+              }
             />
           </FormField>
-          <FormField id="setup-email" label={t("common.email")}>
+          <FormField
+            id="setup-email"
+            label={t("common.email")}
+            error={fieldErrors["setup-email"]}
+            required
+          >
             <Input
               id="setup-email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                clearFieldError("setup-email");
+              }}
               autoComplete="email"
               required
+              aria-invalid={Boolean(fieldErrors["setup-email"])}
+              aria-describedby={fieldErrors["setup-email"] ? "setup-email-error" : undefined}
             />
           </FormField>
           <PasswordBox
             id="setup-password"
             label={t("auth.register.passwordHint")}
             value={password}
-            onChange={setPassword}
+            onChange={(v) => {
+              setPassword(v);
+              clearFieldError("setup-password");
+            }}
             autoComplete="new-password"
             required
+            error={fieldErrors["setup-password"]}
           />
           <PasswordBox
             id="setup-confirm"
             label={t("auth.register.confirmPassword")}
             value={confirmPassword}
-            onChange={setConfirmPassword}
+            onChange={(v) => {
+              setConfirmPassword(v);
+              clearFieldError("setup-confirm");
+            }}
             autoComplete="new-password"
             required
+            error={fieldErrors["setup-confirm"]}
           />
           <FormField id="setup-org" label={t("auth.register.organizationName")}>
             <Input
@@ -282,7 +336,6 @@ export function SetupPage() {
               value={organizationName}
               onChange={(e) => setOrganizationName(e.target.value)}
               autoComplete="organization"
-              required
             />
           </FormField>
           <Button type="submit" className="w-full">
@@ -292,7 +345,7 @@ export function SetupPage() {
       )}
 
       {step === "instance" && (
-        <form onSubmit={onInstanceNext} className="space-y-4">
+        <form onSubmit={onInstanceNext} noValidate className="space-y-4">
           <FormField id="setup-base-url" label={t("setup.instance.baseUrl")}>
             <Input
               id="setup-base-url"
@@ -327,13 +380,25 @@ export function SetupPage() {
           {emailBackend === "smtp" && (
             <>
               <div className="grid grid-cols-[1fr_96px] gap-3">
-                <FormField id="setup-smtp-host" label={t("setup.instance.smtpHost")}>
+                <FormField
+                  id="setup-smtp-host"
+                  label={t("setup.instance.smtpHost")}
+                  error={fieldErrors["setup-smtp-host"]}
+                  required
+                >
                   <Input
                     id="setup-smtp-host"
                     value={smtpHost}
-                    onChange={(e) => setSmtpHost(e.target.value)}
+                    onChange={(e) => {
+                      setSmtpHost(e.target.value);
+                      clearFieldError("setup-smtp-host");
+                    }}
                     autoComplete="off"
                     required
+                    aria-invalid={Boolean(fieldErrors["setup-smtp-host"])}
+                    aria-describedby={
+                      fieldErrors["setup-smtp-host"] ? "setup-smtp-host-error" : undefined
+                    }
                   />
                 </FormField>
                 <FormField id="setup-smtp-port" label={t("setup.instance.smtpPort")}>
@@ -399,7 +464,7 @@ export function SetupPage() {
       )}
 
       {step === "llm" && (
-        <form onSubmit={onLlmNext} className="space-y-4">
+        <form onSubmit={onLlmNext} noValidate className="space-y-4">
           <FormField id="setup-llm-type" label={t("setup.llm.provider")}>
             <Select
               value={providerType}
@@ -417,33 +482,70 @@ export function SetupPage() {
               </SelectContent>
             </Select>
           </FormField>
-          <FormField id="setup-llm-key" label={t("setup.llm.apiKey")}>
+          <FormField
+            id="setup-llm-key"
+            label={t("setup.llm.apiKey")}
+            error={fieldErrors["setup-llm-key"]}
+            required
+          >
             <Input
               id="setup-llm-key"
               type="password"
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                clearFieldError("setup-llm-key");
+              }}
               autoComplete="new-password"
+              required
+              aria-invalid={Boolean(fieldErrors["setup-llm-key"])}
+              aria-describedby={fieldErrors["setup-llm-key"] ? "setup-llm-key-error" : undefined}
             />
           </FormField>
           {providerType === "openai_compatible" && (
-            <FormField id="setup-llm-base" label={t("setup.llm.apiBase")}>
+            <FormField
+              id="setup-llm-base"
+              label={t("setup.llm.apiBase")}
+              error={fieldErrors["setup-llm-base"]}
+              required
+            >
               <Input
                 id="setup-llm-base"
                 value={apiBase}
-                onChange={(e) => setApiBase(e.target.value)}
+                onChange={(e) => {
+                  setApiBase(e.target.value);
+                  clearFieldError("setup-llm-base");
+                }}
                 autoComplete="off"
                 placeholder="https://"
+                required
+                aria-invalid={Boolean(fieldErrors["setup-llm-base"])}
+                aria-describedby={
+                  fieldErrors["setup-llm-base"] ? "setup-llm-base-error" : undefined
+                }
               />
             </FormField>
           )}
-          <FormField id="setup-chat-model" label={t("setup.llm.chatModel")}>
+          <FormField
+            id="setup-chat-model"
+            label={t("setup.llm.chatModel")}
+            error={fieldErrors["setup-chat-model"]}
+            required
+          >
             <Input
               id="setup-chat-model"
               value={chatModel}
-              onChange={(e) => setChatModel(e.target.value)}
+              onChange={(e) => {
+                setChatModel(e.target.value);
+                clearFieldError("setup-chat-model");
+              }}
               autoComplete="off"
               placeholder="gpt-4o"
+              required
+              aria-invalid={Boolean(fieldErrors["setup-chat-model"])}
+              aria-describedby={
+                fieldErrors["setup-chat-model"] ? "setup-chat-model-error" : undefined
+              }
             />
           </FormField>
           <p className="text-xs text-muted-foreground">{t("setup.llm.chatModelHint")}</p>
