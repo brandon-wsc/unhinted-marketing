@@ -1,0 +1,97 @@
+# External-DB deployment (ADR 0027): migrate + api + scheduler + web against a
+# Postgres you operate (must have the pgvector extension available; migrations
+# run CREATE EXTENSION IF NOT EXISTS vector).
+#
+#   cd deploy
+#   cp .env.example .env   # fill DATABASE_URL + JWT_SECRET + BYOK_ENCRYPTION_KEY
+#   docker compose -f docker-compose.external-db.yml up -d --build
+#
+# No AUTO_SECRETS here — secrets come from your .env / secret manager.
+# To run migrations manually instead of via the service:
+#   docker compose -f docker-compose.external-db.yml run --rm migrate
+
+x-backend-env: &backend-env
+  APP_ENV: production
+  DEPLOYMENT_MODE: onprem
+  DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+  BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY:?set BYOK_ENCRYPTION_KEY in .env}
+  MEDIA_ROOT: /app/data/media
+  WEB_BASE_URL: ${WEB_BASE_URL:?set WEB_BASE_URL in .env}
+  CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in .env}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  LLM_API_BASE: ${LLM_API_BASE:-}
+  LLM_CHEAP_MODEL: ${LLM_CHEAP_MODEL:-gpt-4o-mini}
+  LLM_MEDIUM_MODEL: ${LLM_MEDIUM_MODEL:-gpt-4o-mini}
+  LLM_STRONG_MODEL: ${LLM_STRONG_MODEL:-gpt-4o}
+  LLM_IMAGE_MODEL: ${LLM_IMAGE_MODEL:-}
+  TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+  PUBLISH_ADAPTER: ${PUBLISH_ADAPTER:-stub}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+
+services:
+  # Only `api` carries `build:` — migrate/scheduler share the same image tag,
+  # and a multi-service bake racing one tag fails with "already exists".
+  migrate:
+    image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-api:${IMAGE_TAG:-onprem}
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    restart: "no"
+
+  api:
+    image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-api:${IMAGE_TAG:-onprem}
+    build:
+      context: ..
+      args:
+        DEPLOYMENT_MODE: onprem
+    environment: *backend-env
+    volumes:
+      - appdata:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health',timeout=5).status==200 else 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  scheduler:
+    image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-api:${IMAGE_TAG:-onprem}
+    command: ["python", "-m", "cmd.scheduler"]
+    environment: *backend-env
+    volumes:
+      - appdata:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-web:${IMAGE_TAG:-onprem}
+    build:
+      context: ../web
+      args:
+        VITE_DEPLOYMENT_MODE: onprem
+    ports:
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8484}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  appdata:

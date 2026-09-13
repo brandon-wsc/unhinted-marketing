@@ -67,6 +67,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **`/setup` wizard** — account+org → instance URL/email → optional org BYOK LLM → done; LLM + SMTP are skippable; login hides register on on-prem unless carrying an invite
 - **Consumers moved to the instance snapshot** — invite URLs, local media public URLs, OAuth redirect fallback, invite emails (sync readers fall back to env on a cold cache)
 
+**Decision (2026-09-13) — Docker deployment packages (all-in-one vs external-DB):** → [ADR 0027](./adr/0027-docker-deploy-packages.md)
+
+- **`deploy/` holds two production compose shapes** — `docker-compose.yml` (bundled pgvector `db`, one command, no `.env`) and `docker-compose.external-db.yml` (BYO Postgres; `${VAR:?}` requires `DATABASE_URL` + `JWT_SECRET` + `BYOK_ENCRYPTION_KEY` + `WEB_BASE_URL`/`CORS_ORIGINS`)
+- **`migrate` one-shot service** — api image runs `alembic upgrade head` before `api`/`scheduler` (`service_completed_successfully`); safe for replica scaling
+- **`AUTO_SECRETS` entrypoint** (`docker/api-entrypoint.sh`, api image `ENTRYPOINT`) — all-in-one generates + persists JWT/BYOK keys on the `appdata` volume (`/app/data/.secrets.env`); inert on external-DB; `APP_ENV=production` unchanged
+- **Images** `ghcr.io/brandon-wsc/unhinted-{api,web}:onprem` with `IMAGE_PREFIX`/`IMAGE_TAG` overrides + `build:` fallback; GHCR publish is follow-up CI
+
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
 - **Native `provider_type` only when the wire is not Chat Completions + Images.** Enum is `openai` \| `anthropic` \| `openai_compatible` \| `gemini` \| `vertex_ai`. Clones stay `openai_compatible` (DeepSeek, OpenRouter, Groq, …). Vertex **OAuth** / Bedrock / Cohere / Ollama-native / Azure-as-type deferred
@@ -280,7 +287,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | Alembic `8791b607d5bc` (auth) | ✅ | `users`, `entities`, `organization_members`, `refresh_tokens` |
 | React web app | ✅ | Vite + React 19 + Tailwind v4 |
 | README | ✅ | Project intro; setup in GETTING_STARTED |
-| `docker-compose.yml` | ✅ | Local `db` (pgvector) + adminer. Media is on-disk `MEDIA_ROOT` ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)); no object-storage sidecar |
+| `docker-compose.yml` | ✅ | Dev only — local `db` (pgvector) + adminer. Media is on-disk `MEDIA_ROOT` ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)); no object-storage sidecar. Deployment packages live in [`deploy/`](../deploy/) ([ADR 0027](./adr/0027-docker-deploy-packages.md)) |
 | Auth rate limiting | ✅ | In-memory sliding window on register/login/refresh (`AUTH_RATE_LIMIT_*`); Redis later |
 | Automated tests | ✅ Backend + FE Tier 1/2 + CI + on-demand live eval | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && pnpm test` (Vitest + RTL — lib utils + `session-helpers` / `session-layout` / `useSession` + PasswordBox / UserMenuDropdown). Live LLM: `python -m scripts.eval_agent` (not CI). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
