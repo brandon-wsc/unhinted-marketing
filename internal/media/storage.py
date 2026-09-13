@@ -105,7 +105,9 @@ def public_url_for(key: str, snap: StorageSnapshot) -> str:
     """Browser-fetchable URL for an object key under ``snap``."""
     key = key.lstrip("/")
     if snap.backend == "local":
-        base = _strip(settings.web_base_url).rstrip("/")
+        from internal.instance.config import get_snapshot as get_instance_snapshot
+
+        base = _strip(get_instance_snapshot().web_base_url).rstrip("/")
         path = f"{_API_MEDIA_PREFIX}{key}"
         return f"{base}{path}" if base else path
     pub = _strip(snap.public_base_url).rstrip("/")

@@ -709,3 +709,42 @@ class MigrationDoneKey(Base):
     migrated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class InstanceSettings(Base):
+    """Deployment-wide singleton settings (ADR 0026). Exactly one row (id=1).
+
+    `setup_completed_at IS NULL` on on-prem means the first-run wizard is
+    pending; env values only seed the row — this table is the source of truth.
+    """
+
+    __tablename__ = "instance_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_instance_settings_singleton"),
+        CheckConstraint(
+            "email_backend IN ('link', 'smtp', 'console')",
+            name="ck_instance_settings_email_backend",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    setup_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    web_base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    email_backend: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="link", server_default="link"
+    )
+    email_from: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    smtp_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    smtp_port: Mapped[int] = mapped_column(Integer, nullable=False, default=587)
+    smtp_user: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    smtp_password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    smtp_password_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    smtp_tls: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

@@ -7,7 +7,7 @@ import logging
 import smtplib
 from email.message import EmailMessage
 
-from internal.config import settings
+from internal.instance.config import get_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,8 @@ async def send_invite_email(
     organization_name: str,
 ) -> None:
     """Best-effort invite delivery; failures are logged and never block the API."""
-    backend = (settings.email_backend or "link").strip().lower()
+    snap = get_snapshot()
+    backend = snap.email_backend
     subject = f"Join {organization_name} on Unhinted"
     body = (
         f"You have been invited to join {organization_name}.\n\n"
@@ -44,21 +45,22 @@ async def send_invite_email(
 
 
 async def _send_smtp(*, to_email: str, subject: str, body: str) -> None:
-    if not settings.smtp_host:
-        logger.warning("EMAIL_BACKEND=smtp but SMTP_HOST is unset — skipping send to %s", to_email)
+    snap = get_snapshot()
+    if not snap.smtp_host:
+        logger.warning("email_backend=smtp but smtp_host is unset — skipping send to %s", to_email)
         return
 
     def _send() -> None:
         msg = EmailMessage()
-        msg["From"] = settings.email_from
+        msg["From"] = snap.email_from
         msg["To"] = to_email
         msg["Subject"] = subject
         msg.set_content(body)
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as smtp:
-            if settings.smtp_tls:
+        with smtplib.SMTP(snap.smtp_host, snap.smtp_port, timeout=30) as smtp:
+            if snap.smtp_tls:
                 smtp.starttls()
-            if settings.smtp_user:
-                smtp.login(settings.smtp_user, settings.smtp_password or "")
+            if snap.smtp_user:
+                smtp.login(snap.smtp_user, snap.smtp_password or "")
             smtp.send_message(msg)
 
     await asyncio.to_thread(_send)

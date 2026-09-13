@@ -28,6 +28,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0023](./0023-deployment-mode-flag.md) | Deployment mode flag (cloud vs on-prem) | Accepted (first behavior branch: 0024) |
 | [0024](./0024-media-storage-local-and-s3.md) | Media storage: local default on-prem (optional S3-compatible), AWS S3 in cloud | Accepted (§1 superseded by 0025) |
 | [0025](./0025-db-storage-config-and-portal-migration.md) | DB-backed storage config + portal local→S3 migration | Accepted |
+| [0026](./0026-onprem-first-run-setup.md) | On-prem first-run setup, invite-only register, DB instance settings | Accepted |
 
 ## Format
 

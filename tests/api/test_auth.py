@@ -2,11 +2,18 @@ import uuid
 
 import pytest
 
+from internal.config import settings
 from tests.api.helpers import auth_header, register_user
 
 
+@pytest.fixture
+def cloud_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Open registration stays available on cloud (ADR 0026)."""
+    monkeypatch.setattr(settings, "deployment_mode", "cloud")
+
+
 @pytest.mark.asyncio
-async def test_register_login_me_refresh_logout(client) -> None:
+async def test_register_login_me_refresh_logout(client, cloud_mode) -> None:
     email = f"auth-{uuid.uuid4().hex[:8]}@example.com"
     password = "password123"
 
@@ -50,7 +57,7 @@ async def test_register_login_me_refresh_logout(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email(client) -> None:
+async def test_register_duplicate_email(client, cloud_mode) -> None:
     data = await register_user(client)
     email = data["user"]["email"]
     res = await client.post(

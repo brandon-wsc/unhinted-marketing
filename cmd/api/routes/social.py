@@ -208,8 +208,10 @@ def _oauth_redirect(
 ) -> RedirectResponse:
     from urllib.parse import urlencode
 
+    from internal.instance.config import get_snapshot as get_instance_snapshot
+
     custom = (settings.meta_oauth_success_url or "").strip()
-    base = custom or (settings.web_base_url or "").strip()
+    base = custom or (get_instance_snapshot().web_base_url or "").strip()
     params: dict[str, str] = {"oauth": "done", "status": detail}
     if not custom:
         params["tab"] = "instagram"

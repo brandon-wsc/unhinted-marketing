@@ -38,6 +38,7 @@ async def register_user(
     password: str,
     display_name: str,
     organization_name: str | None = None,
+    platform_level: int | None = None,
 ) -> tuple[User, str, str]:
     email = email.strip().lower()
     if not EMAIL_RE.match(email):
@@ -53,6 +54,7 @@ async def register_user(
         email=email,
         password_hash=hash_password(password),
         display_name=display_name.strip() or email.split("@")[0],
+        **({"platform_level": platform_level} if platform_level is not None else {}),
     )
     db.add(user)
     await db.flush()

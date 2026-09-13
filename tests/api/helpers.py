@@ -25,17 +25,58 @@ async def register_user(
     password: str = "password123",
     display_name: str = "Test User",
     organization_name: str = "Test Co",
+    platform_level: int | None = None,
 ) -> dict:
-    """Register and return token response JSON (sets refresh cookie on client)."""
-    payload = {
-        "email": email or f"user-{uuid.uuid4().hex[:10]}@example.com",
-        "password": password,
-        "display_name": display_name,
-        "organization_name": organization_name,
-    }
-    res = await client.post("/api/auth/register", json=payload)
-    assert res.status_code == 201, res.text
-    return res.json()
+    """Create a user via the service layer and mirror the TokenResponse shape.
+
+    HTTP register is invite-only on on-prem after setup (ADR 0026), so the bulk
+    of the suite seeds users directly. The refresh cookie is set on the client
+    the same way the route would (Path=/api/auth).
+    """
+    from internal.auth.service import (
+        get_user_with_memberships,
+        register_user as svc_register_user,
+    )
+    from internal.config import settings
+    from internal.memory.database import open_session
+
+    async with open_session() as db:
+        user, access, refresh = await svc_register_user(
+            db,
+            email=email or f"user-{uuid.uuid4().hex[:10]}@example.com",
+            password=password,
+            display_name=display_name,
+            organization_name=organization_name,
+            platform_level=platform_level,
+        )
+        user = await get_user_with_memberships(db, user.id)
+        assert user is not None
+        orgs = [
+            {
+                "id": str(m.organization.id),
+                "name": m.organization.name,
+                "slug": m.organization.slug,
+                "role": m.role,
+            }
+            for m in user.memberships
+        ]
+        body = {
+            "access_token": access,
+            "token_type": "bearer",
+            "expires_in": settings.jwt_access_expire_minutes * 60,
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "display_name": user.display_name,
+                "is_active": user.is_active,
+                "platform_level": user.platform_level,
+                "created_at": user.created_at.isoformat(),
+                "organizations": orgs,
+            },
+        }
+    client.cookies.delete("refresh_token", path="/api/auth")
+    client.cookies.set("refresh_token", refresh, path="/api/auth")
+    return body
 
 
 async def join_org(
