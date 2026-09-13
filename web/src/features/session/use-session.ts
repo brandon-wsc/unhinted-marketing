@@ -91,6 +91,8 @@ export function useSession(companyId: string | undefined) {
   const [sending, setSending] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
+  // Bumped to force the SSE effect to tear down + resubscribe the same session.
+  const [sseReconnectNonce, setSseReconnectNonce] = useState(0);
   // In-flight assistant reply while message.delta events stream in; null when idle.
   const [streamingText, setStreamingText] = useState<string | null>(null);
   // Latest agent.progress while a graph turn runs; null when idle.
@@ -140,6 +142,12 @@ export function useSession(companyId: string | undefined) {
   const liveChatBySessionRef = useRef(new Map<string, LiveChatSnapshot>());
   const liveUiRef = useRef<LiveChatSnapshot | null>(null);
   const sseAbortRef = useRef<AbortController | null>(null);
+  // Mirror of sseConnected for event handlers (visibility/online) that must not
+  // close over stale state.
+  const sseConnectedRef = useRef(false);
+  const sseRetryCountRef = useRef(0);
+  const sseRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resyncSeq = useRef(0);
   const composerInputRef = useRef("");
   const editInsertAtRef = useRef<number | null>(null);
   // Bumped per session on Stop / turn.cancelled so late POST responses cannot
@@ -171,6 +179,11 @@ export function useSession(companyId: string | undefined) {
     mode,
     turnAnchor: turnAnchorRef.current,
   };
+
+  const markSseConnected = useCallback((connected: boolean) => {
+    sseConnectedRef.current = connected;
+    setSseConnected(connected);
+  }, []);
 
   const setComposerInput = useCallback((value: string) => {
     composerInputRef.current = value;
@@ -239,7 +252,22 @@ export function useSession(companyId: string | undefined) {
     sseAbortRef.current?.abort();
     sseAbortRef.current = null;
     sseReadyRef.current = null;
-    setSseConnected(false);
+    markSseConnected(false);
+  }, [markSseConnected]);
+
+  // Dead streams retry with backoff while the tab is visible (2s → 30s cap).
+  // Hidden tabs stay disconnected — nobody is watching; the visibility handler
+  // reconnects on return.
+  const scheduleSseRetry = useCallback(() => {
+    if (document.visibilityState !== "visible") return;
+    if (sseRetryTimerRef.current) return;
+    const attempt = sseRetryCountRef.current++;
+    const delay = Math.min(2000 * 2 ** attempt, 30000);
+    sseRetryTimerRef.current = setTimeout(() => {
+      sseRetryTimerRef.current = null;
+      if (document.visibilityState !== "visible") return;
+      setSseReconnectNonce((n) => n + 1);
+    }, delay);
   }, []);
 
   const syncSendingForCurrent = useCallback(() => {
@@ -571,6 +599,8 @@ export function useSession(companyId: string | undefined) {
 
   useEffect(() => {
     if (!sessionId || !accessToken) return;
+    // Bumped to reconnect the same session (retry / tab becomes visible).
+    void sseReconnectNonce;
     const abort = new AbortController();
     let resolveReady!: () => void;
     const readyPromise = new Promise<void>((resolve) => {
@@ -584,7 +614,8 @@ export function useSession(companyId: string | undefined) {
       signal: abort.signal,
       onOpen: () => {
         if (!abort.signal.aborted && sessionIdRef.current === sessionId) {
-          setSseConnected(true);
+          sseRetryCountRef.current = 0;
+          markSseConnected(true);
           resolveReady();
         }
       },
@@ -686,18 +717,35 @@ export function useSession(companyId: string | undefined) {
       },
     }).catch((err) => {
       if (abort.signal.aborted) return;
-      setSseConnected(false);
+      markSseConnected(false);
       // Token rotated out from under the stream — refresh flips accessToken,
       // which re-runs this effect and reconnects.
-      if (err instanceof SseAuthError) void refreshAccessToken();
+      if (err instanceof SseAuthError) {
+        void refreshAccessToken();
+        return;
+      }
+      scheduleSseRetry();
     });
     return () => {
       if (sseAbortRef.current === abort) sseAbortRef.current = null;
       sseReadyRef.current = null;
-      setSseConnected(false);
+      markSseConnected(false);
       abort.abort();
+      if (sseRetryTimerRef.current) {
+        clearTimeout(sseRetryTimerRef.current);
+        sseRetryTimerRef.current = null;
+      }
     };
-  }, [sessionId, accessToken, refreshAccessToken, applyTurnEvent, lastUserMessageId]);
+  }, [
+    sessionId,
+    accessToken,
+    refreshAccessToken,
+    applyTurnEvent,
+    lastUserMessageId,
+    markSseConnected,
+    scheduleSseRetry,
+    sseReconnectNonce,
+  ]);
 
   // Active server-side history search ("" = browse mode). Ref so that
   // refreshHistory re-applies it — opening a result must not drop the
@@ -743,7 +791,10 @@ export function useSession(companyId: string | undefined) {
     [fetchHistory],
   );
 
-  const applyHydratedSession = useCallback(
+  // Transcript + card state from a messages fetch. Shared by session open and
+  // post-reconnect resync — deliberately excludes composer draft (the stash for
+  // the session on screen is stale next to what the user is typing right now).
+  const hydrateTranscript = useCallback(
     (res: {
       session: Session;
       messages: ChatMessage[];
@@ -751,10 +802,7 @@ export function useSession(companyId: string | undefined) {
       awaiting_image_ok?: boolean;
       forked_from?: ForkOrigin | null;
     }) => {
-      disconnectSse();
-      sessionIdRef.current = res.session.id;
       resetTransientUi();
-      applyComposerDraft(readComposerDraft(composerDraftsRef.current, res.session.id));
       syncSendingForCurrent();
       setMessages(res.messages);
       messagesRef.current = res.messages;
@@ -781,8 +829,71 @@ export function useSession(companyId: string | undefined) {
         drainQueueRef.current();
       }
     },
-    [resetTransientUi, applyComposerDraft, syncSendingForCurrent, disconnectSse],
+    [resetTransientUi, syncSendingForCurrent],
   );
+
+  const applyHydratedSession = useCallback(
+    (res: {
+      session: Session;
+      messages: ChatMessage[];
+      brief?: unknown;
+      awaiting_image_ok?: boolean;
+      forked_from?: ForkOrigin | null;
+    }) => {
+      disconnectSse();
+      sessionIdRef.current = res.session.id;
+      applyComposerDraft(readComposerDraft(composerDraftsRef.current, res.session.id));
+      hydrateTranscript(res);
+    },
+    [applyComposerDraft, hydrateTranscript, disconnectSse],
+  );
+
+  // REST catch-up after a dead stream reconnects — snapshot carries no
+  // messages, so turns committed while disconnected would stay invisible.
+  const resyncCurrentSession = useCallback(async () => {
+    const id = sessionIdRef.current;
+    if (!id || !accessToken) return;
+    const seq = ++resyncSeq.current;
+    try {
+      const res = await apiGetSessionMessages(accessToken, id);
+      if (seq !== resyncSeq.current || sessionIdRef.current !== id) return;
+      if (stoppingRef.current || inFlightBySessionRef.current.has(id)) {
+        // An in-flight POST / stopTurn owns the transcript — refreshing the
+        // session row only, so the optimistic message + live actions survive.
+        setSession(res.session);
+        setMode(res.session.mode);
+        return;
+      }
+      hydrateTranscript(res);
+    } catch {
+      // Snapshot on reconnect still heals mode/draft; transcript stays stale
+      // until the next resync — no worse than before.
+    }
+  }, [accessToken, hydrateTranscript]);
+
+  // Tab returns to foreground / network comes back: if the stream is dead,
+  // reconnect immediately and resync — SSE does not replay missed events.
+  useEffect(() => {
+    const kick = () => {
+      if (!sessionIdRef.current || sseConnectedRef.current) return;
+      if (sseRetryTimerRef.current) {
+        clearTimeout(sseRetryTimerRef.current);
+        sseRetryTimerRef.current = null;
+      }
+      sseRetryCountRef.current = 0;
+      setSseReconnectNonce((n) => n + 1);
+      void resyncCurrentSession();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") kick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", kick);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", kick);
+    };
+  }, [resyncCurrentSession]);
 
   const openSession = useCallback(
     async (targetSessionId: string) => {

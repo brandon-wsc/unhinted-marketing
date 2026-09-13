@@ -1847,4 +1847,159 @@ describe("useSession", () => {
     expect(result.current.awaitingImageOk).toBe(true);
     expect(result.current.interruptAfterMessageId).toBe("u-b");
   });
+
+  it("reconnects and resyncs when the tab becomes visible after the stream died", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages
+      .mockResolvedValueOnce({ session: sessionFixture, messages: [msgA] })
+      .mockResolvedValue({
+        session: sessionFixture,
+        messages: [
+          msgA,
+          {
+            id: "a-1",
+            session_id: "sess-1",
+            role: "assistant",
+            content: "late reply",
+            created_at: "2026-01-01T00:00:02Z",
+          },
+        ],
+      });
+    subscribeSessionEvents
+      .mockRejectedValueOnce(new Error("net down"))
+      .mockImplementation(({ onOpen }: { onOpen?: () => void }) => {
+        onOpen?.();
+        return new Promise<void>(() => {});
+      });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+    await waitFor(() => expect(subscribeSessionEvents).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    await waitFor(() => expect(subscribeSessionEvents).toHaveBeenCalledTimes(2));
+    expect(subscribeSessionEvents.mock.calls[1]?.[0]).toMatchObject({ sessionId: "sess-1" });
+    await waitFor(() => expect(result.current.messages.some((m) => m.id === "a-1")).toBe(true));
+    expect(result.current.sseConnected).toBe(true);
+  });
+
+  it("does not retry while hidden, then reconnects on return", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({ session: sessionFixture, messages: [] });
+    const vis = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    subscribeSessionEvents.mockRejectedValue(new Error("net down"));
+
+    const { result } = renderHook(() => useSession("co-1"));
+    try {
+      await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+      await waitFor(() => expect(subscribeSessionEvents).toHaveBeenCalledTimes(1));
+
+      // Hidden tab: give the rejection a beat to process — no retry scheduled.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(subscribeSessionEvents).toHaveBeenCalledTimes(1);
+
+      vis.mockReturnValue("visible");
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await waitFor(() => expect(subscribeSessionEvents).toHaveBeenCalledTimes(2));
+    } finally {
+      vis.mockRestore();
+    }
+  });
+
+  it("retries a dead stream with backoff while the tab is visible", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({ session: sessionFixture, messages: [] });
+    subscribeSessionEvents.mockRejectedValue(new Error("net down"));
+
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSession("co-1"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(result.current.session?.id).toBe("sess-1");
+      expect(subscribeSessionEvents).toHaveBeenCalledTimes(1);
+
+      // First retry after ~2s.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
+      });
+      expect(subscribeSessionEvents).toHaveBeenCalledTimes(2);
+
+      // Second failure backs off to ~4s — nothing at +3.9s, retry by +4.1s.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3900);
+      });
+      expect(subscribeSessionEvents).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(subscribeSessionEvents).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("resync keeps the optimistic message while a send is in flight", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages
+      .mockResolvedValueOnce({ session: sessionFixture, messages: [] })
+      .mockResolvedValue({ session: sessionFixture, messages: [] });
+    const rejects: ((err: unknown) => void)[] = [];
+    subscribeSessionEvents.mockImplementation(({ onOpen }: { onOpen?: () => void }) => {
+      onOpen?.();
+      return new Promise<void>((_res, rej) => rejects.push(rej));
+    });
+    let resolvePost: (value: unknown) => void = () => {};
+    apiPostSessionMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePost = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    act(() => {
+      void result.current.sendMessage("still typing");
+    });
+    await waitFor(() =>
+      expect(result.current.messages.some((m) => m.id.startsWith("local-"))).toBe(true),
+    );
+    expect(result.current.sending).toBe(true);
+
+    // Stream dies mid-send; flush the rejection so the catch has run.
+    await act(async () => {
+      rejects[0]?.(new Error("net down"));
+      await Promise.resolve();
+    });
+    expect(result.current.sseConnected).toBe(false);
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(apiGetSessionMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(subscribeSessionEvents).toHaveBeenCalledTimes(2));
+
+    // In-flight send owns the transcript — optimistic message must survive.
+    expect(result.current.messages.some((m) => m.id.startsWith("local-"))).toBe(true);
+    expect(result.current.sending).toBe(true);
+
+    await act(async () => {
+      resolvePost({
+        session: sessionFixture,
+        messages: [msgA],
+        ...idleTurn,
+      });
+    });
+    expect(result.current.messages).toEqual([msgA]);
+  });
 });
