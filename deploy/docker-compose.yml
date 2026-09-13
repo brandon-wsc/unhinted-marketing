@@ -1,7 +1,7 @@
 # All-in-one self-hosted deployment (ADR 0027): bundled pgvector Postgres +
 # migrate + api + scheduler + web. One command, no .env required:
 #
-#   cd deploy && docker compose up -d --build   →  http://localhost:8080
+#   cd deploy && docker compose up -d --build   →  http://localhost:8484
 #
 # AUTO_SECRETS generates JWT_SECRET / BYOK_ENCRYPTION_KEY on first boot and
 # persists them in the `appdata` volume (docker/api-entrypoint.sh). Set them
@@ -13,8 +13,8 @@ x-backend-env: &backend-env
   AUTO_SECRETS: "true"
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-unhinted}:${POSTGRES_PASSWORD:-unhinted-local-only}@db:5432/${POSTGRES_DB:-unhinted}
   MEDIA_ROOT: /app/data/media
-  WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:8080}
-  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+  WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:8484}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8484}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   LLM_API_BASE: ${LLM_API_BASE:-}
   LLM_CHEAP_MODEL: ${LLM_CHEAP_MODEL:-gpt-4o-mini}
@@ -99,7 +99,7 @@ services:
       args:
         VITE_DEPLOYMENT_MODE: onprem
     ports:
-      - "${WEB_PORT:-8080}:80"
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8484}:80"
     depends_on:
       api:
         condition: service_healthy

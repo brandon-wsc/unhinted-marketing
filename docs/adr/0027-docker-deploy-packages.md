@@ -32,7 +32,9 @@ materialized somewhere — without weakening the production checks.
 
 Both run `APP_ENV=production`, `DEPLOYMENT_MODE=onprem` and share one backend
 env block (YAML anchor). The web service is the only published port
-(`WEB_PORT`, default 8080); nginx proxies `/api` to the service named `api`.
+(`${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8484}:80` — 8484 avoids the crowded 8080
+range; `WEB_BIND=127.0.0.1` keeps trial installs off the LAN); nginx proxies
+`/api` to the service named `api`.
 
 ### 2. `migrate` one-shot service owns schema setup
 

@@ -17,7 +17,7 @@ cd deploy
 docker compose up -d --build
 ```
 
-Open http://localhost:8080 — the first-run `/setup` wizard creates the
+Open http://localhost:8484 — the first-run `/setup` wizard creates the
 SUPERADMIN account and first org (ADR 0026). LLM keys are skippable there and
 can be added later per-org.
 
@@ -26,9 +26,13 @@ What happens on `up`: `db` (pgvector/pgvector:pg18) starts → `migrate` runs
 (persisted to the `appdata` volume) → `api` + `scheduler` start → `web` (nginx)
 serves the SPA and proxies `/api`.
 
-Optional overrides via `.env` (`cp .env.example .env`): `WEB_PORT`,
-`WEB_BASE_URL`, `OPENAI_API_KEY`, `POSTGRES_*` — see [.env.example](./.env.example).
-The bundled database publishes no host port.
+Optional overrides via `.env` (`cp .env.example .env`): `WEB_PORT` /
+`WEB_BIND`, `WEB_BASE_URL`, `OPENAI_API_KEY`, `POSTGRES_*` — see
+[.env.example](./.env.example). The bundled database publishes no host port.
+
+Port already allocated? Set `WEB_PORT` in `.env` and update `WEB_BASE_URL` /
+`CORS_ORIGINS` to match — invite links and media URLs derive from the base
+URL. `WEB_BIND=127.0.0.1` keeps a trial install off the LAN.
 
 ## External DB (ops-managed)
 
