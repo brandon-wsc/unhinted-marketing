@@ -1,0 +1,110 @@
+# All-in-one self-hosted deployment (ADR 0027): bundled pgvector Postgres +
+# migrate + api + scheduler + web. One command, no .env required:
+#
+#   cd deploy && docker compose up -d --build   →  http://localhost:8080
+#
+# AUTO_SECRETS generates JWT_SECRET / BYOK_ENCRYPTION_KEY on first boot and
+# persists them in the `appdata` volume (docker/api-entrypoint.sh). Set them
+# explicitly in .env to pin your own. See deploy/README.md and .env.example.
+
+x-backend-env: &backend-env
+  APP_ENV: production
+  DEPLOYMENT_MODE: onprem
+  AUTO_SECRETS: "true"
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-unhinted}:${POSTGRES_PASSWORD:-unhinted-local-only}@db:5432/${POSTGRES_DB:-unhinted}
+  MEDIA_ROOT: /app/data/media
+  WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:8080}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  LLM_API_BASE: ${LLM_API_BASE:-}
+  LLM_CHEAP_MODEL: ${LLM_CHEAP_MODEL:-gpt-4o-mini}
+  LLM_MEDIUM_MODEL: ${LLM_MEDIUM_MODEL:-gpt-4o-mini}
+  LLM_STRONG_MODEL: ${LLM_STRONG_MODEL:-gpt-4o}
+  LLM_IMAGE_MODEL: ${LLM_IMAGE_MODEL:-}
+  TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+  PUBLISH_ADAPTER: ${PUBLISH_ADAPTER:-stub}
+
+services:
+  db:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    shm_size: 128mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-unhinted}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-unhinted-local-only}
+      POSTGRES_DB: ${POSTGRES_DB:-unhinted}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    # No published port — reachable only inside this compose network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Only `api` carries `build:` — migrate/scheduler share the same image tag,
+  # and a multi-service bake racing one tag fails with "already exists".
+  migrate:
+    image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-api:${IMAGE_TAG:-onprem}
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    volumes:
+      - appdata:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-api:${IMAGE_TAG:-onprem}
+    build:
+      context: ..
+      args:
+        DEPLOYMENT_MODE: onprem
+    environment: *backend-env
+    volumes:
+      - appdata:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health',timeout=5).status==200 else 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  scheduler:
+    image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-api:${IMAGE_TAG:-onprem}
+    command: ["python", "-m", "cmd.scheduler"]
+    environment: *backend-env
+    volumes:
+      - appdata:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-web:${IMAGE_TAG:-onprem}
+    build:
+      context: ../web
+      args:
+        VITE_DEPLOYMENT_MODE: onprem
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  appdata:

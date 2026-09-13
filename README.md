@@ -24,6 +24,7 @@ FastAPI · PostgreSQL (pgvector) · React · LangGraph + LiteLLM (Phase 2+)
 | [docs/contracts/](docs/contracts/) | JSON Schema mirrors + SSE event catalog |
 | [docs/openapi.json](docs/openapi.json) | Generated OpenAPI (refresh via `python -m scripts.export_contracts`) |
 | [docs/TESTING.md](docs/TESTING.md) | Test tiers + path coverage gates (utils / API / UI) |
+| [deploy/](deploy/) | Self-hosted Docker packages — all-in-one (bundled Postgres) or external DB ([ADR 0027](docs/adr/0027-docker-deploy-packages.md)) |
 
 ## Quick start
 
