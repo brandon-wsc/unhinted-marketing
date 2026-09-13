@@ -59,6 +59,14 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-09-10) — DB-backed storage config + portal local→S3 migration:** → [ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md). Supersedes ADR 0024 §1 (env-presence backend). Dual-write from migrate start until cleanup; leased in-process copy; `ready_to_flip` is a human gate. Deployment-wide flip (schema has unused `company_id` for a later per-company bucket ADR).
 
+**Decision (2026-09-13) — On-prem first-run setup + invite-only register:** → [ADR 0026](./adr/0026-onprem-first-run-setup.md)
+
+- **`instance_settings` singleton row** — DB is source of truth for `web_base_url` + email/SMTP delivery; env vars seed on boot then become fallback-only. `setup_completed_at IS NULL` on on-prem = wizard pending; migration marks usered installs complete
+- **First user = SUPERADMIN (9)** — `POST /api/setup` (on-prem only, one-shot, row-locked) creates admin + first org owner in one transaction; `GET /api/setup/status` is public; `GET/PUT /api/instance/settings` is admin-read / superadmin-write (**System → Instance** tab)
+- **On-prem register is invite-only** — `403 setup_required` before setup, `403 invite_required` without a pending invite matching the email; invite accept flow unchanged. Cloud register stays open
+- **`/setup` wizard** — account+org → instance URL/email → optional org BYOK LLM → done; LLM + SMTP are skippable; login hides register on on-prem unless carrying an invite
+- **Consumers moved to the instance snapshot** — invite URLs, local media public URLs, OAuth redirect fallback, invite emails (sync readers fall back to env on a cold cache)
+
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
 - **Native `provider_type` only when the wire is not Chat Completions + Images.** Enum is `openai` \| `anthropic` \| `openai_compatible` \| `gemini` \| `vertex_ai`. Clones stay `openai_compatible` (DeepSeek, OpenRouter, Groq, …). Vertex **OAuth** / Bedrock / Cohere / Ollama-native / Azure-as-type deferred
@@ -248,7 +256,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Members API** — ✅ `GET/PATCH/DELETE …/members`, `PATCH /api/companies/{id}` rename; sole-owner rules enforced
 - **Invites API** — ✅ `POST/GET/DELETE …/invites`, `GET /api/invites/{token}` preview (`email` + `company_name`, [ADR 0014](./adr/0014-invite-public-preview.md)), `POST /api/invites/{token}/accept`; `internal/notify/` (`link` / `smtp` / `console`); invite create rate-limited
 - **Team UI** — ✅ Members tab, `/invite/:token`, login `next`; bootstrap solo-org replace on accept ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); teammate session isolation in `tests/api/test_session_isolation.py` (CI `backend-api`)
-- **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; `WEB_BASE_URL` required for link building; `internal/notify/` seam
+- **Email pluggable** — `EMAIL_BACKEND` = `link` (default) / `smtp` / `console`; link building uses `instance_settings.web_base_url` (env `WEB_BASE_URL` seeds it, [ADR 0026](./adr/0026-onprem-first-run-setup.md)); `internal/notify/` seam
 - **MVP one user ↔ one org** — invite accept **409** if already in a real team; **bootstrap solo-org is replaced** ([ADR 0013](./adr/0013-invite-accept-replaces-bootstrap-org.md)); products rehome to Mine, voice discarded ([ADR 0015](./adr/0015-invite-rehome-solo-products.md)); no switcher
 - **Shared = products + voice only** — sessions/media/drafts stay user-private; revoke cuts company access immediately (per-request membership); confirm stays open to all members (publish-role gate is not part of K6; still [ADR 0010](./adr/0010-org-membership-invites-and-shared-assets.md))
 - **Unblocks K6** promote-to-org Approvals — **shipped** ([ADR 0011](./adr/0011-knowledge-commit-without-llm.md))
@@ -400,6 +408,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `preview_images` | Append-only image versions (object key or external/`placeholder://` in `url` + plan) ([ADR 0008](./adr/0008-preview-images-append-only.md), [ADR 0024](./adr/0024-media-storage-local-and-s3.md)) |
 | `storage_configs` | Active media backend + S3 credentials (Fernet secret) ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)) |
 | `storage_migrations` | Local→S3 migrate state machine + lease |
+| `instance_settings` | Singleton deployment settings: setup marker, `web_base_url`, email/SMTP (Fernet secret) ([ADR 0026](./adr/0026-onprem-first-run-setup.md)) |
 | `migration_done_keys` | Per-key copy truth during a migrate |
 | `tool_receipts` | Idempotent Confirm / tool receipts |
 | `llm_call_records` | Per-call LLM record: correlation, prompts, response, tokens, latency, status, `parse_ok`/`fallback_used` ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |
@@ -412,12 +421,13 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 
 | Route | Description |
 |-------|-------------|
-| `/login` | Email/password login |
-| `/register` | Sign up + default workspace |
+| `/login` | Email/password login (register link hidden on on-prem unless carrying an invite) |
+| `/register` | Sign up + default workspace (on-prem: invite token required after setup) |
+| `/setup` | On-prem first-run wizard — first user becomes SUPERADMIN ([ADR 0026](./adr/0026-onprem-first-run-setup.md)) |
 | `/` | Protected **chat workspace** — split: history + chat (+ preview); paged: Record / Chat / Preview |
 | `/settings` | Company settings — Voice · Products (Org \| Mine) · Members · Approvals · Models · Instagram · Storage |
 | `/invite/:token` | Invite accept (public page; POST accept requires auth) |
-| `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace; `/admin` redirects here |
+| `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace / Instance settings (edit ≥ 9); `/admin` redirects here |
 
 **UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; harness-desk values from [`docs/design/`](./design/) **applied**; layers in [`AGENTS.md`](../AGENTS.md). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`, `UserMenu`). Session shell uses content-width `split`/`paged` (`session-layout.ts`); split chat|preview is resizable. Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
 
@@ -492,7 +502,7 @@ unhinted-marketing/
 | `AUTH_RATE_LIMIT_MAX` | Max requests per client IP per window (default 30) |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Sliding window length (default 60) |
 | `CORS_ORIGINS` | Default `https://unhinted.localhost:5173` |
-| `WEB_BASE_URL` | Invite links + OAuth return origin; also prefixes local `GET /api/media/{key}` URLs (default `https://unhinted.localhost:5173`) |
+| `WEB_BASE_URL` | Invite links + OAuth return origin; also prefixes local `GET /api/media/{key}` URLs. Seeds `instance_settings` on first boot — afterwards the DB row wins, edit via System → Instance ([ADR 0026](./adr/0026-onprem-first-run-setup.md)) (default `https://unhinted.localhost:5173`) |
 | `OPENAI_API_KEY` | LLM for questions + session nodes + `python -m scripts.eval_agent` |
 | `LLM_API_BASE` | Optional OpenAI-compatible proxy base URL (OpenRouter, DeepSeek, Azure, …). When set, model ids go through the OpenAI-compatible client (`openai/` prefix); OpenRouter `org/model` slugs are kept intact |
 | `ANTHROPIC_API_KEY` | Optional alternate provider |

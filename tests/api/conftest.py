@@ -44,6 +44,7 @@ TRUNCATE_TABLES = (
     "migration_done_keys",
     "storage_migrations",
     "storage_configs",
+    "instance_settings",
     "refresh_tokens",
     "organization_members",
     "entities",
@@ -115,9 +116,13 @@ async def clean_db(
     monkeypatch.setattr(settings, "s3_secret_key", None)
     monkeypatch.setattr(settings, "s3_public_base_url", None)
     monkeypatch.setattr(settings, "media_root", str(tmp_path / "media"))
+    from internal.instance.config import (
+        reset_snapshot_cache as reset_instance_snapshot_cache,
+    )
     from internal.media.config import reset_snapshot_cache
 
     reset_snapshot_cache()
+    reset_instance_snapshot_cache()
     reset_auth_rate_limiter()
     reset_model_list_cache()
     async with engine.begin() as conn:

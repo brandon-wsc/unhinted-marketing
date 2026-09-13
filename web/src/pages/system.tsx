@@ -4,16 +4,19 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/app-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/auth-context";
+import { InstancePanel } from "@/features/admin/components/instance-panel";
 import { LlmCallRecords } from "@/features/admin/components/llm-call-records";
 import { NodeStepsPanel } from "@/features/admin/components/node-steps";
 import { ResearchPanel } from "@/features/admin/components/research-panel";
 import { SessionTracePanel } from "@/features/admin/components/session-trace";
 import { isAdmin } from "@/lib/platform-level";
 
-type SystemTab = "llm" | "steps" | "trace" | "research";
+type SystemTab = "llm" | "steps" | "trace" | "research" | "instance";
 
 function parseTab(raw: string | null): SystemTab {
-  if (raw === "steps" || raw === "trace" || raw === "research") return raw;
+  if (raw === "steps" || raw === "trace" || raw === "research" || raw === "instance") {
+    return raw;
+  }
   return "llm";
 }
 
@@ -79,6 +82,7 @@ export function SystemPage() {
             <TabsTrigger value="steps">{t("admin.tabs.steps")}</TabsTrigger>
             <TabsTrigger value="research">{t("admin.tabs.research")}</TabsTrigger>
             <TabsTrigger value="trace">{t("admin.tabs.trace")}</TabsTrigger>
+            <TabsTrigger value="instance">{t("admin.tabs.instance")}</TabsTrigger>
           </TabsList>
           <TabsContent value="llm">
             <LlmCallRecords
@@ -105,6 +109,9 @@ export function SystemPage() {
               onOpenTurn={(id) => setTab("steps", { turn: id })}
               onOpenResearch={(id) => setTab("research", { session: id })}
             />
+          </TabsContent>
+          <TabsContent value="instance">
+            <InstancePanel />
           </TabsContent>
         </Tabs>
       </div>

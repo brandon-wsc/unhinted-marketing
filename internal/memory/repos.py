@@ -15,6 +15,7 @@ from internal.memory.models import (
     ByokRouting,
     Edge,
     Entity,
+    InstanceSettings,
     MigrationDoneKey,
     OrganizationMember,
     OrgInvite,
@@ -1925,6 +1926,30 @@ async def is_migration_key_done(db: AsyncSession, key: str) -> bool:
 
 async def list_done_migration_keys(db: AsyncSession) -> list[str]:
     return list((await db.scalars(select(MigrationDoneKey.key))).all())
+
+
+INSTANCE_SETTINGS_ID = 1
+
+
+async def get_instance_settings(db: AsyncSession) -> InstanceSettings | None:
+    return await db.get(InstanceSettings, INSTANCE_SETTINGS_ID)
+
+
+async def upsert_instance_settings(db: AsyncSession, **fields) -> InstanceSettings:
+    """Insert the singleton row when absent, then apply ``fields``."""
+    row = await get_instance_settings(db)
+    if row is None:
+        row = InstanceSettings(id=INSTANCE_SETTINGS_ID)
+        db.add(row)
+        await db.flush()
+    for key, value in fields.items():
+        setattr(row, key, value)
+    await db.flush()
+    return row
+
+
+async def mark_instance_setup_complete(db: AsyncSession) -> InstanceSettings:
+    return await upsert_instance_settings(db, setup_completed_at=datetime.now(UTC))
 
 
 async def clear_migration_done_keys(db: AsyncSession) -> None:

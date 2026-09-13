@@ -9,6 +9,8 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     display_name: str = Field(min_length=1, max_length=120)
     organization_name: str | None = Field(default=None, max_length=200)
+    # ADR 0026: on-prem self-serve register is invite-only after setup.
+    invite_token: str | None = Field(default=None, max_length=200)
 
 
 class LoginRequest(BaseModel):

@@ -1,9 +1,11 @@
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
+from internal.auth.invites import hash_invite_token, normalize_invite_email
 from internal.auth.rate_limit import enforce_auth_rate_limit
 from internal.auth.service import (
     AuthError,
@@ -14,6 +16,7 @@ from internal.auth.service import (
     register_user,
 )
 from internal.config import settings
+from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import User
 from schemas.auth import (
@@ -80,6 +83,20 @@ def _token_response(
     )
 
 
+async def _invite_allows_registration(
+    db: AsyncSession, token: str | None, email: str
+) -> bool:
+    """ADR 0026 — on-prem register requires a pending invite for this email."""
+    if not token:
+        return False
+    invite = await repos.get_org_invite_by_token_hash(db, hash_invite_token(token))
+    if not invite or invite.revoked_at or invite.accepted_at:
+        return False
+    if invite.expires_at < datetime.now(UTC):
+        return False
+    return normalize_invite_email(email) == invite.email
+
+
 @router.post("/register", response_model=TokenResponse, status_code=201)
 async def register(
     body: RegisterRequest,
@@ -88,6 +105,12 @@ async def register(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     enforce_auth_rate_limit(request, bucket="register")
+    if settings.deployment_mode == "onprem":
+        instance = await repos.get_instance_settings(db)
+        if instance is None or instance.setup_completed_at is None:
+            raise HTTPException(status_code=403, detail="setup_required")
+        if not await _invite_allows_registration(db, body.invite_token, body.email):
+            raise HTTPException(status_code=403, detail="invite_required")
     try:
         user, access, refresh = await register_user(
             db,

@@ -1,5 +1,5 @@
 import { Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
 import { IconButton } from "@/components/icon-button";
@@ -13,6 +13,7 @@ type PasswordBoxProps = {
   autoComplete?: string;
   placeholder?: string;
   required?: boolean;
+  error?: ReactNode;
 };
 
 export function PasswordBox({
@@ -23,12 +24,13 @@ export function PasswordBox({
   autoComplete,
   placeholder,
   required,
+  error,
 }: PasswordBoxProps) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
 
   return (
-    <FormField id={id} label={label}>
+    <FormField id={id} label={label} error={error} required={required}>
       <div className="relative">
         <Input
           id={id}
@@ -38,6 +40,8 @@ export function PasswordBox({
           autoComplete={autoComplete}
           placeholder={placeholder}
           required={required}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-error` : undefined}
           className="pr-10"
         />
         <IconButton

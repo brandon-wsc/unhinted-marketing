@@ -7,15 +7,18 @@ import { PasswordBox } from "@/components/password-box";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
+import { useSetup } from "@/context/setup-context";
 import { useToast } from "@/context/toast-context";
 import { useInvitePreview } from "@/features/company-settings/use-invite-preview";
 import { inviteTokenFromPath } from "@/lib/invite-path";
 import { mapApiError } from "@/lib/map-api-error";
 import { safeInternalPath } from "@/lib/safe-internal-path";
+import { isValidEmail } from "@/lib/simple-email";
 
 export function RegisterPage() {
   const { t } = useTranslation();
   const { register, user, loading } = useAuth();
+  const { status: setupStatus, loading: setupLoading, deploymentMode } = useSetup();
   const { showError } = useToast();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -30,6 +33,7 @@ export function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -38,17 +42,39 @@ export function RegisterPage() {
 
   if (!loading && user) return <Navigate to={nextPath} replace />;
 
+  // On-prem self-serve register is invite-only (ADR 0026). Fresh installs route
+  // to the setup wizard; later visitors without an invite go back to login.
+  if (!setupLoading && deploymentMode === "onprem" && !inviteToken) {
+    if (setupStatus?.setup_required) return <Navigate to="/setup" replace />;
+    return <Navigate to="/login" replace />;
+  }
+
+  function clearFieldError(id: string) {
+    setFieldErrors((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (invitePending) return;
 
-    if (password.length < 8 || confirmPassword.length < 8) {
-      showError(t("errors.passwordTooShort"));
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      showError(t("errors.passwordMismatch"));
+    const errors: Record<string, string> = {};
+    if (!displayName.trim()) errors.displayName = t("errors.displayNameRequired");
+    if (!email.trim()) errors.email = t("errors.emailRequired");
+    else if (!isValidEmail(email)) errors.email = t("errors.invalidEmail");
+    if (!password) errors.password = t("errors.passwordRequired");
+    else if (password.length < 8) errors.password = t("errors.passwordTooShort");
+    if (!confirmPassword) errors.confirmPassword = t("errors.confirmPasswordRequired");
+    else if (password && confirmPassword !== password)
+      errors.confirmPassword = t("errors.passwordMismatch");
+    setFieldErrors(errors);
+    const firstId = Object.keys(errors)[0];
+    if (firstId) {
+      document.getElementById(firstId)?.focus();
       return;
     }
 
@@ -59,6 +85,7 @@ export function RegisterPage() {
         password,
         display_name: displayName,
         organization_name: emailLocked ? undefined : organizationName || undefined,
+        invite_token: inviteToken ?? undefined,
       });
       navigate(nextPath, { replace: true });
     } catch (err) {
@@ -91,14 +118,24 @@ export function RegisterPage() {
         </>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-4">
-        <FormField id="displayName" label={t("auth.register.displayName")}>
+      <form onSubmit={onSubmit} noValidate className="space-y-4">
+        <FormField
+          id="displayName"
+          label={t("auth.register.displayName")}
+          error={fieldErrors.displayName}
+          required
+        >
           <Input
             id="displayName"
             value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
+            onChange={(e) => {
+              setDisplayName(e.target.value);
+              clearFieldError("displayName");
+            }}
             autoComplete="name"
             required
+            aria-invalid={Boolean(fieldErrors.displayName)}
+            aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
           />
         </FormField>
         {!(emailLocked || invitePending) && (
@@ -111,32 +148,45 @@ export function RegisterPage() {
             />
           </FormField>
         )}
-        <FormField id="email" label={t("common.email")}>
+        <FormField id="email" label={t("common.email")} error={fieldErrors.email} required>
           <Input
             id="email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              clearFieldError("email");
+            }}
             autoComplete="email"
             readOnly={emailLocked || invitePending}
             required
+            aria-invalid={Boolean(fieldErrors.email)}
+            aria-describedby={fieldErrors.email ? "email-error" : undefined}
           />
         </FormField>
         <PasswordBox
           id="password"
           label={t("auth.register.passwordHint")}
           value={password}
-          onChange={setPassword}
+          onChange={(v) => {
+            setPassword(v);
+            clearFieldError("password");
+          }}
           autoComplete="new-password"
           required
+          error={fieldErrors.password}
         />
         <PasswordBox
           id="confirmPassword"
           label={t("auth.register.confirmPassword")}
           value={confirmPassword}
-          onChange={setConfirmPassword}
+          onChange={(v) => {
+            setConfirmPassword(v);
+            clearFieldError("confirmPassword");
+          }}
           autoComplete="new-password"
           required
+          error={fieldErrors.confirmPassword}
         />
         <Button type="submit" disabled={submitting || invitePending} className="w-full">
           {submitting ? t("auth.register.submitting") : t("auth.register.submit")}

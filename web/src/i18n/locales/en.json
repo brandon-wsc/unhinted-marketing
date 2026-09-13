@@ -26,7 +26,7 @@
     }
   },
   "auth": {
-    "craftTagline": "Boss yaps. Agent posts.",
+    "craftCorner": "Boss yaps. Agent posts.",
     "login": {
       "title": "Sign in",
       "subtitle": "Sign in to access the Unhinted Marketing Dashboard",
@@ -631,6 +631,67 @@
       }
     }
   },
+  "setup": {
+    "title": "Set up your instance",
+    "stepIndicator": "Step {{step}} / {{total}} · {{label}}",
+    "stepLabels": {
+      "account": "Account",
+      "instance": "Instance",
+      "llm": "AI model"
+    },
+    "welcome": {
+      "title": "Welcome to Unhinted",
+      "subtitle": "This instance is starting for the first time — create an admin account to begin.",
+      "itemAccount": "Admin account",
+      "itemInstance": "Site URL & invite email",
+      "itemLlm": "LLM provider",
+      "cta": "Start setup",
+      "footer": "You can change all of this later under System → Instance."
+    },
+    "account": {
+      "title": "Create administrator account",
+      "subtitle": "The first user will become the platform Superadmin"
+    },
+    "instance": {
+      "title": "Instance settings",
+      "subtitle": "Set the site URL and invite email delivery — you can skip this step",
+      "baseUrl": "Site URL",
+      "baseUrlHint": "Used to build invite links and media URLs. Detected from your browser — edit if needed.",
+      "emailBackend": "Invite email delivery",
+      "emailLink": "Link only (copy links manually)",
+      "emailSmtp": "SMTP (send invite emails)",
+      "smtpHost": "SMTP host",
+      "smtpPort": "Port",
+      "smtpUser": "Username",
+      "smtpPassword": "Password",
+      "smtpTls": "Enable TLS (STARTTLS)",
+      "emailFrom": "Sender address",
+      "linkNote": "Invites are shared as links you copy — no email is sent. You can configure SMTP later in System → Instance."
+    },
+    "llm": {
+      "title": "Connect an AI model",
+      "subtitle": "Set a default model for chat and image generation — you can skip this step",
+      "provider": "Provider",
+      "apiKey": "API Key",
+      "apiBase": "Base URL",
+      "chatModel": "Default model",
+      "chatModelHint": "Used for all chat tiers; change routing later in Settings → API Keys.",
+      "save": "Save & finish"
+    },
+    "done": {
+      "banner": "Setup complete",
+      "title": "Your instance is ready",
+      "subtitle": "You can start using it now — configuration can be adjusted anytime in Settings",
+      "nextTitle": "Next steps",
+      "nextModels": "Connect or adjust models — Settings → API Keys",
+      "nextMembers": "Invite members — Settings → Members",
+      "nextInstance": "Email and site URL — System → Instance",
+      "cta": "Start using"
+    },
+    "next": "Continue",
+    "skip": "Skip",
+    "submitting": "Saving…"
+  },
   "system": {
     "menuEntry": "System",
     "title": "System",
@@ -638,6 +699,14 @@
       "title": "No access",
       "body": "System tools require elevated platform access.",
       "back": "Back to home"
+    },
+    "instance": {
+      "saved": "Instance settings saved.",
+      "readOnly": "Only superadmins can edit instance settings.",
+      "baseUrl": "Instance URL",
+      "baseUrlHint": "Used for invite links and OAuth redirects.",
+      "emailBackend": "Invite email delivery",
+      "smtpPasswordSet": "Saved (…{{last4}}) — enter a new password to rotate"
     }
   },
   "admin": {
@@ -652,7 +721,8 @@
       "llm": "LLM calls",
       "steps": "Node steps",
       "research": "Research",
-      "trace": "Session Trace"
+      "trace": "Session Trace",
+      "instance": "Instance"
     },
     "filters": {
       "node": "Node",
@@ -773,6 +843,12 @@
     "invalidBody": "This link may have expired, been revoked, or already been used. Ask an admin to send a new invite."
   },
   "errors": {
+    "displayNameRequired": "Enter a display name.",
+    "emailRequired": "Enter an email address.",
+    "passwordRequired": "Enter a password.",
+    "confirmPasswordRequired": "Confirm your password.",
+    "smtpHostRequired": "Enter an SMTP host.",
+    "chatModelRequired": "Enter a default model.",
     "loginFailed": "Sign in failed",
     "registrationFailed": "Registration failed",
     "invalidEmail": "Invalid email address",
@@ -782,6 +858,9 @@
     "invalidCredentials": "Incorrect email or password",
     "accountDisabled": "This account has been disabled",
     "invalidRefreshToken": "Session expired. Please sign in again",
+    "setupFailed": "Setup failed. Please try again.",
+    "inviteRequired": "Registration requires a valid invitation.",
+    "setupAlreadyCompleted": "Setup has already been completed.",
     "requestFailed": "Request failed ({{status}})"
   }
 }

@@ -4836,6 +4836,138 @@
         }
       }
     },
+    "/api/setup/status": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Setup Status",
+        "operationId": "setup_status_api_setup_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/setup": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Run Setup",
+        "operationId": "run_setup_api_setup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instance/settings": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Get Instance Settings",
+        "operationId": "get_instance_settings_api_instance_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceSettingsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Put Instance Settings",
+        "operationId": "put_instance_settings_api_instance_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstanceSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceSettingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -6093,6 +6225,100 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InstanceSettingsResponse": {
+        "properties": {
+          "web_base_url": {
+            "type": "string",
+            "title": "Web Base Url"
+          },
+          "email_backend": {
+            "type": "string",
+            "enum": [
+              "link",
+              "smtp",
+              "console"
+            ],
+            "title": "Email Backend"
+          },
+          "email_from": {
+            "type": "string",
+            "title": "Email From"
+          },
+          "smtp_host": {
+            "type": "string",
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "type": "integer",
+            "title": "Smtp Port"
+          },
+          "smtp_user": {
+            "type": "string",
+            "title": "Smtp User"
+          },
+          "smtp_password_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Password Last4"
+          },
+          "smtp_tls": {
+            "type": "boolean",
+            "title": "Smtp Tls"
+          },
+          "setup_completed": {
+            "type": "boolean",
+            "title": "Setup Completed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "web_base_url",
+          "email_backend",
+          "email_from",
+          "smtp_host",
+          "smtp_port",
+          "smtp_user",
+          "smtp_password_last4",
+          "smtp_tls",
+          "setup_completed"
+        ],
+        "title": "InstanceSettingsResponse"
+      },
+      "InstanceSettingsUpdate": {
+        "properties": {
+          "web_base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base Url"
+          },
+          "email_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupEmailConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "InstanceSettingsUpdate",
+        "description": "PUT semantics: omitted fields keep their current value; smtp_password\nonly rotates when a non-empty value is sent (never returned back)."
       },
       "LlmCallRecordDetail": {
         "properties": {
@@ -8014,6 +8240,18 @@
               }
             ],
             "title": "Organization Name"
+          },
+          "invite_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Token"
           }
         },
         "type": "object",
@@ -8680,6 +8918,171 @@
           "created_at"
         ],
         "title": "SessionTrace"
+      },
+      "SetupEmailConfig": {
+        "properties": {
+          "backend": {
+            "type": "string",
+            "enum": [
+              "link",
+              "smtp",
+              "console"
+            ],
+            "title": "Backend",
+            "default": "link"
+          },
+          "email_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 320
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email From"
+          },
+          "smtp_host": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Smtp Port",
+            "default": 587
+          },
+          "smtp_user": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp User"
+          },
+          "smtp_password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Password"
+          },
+          "smtp_tls": {
+            "type": "boolean",
+            "title": "Smtp Tls",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "SetupEmailConfig"
+      },
+      "SetupRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password"
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "organization_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Name"
+          },
+          "web_base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base Url"
+          },
+          "email_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupEmailConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "display_name"
+        ],
+        "title": "SetupRequest"
+      },
+      "SetupStatusResponse": {
+        "properties": {
+          "deployment_mode": {
+            "type": "string",
+            "enum": [
+              "cloud",
+              "onprem"
+            ],
+            "title": "Deployment Mode"
+          },
+          "setup_required": {
+            "type": "boolean",
+            "title": "Setup Required"
+          },
+          "web_base_url": {
+            "type": "string",
+            "title": "Web Base Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deployment_mode",
+          "setup_required",
+          "web_base_url"
+        ],
+        "title": "SetupStatusResponse"
       },
       "SignalResponse": {
         "properties": {

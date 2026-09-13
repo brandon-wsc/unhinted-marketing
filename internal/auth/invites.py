@@ -6,7 +6,6 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 from internal.auth.jwt import hash_refresh_token
-from internal.config import settings
 
 INVITE_TTL_DAYS = 7
 
@@ -29,5 +28,7 @@ def invite_expires_at(*, now: datetime | None = None) -> datetime:
 
 
 def build_invite_url(raw_token: str) -> str:
-    base = settings.web_base_url.rstrip("/")
+    from internal.instance.config import get_snapshot
+
+    base = get_snapshot().web_base_url.rstrip("/")
     return f"{base}/invite/{raw_token}"

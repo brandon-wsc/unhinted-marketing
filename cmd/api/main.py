@@ -16,6 +16,7 @@ from cmd.api.routes.products import router as products_router
 from cmd.api.routes.proposals import router as proposals_router
 from cmd.api.routes.questions import router as questions_router
 from cmd.api.routes.sessions import router as sessions_router
+from cmd.api.routes.setup import router as setup_router
 from cmd.api.routes.signals import router as signals_router
 from cmd.api.routes.social import oauth_callback_router
 from cmd.api.routes.social import router as social_router
@@ -40,11 +41,18 @@ async def lifespan(app: FastAPI):
     from internal.session.semantic_gate import start_semantic_router_warmup
 
     start_semantic_router_warmup()
+    from internal.instance.config import ensure_instance_settings_seeded
     from internal.media.config import ensure_storage_config_seeded
     from internal.media.migrate import resume_open_migration
     from internal.memory.database import open_session
 
     async with open_session() as db:
+        try:
+            await ensure_instance_settings_seeded(db)
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "instance settings seed failed", exc_info=True
+            )
         try:
             await ensure_storage_config_seeded(db)
         except Exception:
@@ -99,6 +107,7 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(media_router, prefix="/api")
     application.include_router(admin_router, prefix="/api")
     application.include_router(meta_router, prefix="/api")
+    application.include_router(setup_router, prefix="/api")
 
     @application.get("/api/health")
     async def health() -> dict[str, str]:
