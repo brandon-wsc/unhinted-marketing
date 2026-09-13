@@ -35,6 +35,8 @@ async def register_user(
     """
     from internal.auth.service import (
         get_user_with_memberships,
+    )
+    from internal.auth.service import (
         register_user as svc_register_user,
     )
     from internal.config import settings

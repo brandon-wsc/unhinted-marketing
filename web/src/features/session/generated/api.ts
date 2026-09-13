@@ -2938,7 +2938,7 @@ export type components = {
             /** Display Name */
             display_name: string;
             /** Organization Name */
-            organization_name: string;
+            organization_name?: string | null;
             /** Web Base Url */
             web_base_url?: string | null;
             email_config?: components["schemas"]["SetupEmailConfig"] | null;
