@@ -30,30 +30,26 @@ import { mapApiError } from "@/lib/map-api-error";
 import { isValidEmail } from "@/lib/simple-email";
 import { cn } from "@/lib/utils";
 
-type Step = "account" | "instance" | "llm" | "done";
-
 const STEP_KEYS = ["account", "instance", "llm"] as const;
-const STEP_INDEX: Record<Step, number> = { account: 1, instance: 2, llm: 3, done: 0 };
+type Step = "welcome" | (typeof STEP_KEYS)[number] | "done";
 
-function SetupStepper({ step }: { step: number }) {
+function SetupStepper({ step }: { step: (typeof STEP_KEYS)[number] }) {
   const { t } = useTranslation();
+  const index = STEP_KEYS.indexOf(step);
   return (
     <div className="flex items-center gap-1.5">
       {STEP_KEYS.map((key, i) => (
         <span
           key={key}
           aria-hidden="true"
-          className={cn(
-            "h-[3px] flex-1 rounded-full",
-            i === step - 1 ? "bg-foreground" : "bg-border",
-          )}
+          className={cn("h-[3px] flex-1 rounded-full", i <= index ? "bg-foreground" : "bg-border")}
         />
       ))}
       <span className="pl-1 text-xs whitespace-nowrap text-muted-foreground">
         {t("setup.stepIndicator", {
-          step,
+          step: index + 1,
           total: STEP_KEYS.length,
-          label: t(`setup.stepLabels.${STEP_KEYS[step - 1]}`),
+          label: t(`setup.stepLabels.${step}`),
         })}
       </span>
     </div>
@@ -67,7 +63,7 @@ export function SetupPage() {
   const { showError } = useToast();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<Step>("account");
+  const [step, setStep] = useState<Step>("welcome");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -106,7 +102,10 @@ export function SetupPage() {
 
   // Only bounce pre-submit steps — after POST /setup succeeds the status flips
   // and the wizard must stay mounted for the LLM step.
-  if (!status?.setup_required && (step === "account" || step === "instance")) {
+  if (
+    !status?.setup_required &&
+    (step === "welcome" || step === "account" || step === "instance")
+  ) {
     return <Navigate to="/" replace />;
   }
 
@@ -235,7 +234,6 @@ export function SetupPage() {
     }
   }
 
-  const stepIndex = STEP_INDEX[step];
   const title = step === "done" ? t("setup.done.title") : t(`setup.${step}.title`);
   const subtitle = step === "done" ? t("setup.done.subtitle") : t(`setup.${step}.subtitle`);
 
@@ -244,13 +242,14 @@ export function SetupPage() {
       title={title}
       subtitle={subtitle}
       craftSignal
+      footer={step === "welcome" ? t("setup.welcome.footer") : undefined}
       headerSlot={
         step === "done" ? (
           <Alert variant="success">
             <AlertDescription>{t("setup.done.banner")}</AlertDescription>
           </Alert>
-        ) : (
-          <SetupStepper step={stepIndex} />
+        ) : step === "welcome" ? null : (
+          <SetupStepper step={step} />
         )
       }
     >
@@ -261,6 +260,24 @@ export function SetupPage() {
         >
           <AlertDescription className="text-destructive-foreground">{error}</AlertDescription>
         </Alert>
+      )}
+
+      {step === "welcome" && (
+        <div className="space-y-6">
+          <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+            <li>
+              {t("setup.welcome.itemAccount")}{" "}
+              <span aria-hidden="true" className="text-destructive">
+                *
+              </span>
+            </li>
+            <li>{t("setup.welcome.itemInstance")}</li>
+            <li>{t("setup.welcome.itemLlm")}</li>
+          </ul>
+          <Button className="w-full" onClick={() => setStep("account")}>
+            {t("setup.welcome.cta")}
+          </Button>
+        </div>
       )}
 
       {step === "account" && (
@@ -564,10 +581,10 @@ export function SetupPage() {
         <div className="space-y-4">
           <div>
             <p className="mb-2 text-sm font-medium">{t("setup.done.nextTitle")}</p>
-            <ul className="space-y-1.5 text-sm text-muted-foreground">
-              <li>· {t("setup.done.nextModels")}</li>
-              <li>· {t("setup.done.nextMembers")}</li>
-              <li>· {t("setup.done.nextInstance")}</li>
+            <ul className="list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+              <li>{t("setup.done.nextModels")}</li>
+              <li>{t("setup.done.nextMembers")}</li>
+              <li>{t("setup.done.nextInstance")}</li>
             </ul>
           </div>
           <Button className="w-full" onClick={() => navigate("/", { replace: true })}>

@@ -639,6 +639,15 @@
       "instance": "Instance",
       "llm": "AI model"
     },
+    "welcome": {
+      "title": "Welcome to Unhinted",
+      "subtitle": "This instance is starting for the first time — create an admin account to begin.",
+      "itemAccount": "Admin account",
+      "itemInstance": "Site URL & invite email",
+      "itemLlm": "LLM provider",
+      "cta": "Start setup",
+      "footer": "You can change all of this later under System → Instance."
+    },
     "account": {
       "title": "Create administrator account",
       "subtitle": "The first user will become the platform Superadmin"

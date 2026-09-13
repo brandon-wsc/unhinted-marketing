@@ -54,22 +54,35 @@ function renderSetup() {
   );
 }
 
+async function renderAtAccount() {
+  const user = userEvent.setup();
+  renderSetup();
+  await user.click(await screen.findByRole("button", { name: "setup.welcome.cta" }));
+  return user;
+}
+
 describe("setup wizard step 1", () => {
   beforeEach(() => {
     apiRunSetup.mockReset();
     apiRunSetup.mockResolvedValue({ access_token: "tok" });
   });
 
-  it("marks company name optional — no required attribute", async () => {
+  it("starts on the welcome step and advances to the account form", async () => {
+    const user = userEvent.setup();
     renderSetup();
+    await user.click(await screen.findByRole("button", { name: "setup.welcome.cta" }));
+    expect(await screen.findByLabelText("auth.register.displayName")).toBeInTheDocument();
+  });
+
+  it("marks company name optional — no required attribute", async () => {
+    await renderAtAccount();
     const org = await screen.findByLabelText("auth.register.organizationName");
     expect(org).not.toBeRequired();
     expect(screen.getByLabelText("auth.register.displayName")).toBeRequired();
   });
 
   it("shows inline field errors instead of submitting empty", async () => {
-    const user = userEvent.setup();
-    renderSetup();
+    const user = await renderAtAccount();
     await user.click(await screen.findByRole("button", { name: "setup.next" }));
     expect(apiRunSetup).not.toHaveBeenCalled();
     // One alert per missing required field; the optional org field is silent.
@@ -84,8 +97,7 @@ describe("setup wizard step 1", () => {
   });
 
   it("advances with company name left blank", async () => {
-    const user = userEvent.setup();
-    renderSetup();
+    const user = await renderAtAccount();
     await user.type(await screen.findByLabelText("auth.register.displayName"), "First Admin");
     await user.type(screen.getByLabelText("common.email"), "admin@example.com");
     await user.type(screen.getByLabelText("auth.register.passwordHint"), "password123");

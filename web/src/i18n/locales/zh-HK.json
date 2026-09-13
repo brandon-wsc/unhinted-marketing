@@ -639,6 +639,15 @@
       "instance": "Instance",
       "llm": "AI 模型"
     },
+    "welcome": {
+      "title": "歡迎使用 Unhinted",
+      "subtitle": "呢個 instance 第一次啟動，要先建立管理員帳戶。",
+      "itemAccount": "管理員帳戶",
+      "itemInstance": "網址同邀請電郵",
+      "itemLlm": "LLM 供應商",
+      "cta": "開始設定",
+      "footer": "全部設定之後都可以喺 系統 → Instance 改返。"
+    },
     "account": {
       "title": "建立管理員帳戶",
       "subtitle": "第一位用戶會成為平台 Superadmin"
