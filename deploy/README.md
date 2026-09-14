@@ -12,6 +12,15 @@ Requires Docker with Compose v2.20+ (`docker compose version`).
 
 ## All-in-one (one command)
 
+Standalone install (prebuilt images, no repo checkout):
+
+```bash
+curl -LO https://github.com/brandon-wsc/unhinted-marketing/releases/latest/download/compose.yaml
+docker compose -f compose.yaml up -d
+```
+
+Or from a repo checkout:
+
 ```bash
 cd deploy
 docker compose up -d --build
@@ -43,6 +52,9 @@ cp .env.example .env   # set DATABASE_URL, JWT_SECRET, BYOK_ENCRYPTION_KEY,
 docker compose -f docker-compose.external-db.yml up -d --build
 ```
 
+Standalone: grab `compose.external-db.yaml` + `env.example` from the latest
+release instead of the checkout files.
+
 Your Postgres must have the pgvector extension available (migrations run
 `CREATE EXTENSION IF NOT EXISTS vector`). No `AUTO_SECRETS` here — the compose
 file fails fast on missing `DATABASE_URL` / `JWT_SECRET` / `BYOK_ENCRYPTION_KEY`.
@@ -56,16 +68,24 @@ docker compose -f docker-compose.external-db.yml run --rm migrate
 
 ## Images
 
-Services carry both `image:` and `build:` — inside a repo checkout
-`up -d --build` builds locally; `docker compose pull` works once images are
-published. Until then `pull` (or `up` without `--build`) fails — the GHCR
-coordinates do not exist yet (publishing is follow-up CI, ADR 0027).
-Coordinates default to `ghcr.io/brandon-wsc/unhinted-{api,web}:onprem`
-and are overridable:
+Each `v*` tag runs `.github/workflows/release.yml`: it builds + pushes
+`ghcr.io/brandon-wsc/unhinted-{api,web}` (multi-arch: amd64 + arm64 via QEMU)
+tagged with the version **and** the
+floating `onprem` tag, then attaches standalone compose assets
+(`compose.yaml`, `compose.external-db.yaml`, `env.example`) to the GitHub
+Release. The standalone files are derived from the `deploy/` compose files —
+`build:` sections stripped, `IMAGE_TAG` default pinned to the release version.
+
+Inside a repo checkout `up -d --build` still builds locally;
+`docker compose pull` fetches the latest release (the `onprem` tag).
+Coordinates are overridable:
 
 ```bash
 IMAGE_PREFIX=ghcr.io/your-ns IMAGE_TAG=v1.2.3 docker compose pull
 ```
+
+Anonymous pull needs the GHCR packages set to public — a one-time repo-owner
+step (package → Settings → Change visibility) after the first publish.
 
 `DEPLOYMENT_MODE` is baked at image build time (ADR 0023) — on-prem is the
 default and correct for both packages.

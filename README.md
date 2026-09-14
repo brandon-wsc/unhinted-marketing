@@ -26,6 +26,15 @@ FastAPI · PostgreSQL (pgvector) · React · LangGraph + LiteLLM (Phase 2+)
 | [docs/TESTING.md](docs/TESTING.md) | Test tiers + path coverage gates (utils / API / UI) |
 | [deploy/](deploy/) | Self-hosted Docker packages — all-in-one (bundled Postgres) or external DB ([ADR 0027](docs/adr/0027-docker-deploy-packages.md)) |
 
+## Self-host (Docker)
+
+```bash
+curl -LO https://github.com/brandon-wsc/unhinted-marketing/releases/latest/download/compose.yaml
+docker compose -f compose.yaml up -d   # → http://localhost:8484, first-run /setup wizard
+```
+
+Or from a checkout: `cd deploy && docker compose up -d --build`. BYO-Postgres and ops details: [deploy/README.md](deploy/README.md).
+
 ## Quick start
 
 ```bash

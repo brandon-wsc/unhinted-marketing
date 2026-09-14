@@ -1,0 +1,153 @@
+name: Release
+
+# Tag a v* release → build + push GHCR images → attach standalone
+# (pull-only, build: stripped, IMAGE_TAG pinned) compose assets to the
+# GitHub Release. Re-run an existing tag via workflow_dispatch.
+#
+# One-time manual step after the first publish: the GHCR packages start
+# private — flip each to public under github.com/users/<owner>/packages →
+# package → Settings → Change visibility. GITHUB_TOKEN cannot do this.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v* tag to (re)publish
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+  attestations: write
+  id-token: write
+
+env:
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  images:
+    name: Build + push ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            context: .
+            file: Dockerfile
+            args: DEPLOYMENT_MODE=onprem
+          - name: web
+            context: web
+            file: web/Dockerfile
+            args: VITE_DEPLOYMENT_MODE=onprem
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.args }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/unhinted-${{ matrix.name }}:${{ env.RELEASE_TAG }}
+            ${{ env.IMAGE_PREFIX }}/unhinted-${{ matrix.name }}:onprem
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.IMAGE_PREFIX }}/unhinted-${{ matrix.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  release:
+    name: GitHub Release + standalone compose
+    needs: images
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Derive standalone compose assets
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          cat > out/compose.header <<'HDR'
+          # Unhinted Marketing — standalone all-in-one install (prebuilt images,
+          # no repo checkout). Bundled pgvector Postgres; zero .env required.
+          #
+          #   docker compose -f compose.yaml up -d   →  http://localhost:8484
+          #
+          # First boot opens the /setup wizard (admin account + first org).
+          # Optional overrides: download env.example from this release →
+          # cp env.example .env (WEB_PORT, WEB_BASE_URL, OPENAI_API_KEY, …).
+          # IMAGE_TAG below is pinned to this release — bump it to upgrade.
+          #
+          # ── derived from deploy/docker-compose.yml (build: stripped) ────────
+          HDR
+
+          cat > out/compose.external-db.header <<'HDR'
+          # Unhinted Marketing — standalone install against your own Postgres
+          # (prebuilt images, no repo checkout). Postgres must have pgvector.
+          #
+          #   cp env.example .env   # set DATABASE_URL + JWT_SECRET +
+          #                         # BYOK_ENCRYPTION_KEY + WEB_BASE_URL + CORS_ORIGINS
+          #   docker compose -f compose.external-db.yaml up -d
+          #
+          # env.example ships in this same release. No AUTO_SECRETS here — the
+          # file fails fast until required secrets are set.
+          #
+          # ── derived from deploy/docker-compose.external-db.yml (build: stripped)
+          HDR
+
+          # Strip every `build:` block (its nested keys are more indented) and
+          # pin the IMAGE_TAG default to this release tag.
+          standalone() {
+            cat "out/$2" > "out/$3"
+            awk -v tag="$RELEASE_TAG" '
+              /^[[:space:]]+build:[[:space:]]*$/ {
+                match($0, /[^[:space:]]/); ind = RSTART; skip = 1; next
+              }
+              skip && NF {
+                match($0, /[^[:space:]]/);
+                if (RSTART <= ind) skip = 0
+              }
+              !skip {
+                gsub(/IMAGE_TAG:-onprem/, "IMAGE_TAG:-" tag); print
+              }' "$1" >> "out/$3"
+          }
+
+          standalone deploy/docker-compose.yml              compose.header            compose.yaml
+          standalone deploy/docker-compose.external-db.yml  compose.external-db.header compose.external-db.yaml
+          cp deploy/.env.example out/env.example
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            out/compose.yaml
+            out/compose.external-db.yaml
+            out/env.example
+          generate_release_notes: true

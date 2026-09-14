@@ -73,5 +73,7 @@ override the namespace and tag without editing the files.
 - Compose `service_completed_successfully` needs Docker Compose v2.20+.
 - Root `docker-compose.yml` remains dev-only; the deploy `db` never mounts
   `docker/postgres/init` (test-database SQL is dev/test only).
-- Publishing images to GHCR is follow-up CI work; until then both packages
-  build from a checkout.
+- Publishing images to GHCR shipped 2026-09-14 via
+  `.github/workflows/release.yml` — `v*` tags build/push version + floating
+  `onprem` tags and attach derived standalone (build-stripped, tag-pinned)
+  compose assets to the Release. Checkouts still build via `--build`.
