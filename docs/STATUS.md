@@ -72,7 +72,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **`deploy/` holds two production compose shapes** — `docker-compose.yml` (bundled pgvector `db`, one command, no `.env`) and `docker-compose.external-db.yml` (BYO Postgres; `${VAR:?}` requires `DATABASE_URL` + `JWT_SECRET` + `BYOK_ENCRYPTION_KEY` + `WEB_BASE_URL`/`CORS_ORIGINS`)
 - **`migrate` one-shot service** — api image runs `alembic upgrade head` before `api`/`scheduler` (`service_completed_successfully`); safe for replica scaling
 - **`AUTO_SECRETS` entrypoint** (`docker/api-entrypoint.sh`, api image `ENTRYPOINT`) — all-in-one generates + persists JWT/BYOK keys on the `appdata` volume (`/app/data/.secrets.env`); inert on external-DB; `APP_ENV=production` unchanged
-- **Images** `ghcr.io/brandon-wsc/unhinted-{api,web}:onprem` with `IMAGE_PREFIX`/`IMAGE_TAG` overrides + `build:` fallback; GHCR publish is follow-up CI
+- **Images** `ghcr.io/brandon-wsc/unhinted-{api,web}` with `IMAGE_PREFIX`/`IMAGE_TAG` overrides + `build:` fallback; `.github/workflows/release.yml` publishes on `v*` tags (version + floating `onprem` tag) and attaches derived standalone pull-only compose assets (`compose.yaml`, `compose.external-db.yaml`, `env.example`) to the Release. GHCR packages need a one-time public-visibility flip after first publish
 
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
