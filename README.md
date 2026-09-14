@@ -49,3 +49,7 @@ Frontend: `cd web && pnpm install && pnpm run dev` → [https://unhinted.localho
 Frontend tests: `cd web && pnpm test` (also `pnpm run test:coverage`, `pnpm run build`).
 
 See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) for full setup (DB, workers, scheduler, tests).
+
+## License
+
+[MIT](LICENSE) © 2026 brandon-wsc
