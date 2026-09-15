@@ -1,4 +1,4 @@
-"""API coverage for ADR 0004 stop / resume-image / parked 409."""
+"""API coverage for ADR 0004 stop / resume-image / parked 409 + ADR 0028 choose-angle."""
 
 from __future__ import annotations
 
@@ -100,3 +100,120 @@ async def test_resume_image_happy_path(client) -> None:
     body = res.json()
     assert body["session"]["id"] == str(sid)
     assert body["interrupted"] is False
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_not_parked(client) -> None:
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+
+    with patch(
+        "cmd.api.routes.sessions.choose_angle_turn",
+        AsyncMock(side_effect=SessionTurnConflict("not_parked", "not parked")),
+    ):
+        res = await client.post(
+            f"/api/sessions/{session_id}/choose-angle",
+            headers=headers,
+            json={"angle_index": 0},
+        )
+    assert res.status_code == 409
+    assert res.json()["detail"]["reason"] == "not_parked"
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_requires_a_pick(client) -> None:
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+
+    res = await client.post(
+        f"/api/sessions/{session_id}/choose-angle",
+        headers=headers,
+        json={},
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_index_out_of_range(client) -> None:
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+
+    with patch(
+        "cmd.api.routes.sessions.choose_angle_turn",
+        AsyncMock(side_effect=ValueError("angle_index out of range")),
+    ):
+        res = await client.post(
+            f"/api/sessions/{session_id}/choose-angle",
+            headers=headers,
+            json={"angle_index": 9},
+        )
+    assert res.status_code == 422
+    assert "out of range" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_happy_path(client) -> None:
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+    sid = uuid.UUID(session_id)
+
+    fake_result = {
+        "interrupted": True,
+        "events": [
+            {"type": "draft.awaiting_image_ok", "data": {"awaiting": True}},
+        ],
+        "values": {"revision": 0, "pending_confirm": False, "approval_token": None},
+    }
+    choose = AsyncMock(return_value=fake_result)
+    with patch("cmd.api.routes.sessions.choose_angle_turn", choose):
+        res = await client.post(
+            f"/api/sessions/{session_id}/choose-angle",
+            headers=headers,
+            json={"angle_index": 1},
+        )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["session"]["id"] == str(sid)
+    assert body["interrupted"] is True
+    assert choose.await_args.kwargs["angle_index"] == 1
+    assert choose.await_args.kwargs["angle_text"] is None
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_rejects_other_users_session(client) -> None:
+    owner = await register_user(client)
+    owner_company = owner["user"]["organizations"][0]["id"]
+    created = await client.post(
+        "/api/sessions",
+        headers=auth_header(owner["access_token"]),
+        json={"company_id": owner_company},
+    )
+    session_id = created.json()["id"]
+
+    other = await register_user(client)
+    res = await client.post(
+        f"/api/sessions/{session_id}/choose-angle",
+        headers=auth_header(other["access_token"]),
+        json={"angle_index": 0},
+    )
+    assert res.status_code in (403, 404)

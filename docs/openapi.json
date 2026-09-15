@@ -3480,6 +3480,65 @@
         }
       }
     },
+    "/api/sessions/{session_id}/choose-angle": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Choose Angle",
+        "description": "Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0028).",
+        "operationId": "choose_angle_api_sessions__session_id__choose_angle_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChooseAngleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChooseAngleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/{session_id}/stop": {
       "post": {
         "tags": [
@@ -5676,6 +5735,102 @@
         "type": "object",
         "title": "ByokRoutingUpdate"
       },
+      "ChooseAngleRequest": {
+        "properties": {
+          "angle_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Angle Index"
+          },
+          "angle": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Angle"
+          }
+        },
+        "type": "object",
+        "title": "ChooseAngleRequest",
+        "description": "ADR 0028 pick while parked at angle_gate — index or free text."
+      },
+      "ChooseAngleResponse": {
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/SessionResponse"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/schemas__session__MessageResponse"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "interrupted": {
+            "type": "boolean",
+            "title": "Interrupted",
+            "default": false
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "pending_confirm": {
+            "type": "boolean",
+            "title": "Pending Confirm",
+            "default": false
+          },
+          "approval_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Token"
+          },
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session",
+          "messages",
+          "mode"
+        ],
+        "title": "ChooseAngleResponse"
+      },
       "CompanyMember": {
         "properties": {
           "user_id": {
@@ -6178,6 +6333,11 @@
           "awaiting_image_ok": {
             "type": "boolean",
             "title": "Awaiting Image Ok",
+            "default": false
+          },
+          "awaiting_angle_pick": {
+            "type": "boolean",
+            "title": "Awaiting Angle Pick",
             "default": false
           },
           "forked_from": {
@@ -8739,6 +8899,11 @@
             "title": "Awaiting Image Ok",
             "default": false
           },
+          "awaiting_angle_pick": {
+            "type": "boolean",
+            "title": "Awaiting Angle Pick",
+            "default": false
+          },
           "forked_from": {
             "anyOf": [
               {
@@ -9322,6 +9487,11 @@
           "awaiting_image_ok": {
             "type": "boolean",
             "title": "Awaiting Image Ok",
+            "default": false
+          },
+          "awaiting_angle_pick": {
+            "type": "boolean",
+            "title": "Awaiting Angle Pick",
             "default": false
           }
         },

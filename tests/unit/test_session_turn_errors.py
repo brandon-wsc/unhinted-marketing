@@ -106,13 +106,22 @@ async def test_invoke_graph_node_error_does_not_touch_expired_session() -> None:
     graph = SimpleNamespace(ainvoke=boom_ainvoke, aget_state=AsyncMock())
 
     with patch("internal.session.service.get_session_graph", return_value=graph):
-        values, interrupted, provider_error, events, _duration = await _invoke_graph(
+        (
+            values,
+            interrupted,
+            parked_node,
+            provider_error,
+            events,
+            _duration,
+        ) = await _invoke_graph(
             db,
             session,  # type: ignore[arg-type]
             graph_input={},
             user_content="幫我睇下市場",
             message_dicts=[{"role": "user", "content": "幫我睇下市場"}],
         )
+
+    assert parked_node is None
 
     assert interrupted is False
     assert provider_error is None
@@ -142,7 +151,14 @@ async def test_invoke_graph_llm_error_still_surfaces_provider_copy() -> None:
     )
 
     with patch("internal.session.service.get_session_graph", return_value=graph):
-        values, interrupted, provider_error, _events, _duration = await _invoke_graph(
+        (
+            values,
+            interrupted,
+            parked_node,
+            provider_error,
+            _events,
+            _duration,
+        ) = await _invoke_graph(
             db,
             session,  # type: ignore[arg-type]
             graph_input={},
@@ -151,6 +167,7 @@ async def test_invoke_graph_llm_error_still_surfaces_provider_copy() -> None:
         )
 
     assert interrupted is False
+    assert parked_node is None
     assert provider_error is err
     assert "AI service unavailable" in values["messages"][-1]["content"]
     db.rollback.assert_not_awaited()
@@ -168,7 +185,10 @@ async def test_run_session_turn_graph_error_persists_and_clears_registry() -> No
     graph = SimpleNamespace(ainvoke=boom_ainvoke, aget_state=AsyncMock())
 
     with (
-        patch("internal.session.service.session_is_parked", AsyncMock(return_value=False)),
+        patch(
+            "internal.session.service.session_park_kind",
+            AsyncMock(return_value=None),
+        ),
         patch(
             "internal.session.service.repos.add_session_message",
             AsyncMock(return_value=user_msg),
@@ -205,7 +225,10 @@ async def test_run_session_turn_clears_registry_when_session_id_expires() -> Non
         raise RuntimeError("persist path never reached")
 
     with (
-        patch("internal.session.service.session_is_parked", AsyncMock(return_value=False)),
+        patch(
+            "internal.session.service.session_park_kind",
+            AsyncMock(return_value=None),
+        ),
         patch(
             "internal.session.service.repos.add_session_message",
             AsyncMock(return_value=user_msg),

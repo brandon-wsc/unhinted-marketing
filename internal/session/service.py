@@ -23,7 +23,11 @@ from internal.memory import repos
 from internal.memory.models import PreviewImage, Session
 from internal.session.context import session_db
 from internal.session.events import session_event_bus
-from internal.session.graph import get_session_graph
+from internal.session.graph import (
+    ANGLE_GATE_NODE,
+    IMAGE_PARK_NODE,
+    get_session_graph,
+)
 from internal.session.media import image_format_from_plan, media_item_payload
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
 from internal.session.trace import turn_trace
@@ -259,6 +263,7 @@ def _strip_discard_meta(state: dict[str, Any] | None) -> dict[str, Any]:
     out = copy.deepcopy(state or {})
     out.pop("turn_discard", None)
     out.pop("awaiting_image_ok", None)
+    out.pop("awaiting_angle_pick", None)
     return out
 
 
@@ -357,14 +362,35 @@ async def graph_is_parked(session_id: uuid.UUID) -> bool:
     return bool(snapshot.next)
 
 
-async def session_is_parked(session: Session) -> bool:
-    if bool((session.state or {}).get("awaiting_image_ok")):
-        return True
+async def graph_parked_node(session_id: uuid.UUID) -> str | None:
+    """First node name the graph is parked before, or None."""
+    graph = get_session_graph()
+    snapshot = await graph.aget_state(_session_config(session_id))
+    nxt = snapshot.next or ()
+    return str(nxt[0]) if nxt else None
+
+
+async def session_park_kind(session: Session) -> str | None:
+    """Which interrupt the session waits on: 'image' | 'angle' | 'unknown' | None."""
+    state = session.state or {}
+    if state.get("awaiting_image_ok"):
+        return "image"
+    if state.get("awaiting_angle_pick"):
+        return "angle"
     try:
-        return await graph_is_parked(session.id)
+        node = await graph_parked_node(session.id)
     except Exception:
         logger.debug("Could not read graph interrupt state", exc_info=True)
-        return False
+        return None
+    if node == IMAGE_PARK_NODE:
+        return "image"
+    if node == ANGLE_GATE_NODE:
+        return "angle"
+    return "unknown" if node else None
+
+
+async def session_is_parked(session: Session) -> bool:
+    return await session_park_kind(session) is not None
 
 
 async def _adelete_graph_thread(session_id: uuid.UUID) -> None:
@@ -412,6 +438,33 @@ async def _repark_graph_at_image_interrupt(
         )
 
 
+async def _repark_graph_at_angle_gate(
+    db: AsyncSession,
+    session: Session,
+) -> None:
+    """After cancelling choose-angle, wipe mid-run checkpoint and re-seat interrupt.
+
+    ``aupdate_state(..., as_node="brainstormer")`` with the offered brief and
+    ``chosen_angle=None`` schedules ``angle_gate``, which pauses again via
+    ``interrupt_before``.
+    """
+    await _adelete_graph_thread(session.id)
+    msgs = await repos.list_session_messages(db, session.id)
+    message_dicts = [{"role": m.role, "content": m.content} for m in msgs]
+    values = _graph_values(session, message_dicts)
+    values["chosen_angle"] = None
+    graph = get_session_graph()
+    config = _session_config(session.id)
+    try:
+        await graph.aupdate_state(config, values, as_node="brainstormer")
+    except Exception:
+        logger.warning(
+            "Failed to re-park graph at angle gate (session=%s)",
+            session.id,
+            exc_info=True,
+        )
+
+
 async def _discard_turn_state(
     db: AsyncSession,
     session: Session,
@@ -430,7 +483,16 @@ async def _discard_turn_state(
     await db.flush()
     await session_event_bus.publish_many(
         session.id,
-        [{"type": "turn.cancelled", "data": {"reason": "stop", "awaiting_image_ok": False}}],
+        [
+            {
+                "type": "turn.cancelled",
+                "data": {
+                    "reason": "stop",
+                    "awaiting_image_ok": False,
+                    "awaiting_angle_pick": False,
+                },
+            }
+        ],
     )
 
 
@@ -440,19 +502,33 @@ async def _restore_parked_after_resume_cancel(
     *,
     parked_state: dict[str, Any],
     message_ids: list[uuid.UUID],
+    kind: str = "image",
 ) -> None:
-    """Cancel in-flight resume-image: keep draft/brief and re-show Generate-image CTA."""
+    """Cancel in-flight resume: keep draft/brief and re-show the parked CTA."""
     session_event_bus.end_turn_progress(session.id)
     restored = copy.deepcopy(parked_state)
-    restored["awaiting_image_ok"] = True
+    restored["awaiting_image_ok"] = kind == "image"
+    restored["awaiting_angle_pick"] = kind == "angle"
     session.state = restored
     if message_ids:
         await repos.delete_session_messages_by_ids(db, session.id, message_ids)
-    await _repark_graph_at_image_interrupt(db, session)
+    if kind == "angle":
+        await _repark_graph_at_angle_gate(db, session)
+    else:
+        await _repark_graph_at_image_interrupt(db, session)
     await db.flush()
     await session_event_bus.publish_many(
         session.id,
-        [{"type": "turn.cancelled", "data": {"reason": "stop", "awaiting_image_ok": True}}],
+        [
+            {
+                "type": "turn.cancelled",
+                "data": {
+                    "reason": "stop",
+                    "awaiting_image_ok": kind == "image",
+                    "awaiting_angle_pick": kind == "angle",
+                },
+            }
+        ],
     )
 
 
@@ -464,6 +540,7 @@ async def _persist_after_invoke(
     message_dicts: list[dict[str, Any]],
     values: dict[str, Any],
     still_interrupted: bool,
+    parked_node: str | None,
     progress_events: list[dict[str, Any]],
     provider_error: LlmProviderError | None,
     user_content: str,
@@ -519,8 +596,9 @@ async def _persist_after_invoke(
         "product_candidates": values.get("product_candidates") or [],
         "grounding_ok": values.get("grounding_ok", True),
         "error": values.get("error"),
-        # UI hydrate: interrupt_before executor_image_plan
-        "awaiting_image_ok": still_interrupted,
+        # UI hydrate: interrupt_before angle_gate / executor_image_plan
+        "awaiting_image_ok": parked_node == IMAGE_PARK_NODE,
+        "awaiting_angle_pick": parked_node == ANGLE_GATE_NODE,
     }
     if still_interrupted:
         if user_msg is not None:
@@ -532,8 +610,13 @@ async def _persist_after_invoke(
                 ],
             }
         elif isinstance((session.state or {}).get("turn_discard"), dict):
-            # resume-image: keep the original park discard metadata (ADR 0004).
+            # resume-image / typed angle pick: keep the original park discard
+            # metadata (ADR 0004); a typed pick message joins the discard scope.
             next_state["turn_discard"] = dict(session.state["turn_discard"])
+            if entry is not None and entry.message_ids:
+                merged = list(next_state["turn_discard"].get("message_ids") or [])
+                merged.extend(str(mid) for mid in entry.message_ids)
+                next_state["turn_discard"]["message_ids"] = merged
     session.state = next_state
 
     events: list[dict[str, Any]] = list(progress_events)
@@ -551,11 +634,23 @@ async def _persist_after_invoke(
                 }
             )
 
-    if still_interrupted:
+    if parked_node == IMAGE_PARK_NODE:
         events.append(
             {
                 "type": "draft.awaiting_image_ok",
                 "data": {"awaiting": True},
+            }
+        )
+    elif parked_node == ANGLE_GATE_NODE:
+        angles = [
+            a
+            for a in ((values.get("brief") or {}).get("angles") or [])
+            if isinstance(a, str) and a.strip()
+        ]
+        events.append(
+            {
+                "type": "draft.awaiting_angle_pick",
+                "data": {"awaiting": True, "angles": angles},
             }
         )
 
@@ -676,6 +771,7 @@ async def _invoke_graph(
     provider_error: LlmProviderError | None = None
     values: dict[str, Any] = {}
     still_interrupted = False
+    parked_node: str | None = None
     progress_events: list[dict[str, Any]] = []
     started = time.perf_counter()
 
@@ -694,6 +790,7 @@ async def _invoke_graph(
                 snapshot = await graph.aget_state(config)
                 values = dict(snapshot.values or result or {})
                 still_interrupted = bool(snapshot.next)
+                parked_node = str(snapshot.next[0]) if snapshot.next else None
             except asyncio.CancelledError:
                 progress_events = session_event_bus.end_turn_progress(session_id)
                 raise
@@ -722,6 +819,7 @@ async def _invoke_graph(
                         snapshot = await graph.aget_state(config)
                         values = dict(snapshot.values or {})
                         still_interrupted = bool(snapshot.next)
+                        parked_node = str(snapshot.next[0]) if snapshot.next else None
                     except Exception:
                         logger.exception(
                             "aget_state after LLM error failed (session=%s)",
@@ -729,6 +827,7 @@ async def _invoke_graph(
                         )
                         values = {}
                         still_interrupted = False
+                        parked_node = None
                     values["error"] = provider_error.message
                     values["messages"] = list(values.get("messages") or message_dicts) + [
                         {
@@ -741,7 +840,14 @@ async def _invoke_graph(
                     progress_events = session_event_bus.end_turn_progress(session_id)
 
     duration_ms = max(0, int((time.perf_counter() - started) * 1000))
-    return values, still_interrupted, provider_error, progress_events, duration_ms
+    return (
+        values,
+        still_interrupted,
+        parked_node,
+        provider_error,
+        progress_events,
+        duration_ms,
+    )
 
 
 async def run_session_turn(
@@ -755,10 +861,14 @@ async def run_session_turn(
     session_id = session.id
     if session_turn_registry.is_busy(session_id):
         raise SessionTurnConflict("busy", "Session turn already in progress")
-    if await session_is_parked(session):
+    park_kind = await session_park_kind(session)
+    if park_kind == "angle":
+        # ADR 0028: a typed reply while parked at the angle gate IS the pick.
+        return await choose_angle_turn(db, session, angle_text=user_content)
+    if park_kind is not None:
         raise SessionTurnConflict(
             "parked",
-            "Session is awaiting image confirmation — use resume-image or stop",
+            "Session is awaiting a parked confirmation — resume or stop",
         )
 
     pre_state = _strip_discard_meta(session.state)
@@ -790,6 +900,7 @@ async def run_session_turn(
         (
             values,
             still_interrupted,
+            parked_node,
             provider_error,
             progress_events,
             duration_ms,
@@ -807,6 +918,7 @@ async def run_session_turn(
             message_dicts=message_dicts,
             values=values,
             still_interrupted=still_interrupted,
+            parked_node=parked_node,
             progress_events=progress_events,
             provider_error=provider_error,
             user_content=user_content,
@@ -840,7 +952,7 @@ async def resume_image_turn(
     session_id = session.id
     if session_turn_registry.is_busy(session_id):
         raise SessionTurnConflict("busy", "Session turn already in progress")
-    if not await session_is_parked(session):
+    if await session_park_kind(session) != "image":
         raise SessionTurnConflict("not_parked", "Session is not awaiting image confirmation")
 
     # Snapshot full parked UI state so Stop mid-image can restore the CTA.
@@ -883,6 +995,7 @@ async def resume_image_turn(
         (
             values,
             still_interrupted,
+            parked_node,
             provider_error,
             progress_events,
             duration_ms,
@@ -898,6 +1011,7 @@ async def resume_image_turn(
             # a new chat turn. Checkpoint after a failed gen node may have no
             # interrupt; re-seat like Stop mid-resume.
             still_interrupted = True
+            parked_node = IMAGE_PARK_NODE
             values = {
                 **_strip_discard_meta(parked_restore),
                 **values,
@@ -912,6 +1026,7 @@ async def resume_image_turn(
             message_dicts=message_dicts,
             values=values,
             still_interrupted=still_interrupted,
+            parked_node=parked_node,
             progress_events=progress_events,
             provider_error=provider_error,
             user_content="",
@@ -932,6 +1047,146 @@ async def resume_image_turn(
             session,
             parked_state=entry.parked_restore or parked_restore,
             message_ids=list(entry.message_ids),
+            kind="image",
+        )
+        await db.commit()
+        entry.discarded.set()
+        raise
+    finally:
+        if not entry.cancelling:
+            await session_turn_registry.clear(session_id, entry=entry)
+
+
+async def choose_angle_turn(
+    db: AsyncSession,
+    session: Session,
+    *,
+    angle_index: int | None = None,
+    angle_text: str | None = None,
+) -> dict[str, Any]:
+    """Resume parked graph at interrupt_before angle_gate (ADR 0028).
+
+    ``angle_index`` picks ``brief.angles[i]`` (0-based, option card);
+    ``angle_text`` is a free-form pick — a typed ``POST /messages`` reply while
+    angle-parked lands here and is persisted as a user row.
+    """
+    session_id = session.id
+    if session_turn_registry.is_busy(session_id):
+        raise SessionTurnConflict("busy", "Session turn already in progress")
+    if await session_park_kind(session) != "angle":
+        raise SessionTurnConflict(
+            "not_parked", "Session is not awaiting an angle pick"
+        )
+
+    offered = [
+        a
+        for a in (((session.state or {}).get("brief") or {}).get("angles") or [])
+        if isinstance(a, str) and a.strip()
+    ]
+    chosen: str | None = None
+    if angle_index is not None:
+        if not (0 <= angle_index < len(offered)):
+            raise ValueError("angle_index out of range")
+        chosen = offered[angle_index]
+    elif angle_text and angle_text.strip():
+        chosen = angle_text.strip()
+    if not chosen:
+        raise ValueError("Provide angle_index or angle")
+
+    # Snapshot full parked UI state so Stop mid-resume can re-park the card.
+    parked_restore = copy.deepcopy(dict(session.state or {}))
+    parked_restore["awaiting_angle_pick"] = True
+    repos.touch_session(session)
+
+    user_msg = None
+    text_pick = angle_text is not None and angle_index is None
+    if text_pick:
+        user_msg = await repos.add_session_message(
+            db, session_id=session_id, role="user", content=chosen
+        )
+    existing = await repos.list_session_messages(db, session_id)
+    message_dicts = [{"role": m.role, "content": m.content} for m in existing]
+
+    task = asyncio.current_task()
+    if task is None:
+        raise RuntimeError("choose_angle_turn requires a running asyncio task")
+    entry = await session_turn_registry.begin(
+        session_id,
+        task=task,
+        pre_state=_strip_discard_meta(parked_restore),
+        user_message_id=user_msg.id if user_msg else uuid.uuid4(),
+    )
+    entry.kind = "choose_angle"
+    entry.parked_restore = parked_restore
+    # Typed pick joins the original draft turn's discard scope (persisted via
+    # entry.message_ids merge); Stop mid-resume deletes nothing extra.
+    entry.message_ids = [user_msg.id] if user_msg else []
+
+    try:
+        graph = get_session_graph()
+        config = _session_config(session_id)
+        await graph.aupdate_state(
+            config,
+            {"chosen_angle": chosen, "messages": message_dicts},
+        )
+
+        (
+            values,
+            still_interrupted,
+            parked_node,
+            provider_error,
+            progress_events,
+            duration_ms,
+        ) = await _invoke_graph(
+            db,
+            session,
+            graph_input=None,
+            user_content="",
+            message_dicts=message_dicts,
+        )
+        if provider_error:
+            # Keep the angle card so Retry can pick again (re-seat like Stop
+            # mid-resume — a failed downstream node may have no interrupt).
+            still_interrupted = True
+            parked_node = ANGLE_GATE_NODE
+            values = {
+                **_strip_discard_meta(parked_restore),
+                **values,
+                "chosen_angle": None,
+                "error": values.get("error") or provider_error.message,
+                "messages": values.get("messages") or message_dicts,
+            }
+        result = await _persist_after_invoke(
+            db,
+            session,
+            # user_msg stays None: the pick joins the original draft turn's
+            # discard anchor instead of starting a fresh one.
+            user_msg=None,
+            message_dicts=message_dicts,
+            values=values,
+            still_interrupted=still_interrupted,
+            parked_node=parked_node,
+            progress_events=progress_events,
+            provider_error=provider_error,
+            user_content="",
+            pre_state=_strip_discard_meta(parked_restore),
+            entry=entry,
+            duration_ms=duration_ms,
+        )
+        if provider_error:
+            await _repark_graph_at_angle_gate(db, session)
+            parked = dict(session.state or {})
+            parked["awaiting_angle_pick"] = True
+            session.state = parked
+            result["interrupted"] = True
+        return result
+    except asyncio.CancelledError:
+        await _restore_parked_after_resume_cancel(
+            db,
+            session,
+            parked_state=entry.parked_restore or parked_restore,
+            message_ids=list(entry.message_ids),
+            kind="angle",
         )
         await db.commit()
         entry.discarded.set()
@@ -945,21 +1200,24 @@ async def stop_session_turn(
     db: AsyncSession,
     session: Session,
 ) -> dict[str, Any]:
-    """Cancel in-flight turn or discard parked interrupt (ADR 0004).
+    """Cancel in-flight turn or discard parked interrupt (ADR 0004 / 0028).
 
-    Stopping mid ``resume-image`` re-parks at the image interrupt (CTA returns).
-    Stopping a normal message turn or an idle parked session discards the turn.
+    Stopping mid resume (image or angle) re-parks at that interrupt (CTA
+    returns). Stopping a normal message turn or an idle parked session
+    discards the turn.
     """
     entry = session_turn_registry.get(session.id)
     if entry is not None and not entry.task.done():
         if entry.cancelling:
             await entry.discarded.wait()
             await db.refresh(session)
-            awaiting = bool((session.state or {}).get("awaiting_image_ok"))
+            awaiting_image = bool((session.state or {}).get("awaiting_image_ok"))
+            awaiting_angle = bool((session.state or {}).get("awaiting_angle_pick"))
             return {
                 "status": "cancelled",
-                "interrupted": awaiting,
-                "awaiting_image_ok": awaiting,
+                "interrupted": awaiting_image or awaiting_angle,
+                "awaiting_image_ok": awaiting_image,
+                "awaiting_angle_pick": awaiting_angle,
             }
         entry.cancelling = True
         entry.task.cancel()
@@ -968,12 +1226,16 @@ async def stop_session_turn(
         except TimeoutError:
             logger.error("Timed out waiting for turn discard (session=%s)", session.id)
             if not entry.discarded.is_set():
-                if entry.kind == "resume_image" and entry.parked_restore is not None:
+                if (
+                    entry.kind in ("resume_image", "choose_angle")
+                    and entry.parked_restore is not None
+                ):
                     await _restore_parked_after_resume_cancel(
                         db,
                         session,
                         parked_state=entry.parked_restore,
                         message_ids=list(entry.message_ids),
+                        kind="angle" if entry.kind == "choose_angle" else "image",
                     )
                 else:
                     await _discard_turn_state(
@@ -985,11 +1247,13 @@ async def stop_session_turn(
                 entry.discarded.set()
         await session_turn_registry.clear(session.id, entry=entry)
         await db.refresh(session)
-        awaiting = bool((session.state or {}).get("awaiting_image_ok"))
+        awaiting_image = bool((session.state or {}).get("awaiting_image_ok"))
+        awaiting_angle = bool((session.state or {}).get("awaiting_angle_pick"))
         return {
             "status": "cancelled",
-            "interrupted": awaiting,
-            "awaiting_image_ok": awaiting,
+            "interrupted": awaiting_image or awaiting_angle,
+            "awaiting_image_ok": awaiting_image,
+            "awaiting_angle_pick": awaiting_angle,
         }
 
     # Parked discard (no in-flight task) — drop the agent turn that created the draft.
@@ -1019,9 +1283,15 @@ async def stop_session_turn(
             "status": "cancelled",
             "interrupted": False,
             "awaiting_image_ok": False,
+            "awaiting_angle_pick": False,
         }
 
-    return {"status": "idle", "interrupted": False, "awaiting_image_ok": False}
+    return {
+        "status": "idle",
+        "interrupted": False,
+        "awaiting_image_ok": False,
+        "awaiting_angle_pick": False,
+    }
 
 
 async def update_session_draft(

@@ -90,6 +90,7 @@ async def test_persist_bumps_updated_at_when_state_is_unchanged() -> None:
             message_dicts=[{"role": "user", "content": "hi again"}],
             values=values,
             still_interrupted=False,
+            parked_node=None,
             progress_events=[],
             provider_error=None,
             user_content="hi again",
@@ -111,7 +112,7 @@ async def test_run_session_turn_touches_before_graph() -> None:
 
     async def fake_invoke(*_a, **_k):
         assert session.updated_at > old
-        return {}, False, None, [], 1
+        return {}, False, None, None, [], 1
 
     with (
         patch("internal.session.service.session_is_parked", AsyncMock(return_value=False)),
