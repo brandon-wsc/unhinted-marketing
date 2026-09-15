@@ -13,7 +13,8 @@ load_context          → voice_pack, audience_catalog, slim company_context
 trend_searcher        → ranked_signals, source_signal_ids
 product_matcher       → primary_product, related_products[], product_clarify?
 brainstormer          → brief (incl. pain_points), active_persona
-executor_post         → draft, refine product_context_ids
+angle_gate            → PARK for user pick when brief.angles ≥ 2 (ADR 0028)
+executor_post         → draft (chosen_angle direction), refine product_context_ids
 grounding_check       → source_signal_ids + product claims vs retrieved rows
 reviewer              → voice + grounding + craft
 ```
@@ -21,6 +22,13 @@ reviewer              → voice + grounding + craft
 Revise path (`edit_copy`): reuse turn state; re-run `product_matcher` only when user changes product (future `need_product` gate).
 
 If `product_clarify` is true after matcher → short-circuit to **chat** (ask which SKU) — do not enter executor with a guessed primary.
+
+### Angle pick gate ([ADR 0028](../adr/0028-angle-pick-before-draft.md))
+
+- `brief.angles` ≥ 2 and no `chosen_angle` → graph parks at `interrupt_before=["angle_gate"]`; `draft.awaiting_angle_pick` carries the offered angles; `session.state.awaiting_angle_pick` hydrates the option card.
+- Pick: `POST /sessions/{id}/choose-angle` (`angle_index` or `angle` text), or a typed `POST /messages` while angle-parked (the only park where a message resumes; image park still 409s).
+- `angle_gate` resolves picks (exact / 1-based index / CJK numeral / substring). Match → `chosen_angle` → `executor_post` (payload field, cleared on output). Non-match → `angle_feedback` → `brainstormer` regenerates angles and parks again.
+- Stop while parked discards the turn (ADR 0004); Stop mid `choose-angle` re-parks at `angle_gate`.
 
 ---
 
@@ -39,6 +47,8 @@ If `product_clarify` is true after matcher → short-circuit to **chat** (ask wh
 | `product_candidates` | `product_matcher` | chat (clarify) |
 | `active_persona` | `brainstormer` | executor_post, reviewer, image_plan† |
 | `source_signal_ids` | research_ingest, trend_searcher, executor, edit | grounding_check, reviewer |
+| `chosen_angle` | choose-angle resume / typed pick | `angle_gate` (match check), `executor_post` (payload) |
+| `angle_feedback` | `angle_gate` on non-matching text | `brainstormer` (regenerate angles) |
 
 † minimal slice only.
 

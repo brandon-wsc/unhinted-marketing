@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-09-13 
+> **Last updated:** 2026-09-15 
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -66,6 +66,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **On-prem register is invite-only** — `403 setup_required` before setup, `403 invite_required` without a pending invite matching the email; invite accept flow unchanged. Cloud register stays open
 - **`/setup` wizard** — account+org → instance URL/email → optional org BYOK LLM → done; LLM + SMTP are skippable; login hides register on on-prem unless carrying an invite
 - **Consumers moved to the instance snapshot** — invite URLs, local media public URLs, OAuth redirect fallback, invite emails (sync readers fall back to env on a cold cache)
+
+**Decision (2026-09-15) — Angle pick parks before drafting:** → [ADR 0028](./adr/0028-angle-pick-before-draft.md). `brainstormer → executor_post` no longer runs unattended: `brief.angles` ≥ 2 parks the graph at `angle_gate`; user picks via `POST /sessions/{id}/choose-angle` card or a typed reply (the only park where a message resumes). Non-matching text re-briefs. Stop/discard unchanged (ADR 0004).
 
 **Decision (2026-09-13) — Docker deployment packages (all-in-one vs external-DB):** → [ADR 0027](./adr/0027-docker-deploy-packages.md)
 
