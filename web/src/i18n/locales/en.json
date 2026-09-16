@@ -159,6 +159,15 @@
         "formatSingle": "Single image",
         "formatComic": "4-panel comic"
       },
+      "anglePick": {
+        "title": "Pick an angle first",
+        "subtitle": "Choose a direction and the draft will follow it — or type your own below.",
+        "optionsLabel": "Content angles",
+        "otherLabel": "Custom angle",
+        "otherPlaceholder": "Or write your own angle…",
+        "otherSubmit": "Use this angle",
+        "working": "Drafting…"
+      },
       "imageOkMessage": "Looks good — please generate the image."
     },
     "error": {

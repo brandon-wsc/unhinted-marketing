@@ -2,6 +2,7 @@ import { fetchWithAuth } from "@/context/auth-context";
 import { API_BASE } from "@/lib/api-base";
 import { parseApiErrorResponse } from "@/lib/parse-api-error";
 import type {
+  ChooseAngleResponse,
   ConfirmSessionResponse,
   DraftCopy,
   ForkSessionResponse,
@@ -108,6 +109,24 @@ export async function apiPostSessionMessage(
   return res.json();
 }
 
+export async function apiChooseSessionAngle(
+  accessToken: string | null,
+  sessionId: string,
+  init: { signal?: AbortSignal; angleIndex?: number; angle?: string },
+): Promise<ChooseAngleResponse> {
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/choose-angle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      angle_index: init.angleIndex ?? null,
+      angle: init.angle ?? null,
+    }),
+    signal: init.signal,
+  });
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  return res.json();
+}
+
 export async function apiResumeSessionImage(
   accessToken: string | null,
   sessionId: string,
@@ -132,6 +151,7 @@ export async function apiStopSessionTurn(
   status: string;
   interrupted?: boolean;
   awaiting_image_ok?: boolean;
+  awaiting_angle_pick?: boolean;
 }> {
   const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/stop`, {
     method: "POST",

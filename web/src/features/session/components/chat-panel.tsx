@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
+import { AnglePickCard } from "@/features/session/components/angle-pick-card";
 import { InterruptCard } from "@/features/session/components/interrupt-card";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
@@ -108,6 +109,8 @@ export function ChatPanel() {
     interruptAfterMessageId,
     previewAfterMessageId,
     awaitingImageOk,
+    awaitingAnglePick,
+    angleOptions,
     draft,
     confirmReceipt,
     draftSaving,
@@ -123,6 +126,7 @@ export function ChatPanel() {
     enqueueQueuedMessage,
     dequeueQueuedMessage,
     resumeImage,
+    chooseAngle,
     stopTurn,
     updateDraft,
     saveImagePlan,
@@ -267,6 +271,7 @@ export function ChatPanel() {
     agentActions,
     brief,
     awaitingImageOk,
+    awaitingAnglePick,
     queuedMessages,
     composerH,
   ]);
@@ -358,6 +363,14 @@ export function ChatPanel() {
   async function onResumeImageGen(format?: "single" | "comic_4panel") {
     try {
       await resumeImage(format);
+    } catch {
+      showError(t("chat.error.sendFailed"));
+    }
+  }
+
+  async function onPickAngle(angle: number | string) {
+    try {
+      await chooseAngle(angle);
     } catch {
       showError(t("chat.error.sendFailed"));
     }
@@ -472,6 +485,14 @@ export function ChatPanel() {
     />
   );
 
+  const anglePickCard = (
+    <AnglePickCard
+      angles={angleOptions}
+      sending={sending || stopping}
+      onPick={(i) => void onPickAngle(i)}
+    />
+  );
+
   const chatColumn = (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {!isSplit && (
@@ -546,7 +567,7 @@ export function ChatPanel() {
                       now={now}
                       retryDisabled={stopping || (sending && queueFull)}
                       onRetry={
-                        prevUser || awaitingImageOk
+                        prevUser || awaitingImageOk || awaitingAnglePick
                           ? () => void onRetryLlmError(prevUser)
                           : undefined
                       }
@@ -571,6 +592,7 @@ export function ChatPanel() {
                       />
                     )}
                     {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
+                    {awaitingAnglePick && interruptAfterMessageId === m.id && anglePickCard}
                     {awaitingImageOk && interruptAfterMessageId === m.id && (
                       <InterruptCard
                         sending={sending || stopping}
@@ -599,6 +621,10 @@ export function ChatPanel() {
             {brief &&
               briefAfterMessageId &&
               !messages.some((m) => m.id === briefAfterMessageId) && <BriefCard brief={brief} />}
+            {awaitingAnglePick &&
+              interruptAfterMessageId &&
+              !messages.some((m) => m.id === interruptAfterMessageId) &&
+              anglePickCard}
             {awaitingImageOk &&
               interruptAfterMessageId &&
               !messages.some((m) => m.id === interruptAfterMessageId) && (
@@ -612,6 +638,7 @@ export function ChatPanel() {
               !messages.some((m) => m.id === previewAfterMessageId) &&
               !isSplit && <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />}
             {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
+            {awaitingAnglePick && !interruptAfterMessageId && anglePickCard}
             {awaitingImageOk && !interruptAfterMessageId && (
               <InterruptCard
                 sending={sending || stopping}
@@ -627,7 +654,7 @@ export function ChatPanel() {
                 message={llmError}
                 retryDisabled={stopping || (sending && queueFull)}
                 onRetry={
-                  findLastUserContent(messages) || awaitingImageOk
+                  findLastUserContent(messages) || awaitingImageOk || awaitingAnglePick
                     ? () => void onRetryLlmError(findLastUserContent(messages))
                     : undefined
                 }

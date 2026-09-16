@@ -923,6 +923,26 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/choose-angle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Choose Angle
+         * @description Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0028).
+         */
+        post: operations["choose_angle_api_sessions__session_id__choose_angle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/stop": {
         parameters: {
             query?: never;
@@ -1617,6 +1637,42 @@ export type components = {
             /** Image Model Id */
             image_model_id?: string | null;
         };
+        /**
+         * ChooseAngleRequest
+         * @description ADR 0028 pick while parked at angle_gate — index or free text.
+         */
+        ChooseAngleRequest: {
+            /** Angle Index */
+            angle_index?: number | null;
+            /** Angle */
+            angle?: string | null;
+        };
+        /** ChooseAngleResponse */
+        ChooseAngleResponse: {
+            session: components["schemas"]["SessionResponse"];
+            /** Messages */
+            messages: components["schemas"]["schemas__session__MessageResponse"][];
+            /**
+             * Interrupted
+             * @default false
+             */
+            interrupted: boolean;
+            /** Mode */
+            mode: string;
+            /** Revision */
+            revision?: number | null;
+            /**
+             * Pending Confirm
+             * @default false
+             */
+            pending_confirm: boolean;
+            /** Approval Token */
+            approval_token?: string | null;
+            /** Events */
+            events?: {
+                [key: string]: unknown;
+            }[];
+        };
         /** CompanyMember */
         CompanyMember: {
             /**
@@ -1852,6 +1908,11 @@ export type components = {
              * @default false
              */
             awaiting_image_ok: boolean;
+            /**
+             * Awaiting Angle Pick
+             * @default false
+             */
+            awaiting_angle_pick: boolean;
             forked_from?: components["schemas"]["ForkOrigin"] | null;
             /** Preview Note */
             preview_note?: ("carried_stale" | "not_carried_later") | null;
@@ -2816,6 +2877,11 @@ export type components = {
              * @default false
              */
             awaiting_image_ok: boolean;
+            /**
+             * Awaiting Angle Pick
+             * @default false
+             */
+            awaiting_angle_pick: boolean;
             forked_from?: components["schemas"]["ForkOrigin"] | null;
         };
         /** SessionResearch */
@@ -3057,6 +3123,11 @@ export type components = {
              * @default false
              */
             awaiting_image_ok: boolean;
+            /**
+             * Awaiting Angle Pick
+             * @default false
+             */
+            awaiting_angle_pick: boolean;
         };
         /** StorageConfigOut */
         StorageConfigOut: {
@@ -5448,6 +5519,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResumeImageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    choose_angle_api_sessions__session_id__choose_angle_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChooseAngleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChooseAngleResponse"];
                 };
             };
             /** @description Validation Error */

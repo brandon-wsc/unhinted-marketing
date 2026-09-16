@@ -159,6 +159,15 @@
         "formatSingle": "單圖",
         "formatComic": "4格漫畫"
       },
+      "anglePick": {
+        "title": "先揀個角度",
+        "subtitle": "揀個方向先至落筆；都唔啱嘅話，喺下面打自己嘅諗法。",
+        "optionsLabel": "內容角度",
+        "otherLabel": "自訂角度",
+        "otherPlaceholder": "或者自己寫個方向…",
+        "otherSubmit": "用呢個方向",
+        "working": "寫緊稿…"
+      },
       "imageOkMessage": "得，幫手出圖啦。"
     },
     "error": {

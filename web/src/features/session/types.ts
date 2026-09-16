@@ -12,6 +12,10 @@ export type SessionMessagesResponse = components["schemas"]["SessionMessagesResp
 export type PostMessageResponse = Omit<components["schemas"]["PostMessageResponse"], "events"> & {
   events: SessionEvent[];
 };
+// POST /choose-angle mirrors the turn-response shape (ADR 0028).
+export type ChooseAngleResponse = Omit<components["schemas"]["ChooseAngleResponse"], "events"> & {
+  events: SessionEvent[];
+};
 export type UpdateDraftResponse = components["schemas"]["UpdateDraftResponse"];
 export type PreviewMediaMutationResponse = components["schemas"]["PreviewMediaMutationResponse"];
 export type ConfirmSessionResponse = components["schemas"]["ConfirmSessionResponse"];
