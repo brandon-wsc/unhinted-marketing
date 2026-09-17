@@ -38,7 +38,7 @@ Nested [`web/AGENTS.md`](web/AGENTS.md) and [`migrations/AGENTS.md`](migrations/
 3. **Knowledge** — PostgreSQL only (signals, entities, edges). No parallel knowledge store.
 4. **Org catalog ≠ chat** — Mine propose / Approvals approve-reject are HTTP. Graph nodes must not upsert org products ([ADR 0011](docs/adr/0011-knowledge-commit-without-llm.md)).
 5. **Graph scope** — LangGraph = session LLM zone. Preview persist / confirm are outside LLM publish.
-6. **Stop ≠ blind resume** — Parked image OK resumes only via `POST /resume-image`; Stop discards the turn ([ADR 0004](docs/adr/0004-stop-discard-and-image-resume.md)). In-flight Send queues locally (max 3); do not lock the composer ([ADR 0016](docs/adr/0016-queue-send-while-turn-in-flight.md)). Chat/JSON LLM calls stream + `aclose` on cancel (best-effort upstream abort).
+6. **Stop ≠ blind resume** — Parked image OK resumes only via `POST /resume-image` ([ADR 0004](docs/adr/0004-stop-discard-and-image-resume.md)). Parked angle pick resumes via `POST /choose-angle` or a typed `POST /messages` ([ADR 0028](docs/adr/0028-angle-pick-before-draft.md)); Stop discards a parked turn, but Stop mid-resume / mid choose-angle re-parks. In-flight Send queues locally (max 3) and holds while either park is up ([ADR 0016](docs/adr/0016-queue-send-while-turn-in-flight.md)). Chat/JSON LLM calls stream + `aclose` on cancel (best-effort upstream abort).
 
 ## Before changing behavior
 
@@ -59,7 +59,8 @@ Nested [`web/AGENTS.md`](web/AGENTS.md) and [`migrations/AGENTS.md`](migrations/
 pip install -e ".[dev]"
 pytest tests/unit
 pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
- tests/unit/test_session_trace.py tests/unit/test_session_harness.py \
+ tests/unit/test_session_angle_gate.py tests/unit/test_session_trace.py \
+ tests/unit/test_session_harness.py \
  tests/unit/test_session_research_harness.py \
  tests/unit/test_session_execute_harness.py \
  --cov=internal.session.nodes --cov=internal.session.trace \
