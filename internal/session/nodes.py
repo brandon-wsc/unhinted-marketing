@@ -199,6 +199,13 @@ def _wants_image_change(text: str) -> bool:
     return any(k in lower for k in ("圖", "图片", "圖片", "image", "photo", "visual", "封面"))
 
 
+def offered_angles(brief: dict[str, Any] | None) -> list[str]:
+    """Non-empty angle strings from a brief — the ADR 0028 pick options."""
+    return [
+        a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()
+    ]
+
+
 _CJK_NUMERAL_INDEX = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4}
 
 
@@ -875,8 +882,7 @@ async def angle_gate(state: SessionState) -> dict[str, Any]:
     chosen = str(state.get("chosen_angle") or "").strip()
     if not chosen:
         return {}
-    angles = (state.get("brief") or {}).get("angles") or []
-    matched = resolve_angle_pick(chosen, angles)
+    matched = resolve_angle_pick(chosen, offered_angles(state.get("brief")))
     if matched is not None:
         return {"chosen_angle": matched}
     return {"chosen_angle": None, "angle_feedback": chosen}
@@ -1266,9 +1272,9 @@ def route_after_product_matcher(state: SessionState) -> str:
 
 def route_after_brainstormer(state: SessionState) -> str:
     """ADR 0028: offer ≥2 angles for the user to pick before drafting."""
-    angles = (state.get("brief") or {}).get("angles") or []
-    offered = [a for a in angles if isinstance(a, str) and a.strip()]
-    if len(offered) >= 2 and not str(state.get("chosen_angle") or "").strip():
+    if len(offered_angles(state.get("brief"))) >= 2 and not str(
+        state.get("chosen_angle") or ""
+    ).strip():
         return "angle_gate"
     return "executor_post"
 

@@ -111,6 +111,7 @@ export function ChatPanel() {
     awaitingImageOk,
     awaitingAnglePick,
     angleOptions,
+    canRetryAnglePick,
     draft,
     confirmReceipt,
     draftSaving,
@@ -127,6 +128,7 @@ export function ChatPanel() {
     dequeueQueuedMessage,
     resumeImage,
     chooseAngle,
+    retryAnglePick,
     stopTurn,
     updateDraft,
     saveImagePlan,
@@ -323,6 +325,12 @@ export function ChatPanel() {
     if (stopping) return;
     if (sending && queueFull) return;
     try {
+      // At the angle gate a typed send is a NEW pick/feedback, not a resume —
+      // Retry re-issues the failed pick; the card is the fallback affordance.
+      if (awaitingAnglePick) {
+        if (canRetryAnglePick) await retryAnglePick();
+        return;
+      }
       if (
         shouldRetryResumeImage({
           awaitingImageOk,
@@ -567,7 +575,7 @@ export function ChatPanel() {
                       now={now}
                       retryDisabled={stopping || (sending && queueFull)}
                       onRetry={
-                        prevUser || awaitingImageOk || awaitingAnglePick
+                        awaitingImageOk || canRetryAnglePick || (!awaitingAnglePick && !!prevUser)
                           ? () => void onRetryLlmError(prevUser)
                           : undefined
                       }
@@ -654,7 +662,9 @@ export function ChatPanel() {
                 message={llmError}
                 retryDisabled={stopping || (sending && queueFull)}
                 onRetry={
-                  findLastUserContent(messages) || awaitingImageOk || awaitingAnglePick
+                  awaitingImageOk ||
+                  canRetryAnglePick ||
+                  (!awaitingAnglePick && !!findLastUserContent(messages))
                     ? () => void onRetryLlmError(findLastUserContent(messages))
                     : undefined
                 }
@@ -676,10 +686,14 @@ export function ChatPanel() {
               onSubmit={onSubmit}
               className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
             >
-              {(awaitingImageOk && queuedMessages.length > 0) || queueFull ? (
+              {((awaitingImageOk || awaitingAnglePick) && queuedMessages.length > 0) ||
+              queueFull ? (
                 <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
                   {awaitingImageOk && queuedMessages.length > 0 ? (
                     <p>{t("chat.queue.holdForImage")}</p>
+                  ) : null}
+                  {awaitingAnglePick && queuedMessages.length > 0 ? (
+                    <p>{t("chat.queue.holdForAngle")}</p>
                   ) : null}
                   {queueFull ? <p>{t("chat.queue.full")}</p> : null}
                 </div>

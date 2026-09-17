@@ -10,9 +10,6 @@ type Props = {
   onPick: (angle: number | string) => void;
 };
 
-const OPTION_CLASS =
-  "w-full rounded-lg border bg-card px-3 py-3 text-left text-foreground transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-50";
-
 // Highlight follows `active` (hover/arrow/focus all move it), not DOM focus —
 // one row shows border + wash + ring at a time, like a listbox activedescendant.
 const ACTIVE_CLASS = "border-voice-border bg-accent ring-1 ring-ring";
@@ -87,6 +84,8 @@ export function AnglePickCard({ angles, sending, onPick }: Props) {
       >
         {angles.map((angle, i) => (
           <li key={angle}>
+            {/* Native row: the shared Button's own hover wash would fight the
+                single `active` highlight — the ring already marks focus. */}
             <button
               type="button"
               disabled={sending}
@@ -94,24 +93,30 @@ export function AnglePickCard({ angles, sending, onPick }: Props) {
               onKeyDown={onNavKeyDown}
               onPointerEnter={() => activate(i)}
               onFocus={() => activate(i)}
-              className={cn(OPTION_CLASS, i === active ? ACTIVE_CLASS : "border-border")}
+              className={cn(
+                "flex w-full items-baseline gap-2 rounded-lg border border-input px-3 py-3 text-left text-foreground transition focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+                i === active && ACTIVE_CLASS,
+              )}
             >
-              <span className="mr-2 font-medium text-muted-foreground">{i + 1}.</span>
+              <span className="font-medium text-muted-foreground">{i + 1}.</span>
               {angle}
             </button>
           </li>
         ))}
         <li>
+          {/* Field chrome lives on the row (composer pattern): rest border-input,
+              hover border-voice-border, active/focus ring via ACTIVE_CLASS. */}
           <form
             onSubmit={onSubmitOther}
             onPointerEnter={() => activate(angles.length)}
             className={cn(
               "flex items-center gap-1.5 rounded-lg border bg-card transition",
-              active === angles.length ? ACTIVE_CLASS : "border-input",
+              active === angles.length ? ACTIVE_CLASS : "border-input hover:border-voice-border",
             )}
           >
             <input
               ref={otherInputRef}
+              type="text"
               value={other}
               onChange={(e) => setOther(e.target.value)}
               onKeyDown={onNavKeyDown}
@@ -119,7 +124,7 @@ export function AnglePickCard({ angles, sending, onPick }: Props) {
               disabled={sending}
               placeholder={t("chat.agent.anglePick.otherPlaceholder")}
               aria-label={t("chat.agent.anglePick.otherLabel")}
-              className="h-11 min-w-0 flex-1 bg-transparent px-3 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-11 flex-1 bg-transparent px-3 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
             />
             <IconButton
               type="submit"

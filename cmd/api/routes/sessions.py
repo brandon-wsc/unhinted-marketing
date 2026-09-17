@@ -659,15 +659,13 @@ async def session_events(
         platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
         media_items = await list_latest_session_media(db, session)
 
-        interrupted = _parked_node_from_snapshot(state, ()) == IMAGE_PARK_NODE
+        interrupted = _parked_node_from_snapshot(state, ()) is not None
         try:
             from internal.session.graph import get_session_graph
 
             graph = get_session_graph()
             snap = await graph.aget_state({"configurable": {"thread_id": str(session.id)}})
-            interrupted = (
-                _parked_node_from_snapshot(state, snap.next) == IMAGE_PARK_NODE
-            )
+            interrupted = _parked_node_from_snapshot(state, snap.next) is not None
         except Exception:
             # Graph/checkpointer may be unavailable in tests / early boot.
             logger.debug("session events: could not read graph interrupt state", exc_info=True)

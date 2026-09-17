@@ -2127,5 +2127,191 @@ describe("useSession", () => {
       expect(result.current.awaitingAnglePick).toBe(true);
       expect(result.current.awaitingImageOk).toBe(false);
     });
+
+    const ANGLE_PARKED_HYDRATE = {
+      session: { ...sessionFixture, mode: "AGENT" },
+      messages: [msgA],
+      awaiting_angle_pick: true,
+      brief: { angles: ["甲", "乙"], can_do: [], cannot_do: [], summary: "s" },
+    };
+
+    const ANGLE_REPARK_RESPONSE = {
+      session: sessionFixture,
+      messages: [msgA],
+      interrupted: true,
+      mode: "AGENT",
+      revision: null,
+      pending_confirm: false,
+      approval_token: null,
+      events: [
+        {
+          type: "draft.awaiting_angle_pick",
+          data: { awaiting: true, angles: ["甲", "乙"] },
+        },
+      ],
+    };
+
+    it("holds the queue when a pick re-parks at the gate", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue(ANGLE_PARKED_HYDRATE);
+      apiChooseSessionAngle.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+
+      act(() => {
+        result.current.enqueueQueuedMessage("遲啲先傾");
+      });
+      await act(async () => {
+        await result.current.chooseAngle(0);
+      });
+
+      // Still parked — queued text must not drain into the gate as a pick.
+      expect(result.current.awaitingAnglePick).toBe(true);
+      expect(apiPostSessionMessage).not.toHaveBeenCalled();
+      expect(result.current.queuedMessages).toHaveLength(1);
+    });
+
+    it("holds the queue after Stop mid-choose-angle re-parks", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue(ANGLE_PARKED_HYDRATE);
+      apiChooseSessionAngle.mockReturnValue(new Promise(() => {}));
+      apiStopSessionTurn.mockResolvedValue({
+        status: "cancelled",
+        interrupted: true,
+        awaiting_angle_pick: true,
+      });
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+
+      act(() => {
+        result.current.enqueueQueuedMessage("遲啲先傾");
+      });
+      act(() => {
+        void result.current.chooseAngle(0);
+      });
+      await waitFor(() => expect(result.current.sending).toBe(true));
+
+      await act(async () => {
+        await result.current.stopTurn();
+      });
+
+      expect(result.current.awaitingAnglePick).toBe(true);
+      expect(apiPostSessionMessage).not.toHaveBeenCalled();
+      expect(result.current.queuedMessages).toHaveLength(1);
+    });
+
+    it("drains the queue once the angle pick unparks", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue(ANGLE_PARKED_HYDRATE);
+      apiChooseSessionAngle.mockResolvedValue({
+        session: sessionFixture,
+        messages: [msgA],
+        interrupted: false,
+        mode: "CHAT",
+        revision: null,
+        pending_confirm: false,
+        approval_token: null,
+        events: [],
+      });
+      apiPostSessionMessage.mockResolvedValue({
+        session: sessionFixture,
+        messages: [msgA],
+        ...idleTurn,
+      });
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+
+      act(() => {
+        result.current.enqueueQueuedMessage("遲啲先傾");
+      });
+      await act(async () => {
+        await result.current.chooseAngle(0);
+      });
+
+      expect(result.current.awaitingAnglePick).toBe(false);
+      await waitFor(() =>
+        expect(apiPostSessionMessage).toHaveBeenCalledWith(
+          "tok",
+          "sess-1",
+          "遲啲先傾",
+          expect.anything(),
+        ),
+      );
+    });
+
+    it("typed send while angle-parked posts without a route_intent trail row", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue(ANGLE_PARKED_HYDRATE);
+      apiPostSessionMessage.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+
+      await act(async () => {
+        await result.current.sendMessage("第二個");
+      });
+
+      expect(apiPostSessionMessage).toHaveBeenCalledWith(
+        "tok",
+        "sess-1",
+        "第二個",
+        expect.anything(),
+      );
+      // route_intent is not consulted on resume turns (ADR 0028 §6).
+      expect(result.current.agentActions.some((a) => a.node === "route_intent")).toBe(false);
+      expect(result.current.awaitingAnglePick).toBe(true);
+    });
+
+    it("retryAnglePick re-issues the last card pick via choose-angle", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue(ANGLE_PARKED_HYDRATE);
+      apiChooseSessionAngle.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+
+      await act(async () => {
+        await result.current.chooseAngle(1);
+      });
+      expect(result.current.canRetryAnglePick).toBe(true);
+
+      await act(async () => {
+        await result.current.retryAnglePick();
+      });
+
+      expect(apiChooseSessionAngle).toHaveBeenCalledTimes(2);
+      expect(apiChooseSessionAngle).toHaveBeenLastCalledWith(
+        "tok",
+        "sess-1",
+        expect.objectContaining({ angleIndex: 1 }),
+      );
+      expect(apiPostSessionMessage).not.toHaveBeenCalled();
+    });
+
+    it("typed pick is remembered — retryAnglePick re-issues it via choose-angle", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue(ANGLE_PARKED_HYDRATE);
+      apiPostSessionMessage.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+      apiChooseSessionAngle.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+
+      await act(async () => {
+        await result.current.sendMessage("第二個");
+      });
+      await act(async () => {
+        await result.current.retryAnglePick();
+      });
+
+      expect(apiChooseSessionAngle).toHaveBeenCalledWith(
+        "tok",
+        "sess-1",
+        expect.objectContaining({ angle: "第二個" }),
+      );
+    });
   });
 });

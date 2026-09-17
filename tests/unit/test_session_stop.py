@@ -482,6 +482,45 @@ async def test_choose_angle_free_text_creates_user_row() -> None:
 
 
 @pytest.mark.asyncio
+async def test_choose_angle_retry_does_not_duplicate_user_row() -> None:
+    """Re-issuing a failed typed pick must not append a second user bubble."""
+    session = _angle_parked_session()
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+    pick_row = SimpleNamespace(
+        id=uuid.uuid4(), role="user", content="做數據懶人包", metadata_={}
+    )
+
+    async def fake_invoke(*_a, **_k):
+        return ({"mode": "AGENT", "messages": []}, False, None, None, [], 5)
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.add_session_message",
+            AsyncMock(),
+        ) as add_msg,
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[pick_row]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=fake_invoke),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": False, "events": [], "values": {}}),
+        ),
+    ):
+        await choose_angle_turn(db, session, angle_text="做數據懶人包")
+
+    add_msg.assert_not_awaited()
+    update = graph.aupdate_state.await_args
+    assert update.args[1]["chosen_angle"] == "做數據懶人包"
+
+
+@pytest.mark.asyncio
 async def test_choose_angle_provider_error_reparks() -> None:
     from internal.llm.router import LlmProviderError
 
