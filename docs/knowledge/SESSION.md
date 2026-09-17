@@ -25,7 +25,7 @@ If `product_clarify` is true after matcher → short-circuit to **chat** (ask wh
 
 ### Angle pick gate ([ADR 0028](../adr/0028-angle-pick-before-draft.md))
 
-- `brief.angles` ≥ 2 and no `chosen_angle` → graph parks at `interrupt_before=["angle_gate"]`; `draft.awaiting_angle_pick` carries the offered angles; `session.state.awaiting_angle_pick` hydrates the option card.
+- `brief.angles` ≥ 2 → graph parks at `interrupt_before=["angle_gate"]` (the gate validates any pending `chosen_angle`; a non-empty value is not a skip). `draft.awaiting_angle_pick` carries the offered angles; `session.state.awaiting_angle_pick` hydrates the option card.
 - Pick: `POST /sessions/{id}/choose-angle` (`angle_index` or `angle` text), or a typed `POST /messages` while angle-parked (the only park where a message resumes; image park still 409s).
 - `angle_gate` resolves picks (exact / 1-based index / CJK numeral / substring). Match → `chosen_angle` → `executor_post` (payload field, cleared on output). Non-match → `angle_feedback` → `brainstormer` regenerates angles and parks again.
 - Stop while parked discards the turn (ADR 0004); Stop mid `choose-angle` re-parks at `angle_gate`.

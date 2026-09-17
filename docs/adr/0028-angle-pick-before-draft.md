@@ -10,7 +10,7 @@
 
 ## Decision
 
-1. **Park after brainstorm:** New `angle_gate` node added to `interrupt_before`. `route_after_brainstormer` routes to it when `len(brief.angles) >= 2` and no `chosen_angle`; single-angle briefs go straight to `executor_post`. The park emits `draft.awaiting_angle_pick` (angles payload) and `session.state.awaiting_angle_pick` for hydrate — same contract as `awaiting_image_ok`.
+1. **Park after brainstorm:** New `angle_gate` node added to `interrupt_before`. `route_after_brainstormer` routes to it when `len(brief.angles) >= 2` — **including when `chosen_angle` is already set**. The gate, not this router, validates the pick (match vs feedback). Single-angle briefs go straight to `executor_post`. The park emits `draft.awaiting_angle_pick` (angles payload) and `session.state.awaiting_angle_pick` for hydrate — same contract as `awaiting_image_ok`.
 2. **Pick is explicit:** `POST /sessions/{id}/choose-angle` with `{angle_index}` or `{angle}` text → `aupdate_state(chosen_angle)` → `ainvoke(None)`. A **typed message while parked at the angle gate is also a pick** (the only park where `POST /messages` resumes); parked at the image interrupt still returns 409 per ADR 0004.
 3. **Non-matching text = feedback, not a pick:** `angle_gate` resolves the pick against offered angles (exact / 1-based index / 一二三四 / substring). No match → `chosen_angle=None`, `angle_feedback=text` → route back to `brainstormer` → fresh angles → parks again. This is the「都唔啱」loop; escape hatch is Stop.
 4. **Match = lock:** matched pick → `executor_post` with `chosen_angle` in its payload; the node clears it in output so a later `start` re-offers.
@@ -25,3 +25,4 @@
 - The pick card is the canonical affordance; free text is a convenience path. Both end at `chosen_angle` or `angle_feedback` — no third state.
 - Re-offer loop is bounded by user action only; each cycle costs one brainstormer call.
 - Confirm / publish remains ADR 0003; this ADR only adds a pre-draft decision point.
+- Resume `aupdate_state({chosen_angle})` is attributed to `brainstormer` (last completed node) and re-fires that node's edges. The brainstormer router must still schedule `angle_gate`; short-circuiting to `executor_post` when `chosen_angle` is non-empty skips `resolve_angle_pick` and drafts Other/feedback text as a locked angle. `as_node="angle_gate"` alone is not a substitute — that treats the gate as already run.

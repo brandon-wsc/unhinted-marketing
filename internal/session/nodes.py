@@ -1271,10 +1271,14 @@ def route_after_product_matcher(state: SessionState) -> str:
 
 
 def route_after_brainstormer(state: SessionState) -> str:
-    """ADR 0028: offer ≥2 angles for the user to pick before drafting."""
-    if len(offered_angles(state.get("brief"))) >= 2 and not str(
-        state.get("chosen_angle") or ""
-    ).strip():
+    """ADR 0028: offer ≥2 angles for the user to pick before drafting.
+
+    Always park at ``angle_gate`` when there is a real choice — including when
+    ``chosen_angle`` is already set. Resume ``aupdate_state`` is attributed to
+    this node; short-circuiting on a non-empty pick skipped the gate and drafted
+    Other/feedback text as a locked angle.
+    """
+    if len(offered_angles(state.get("brief"))) >= 2:
         return "angle_gate"
     return "executor_post"
 

@@ -492,7 +492,11 @@ async def _repark_graph_at_angle_gate(
     db: AsyncSession,
     session: Session,
 ) -> None:
-    """as_node="brainstormer" with ``chosen_angle=None`` schedules ``angle_gate``."""
+    """as_node="brainstormer" with ``chosen_angle=None`` re-seats ``angle_gate``.
+
+    Clearing the pick is required so a leftover match does not auto-advance
+    through the gate on Retry; ≥2 angles already route there regardless.
+    """
     await _repark_graph_at_interrupt(
         db,
         session,

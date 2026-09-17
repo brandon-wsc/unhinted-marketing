@@ -85,7 +85,14 @@ def test_route_after_product_matcher() -> None:
 def test_route_after_brainstormer() -> None:
     two = {"brief": {"angles": ["甲", "乙"]}}
     assert route_after_brainstormer(two) == "angle_gate"
-    assert route_after_brainstormer({**two, "chosen_angle": "甲"}) == "executor_post"
+    # chosen_angle is a pending pick — the gate validates it. Do not skip to draft
+    # (aupdate_state on resume is attributed to brainstormer; skipping here
+    # drafts Other/feedback text as if it were a locked angle).
+    assert route_after_brainstormer({**two, "chosen_angle": "甲"}) == "angle_gate"
+    assert (
+        route_after_brainstormer({**two, "chosen_angle": "都唔啱，想偏溫柔少抽水啲"})
+        == "angle_gate"
+    )
     # <2 offered angles can't make a meaningful pick — draft straight away.
     assert route_after_brainstormer({"brief": {"angles": ["甲"]}}) == "executor_post"
     assert route_after_brainstormer({"brief": {}}) == "executor_post"
@@ -107,6 +114,7 @@ def test_resolve_angle_pick() -> None:
     assert resolve_angle_pick("一", angles) == angles[0]
     assert resolve_angle_pick("懶人包", angles) == angles[1]
     assert resolve_angle_pick("冇一個啱", angles) is None
+    assert resolve_angle_pick("都唔啱，想偏溫柔少抽水啲", angles) is None
     assert resolve_angle_pick("", angles) is None
     assert resolve_angle_pick("3", angles) is None
     assert resolve_angle_pick("x", []) is None
