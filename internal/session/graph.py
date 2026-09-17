@@ -15,8 +15,11 @@ from internal.session.state import SessionState
 
 logger = logging.getLogger(__name__)
 
-# Nodes that pause for human OK before image plan (ROADMAP interrupt contract).
-INTERRUPT_BEFORE = ["executor_image_plan"]
+# Nodes that pause for human OK (ROADMAP interrupt contract): angle pick
+# (ADR 0028) before drafting, image plan (ADR 0004) before image gen.
+INTERRUPT_BEFORE = ["angle_gate", "executor_image_plan"]
+ANGLE_GATE_NODE = "angle_gate"
+IMAGE_PARK_NODE = "executor_image_plan"
 
 _compiled_graph: Any | None = None
 
@@ -64,6 +67,8 @@ def build_session_graph(*, checkpointer: Any | None = None):
     g.add_node("trend_searcher", _with_llm_record_context("trend_searcher", N.trend_searcher))
     g.add_node("product_matcher", N.product_matcher)
     g.add_node("brainstormer", _with_llm_record_context("brainstormer", N.brainstormer))
+    # ADR 0028: plain routing node — parks for the user's angle pick; no LLM.
+    g.add_node("angle_gate", N.angle_gate)
     g.add_node("executor_post", _with_llm_record_context("executor_post", N.executor_post))
     g.add_node("grounding_check", N.grounding_check)
     g.add_node("reviewer", _with_llm_record_context("reviewer", N.reviewer))
@@ -119,7 +124,22 @@ def build_session_graph(*, checkpointer: Any | None = None):
             "chat": "chat",
         },
     )
-    g.add_edge("brainstormer", "executor_post")
+    g.add_conditional_edges(
+        "brainstormer",
+        N.route_after_brainstormer,
+        {
+            "angle_gate": "angle_gate",
+            "executor_post": "executor_post",
+        },
+    )
+    g.add_conditional_edges(
+        "angle_gate",
+        N.route_after_angle_gate,
+        {
+            "executor_post": "executor_post",
+            "brainstormer": "brainstormer",
+        },
+    )
     g.add_edge("executor_post", "grounding_check")
     g.add_edge("grounding_check", "reviewer")
     g.add_edge("edit_copy", "grounding_check")

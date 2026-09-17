@@ -199,6 +199,45 @@ def _wants_image_change(text: str) -> bool:
     return any(k in lower for k in ("圖", "图片", "圖片", "image", "photo", "visual", "封面"))
 
 
+def offered_angles(brief: dict[str, Any] | None) -> list[str]:
+    """Non-empty angle strings from a brief — the ADR 0028 pick options."""
+    return [
+        a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()
+    ]
+
+
+_CJK_NUMERAL_INDEX = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4}
+
+
+def _angle_index_from_pick(text: str) -> int | None:
+    """1-based human index picks: '2', '#2', '第二個', '二'."""
+    m = re.fullmatch(r"#?(\d+)", text)
+    if m:
+        return int(m.group(1)) - 1
+    m = re.fullmatch(r"第?\s*([一二三四五])\s*[個个款條]?", text)
+    if m:
+        return _CJK_NUMERAL_INDEX[m.group(1)]
+    return None
+
+
+def resolve_angle_pick(pick: str, angles: list[str]) -> str | None:
+    """Map a choose-angle pick to an offered angle; None = re-brief feedback."""
+    text = " ".join((pick or "").split()).strip().lower()
+    offered = [a for a in angles if isinstance(a, str) and a.strip()]
+    if not text or not offered:
+        return None
+    lowered = [a.strip().lower() for a in offered]
+    if text in lowered:
+        return offered[lowered.index(text)]
+    idx = _angle_index_from_pick(text)
+    if idx is not None:
+        return offered[idx] if 0 <= idx < len(offered) else None
+    for i, angle in enumerate(lowered):
+        if text in angle or angle in text:
+            return offered[i]
+    return None
+
+
 async def _parse_llm_json(tier: ModelTier, system: str, user: str, model: type[T]) -> T | None:
     if not has_llm_credentials():
         return None
@@ -802,6 +841,8 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
         "source_signal_ids": state.get("source_signal_ids") or [],
         "primary_product": state.get("primary_product"),
         "related_products": (state.get("related_products") or [])[:2],
+        "prior_brief": state.get("brief") or {},
+        "angle_feedback": state.get("angle_feedback"),
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["brainstormer"] or ModelTier.MEDIUM,
@@ -822,7 +863,29 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
             "summary": f"基於近期 HK signals，建議做一則同「{topic}」相關嘅 grounded post。",
         }
     active = pick_active_persona(catalog, brief.get("persona"))
-    return {"mode": MODE_AGENT, "brief": brief, "active_persona": active}
+    return {
+        "mode": MODE_AGENT,
+        "brief": brief,
+        "active_persona": active,
+        "angle_feedback": None,
+    }
+
+
+async def angle_gate(state: SessionState) -> dict[str, Any]:
+    """ADR 0028 park anchor — runs only on a choose-angle resume.
+
+    A pick matching an offered ``brief.angles`` entry (exact / 1-based index /
+    CJK numeral / substring) locks ``chosen_angle`` for ``executor_post``.
+    Non-matching free text becomes ``angle_feedback`` so ``brainstormer``
+    regenerates options instead of drafting on a guessed direction.
+    """
+    chosen = str(state.get("chosen_angle") or "").strip()
+    if not chosen:
+        return {}
+    matched = resolve_angle_pick(chosen, offered_angles(state.get("brief")))
+    if matched is not None:
+        return {"chosen_angle": matched}
+    return {"chosen_angle": None, "angle_feedback": chosen}
 
 
 @agent_progress("executor_post")
@@ -840,6 +903,7 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "user_request": _last_user_text(state),
         "primary_product": state.get("primary_product"),
         "related_products": (state.get("related_products") or [])[:2],
+        "chosen_angle": state.get("chosen_angle"),
     }
     parsed: DraftOut | None = None
     if has_llm_credentials():
@@ -873,6 +937,7 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "source_signal_ids": refs,
         "need_image": True,
         "grounding_ok": True,
+        "chosen_angle": None,
     }
 
 
@@ -1202,6 +1267,25 @@ def route_after_intent(state: SessionState) -> str:
 def route_after_product_matcher(state: SessionState) -> str:
     if state.get("product_clarify"):
         return "chat"
+    return "brainstormer"
+
+
+def route_after_brainstormer(state: SessionState) -> str:
+    """ADR 0028: offer ≥2 angles for the user to pick before drafting.
+
+    Always park at ``angle_gate`` when there is a real choice — including when
+    ``chosen_angle`` is already set. Resume ``aupdate_state`` is attributed to
+    this node; short-circuiting on a non-empty pick skipped the gate and drafted
+    Other/feedback text as a locked angle.
+    """
+    if len(offered_angles(state.get("brief"))) >= 2:
+        return "angle_gate"
+    return "executor_post"
+
+
+def route_after_angle_gate(state: SessionState) -> str:
+    if str(state.get("chosen_angle") or "").strip():
+        return "executor_post"
     return "brainstormer"
 
 

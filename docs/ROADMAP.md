@@ -153,6 +153,7 @@ nodes:
   control:     route_intent · load_context · chat · ack_confirm
   research:    trend_searcher          # session on-demand PG signal lookup (not background ingest)
   strategy:    brainstormer            # brief ideas, can_do[] / cannot_do[], angles
+               angle_gate              # park for user pick when ≥2 angles (ADR 0028; no LLM)
   execute:     executor_post           # brief → publish-ready post copy
                executor_image_plan     # post + brand context → image prompt / layout spec
                executor_image_gen      # dispatch image worker (no LLM; async job)
@@ -172,8 +173,9 @@ NOT in graph: hot_search_worker · question_generator · DALL-E worker · POST /
 ```
 START → route_intent
   ├── chat            → chat → END
-  ├── start           → load_context → trend_searcher → brainstormer → executor_post
-  │                     → grounding_check → reviewer
+  ├── start           → load_context → trend_searcher → brainstormer
+  │                     → angle_gate (park if ≥2 angles; typed pick or POST /choose-angle)
+  │                     → executor_post → grounding_check → reviewer
   ├── revise          → edit_copy → grounding_check → reviewer
   └── confirm_intent  → ack_confirm → END   # sets pending_confirm; does NOT publish
 
@@ -199,7 +201,10 @@ flowchart TD
   route_intent -->|confirm_intent| ack_confirm
   chat --> endChat[END]
   ack_confirm --> endAck[END]
-  load_context --> trend_searcher --> brainstormer --> executor_post --> grounding_check --> reviewer
+  load_context --> trend_searcher --> brainstormer --> angleGate[angle_gate]
+  angleGate -->|pick| executor_post
+  angleGate -->|feedback| brainstormer
+  executor_post --> grounding_check --> reviewer
   reviewer -->|fail| edit_copy
   reviewer -->|pass_and_need_image| interruptWait[interrupt_before_image]
   reviewer -->|pass_copy_only_revise| persistPreview[persist_preview_SSE]
@@ -219,10 +224,11 @@ flowchart TD
 
 ### Interrupts
 
-- Compile with **`interrupt_before=["executor_image_plan"]`**.
-- First AGENT path: after `reviewer` pass → checkpoint pauses before image plan.
-- Resume: authenticated `POST /sessions/{id}/resume-image` continues into `executor_image_plan` ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)). `POST /messages` while parked returns 409. `POST /stop` discards the turn.
-- Copy-only revise that does not need a new image skips the interrupt and goes to `persist_preview`.
+- Compile with **`interrupt_before=["angle_gate", "executor_image_plan"]`**. Code that asks "is it parked" must check **which** node is next.
+- Angle pick ([ADR 0028](./adr/0028-angle-pick-before-draft.md)): after `brainstormer` when `brief.angles` ≥ 2, checkpoint pauses at `angle_gate`. Resume via `POST /sessions/{id}/choose-angle` or a typed `POST /messages` (the only park where a message resumes). Non-matching text re-briefs.
+- Image OK ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)): after `reviewer` pass → checkpoint pauses before image plan. Resume via `POST /sessions/{id}/resume-image`. `POST /messages` while image-parked returns 409.
+- `POST /stop` while parked discards the turn; Stop mid-resume / mid choose-angle re-parks.
+- Copy-only revise that does not need a new image skips the image interrupt and goes to `persist_preview`.
 
 ### State
 
@@ -241,6 +247,9 @@ review_attempts       # retries toward max_review_retries=2
 pending_confirm       # set by ack_confirm; Confirm handler checks this + approval_token
 approval_token        # per-revision token written with preview_drafts
 need_image            # bool — route reviewer → interrupt vs copy-only persist
+chosen_angle          # pick locked by angle_gate for executor_post; cleared on that node's output
+angle_feedback        # non-matching pick text → brainstormer re-offer
+awaiting_angle_pick   # bool — mirrored into sessions.state when parked at interrupt_before angle_gate
 awaiting_image_ok     # bool — mirrored into sessions.state when graph is parked at interrupt_before executor_image_plan (UI hydrate)
 ```
 
@@ -253,6 +262,7 @@ awaiting_image_ok     # bool — mirrored into sessions.state when graph is park
 | `trend_searcher` | tool + LLM (cheap) | `source_signal_ids`, ranked signals | `signals.updated` |
 | `chat` | LLM (stream) | `messages` | `message.delta` (tokens) → `message.assistant`; `llm.failed` on provider/transport errors |
 | `brainstormer` | LLM (medium) | `brief`, `mode=AGENT` | `agent.progress` → `brief.updated` |
+| `angle_gate` | deterministic | `chosen_angle` / `angle_feedback` | persist-side `draft.awaiting_angle_pick` on park |
 | `executor_post` | LLM (medium) | `draft` | `agent.progress` → `draft.copy_updated` |
 | `executor_image_plan` | LLM (medium) | `image_plan` | `agent.progress` → `draft.image_plan_updated` |
 | `executor_image_gen` | async dispatch | `image_url` | `draft.image_pending` → `draft.updated` |
@@ -405,9 +415,9 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 
 - [x] Migrations: `sessions`, `session_messages`, `preview_drafts`, `tool_receipts`
 - [x] LangGraph graph: CHAT → AGENT → PREVIEW (revise loop) + PostgreSQL checkpointer (`thread_id = session.id`)
-- [x] Session nodes: `route_intent`, `load_context`, `trend_searcher`, `brainstormer`, `executor_post`, `executor_image_plan`, `executor_image_gen`, `edit_copy`, `grounding_check`, `reviewer`, `chat`, `ack_confirm` (+ `persist_preview` side-effect; not a node)
-- [x] Graph interrupt: `interrupt_before=["executor_image_plan"]`; resume via `POST /resume-image`; Stop discards ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))
-- [x] FastAPI: `POST /sessions`, `POST /messages`, `POST /resume-image`, `POST /stop`, `GET /events` (SSE)
+- [x] Session nodes: `route_intent`, `load_context`, `trend_searcher`, `brainstormer`, `angle_gate`, `executor_post`, `executor_image_plan`, `executor_image_gen`, `edit_copy`, `grounding_check`, `reviewer`, `chat`, `ack_confirm` (+ `persist_preview` side-effect; not a node)
+- [x] Graph interrupts: `interrupt_before=["angle_gate", "executor_image_plan"]`; angle pick via `POST /choose-angle` or typed message ([ADR 0028](./adr/0028-angle-pick-before-draft.md)); image resume via `POST /resume-image`; Stop discards ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))
+- [x] FastAPI: `POST /sessions`, `POST /messages`, `POST /choose-angle`, `POST /resume-image`, `POST /stop`, `GET /events` (SSE)
 - [ ] Image generation worker (`executor_image_gen` dispatches; placeholder/local URL in `preview_drafts` for MVP)
 - [x] `POST /sessions/{id}/confirm` — **traditional handler**, stub platform adapter → writes `tool_receipts` row
 - [x] Tool schema validators (Pydantic + JSON Schema) for `query_market_trends` / `publish_social_post` / canonical draft + SSE catalog (`schemas/contracts.py`, `schemas/tools.py`; mirrors in `docs/contracts/`). Node wiring to tool adapters remains a follow-up.
@@ -426,7 +436,7 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 - [x] Protected routes; redirect unauthenticated → `/login`
 - [x] Chat UI shell: `useSession` + composer + Streamdown message list (SSE via `fetch` + Bearer)
 - [x] Chat token stream: LiteLLM streaming on `chat` node → SSE `message.delta` → final `message.assistant`
-- [x] Agent UI: SSE `agent.progress` `{node, model_tier, model}` → in-chat action-record trail (persisted on user message `metadata.agent_actions`; hydrate on reopen) + brief / interrupt cards; snapshot `interrupted` restores Generate-image CTA (no Agent JSON as streamed chat MD)
+- [x] Agent UI: SSE `agent.progress` `{node, model_tier, model}` → in-chat action-record trail (persisted on user message `metadata.agent_actions`; hydrate on reopen) + brief / interrupt cards; snapshot `interrupted` restores Generate-image CTA **or** angle-pick card (`draft.awaiting_angle_pick`, [ADR 0028](./adr/0028-angle-pick-before-draft.md)) (no Agent JSON as streamed chat MD)
 - [x] Landing: recommended questions cards (poll or SSE refresh)
 - [x] Preview Mode: split left chat / right IG mock (resizable leftover) + editable fields; paged Preview push page (canonical draft; SSE `preview.updated` + copy)
 - [x] `POST /sessions/{id}/draft` — manual revision (no LLM); sync session.state + graph checkpoint

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import {
   apiAddSessionImage,
+  apiChooseSessionAngle,
   apiConfirmSession,
   apiCreateSession,
   apiDeleteSession,
@@ -20,8 +21,10 @@ import {
 } from "./api";
 import {
   agentActionsFromMessages,
+  anglePickParkFromEvents,
   bumpSessionInHistory,
   EMPTY_COMPOSER_DRAFT,
+  filterOfferedAngles,
   isConfirmSuccessStatus,
   isUserFacingAgentNode,
   MAX_QUEUED_SESSION_MESSAGES,
@@ -73,6 +76,9 @@ type LiveChatSnapshot = {
   interruptAfterMessageId: string | null;
   previewAfterMessageId: string | null;
   awaitingImageOk: boolean;
+  awaitingAnglePick: boolean;
+  angleOptions: string[];
+  lastAnglePick: number | string | null;
   draft: PreviewDraft | null;
   confirmReceipt: ConfirmSessionResponse | null;
   llmError: string | null;
@@ -107,6 +113,12 @@ export function useSession(companyId: string | undefined) {
   const [previewAfterMessageId, setPreviewAfterMessageId] = useState<string | null>(null);
   // True while the graph sits at interrupt_before executor_image_plan.
   const [awaitingImageOk, setAwaitingImageOk] = useState(false);
+  // ADR 0028 — true while parked at angle_gate; options from brief.angles.
+  const [awaitingAnglePick, setAwaitingAnglePick] = useState(false);
+  const [angleOptions, setAngleOptions] = useState<string[]>([]);
+  // Last pick attempted at the gate — Retry re-issues it; a typed send while
+  // parked IS a pick, so re-sending the stale start prompt would be feedback.
+  const [lastAnglePick, setLastAnglePick] = useState<number | string | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatMessage[]>([]);
   const [composerInput, setComposerInputState] = useState("");
   const [editInsertAt, setEditInsertAtState] = useState<number | null>(null);
@@ -157,12 +169,16 @@ export function useSession(companyId: string | undefined) {
   const sendingRef = useRef(false);
   const stoppingRef = useRef(false);
   const awaitingImageOkRef = useRef(false);
+  const awaitingAnglePickRef = useRef(false);
+  const lastAnglePickRef = useRef<number | string | null>(null);
   const queuedRef = useRef<QueuedChatMessage[]>([]);
   const drainQueueRef = useRef<() => void>(() => {});
   queuedRef.current = queuedMessages;
   sendingRef.current = sending;
   stoppingRef.current = stopping;
   awaitingImageOkRef.current = awaitingImageOk;
+  awaitingAnglePickRef.current = awaitingAnglePick;
+  lastAnglePickRef.current = lastAnglePick;
   liveUiRef.current = {
     messages,
     agentActions,
@@ -173,6 +189,9 @@ export function useSession(companyId: string | undefined) {
     interruptAfterMessageId,
     previewAfterMessageId,
     awaitingImageOk,
+    awaitingAnglePick,
+    angleOptions,
+    lastAnglePick,
     draft,
     confirmReceipt,
     llmError,
@@ -221,6 +240,8 @@ export function useSession(companyId: string | undefined) {
       agentActions: [...liveUiRef.current.agentActions],
       turnAnchor: turnAnchorRef.current,
       awaitingImageOk: awaitingImageOkRef.current,
+      awaitingAnglePick: awaitingAnglePickRef.current,
+      lastAnglePick: lastAnglePickRef.current,
     });
   }, []);
 
@@ -240,6 +261,10 @@ export function useSession(companyId: string | undefined) {
     setPreviewAfterMessageId(snap.previewAfterMessageId);
     awaitingImageOkRef.current = snap.awaitingImageOk;
     setAwaitingImageOk(snap.awaitingImageOk);
+    awaitingAnglePickRef.current = snap.awaitingAnglePick;
+    setAwaitingAnglePick(snap.awaitingAnglePick);
+    lastAnglePickRef.current = snap.lastAnglePick;
+    setLastAnglePick(snap.lastAnglePick);
     setDraft(snap.draft);
     setConfirmReceipt(snap.confirmReceipt);
     setLlmError(snap.llmError);
@@ -327,6 +352,9 @@ export function useSession(companyId: string | undefined) {
     setInterruptAfterMessageId(null);
     setPreviewAfterMessageId(null);
     setAwaitingImageOk(false);
+    setAwaitingAnglePick(false);
+    setAngleOptions([]);
+    setLastAnglePick(null);
     setDraft(null);
     setConfirmReceipt(null);
     setLlmError(null);
@@ -334,6 +362,8 @@ export function useSession(companyId: string | undefined) {
     setConfirming(false);
     setForkedFrom(null);
     awaitingImageOkRef.current = false;
+    awaitingAnglePickRef.current = false;
+    lastAnglePickRef.current = null;
   }, []);
 
   const lastUserMessageId = useCallback(() => {
@@ -475,11 +505,14 @@ export function useSession(companyId: string | undefined) {
         const discardedAnchor = turnAnchorRef.current;
         turnAnchorRef.current = null;
 
-        // Mid resume-image Stop re-parks; keep Generate-image CTA.
-        const stillParked = data.awaiting_image_ok === true;
-        awaitingImageOkRef.current = stillParked;
-        setAwaitingImageOk(stillParked);
-        if (stillParked) {
+        // Mid resume Stop re-parks; keep the parked card (image or angle).
+        const stillParkedImage = data.awaiting_image_ok === true;
+        const stillParkedAngle = data.awaiting_angle_pick === true;
+        awaitingImageOkRef.current = stillParkedImage;
+        setAwaitingImageOk(stillParkedImage);
+        awaitingAnglePickRef.current = stillParkedAngle;
+        setAwaitingAnglePick(stillParkedAngle);
+        if (stillParkedImage || stillParkedAngle) {
           setInterruptAfterMessageId(lastUserMessageId());
           setStreamingText(null);
           setAgentProgress(null);
@@ -512,6 +545,7 @@ export function useSession(companyId: string | undefined) {
           type === "agent.progress" ||
           type === "brief.updated" ||
           type === "draft.awaiting_image_ok" ||
+          type === "draft.awaiting_angle_pick" ||
           type === "message.delta" ||
           type === "draft.copy_updated" ||
           type === "draft.updated" ||
@@ -536,6 +570,16 @@ export function useSession(companyId: string | undefined) {
       if (type === "draft.awaiting_image_ok") {
         awaitingImageOkRef.current = true;
         setAwaitingImageOk(true);
+        awaitingAnglePickRef.current = false;
+        setAwaitingAnglePick(false);
+        setInterruptAfterMessageId(lastUserMessageId());
+        return;
+      }
+      if (type === "draft.awaiting_angle_pick") {
+        awaitingAnglePickRef.current = true;
+        setAwaitingAnglePick(true);
+        const offered = filterOfferedAngles(data.angles);
+        if (offered.length > 0) setAngleOptions(offered);
         setInterruptAfterMessageId(lastUserMessageId());
         return;
       }
@@ -549,11 +593,13 @@ export function useSession(companyId: string | undefined) {
       if (type === "draft.updated") {
         const imageUrl = typeof data.image_url === "string" ? data.image_url : null;
         setAwaitingImageOk(false);
+        setAwaitingAnglePick(false);
         setDraft((prev) => mergePreviewDraft(prev, { image_url: imageUrl }));
         return;
       }
       if (type === "preview.updated") {
         setAwaitingImageOk(false);
+        setAwaitingAnglePick(false);
         setInterruptAfterMessageId(null);
         setPreviewAfterMessageId(lastUserMessageId());
         const copy = parseDraftCopy(data.copy);
@@ -675,12 +721,20 @@ export function useSession(companyId: string | undefined) {
             });
           }
           const parkedAtImage = state?.awaiting_image_ok === true;
-          if (parkedAtImage) {
-            setAwaitingImageOk(true);
+          const parkedAtAngle = state?.awaiting_angle_pick === true;
+          setAwaitingImageOk(parkedAtImage);
+          awaitingImageOkRef.current = parkedAtImage;
+          setAwaitingAnglePick(parkedAtAngle);
+          awaitingAnglePickRef.current = parkedAtAngle;
+          if (parkedAtAngle) {
+            const snapAngles = (state?.brief as { angles?: unknown } | undefined)?.angles;
+            const offered = filterOfferedAngles(snapAngles);
+            if (offered.length > 0) setAngleOptions(offered);
+          }
+          if (parkedAtImage || parkedAtAngle) {
             const anchor = lastUserMessageId();
             if (anchor) setInterruptAfterMessageId(anchor);
           } else {
-            setAwaitingImageOk(false);
             setInterruptAfterMessageId(null);
           }
           return;
@@ -800,6 +854,7 @@ export function useSession(companyId: string | undefined) {
       messages: ChatMessage[];
       brief?: unknown;
       awaiting_image_ok?: boolean;
+      awaiting_angle_pick?: boolean;
       forked_from?: ForkOrigin | null;
     }) => {
       resetTransientUi();
@@ -814,9 +869,16 @@ export function useSession(companyId: string | undefined) {
       const parsedBrief = parseBrief(res.brief);
       setBrief(parsedBrief);
       setBriefAfterMessageId(parsedBrief && lastUser ? lastUser.id : null);
-      const parked = res.awaiting_image_ok === true;
-      awaitingImageOkRef.current = parked;
-      setAwaitingImageOk(parked);
+      const parkedImage = res.awaiting_image_ok === true;
+      const parkedAngle = res.awaiting_angle_pick === true;
+      awaitingImageOkRef.current = parkedImage;
+      setAwaitingImageOk(parkedImage);
+      awaitingAnglePickRef.current = parkedAngle;
+      setAwaitingAnglePick(parkedAngle);
+      if (parkedAngle) {
+        setAngleOptions(filterOfferedAngles(parsedBrief?.angles));
+      }
+      const parked = parkedImage || parkedAngle;
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
       if (res.session.mode === "PREVIEW") {
         setPreviewAfterMessageId(
@@ -825,6 +887,8 @@ export function useSession(companyId: string | undefined) {
       } else {
         setPreviewAfterMessageId(null);
       }
+      // ADR 0016 §5: hold the queue while parked at either gate — queued text
+      // was composed before the options existed and must not become a pick.
       if (!sendingRef.current && !stoppingRef.current && !parked) {
         drainQueueRef.current();
       }
@@ -838,6 +902,7 @@ export function useSession(companyId: string | undefined) {
       messages: ChatMessage[];
       brief?: unknown;
       awaiting_image_ok?: boolean;
+      awaiting_angle_pick?: boolean;
       forked_from?: ForkOrigin | null;
     }) => {
       disconnectSse();
@@ -1094,7 +1159,7 @@ export function useSession(companyId: string | undefined) {
 
   const stopTurn = useCallback(async () => {
     if (!accessToken || !sessionId || stoppingRef.current) return;
-    if (!sendingRef.current && !awaitingImageOkRef.current) return;
+    if (!sendingRef.current && !awaitingImageOkRef.current && !awaitingAnglePickRef.current) return;
     stoppingRef.current = true;
     setStopping(true);
     // Invalidate in-flight send/resume before abort so late resolves are dropped.
@@ -1104,7 +1169,8 @@ export function useSession(companyId: string | undefined) {
     try {
       const stopped = await apiStopSessionTurn(accessToken, sessionId);
       if (!stillOn(sessionId)) return;
-      const stillParked = stopped.awaiting_image_ok === true;
+      const stillParkedImage = stopped.awaiting_image_ok === true;
+      const stillParkedAngle = stopped.awaiting_angle_pick === true;
       // Reload transcript after discard (user message / draft may be gone).
       const hydrated = await apiGetSessionMessages(accessToken, sessionId);
       if (!stillOn(sessionId)) return;
@@ -1113,12 +1179,19 @@ export function useSession(companyId: string | undefined) {
       setMode(hydrated.session.mode);
       setSession(hydrated.session);
       const lastUser = [...hydrated.messages].reverse().find((m) => m.role === "user");
-      const parked = stillParked || hydrated.awaiting_image_ok === true;
-      awaitingImageOkRef.current = parked;
-      setAwaitingImageOk(parked);
+      const parsedBrief = parseBrief(hydrated.brief);
+      const parkedImage = stillParkedImage || hydrated.awaiting_image_ok === true;
+      const parkedAngle = stillParkedAngle || hydrated.awaiting_angle_pick === true;
+      awaitingImageOkRef.current = parkedImage;
+      setAwaitingImageOk(parkedImage);
+      awaitingAnglePickRef.current = parkedAngle;
+      setAwaitingAnglePick(parkedAngle);
+      if (parkedAngle) {
+        setAngleOptions(filterOfferedAngles(parsedBrief?.angles));
+      }
+      const parked = parkedImage || parkedAngle;
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
       // Restore BriefCard from sessions.state (Stop must not wipe a surviving brief).
-      const parsedBrief = parseBrief(hydrated.brief);
       setBrief(parsedBrief);
       setBriefAfterMessageId(parsedBrief && lastUser ? lastUser.id : null);
       if (!parked) {
@@ -1185,6 +1258,11 @@ export function useSession(companyId: string | undefined) {
         await stopTurn();
         if (stoppingRef.current || !accessToken) return;
       }
+      // A typed reply while angle-parked IS the pick (ADR 0028) — remember it
+      // so Retry re-issues the pick; any fresh turn clears the stale one.
+      const anglePickText = awaitingAnglePickRef.current ? text : null;
+      lastAnglePickRef.current = anglePickText;
+      setLastAnglePick(anglePickText);
 
       let optimistic: ChatMessage | null = null;
       let boundId: string | null = null;
@@ -1229,7 +1307,11 @@ export function useSession(companyId: string | undefined) {
           turnAnchorRef.current = pending.id;
           messagesRef.current = [...messagesRef.current, pending];
           setMessages(messagesRef.current);
-          appendAgentAction({ node: "route_intent", model_tier: null, model: null }, pending.id);
+          // A typed pick resumes the parked turn — route_intent is not
+          // consulted on resume turns (ADR 0028 §6).
+          if (anglePickText === null) {
+            appendAgentAction({ node: "route_intent", model_tier: null, model: null }, pending.id);
+          }
         }
 
         const res = await apiPostSessionMessage(accessToken, active.id, text, {
@@ -1243,6 +1325,7 @@ export function useSession(companyId: string | undefined) {
         // Switched away — keep the completed transcript for this session; do
         // not paint it onto the session now on screen.
         if (!stillOn(active.id)) {
+          const offscreenPark = anglePickParkFromEvents(res.interrupted, res.events);
           liveChatBySessionRef.current.set(active.id, {
             messages: res.messages,
             agentActions: agentActionsFromMessages(res.messages),
@@ -1257,7 +1340,10 @@ export function useSession(companyId: string | undefined) {
             previewAfterMessageId: res.events?.some((ev) => ev.type === "preview.updated")
               ? ([...res.messages].reverse().find((m) => m.role === "user")?.id ?? null)
               : null,
-            awaitingImageOk: res.interrupted,
+            awaitingImageOk: res.interrupted && !offscreenPark.parked,
+            awaitingAnglePick: offscreenPark.parked,
+            angleOptions: offscreenPark.angles,
+            lastAnglePick: anglePickText,
             draft: null,
             confirmReceipt: null,
             llmError: null,
@@ -1271,8 +1357,11 @@ export function useSession(companyId: string | undefined) {
         setMessages(res.messages);
         setMode(res.mode);
         setStreamingText(null);
-        awaitingImageOkRef.current = res.interrupted;
-        setAwaitingImageOk(res.interrupted);
+        const anglePark = anglePickParkFromEvents(res.interrupted, res.events);
+        awaitingImageOkRef.current = res.interrupted && !anglePark.parked;
+        setAwaitingImageOk(res.interrupted && !anglePark.parked);
+        awaitingAnglePickRef.current = anglePark.parked;
+        setAwaitingAnglePick(anglePark.parked);
         if (!res.interrupted) setInterruptAfterMessageId(null);
 
         const pending = optimistic;
@@ -1295,7 +1384,10 @@ export function useSession(companyId: string | undefined) {
         }
         if (serverLastUser) {
           const hasBriefEvent = res.events?.some((ev) => ev.type === "brief.updated");
-          const hasInterruptEvent = res.events?.some((ev) => ev.type === "draft.awaiting_image_ok");
+          const hasInterruptEvent = res.events?.some(
+            (ev) =>
+              ev.type === "draft.awaiting_image_ok" || ev.type === "draft.awaiting_angle_pick",
+          );
           if (hasBriefEvent) setBriefAfterMessageId(serverLastUser.id);
           if (res.interrupted || hasInterruptEvent) {
             setInterruptAfterMessageId(serverLastUser.id);
@@ -1375,7 +1467,15 @@ export function useSession(companyId: string | undefined) {
   );
 
   drainQueueRef.current = () => {
-    if (sendingRef.current || stoppingRef.current || awaitingImageOkRef.current) return;
+    // Held while parked at either gate — queued text is not a pick (ADR 0016 §5).
+    if (
+      sendingRef.current ||
+      stoppingRef.current ||
+      awaitingImageOkRef.current ||
+      awaitingAnglePickRef.current
+    ) {
+      return;
+    }
     const next = queuedRef.current[0];
     if (!next) return;
     queuedRef.current = queuedRef.current.slice(1);
@@ -1404,8 +1504,11 @@ export function useSession(companyId: string | undefined) {
       setMessages(res.messages);
       setMode(res.mode);
       setStreamingText(null);
-      awaitingImageOkRef.current = res.interrupted;
-      setAwaitingImageOk(res.interrupted);
+      const anglePark = anglePickParkFromEvents(res.interrupted, res.events);
+      awaitingImageOkRef.current = res.interrupted && !anglePark.parked;
+      setAwaitingImageOk(res.interrupted && !anglePark.parked);
+      awaitingAnglePickRef.current = anglePark.parked;
+      setAwaitingAnglePick(anglePark.parked);
       if (!res.interrupted) setInterruptAfterMessageId(null);
 
       const serverLastUser = [...res.messages].reverse().find((m) => m.role === "user");
@@ -1441,6 +1544,74 @@ export function useSession(companyId: string | undefined) {
     },
     [applyTurnEvent, ensureOutcomeActions, finishRunningActions],
   );
+
+  const chooseAngle = useCallback(
+    async (angle: number | string) => {
+      if (
+        !accessToken ||
+        !sessionId ||
+        sendingRef.current ||
+        stoppingRef.current ||
+        !awaitingAnglePickRef.current ||
+        (typeof angle === "string" && !angle.trim())
+      ) {
+        return;
+      }
+      const boundId = sessionId;
+      const epoch = bumpEpoch(boundId);
+      suppressLiveTurnEventsRef.current = false;
+      const abort = new AbortController();
+      registerInFlight(boundId, abort);
+      setLlmError(null);
+      const pick = typeof angle === "number" ? angle : angle.trim();
+      lastAnglePickRef.current = pick;
+      setLastAnglePick(pick);
+      bumpHistoryRecency(boundId);
+      try {
+        const res = await apiChooseSessionAngle(accessToken, boundId, {
+          signal: abort.signal,
+          angleIndex: typeof angle === "number" ? angle : undefined,
+          angle: typeof angle === "string" ? angle.trim() : undefined,
+        });
+        if (abort.signal.aborted || epoch !== epochOf(boundId)) {
+          return;
+        }
+        if (!stillOn(boundId)) {
+          void refreshHistory();
+          return;
+        }
+        applyTurnResponse(res);
+        void refreshHistory();
+      } catch (err) {
+        if (abort.signal.aborted || epoch !== epochOf(boundId)) return;
+        if (!stillOn(boundId)) return;
+        throw err;
+      } finally {
+        dropInFlight(boundId);
+        if (stillOn(boundId)) drainQueueRef.current();
+      }
+    },
+    [
+      accessToken,
+      sessionId,
+      applyTurnResponse,
+      refreshHistory,
+      bumpEpoch,
+      epochOf,
+      stillOn,
+      registerInFlight,
+      dropInFlight,
+      bumpHistoryRecency,
+    ],
+  );
+
+  // Retry at the gate = re-issue the failed pick — never a typed send (that
+  // would be read as a NEW pick/feedback, ADR 0028 §3–4).
+  const retryAnglePick = useCallback(async () => {
+    const pick = lastAnglePickRef.current;
+    if (pick === null) return;
+    await chooseAngle(pick);
+  }, [chooseAngle]);
 
   const resumeImage = useCallback(
     async (imageFormat?: "single" | "comic_4panel") => {
@@ -1674,6 +1845,9 @@ export function useSession(companyId: string | undefined) {
     interruptAfterMessageId,
     previewAfterMessageId,
     awaitingImageOk,
+    awaitingAnglePick,
+    angleOptions,
+    canRetryAnglePick: awaitingAnglePick && lastAnglePick !== null,
     draft,
     confirmReceipt,
     draftSaving,
@@ -1689,6 +1863,8 @@ export function useSession(companyId: string | undefined) {
     enqueueQueuedMessage: enqueueQueuedAt,
     dequeueQueuedMessage,
     resumeImage,
+    chooseAngle,
+    retryAnglePick,
     stopTurn,
     updateDraft,
     saveImagePlan,

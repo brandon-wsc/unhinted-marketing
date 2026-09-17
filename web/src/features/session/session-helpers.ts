@@ -213,6 +213,21 @@ export function agentActionsFromMessages(messages: ChatMessage[]): AgentActionRe
   return out;
 }
 
+/** Non-empty angle strings — mirrors backend `offered_angles` (ADR 0028). */
+export function filterOfferedAngles(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((a): a is string => typeof a === "string" && a.trim() !== "");
+}
+
+/** `draft.awaiting_angle_pick` in a turn response — shared park sniff. */
+export function anglePickParkFromEvents(
+  interrupted: boolean,
+  events?: { type: string; data?: Record<string, unknown> }[],
+): { parked: boolean; angles: string[] } {
+  const ev = interrupted ? events?.find((e) => e.type === "draft.awaiting_angle_pick") : undefined;
+  return { parked: !!ev, angles: filterOfferedAngles(ev?.data?.angles) };
+}
+
 const IMAGE_RETRY_NODES = new Set(["executor_image_plan", "executor_image_gen"]);
 
 /** Image-gen LLM errors should resume-image, not resend the last chat turn. */

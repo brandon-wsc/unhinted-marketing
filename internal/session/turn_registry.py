@@ -9,7 +9,10 @@ import asyncio
 import copy
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+# "message" = plain chat turn; resume kinds re-park their interrupt on cancel.
+TurnKind = Literal["message", "resume_image", "choose_angle"]
 
 
 @dataclass
@@ -20,8 +23,7 @@ class TurnEntry:
     message_ids: list[uuid.UUID] = field(default_factory=list)
     cancelling: bool = False
     discarded: asyncio.Event = field(default_factory=asyncio.Event)
-    # "message" | "resume_image" — resume cancel restores parked interrupt UI
-    kind: str = "message"
+    kind: TurnKind = "message"
     parked_restore: dict[str, Any] | None = None
 
 

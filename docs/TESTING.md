@@ -82,7 +82,8 @@ pytest tests/unit --cov=internal.auth.jwt --cov=schemas --cov-fail-under=85
 
 # Tier 1b session nodes (mock LLM — no API key)
 pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
- tests/unit/test_session_trace.py tests/unit/test_session_harness.py \
+ tests/unit/test_session_angle_gate.py tests/unit/test_session_trace.py \
+ tests/unit/test_session_harness.py \
  tests/unit/test_session_research_harness.py \
  tests/unit/test_session_execute_harness.py \
  --cov=internal.session.nodes --cov=internal.session.trace \

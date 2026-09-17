@@ -11,6 +11,7 @@ import pytest
 
 from internal.session.service import (
     SessionTurnConflict,
+    choose_angle_turn,
     resume_image_turn,
     run_session_turn,
     stop_session_turn,
@@ -99,6 +100,7 @@ async def test_stop_idle_is_noop() -> None:
         "status": "idle",
         "interrupted": False,
         "awaiting_image_ok": False,
+        "awaiting_angle_pick": False,
     }
 
 @pytest.mark.asyncio
@@ -135,6 +137,7 @@ async def test_stop_parked_discards_messages_and_state() -> None:
         "status": "cancelled",
         "interrupted": False,
         "awaiting_image_ok": False,
+        "awaiting_angle_pick": False,
     }
     assert session.state.get("awaiting_image_ok") is False
     assert "turn_discard" not in (session.state or {})
@@ -172,7 +175,7 @@ async def test_stop_mid_resume_image_reparks() -> None:
         except asyncio.CancelledError:
             cancelled_ok.set()
             raise
-        return {}, False, None, []
+        return {}, False, None, None, [], 0
 
     with (
         patch("internal.session.service.session_is_parked", AsyncMock(return_value=True)),
@@ -247,7 +250,7 @@ async def test_resume_image_provider_error_keeps_parked() -> None:
         ),
         patch(
             "internal.session.service._invoke_graph",
-            AsyncMock(return_value=({}, False, err, [], 10)),
+            AsyncMock(return_value=({}, False, None, err, [], 10)),
         ),
         patch("internal.session.service._persist_after_invoke", fake_persist),
         patch(
@@ -291,6 +294,7 @@ async def test_persist_resume_keeps_turn_discard_and_emits_parked_on_llm_error()
             message_dicts=[],
             values={"error": err.message, "messages": [], "draft": session.state["draft"]},
             still_interrupted=True,
+            parked_node="executor_image_plan",
             progress_events=[],
             provider_error=err,
             user_content="",
@@ -344,3 +348,309 @@ async def test_restore_parked_after_resume_cancel_sets_flag() -> None:
     repark.assert_awaited_once()
     events = publish.await_args.args[1]
     assert events[0]["data"]["awaiting_image_ok"] is True
+
+
+def _angle_parked_session() -> SimpleNamespace:
+    session = _session(
+        turn_discard={
+            "pre_state": {"brief": {}},
+            "user_message_id": str(uuid.uuid4()),
+            "message_ids": [],
+        }
+    )
+    session.state["awaiting_angle_pick"] = True
+    session.state["brief"] = {
+        "summary": "x",
+        "can_do": [],
+        "cannot_do": [],
+        "angles": ["用情侶日常帶出產品", "數據懶人包"],
+    }
+    return session
+
+
+@pytest.mark.asyncio
+async def test_run_session_turn_parked_at_angle_is_the_pick() -> None:
+    """Typed reply while angle-parked routes to choose-angle, not a new turn."""
+    session = _angle_parked_session()
+    db = AsyncMock()
+    with (
+        patch(
+            "internal.session.service.choose_angle_turn",
+            AsyncMock(return_value={"ok": True}),
+        ) as choose,
+    ):
+        result = await run_session_turn(db, session, user_content="第二個")
+
+    choose.assert_awaited_once()
+    assert choose.await_args.kwargs["angle_text"] == "第二個"
+    assert result == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_rejects_when_not_parked() -> None:
+    session = _session(awaiting=False)
+    db = AsyncMock()
+    with pytest.raises(SessionTurnConflict) as exc:
+        await choose_angle_turn(db, session, angle_index=0)
+    assert exc.value.reason == "not_parked"
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_index_out_of_range() -> None:
+    session = _angle_parked_session()
+    db = AsyncMock()
+    with pytest.raises(ValueError, match="out of range"):
+        await choose_angle_turn(db, session, angle_index=5)
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_updates_state_and_resumes() -> None:
+    session = _angle_parked_session()
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+
+    async def fake_invoke(*_a, **_k):
+        # Resumed graph parks at the image gate after drafting.
+        return (
+            {"mode": "AGENT", "messages": [], "draft": {"caption": "c"}},
+            True,
+            "executor_image_plan",
+            None,
+            [],
+            5,
+        )
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=fake_invoke),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": True, "events": [], "values": {}}),
+        ) as persist,
+    ):
+        result = await choose_angle_turn(db, session, angle_index=1)
+
+    update = graph.aupdate_state.await_args
+    assert update.args[1]["chosen_angle"] == "數據懶人包"
+    assert persist.await_args.kwargs["user_msg"] is None
+    assert persist.await_args.kwargs["parked_node"] == "executor_image_plan"
+    assert result["interrupted"] is True
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_free_text_creates_user_row() -> None:
+    session = _angle_parked_session()
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+    user_msg = SimpleNamespace(id=uuid.uuid4(), metadata_={})
+
+    async def fake_invoke(*_a, **_k):
+        return ({"mode": "AGENT", "messages": []}, False, None, None, [], 5)
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.add_session_message",
+            AsyncMock(return_value=user_msg),
+        ) as add_msg,
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=fake_invoke),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": False, "events": [], "values": {}}),
+        ),
+    ):
+        await choose_angle_turn(db, session, angle_text="做數據懶人包")
+
+    add_msg.assert_awaited_once()
+    assert add_msg.await_args.kwargs["content"] == "做數據懶人包"
+    update = graph.aupdate_state.await_args
+    assert update.args[1]["chosen_angle"] == "做數據懶人包"
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_retry_does_not_duplicate_user_row() -> None:
+    """Re-issuing a failed typed pick must not append a second user bubble."""
+    session = _angle_parked_session()
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+    pick_row = SimpleNamespace(
+        id=uuid.uuid4(), role="user", content="做數據懶人包", metadata_={}
+    )
+
+    async def fake_invoke(*_a, **_k):
+        return ({"mode": "AGENT", "messages": []}, False, None, None, [], 5)
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.add_session_message",
+            AsyncMock(),
+        ) as add_msg,
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[pick_row]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=fake_invoke),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": False, "events": [], "values": {}}),
+        ),
+    ):
+        await choose_angle_turn(db, session, angle_text="做數據懶人包")
+
+    add_msg.assert_not_awaited()
+    update = graph.aupdate_state.await_args
+    assert update.args[1]["chosen_angle"] == "做數據懶人包"
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_provider_error_reparks() -> None:
+    from internal.llm.router import LlmProviderError
+
+    session = _angle_parked_session()
+    err = LlmProviderError("nope", model="x", kind="bad_request")
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+    persist_kwargs: dict = {}
+
+    async def fake_persist(_db, sess, **kwargs):
+        persist_kwargs.update(kwargs)
+        sess.state = {
+            **dict(sess.state or {}),
+            "awaiting_angle_pick": kwargs["still_interrupted"],
+        }
+        return {"interrupted": kwargs["still_interrupted"], "values": {}, "events": []}
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch(
+            "internal.session.service._invoke_graph",
+            AsyncMock(return_value=({}, False, None, err, [], 10)),
+        ),
+        patch("internal.session.service._persist_after_invoke", fake_persist),
+        patch(
+            "internal.session.service._repark_graph_at_angle_gate",
+            AsyncMock(),
+        ) as repark,
+    ):
+        result = await choose_angle_turn(db, session, angle_index=0)
+
+    assert persist_kwargs["still_interrupted"] is True
+    assert persist_kwargs["parked_node"] == "angle_gate"
+    repark.assert_awaited_once()
+    assert result["interrupted"] is True
+    assert session.state["awaiting_angle_pick"] is True
+
+
+@pytest.mark.asyncio
+async def test_stop_mid_choose_angle_reparks() -> None:
+    """Stop during choose-angle restores the angle card (does not discard)."""
+    session = _angle_parked_session()
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+    started = asyncio.Event()
+    cancelled_ok = asyncio.Event()
+
+    async def _slow_invoke(*_a, **_k):
+        started.set()
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            cancelled_ok.set()
+            raise
+        return {}, False, None, None, [], 0
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=_slow_invoke),
+        patch(
+            "internal.session.service._restore_parked_after_resume_cancel",
+            AsyncMock(),
+        ) as restore,
+        patch(
+            "internal.session.service._adelete_graph_thread",
+            AsyncMock(),
+        ),
+    ):
+        pick_task = asyncio.create_task(
+            choose_angle_turn(db, session, angle_index=0)
+        )
+        await asyncio.wait_for(started.wait(), timeout=2.0)
+        stop_result = await stop_session_turn(db, session)
+        with pytest.raises(asyncio.CancelledError):
+            await pick_task
+
+    assert cancelled_ok.is_set()
+    restore.assert_awaited()
+    assert restore.await_args.kwargs["kind"] == "angle"
+    assert stop_result["status"] == "cancelled"
+    assert stop_result["interrupted"] is True
+    assert stop_result["awaiting_angle_pick"] is True
+
+
+@pytest.mark.asyncio
+async def test_persist_emits_awaiting_angle_pick_event() -> None:
+    from internal.session.service import _persist_after_invoke
+
+    session = _angle_parked_session()
+    brief = session.state["brief"]
+    db = AsyncMock()
+    published: list = []
+
+    with patch(
+        "internal.session.service.session_event_bus.publish_many",
+        AsyncMock(side_effect=lambda _sid, evs: published.extend(evs)),
+    ):
+        await _persist_after_invoke(
+            db,
+            session,
+            user_msg=None,
+            message_dicts=[],
+            values={"messages": [], "brief": brief},
+            still_interrupted=True,
+            parked_node="angle_gate",
+            progress_events=[],
+            provider_error=None,
+            user_content="",
+            pre_state={},
+            entry=None,
+        )
+
+    assert session.state["awaiting_angle_pick"] is True
+    assert session.state["awaiting_image_ok"] is False
+    types = [e["type"] for e in published]
+    assert "draft.awaiting_angle_pick" in types
+    ev = next(e for e in published if e["type"] == "draft.awaiting_angle_pick")
+    assert ev["data"]["awaiting"] is True
+    assert ev["data"]["angles"] == brief["angles"]

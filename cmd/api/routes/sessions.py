@@ -27,11 +27,12 @@ from internal.memory import repos
 from internal.memory.database import get_db, open_session
 from internal.memory.models import Session, User
 from internal.session.events import format_sse, session_event_bus
-from internal.session.graph import INTERRUPT_BEFORE
+from internal.session.graph import ANGLE_GATE_NODE, IMAGE_PARK_NODE
 from internal.session.service import (
     DEFAULT_PLATFORM,
     SessionTurnConflict,
     add_session_image,
+    choose_angle_turn,
     copy_session_preview,
     list_latest_session_media,
     normalize_draft_copy,
@@ -53,6 +54,8 @@ from internal.tools.publish import (
 from schemas.contracts import DraftCopy, PreviewMediaItem, SessionBriefData
 from schemas.session import (
     AddSessionImageRequest,
+    ChooseAngleRequest,
+    ChooseAngleResponse,
     ConfirmSessionRequest,
     ConfirmSessionResponse,
     CreateSessionRequest,
@@ -123,12 +126,17 @@ def _brief_from_state(state: dict | None) -> SessionBriefData | None:
     return brief
 
 
-def _image_interrupt_from_snapshot(state: dict | None, snap_next: object) -> bool:
-    """Generate-image CTA only — a running graph (`snap.next` non-empty) is not parked."""
+def _parked_node_from_snapshot(state: dict | None, snap_next: object) -> str | None:
+    """Which interrupt node the graph waits on — flags first, then snap.next."""
     if bool((state or {}).get("awaiting_image_ok")):
-        return True
+        return IMAGE_PARK_NODE
+    if bool((state or {}).get("awaiting_angle_pick")):
+        return ANGLE_GATE_NODE
     nxt = snap_next if isinstance(snap_next, (list, tuple)) else ()
-    return any(node in nxt for node in INTERRUPT_BEFORE)
+    for node in (ANGLE_GATE_NODE, IMAGE_PARK_NODE):
+        if node in nxt:
+            return node
+    return None
 
 
 async def _require_owned_session(
@@ -452,6 +460,56 @@ async def resume_image(
     )
 
 
+@router.post("/{session_id}/choose-angle", response_model=ChooseAngleResponse)
+async def choose_angle(
+    session_id: uuid.UUID,
+    body: ChooseAngleRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ChooseAngleResponse:
+    """Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0028)."""
+    session = await _require_owned_session(db, session_id, user)
+    if body.angle_index is None and not (body.angle or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide angle_index or angle",
+        )
+    try:
+        result = await choose_angle_turn(
+            db,
+            session,
+            angle_index=body.angle_index,
+            angle_text=body.angle,
+        )
+    except SessionTurnConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"reason": exc.reason, "message": exc.detail},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    except asyncio.CancelledError:
+        await db.rollback()
+        raise
+    await db.commit()
+    await db.refresh(session)
+
+    all_msgs = await repos.list_session_messages(db, session.id)
+    values = result["values"]
+    return ChooseAngleResponse(
+        session=_session_response(session),
+        messages=[_message_response(m) for m in all_msgs],
+        interrupted=result["interrupted"],
+        mode=session.mode,
+        revision=values.get("revision") or None,
+        pending_confirm=bool(values.get("pending_confirm")),
+        approval_token=values.get("approval_token"),
+        events=result["events"],
+    )
+
+
 @router.post("/{session_id}/stop", response_model=StopSessionResponse)
 async def stop_session(
     session_id: uuid.UUID,
@@ -466,6 +524,7 @@ async def stop_session(
         status=result["status"],
         interrupted=bool(result.get("interrupted")),
         awaiting_image_ok=bool(result.get("awaiting_image_ok")),
+        awaiting_angle_pick=bool(result.get("awaiting_angle_pick")),
     )
 
 
@@ -570,6 +629,7 @@ async def get_session_messages(
         messages=messages,
         brief=_brief_from_state(state),
         awaiting_image_ok=bool(state.get("awaiting_image_ok")),
+        awaiting_angle_pick=bool(state.get("awaiting_angle_pick")),
         forked_from=await _fork_origin(db, session),
     )
 
@@ -599,13 +659,13 @@ async def session_events(
         platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
         media_items = await list_latest_session_media(db, session)
 
-        interrupted = _image_interrupt_from_snapshot(state, ())
+        interrupted = _parked_node_from_snapshot(state, ()) is not None
         try:
             from internal.session.graph import get_session_graph
 
             graph = get_session_graph()
             snap = await graph.aget_state({"configurable": {"thread_id": str(session.id)}})
-            interrupted = _image_interrupt_from_snapshot(state, snap.next)
+            interrupted = _parked_node_from_snapshot(state, snap.next) is not None
         except Exception:
             # Graph/checkpointer may be unavailable in tests / early boot.
             logger.debug("session events: could not read graph interrupt state", exc_info=True)

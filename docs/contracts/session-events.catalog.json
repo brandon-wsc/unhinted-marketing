@@ -43,6 +43,10 @@
       "payload_model": "DraftAwaitingImageOkData"
     },
     {
+      "type": "draft.awaiting_angle_pick",
+      "payload_model": "DraftAwaitingAnglePickData"
+    },
+    {
       "type": "draft.updated",
       "payload_model": "DraftImageUrlData"
     },

@@ -90,6 +90,8 @@ class SessionMessagesResponse(BaseModel):
     # From sessions.state — so Stop/openSession can restore BriefCard without SSE.
     brief: SessionBriefData | None = None
     awaiting_image_ok: bool = False
+    # ADR 0028 — parked at angle_gate; brief.angles are the options.
+    awaiting_angle_pick: bool = False
     # Set when this session is itself a fork (ADR 0017).
     forked_from: ForkOrigin | None = None
 
@@ -119,6 +121,25 @@ class StopSessionResponse(BaseModel):
     status: str  # cancelled | idle
     interrupted: bool = False
     awaiting_image_ok: bool = False
+    awaiting_angle_pick: bool = False
+
+
+class ChooseAngleRequest(BaseModel):
+    """ADR 0028 pick while parked at angle_gate — index or free text."""
+
+    angle_index: int | None = Field(default=None, ge=0)
+    angle: str | None = Field(default=None, max_length=8000)
+
+
+class ChooseAngleResponse(BaseModel):
+    session: SessionResponse
+    messages: list[MessageResponse]
+    interrupted: bool = False
+    mode: str
+    revision: int | None = None
+    pending_confirm: bool = False
+    approval_token: str | None = None
+    events: list[dict] = Field(default_factory=list)
 
 
 class ResumeImageRequest(BaseModel):

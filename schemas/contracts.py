@@ -95,6 +95,13 @@ class DraftAwaitingImageOkData(BaseModel):
     awaiting: bool = True
 
 
+class DraftAwaitingAnglePickData(BaseModel):
+    """Payload for `draft.awaiting_angle_pick` (interrupt at angle_gate, ADR 0028)."""
+
+    awaiting: bool = True
+    angles: list[str] = Field(default_factory=list)
+
+
 class LlmFailedData(BaseModel):
     error: str = "AI service unavailable"
     code: str | None = None
@@ -112,6 +119,8 @@ class TurnCancelledData(BaseModel):
     reason: str = "stop"
     # True when Stop cancelled in-flight resume-image and re-parked at image interrupt.
     awaiting_image_ok: bool = False
+    # True when Stop cancelled in-flight choose-angle and re-parked at angle_gate.
+    awaiting_angle_pick: bool = False
 
 
 class ConfirmCompletedData(BaseModel):
@@ -144,6 +153,7 @@ class SessionEventType(StrEnum):
     DRAFT_COPY_UPDATED = "draft.copy_updated"
     DRAFT_IMAGE_PLAN_UPDATED = "draft.image_plan_updated"
     DRAFT_AWAITING_IMAGE_OK = "draft.awaiting_image_ok"
+    DRAFT_AWAITING_ANGLE_PICK = "draft.awaiting_angle_pick"
     DRAFT_UPDATED = "draft.updated"
     PREVIEW_UPDATED = "preview.updated"
     CONFIRM_PENDING = "confirm.pending"
@@ -165,6 +175,7 @@ EVENT_PAYLOAD_MODELS: dict[SessionEventType, type[BaseModel] | None] = {
     SessionEventType.DRAFT_COPY_UPDATED: DraftCopy,
     SessionEventType.DRAFT_IMAGE_PLAN_UPDATED: None,  # ImagePlanOut lives in session.io
     SessionEventType.DRAFT_AWAITING_IMAGE_OK: DraftAwaitingImageOkData,
+    SessionEventType.DRAFT_AWAITING_ANGLE_PICK: DraftAwaitingAnglePickData,
     SessionEventType.DRAFT_UPDATED: DraftImageUrlData,
     SessionEventType.PREVIEW_UPDATED: PreviewUpdatedData,
     SessionEventType.CONFIRM_PENDING: None,

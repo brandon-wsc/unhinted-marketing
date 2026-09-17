@@ -81,7 +81,8 @@
       "edit": "Edit message",
       "more": "More",
       "full": "Queue is full (3). Wait for this turn to finish.",
-      "holdForImage": "Queued messages wait until you pick an image format or Stop."
+      "holdForImage": "Queued messages wait until you pick an image format or Stop.",
+      "holdForAngle": "Queued messages wait until you pick an angle or Stop."
     },
     "live": "Live",
     "offline": "Offline",
@@ -158,6 +159,15 @@
         "formatLabel": "Image format",
         "formatSingle": "Single image",
         "formatComic": "4-panel comic"
+      },
+      "anglePick": {
+        "title": "Pick an angle first",
+        "subtitle": "Choose a direction and the draft will follow it — or type your own below.",
+        "optionsLabel": "Content angles",
+        "otherLabel": "Custom angle",
+        "otherPlaceholder": "Or write your own angle…",
+        "otherSubmit": "Use this angle",
+        "working": "Drafting…"
       },
       "imageOkMessage": "Looks good — please generate the image."
     },
