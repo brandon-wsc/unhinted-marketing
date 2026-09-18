@@ -98,7 +98,7 @@ async def test_dual_write_puts_local_and_s3(
     publish_snapshot(_dual_snap())
 
     url = await S.put_bytes(key=KEY, data=TINY_PNG, content_type="image/png")
-    assert url == f"https://example.test/api/media/{KEY}"
+    assert url == f"/api/media/{KEY}"
     assert (local_media / KEY).read_bytes() == TINY_PNG
     assert fake.objects[KEY] == TINY_PNG
 

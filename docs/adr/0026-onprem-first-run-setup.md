@@ -25,7 +25,7 @@ marker keeps the wizard from reappearing.
 One row (`id = 1`, CHECK-enforced) holds:
 
 - `setup_completed_at` — NULL = wizard pending (on-prem)
-- `web_base_url` — invite links, OAuth redirect fallback, local media URLs
+- `web_base_url` — invite links, OAuth redirect fallback, Instagram Confirm image fetch
 - email delivery: `email_backend` (`link`/`smtp`/`console`), `email_from`,
   `smtp_host/port/user`, `smtp_password_encrypted` (BYOK Fernet KEK,
   last4-only in responses), `smtp_tls`
@@ -37,9 +37,9 @@ already have users as setup-complete so existing installs never see the
 wizard.
 
 `internal.instance.config` publishes an in-process snapshot (8s TTL). Sync
-readers inside SSE emit paths (`resolve_stored_url`, invite links) call
-`get_snapshot()` and fall back to env values when the cache is cold — they
-must not await a DB load.
+readers (invite links, Instagram Confirm image fetch, OAuth redirect fallback)
+call `get_snapshot()` and fall back to env values when the cache is cold —
+they must not await a DB load.
 
 ### 2. First-run setup claims the only SUPERADMIN
 

@@ -2,8 +2,8 @@
 
 Same publish/TTL pattern as ``internal.media.config`` — with one deliberate
 difference: ``get_snapshot()`` falls back to env-derived values when the cache
-is cold instead of raising, because sync readers run inside SSE emit paths
-(media URL resolution, invite links) that cannot await a DB load.
+is cold instead of raising, because sync readers (invite links, Instagram
+Confirm image fetch, OAuth redirect fallback) cannot await a DB load.
 """
 
 from __future__ import annotations

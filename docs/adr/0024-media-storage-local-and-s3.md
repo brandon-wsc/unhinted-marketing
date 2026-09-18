@@ -63,11 +63,12 @@ Callers keep `put_bytes` / `persist_generated_image` / `media_object_key`.
 not store that return value** — store-backed rows persist the object key
 (§3). `persist_generated_image` for `data:` returns the key.
 
-- Local: `{WEB_BASE_URL}/api/media/{key}` (relative `/api/media/{key}` if
-  `WEB_BASE_URL` is empty). Unauthenticated `GET /api/media/{key:path}` streams
-  the file (same public-read model as the old MinIO anonymous download; path
-  traversal rejected). Signed / private URLs stay STATUS hardening and still
-  derive from the key.
+- Local: always relative `/api/media/{key}` for browser/SSE (follows the SPA
+  origin — Vite may hop ports). Unauthenticated `GET /api/media/{key:path}`
+  streams the file (same public-read model as the old MinIO anonymous
+  download; path traversal rejected). Signed / private URLs stay STATUS
+  hardening and still derive from the key. Instagram Confirm uses
+  `resolve_external_url`, which prefixes the current `web_base_url`.
 - S3: `S3_PUBLIC_BASE_URL/{key}` if set, else `{S3_ENDPOINT_URL}/{bucket}/{key}`
   when an endpoint is configured (path-style), else
   `https://{bucket}.s3.{region}.amazonaws.com/{key}`. Do not auto-create the
@@ -83,9 +84,9 @@ origin, and not `put_bytes`'s returned URL. Provider-hosted `http(s)://` and
 The short token (`r{revision}-{hex}`) means concurrent regen/upload can never
 overwrite the same bytes.
 
-`resolve_stored_url` is the read choke point and derives the current URL:
+`resolve_stored_url` is the read choke point for **browser** URLs:
 
-- object key → current `MediaStore.public_url(key)`
+- object key → current `MediaStore.public_url(key)` (local: relative path)
 - legacy `{origin}/api/media/{key}` or relative `/api/media/{key}` → peel key,
   re-derive
 - legacy URL under the current `S3_PUBLIC_BASE_URL`, the configured endpoint's
@@ -93,13 +94,21 @@ overwrite the same bytes.
   `https://{bucket}.s3.{region}.amazonaws.com/` → peel key, re-derive
 - provider `http(s)://`, `placeholder://`, `data:` → as-is (not our objects)
 
-Callers: `media_item_payload`, `preview.updated` / snapshot `image_url`,
-Confirm's publish image URL. Confirm's copy-only gate treats a bare object
-key as an image (`http(s)` / `data:image/` / valid key all count;
-`placeholder://` does not). The HTTP/SSE contract is unchanged — clients
-still receive a browser-fetchable `url` / `image_url`. Changing
-`WEB_BASE_URL` or `S3_PUBLIC_BASE_URL` applies to old rows on the next read.
-No new column, no backfill migration.
+`resolve_external_url` is the Confirm / Instagram Graph choke point: same peel,
+then `external_url` (local prefixes `WEB_BASE_URL`; S3 unchanged). Meta cannot
+fetch a relative path.
+
+Callers: `media_item_payload`, `preview.updated` / snapshot `image_url` use
+`resolve_stored_url`. Confirm's publish image URL uses `resolve_external_url`.
+Confirm's copy-only gate treats a bare object key as an image (`http(s)` /
+`data:image/` / valid key all count; `placeholder://` does not). The HTTP/SSE
+contract still emits a browser-fetchable `url` / `image_url` (now often
+relative on local). Changing `WEB_BASE_URL` or `S3_PUBLIC_BASE_URL` applies to
+old rows on the next read. No new column, no backfill migration.
+
+**Amendment (2026-09-18):** local browser URLs dropped the `{WEB_BASE_URL}`
+prefix so preview `<img>` survives a Vite port hop. Instagram Confirm still
+uses `resolve_external_url` (absolute `{WEB_BASE_URL}/api/media/{key}`).
 
 ### 4. Always persist real bytes
 

@@ -111,10 +111,11 @@ async def publish_social_post(
 
 ## 4. Media public URL
 
-- Publish image = draft's first `media_ids` entry; Confirm derives a fetchable
-  URL via `resolve_stored_url` (object key or leftover baked URL → current
-  origin/CDN; [ADR 0024](./adr/0024-media-storage-local-and-s3.md)) and fills
-  `PublishSocialPostRequest.image_url`.
+- Publish image = draft's first `media_ids` entry; Confirm derives a
+  Meta-reachable URL via `resolve_external_url` (object key or leftover baked
+  URL → current `WEB_BASE_URL` / CDN; [ADR 0024](./adr/0024-media-storage-local-and-s3.md))
+  and fills `PublishSocialPostRequest.image_url`. Browser preview uses relative
+  `resolve_stored_url`.
 - On-prem local disk is unreachable by Meta unless `WEB_BASE_URL` is public
   (tunnel). On-prem S3-compatible behind `S3_PUBLIC_BASE_URL`, or cloud S3/CDN,
   satisfies it. Unit tests mock httpx; this constraint is documented, not coded around.
