@@ -45,6 +45,18 @@ const SINGLE_COMPOSITION = "subject centered, negative space for optional captio
 const SINGLE_STYLE = "bright, contemporary, editorial";
 const COMIC_VEHICLE =
   /4-panel|four-panel|4\s*panel|comic strip|2x2 comic|comic grid|4\s*格|四格|漫畫分格/i;
+const INSPIRED_BY = /inspired by:\s*(.+?)(?:,\s*(?:clear gutters|no logos)|$)/i;
+const SINGLE_PROMPT =
+  "Clean modern social media image, Hong Kong urban mood, no logos, no unreadable text";
+
+// Mirrors _single_prompt_from_comic in internal/session/image_format.py —
+// keeps the "inspired by" seed when dropping the comic vehicle.
+function singlePromptFromComic(prompt: string): string {
+  const seed = INSPIRED_BY.exec(prompt)?.[1]?.trim().replace(/,+$/, "");
+  return seed
+    ? `Clean modern social media image, Hong Kong urban mood, inspired by: ${seed}, no logos, no unreadable text`
+    : SINGLE_PROMPT;
+}
 
 function normalizeFormat(raw: string | undefined, fallback: string): PlanFormat {
   if (raw === "comic_4panel" || raw === "single") return raw;
@@ -204,9 +216,7 @@ export function EditImageDialog({
             ? SINGLE_COMPOSITION
             : prev.composition,
         style: /comic/i.test(prev.style) ? SINGLE_STYLE : prev.style,
-        prompt: COMIC_VEHICLE.test(prev.prompt)
-          ? "Clean modern social media image, Hong Kong urban mood, no logos, no unreadable text"
-          : prev.prompt,
+        prompt: COMIC_VEHICLE.test(prev.prompt) ? singlePromptFromComic(prev.prompt) : prev.prompt,
       };
     });
   }

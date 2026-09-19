@@ -1409,11 +1409,12 @@ async def _bump_preview_revision(
     state["revision"] = rev
     state["approval_token"] = token
     state["image_url"] = primary_url
+    image_format = image_format_from_plan(
+        primary_plan, fallback=str(state.get("image_format") or "single")
+    )
     if primary_plan is not None:
         state["image_plan"] = primary_plan
-        state["image_format"] = image_format_from_plan(
-            primary_plan, fallback=str(state.get("image_format") or "single")
-        )
+        state["image_format"] = image_format
     state["media_ids"] = [str(i) for i in media_ids]
     state["pending_confirm"] = False
     state["need_image"] = False
@@ -1435,7 +1436,7 @@ async def _bump_preview_revision(
         "need_image": False,
     }
     if primary_plan is not None:
-        graph_update["image_format"] = image_format_from_plan(primary_plan)
+        graph_update["image_format"] = image_format
     try:
         await graph.aupdate_state(
             config,
