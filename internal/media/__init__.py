@@ -3,8 +3,8 @@
 from internal.media.storage import (
     MediaStorageError,
     delete_key,
-    extract_store_key,
     external_url,
+    extract_store_key,
     media_backend,
     media_object_key,
     parse_data_url,
@@ -19,8 +19,8 @@ from internal.media.storage import (
 __all__ = [
     "MediaStorageError",
     "delete_key",
-    "extract_store_key",
     "external_url",
+    "extract_store_key",
     "media_backend",
     "media_object_key",
     "parse_data_url",
