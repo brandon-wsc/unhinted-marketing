@@ -26,6 +26,7 @@ import {
   EMPTY_COMPOSER_DRAFT,
   filterOfferedAngles,
   filterOfferedPersonas,
+  type ImageFormat,
   isConfirmSuccessStatus,
   isUserFacingAgentNode,
   MAX_QUEUED_SESSION_MESSAGES,
@@ -37,6 +38,7 @@ import {
   parseBrief,
   parseConfirmReceipt,
   parseDraftCopy,
+  parseImageFormat,
   parseMediaItems,
   previewAnchorFromActions,
   readComposerDraft,
@@ -82,8 +84,10 @@ type LiveChatSnapshot = {
   angleOptions: string[];
   anglePersonas: AudiencePersonaOption[];
   recommendedPersona: string | null;
+  recommendedImageFormat: ImageFormat | null;
   lastAnglePick: number | string | null;
   lastPersonaPick: string | null;
+  lastImageFormatPick: ImageFormat | null;
   draft: PreviewDraft | null;
   confirmReceipt: ConfirmSessionResponse | null;
   llmError: string | null;
@@ -123,10 +127,12 @@ export function useSession(companyId: string | undefined) {
   const [angleOptions, setAngleOptions] = useState<string[]>([]);
   const [anglePersonas, setAnglePersonas] = useState<AudiencePersonaOption[]>([]);
   const [recommendedPersona, setRecommendedPersona] = useState<string | null>(null);
+  const [recommendedImageFormat, setRecommendedImageFormat] = useState<ImageFormat | null>(null);
   // Last pick attempted at the gate — Retry re-issues it; a typed send while
   // parked IS a pick, so re-sending the stale start prompt would be feedback.
   const [lastAnglePick, setLastAnglePick] = useState<number | string | null>(null);
   const [lastPersonaPick, setLastPersonaPick] = useState<string | null>(null);
+  const [lastImageFormatPick, setLastImageFormatPick] = useState<ImageFormat | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatMessage[]>([]);
   const [composerInput, setComposerInputState] = useState("");
   const [editInsertAt, setEditInsertAtState] = useState<number | null>(null);
@@ -180,6 +186,7 @@ export function useSession(companyId: string | undefined) {
   const awaitingAnglePickRef = useRef(false);
   const lastAnglePickRef = useRef<number | string | null>(null);
   const lastPersonaPickRef = useRef<string | null>(null);
+  const lastImageFormatPickRef = useRef<ImageFormat | null>(null);
   const queuedRef = useRef<QueuedChatMessage[]>([]);
   const drainQueueRef = useRef<() => void>(() => {});
   queuedRef.current = queuedMessages;
@@ -189,6 +196,7 @@ export function useSession(companyId: string | undefined) {
   awaitingAnglePickRef.current = awaitingAnglePick;
   lastAnglePickRef.current = lastAnglePick;
   lastPersonaPickRef.current = lastPersonaPick;
+  lastImageFormatPickRef.current = lastImageFormatPick;
   liveUiRef.current = {
     messages,
     agentActions,
@@ -203,8 +211,10 @@ export function useSession(companyId: string | undefined) {
     angleOptions,
     anglePersonas,
     recommendedPersona,
+    recommendedImageFormat,
     lastAnglePick,
     lastPersonaPick,
+    lastImageFormatPick,
     draft,
     confirmReceipt,
     llmError,
@@ -256,6 +266,7 @@ export function useSession(companyId: string | undefined) {
       awaitingAnglePick: awaitingAnglePickRef.current,
       lastAnglePick: lastAnglePickRef.current,
       lastPersonaPick: lastPersonaPickRef.current,
+      lastImageFormatPick: lastImageFormatPickRef.current,
     });
   }, []);
 
@@ -280,10 +291,13 @@ export function useSession(companyId: string | undefined) {
     setAngleOptions(snap.angleOptions);
     setAnglePersonas(snap.anglePersonas);
     setRecommendedPersona(snap.recommendedPersona);
+    setRecommendedImageFormat(snap.recommendedImageFormat);
     lastAnglePickRef.current = snap.lastAnglePick;
     setLastAnglePick(snap.lastAnglePick);
     lastPersonaPickRef.current = snap.lastPersonaPick;
     setLastPersonaPick(snap.lastPersonaPick);
+    lastImageFormatPickRef.current = snap.lastImageFormatPick;
+    setLastImageFormatPick(snap.lastImageFormatPick);
     setDraft(snap.draft);
     setConfirmReceipt(snap.confirmReceipt);
     setLlmError(snap.llmError);
@@ -375,8 +389,10 @@ export function useSession(companyId: string | undefined) {
     setAngleOptions([]);
     setAnglePersonas([]);
     setRecommendedPersona(null);
+    setRecommendedImageFormat(null);
     setLastAnglePick(null);
     setLastPersonaPick(null);
+    setLastImageFormatPick(null);
     setDraft(null);
     setConfirmReceipt(null);
     setLlmError(null);
@@ -387,6 +403,7 @@ export function useSession(companyId: string | undefined) {
     awaitingAnglePickRef.current = false;
     lastAnglePickRef.current = null;
     lastPersonaPickRef.current = null;
+    lastImageFormatPickRef.current = null;
   }, []);
 
   const lastUserMessageId = useCallback(() => {
@@ -607,6 +624,7 @@ export function useSession(companyId: string | undefined) {
         const rec =
           typeof data.recommended_persona === "string" ? data.recommended_persona.trim() : "";
         setRecommendedPersona(rec || null);
+        setRecommendedImageFormat(parseImageFormat(data.recommended_image_format));
         setInterruptAfterMessageId(lastUserMessageId());
         return;
       }
@@ -763,6 +781,9 @@ export function useSession(companyId: string | undefined) {
             const briefPersona = (state?.brief as { persona?: unknown } | undefined)?.persona;
             const rec = sticky || (typeof briefPersona === "string" ? briefPersona.trim() : "");
             setRecommendedPersona(rec || null);
+            setRecommendedImageFormat(
+              parseImageFormat(state?.chosen_image_format) ?? parseImageFormat(state?.image_format),
+            );
           }
           if (parkedAtImage || parkedAtAngle) {
             const anchor = lastUserMessageId();
@@ -890,6 +911,7 @@ export function useSession(companyId: string | undefined) {
       awaiting_angle_pick?: boolean;
       personas?: unknown;
       recommended_persona?: string | null;
+      recommended_image_format?: string | null;
       forked_from?: ForkOrigin | null;
     }) => {
       resetTransientUi();
@@ -910,12 +932,18 @@ export function useSession(companyId: string | undefined) {
       setAwaitingImageOk(parkedImage);
       awaitingAnglePickRef.current = parkedAngle;
       setAwaitingAnglePick(parkedAngle);
+      const lockedFormat = parseImageFormat(res.recommended_image_format);
+      if ((parkedImage || parkedAngle) && lockedFormat) {
+        lastImageFormatPickRef.current = lockedFormat;
+        setLastImageFormatPick(lockedFormat);
+      }
       if (parkedAngle) {
         setAngleOptions(filterOfferedAngles(parsedBrief?.angles));
         setAnglePersonas(filterOfferedPersonas(res.personas));
         const rec =
           typeof res.recommended_persona === "string" ? res.recommended_persona.trim() : "";
         setRecommendedPersona(rec || null);
+        setRecommendedImageFormat(lockedFormat);
       }
       const parked = parkedImage || parkedAngle;
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
@@ -942,6 +970,7 @@ export function useSession(companyId: string | undefined) {
       brief?: unknown;
       awaiting_image_ok?: boolean;
       awaiting_angle_pick?: boolean;
+      recommended_image_format?: string | null;
       forked_from?: ForkOrigin | null;
     }) => {
       disconnectSse();
@@ -1225,6 +1254,11 @@ export function useSession(companyId: string | undefined) {
       setAwaitingImageOk(parkedImage);
       awaitingAnglePickRef.current = parkedAngle;
       setAwaitingAnglePick(parkedAngle);
+      const lockedFormat = parseImageFormat(hydrated.recommended_image_format);
+      if ((parkedImage || parkedAngle) && lockedFormat) {
+        lastImageFormatPickRef.current = lockedFormat;
+        setLastImageFormatPick(lockedFormat);
+      }
       if (parkedAngle) {
         setAngleOptions(filterOfferedAngles(parsedBrief?.angles));
         setAnglePersonas(filterOfferedPersonas(hydrated.personas));
@@ -1233,6 +1267,7 @@ export function useSession(companyId: string | undefined) {
             ? hydrated.recommended_persona.trim()
             : "";
         setRecommendedPersona(rec || null);
+        setRecommendedImageFormat(lockedFormat);
       }
       const parked = parkedImage || parkedAngle;
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
@@ -1390,8 +1425,10 @@ export function useSession(companyId: string | undefined) {
             angleOptions: offscreenPark.angles,
             anglePersonas: offscreenPark.personas,
             recommendedPersona: offscreenPark.recommendedPersona,
+            recommendedImageFormat: offscreenPark.recommendedImageFormat,
             lastAnglePick: anglePickText,
             lastPersonaPick: lastPersonaPickRef.current,
+            lastImageFormatPick: lastImageFormatPickRef.current,
             draft: null,
             confirmReceipt: null,
             llmError: null,
@@ -1414,6 +1451,7 @@ export function useSession(companyId: string | undefined) {
           if (anglePark.angles.length > 0) setAngleOptions(anglePark.angles);
           setAnglePersonas(anglePark.personas);
           setRecommendedPersona(anglePark.recommendedPersona);
+          setRecommendedImageFormat(anglePark.recommendedImageFormat);
         }
         if (!res.interrupted) setInterruptAfterMessageId(null);
 
@@ -1566,6 +1604,7 @@ export function useSession(companyId: string | undefined) {
         if (anglePark.angles.length > 0) setAngleOptions(anglePark.angles);
         setAnglePersonas(anglePark.personas);
         setRecommendedPersona(anglePark.recommendedPersona);
+        setRecommendedImageFormat(anglePark.recommendedImageFormat);
       }
       if (!res.interrupted) setInterruptAfterMessageId(null);
 
@@ -1604,7 +1643,7 @@ export function useSession(companyId: string | undefined) {
   );
 
   const chooseAngle = useCallback(
-    async (angle: number | string, persona?: string) => {
+    async (angle: number | string, persona?: string, imageFormat?: ImageFormat) => {
       if (
         !accessToken ||
         !sessionId ||
@@ -1630,6 +1669,11 @@ export function useSession(companyId: string | undefined) {
         lastPersonaPickRef.current = personaSlug;
         setLastPersonaPick(personaSlug);
       }
+      const pickedFormat = parseImageFormat(imageFormat);
+      if (pickedFormat) {
+        lastImageFormatPickRef.current = pickedFormat;
+        setLastImageFormatPick(pickedFormat);
+      }
       bumpHistoryRecency(boundId);
       try {
         const res = await apiChooseSessionAngle(accessToken, boundId, {
@@ -1637,6 +1681,7 @@ export function useSession(companyId: string | undefined) {
           angleIndex: typeof angle === "number" ? angle : undefined,
           angle: typeof angle === "string" ? angle.trim() : undefined,
           persona: personaSlug,
+          imageFormat: pickedFormat ?? undefined,
         });
         if (abort.signal.aborted || epoch !== epochOf(boundId)) {
           return;
@@ -1675,7 +1720,11 @@ export function useSession(companyId: string | undefined) {
   const retryAnglePick = useCallback(async () => {
     const pick = lastAnglePickRef.current;
     if (pick === null) return;
-    await chooseAngle(pick, lastPersonaPickRef.current ?? undefined);
+    await chooseAngle(
+      pick,
+      lastPersonaPickRef.current ?? undefined,
+      lastImageFormatPickRef.current ?? undefined,
+    );
   }, [chooseAngle]);
 
   const resumeImage = useCallback(
@@ -1914,6 +1963,8 @@ export function useSession(companyId: string | undefined) {
     angleOptions,
     anglePersonas,
     recommendedPersona,
+    recommendedImageFormat,
+    lastImageFormatPick,
     canRetryAnglePick: awaitingAnglePick && lastAnglePick !== null,
     draft,
     confirmReceipt,

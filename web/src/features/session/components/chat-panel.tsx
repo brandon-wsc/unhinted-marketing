@@ -113,6 +113,8 @@ export function ChatPanel() {
     angleOptions,
     anglePersonas,
     recommendedPersona,
+    recommendedImageFormat,
+    lastImageFormatPick,
     canRetryAnglePick,
     draft,
     confirmReceipt,
@@ -378,9 +380,13 @@ export function ChatPanel() {
     }
   }
 
-  async function onPickAngle(angle: number | string, persona?: string) {
+  async function onPickAngle(
+    angle: number | string,
+    persona?: string,
+    imageFormat?: "single" | "comic_4panel",
+  ) {
     try {
-      await chooseAngle(angle, persona);
+      await chooseAngle(angle, persona, imageFormat);
     } catch {
       showError(t("chat.error.sendFailed"));
     }
@@ -500,8 +506,17 @@ export function ChatPanel() {
       angles={angleOptions}
       personas={anglePersonas}
       recommendedPersona={recommendedPersona}
+      recommendedImageFormat={recommendedImageFormat}
       sending={sending || stopping}
-      onPick={(angle, persona) => void onPickAngle(angle, persona)}
+      onPick={(angle, persona, imageFormat) => void onPickAngle(angle, persona, imageFormat)}
+    />
+  );
+
+  const interruptCard = (
+    <InterruptCard
+      sending={sending || stopping}
+      defaultFormat={lastImageFormatPick}
+      onResume={(format) => void onResumeImageGen(format)}
     />
   );
 
@@ -605,12 +620,7 @@ export function ChatPanel() {
                     )}
                     {brief && briefAfterMessageId === m.id && <BriefCard brief={brief} />}
                     {awaitingAnglePick && interruptAfterMessageId === m.id && anglePickCard}
-                    {awaitingImageOk && interruptAfterMessageId === m.id && (
-                      <InterruptCard
-                        sending={sending || stopping}
-                        onResume={(format) => void onResumeImageGen(format)}
-                      />
-                    )}
+                    {awaitingImageOk && interruptAfterMessageId === m.id && interruptCard}
                     {previewMode && previewAfterMessageId === m.id && !isSplit && (
                       <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
                     )}
@@ -639,24 +649,15 @@ export function ChatPanel() {
               anglePickCard}
             {awaitingImageOk &&
               interruptAfterMessageId &&
-              !messages.some((m) => m.id === interruptAfterMessageId) && (
-                <InterruptCard
-                  sending={sending || stopping}
-                  onResume={(format) => void onResumeImageGen(format)}
-                />
-              )}
+              !messages.some((m) => m.id === interruptAfterMessageId) &&
+              interruptCard}
             {previewMode &&
               previewAfterMessageId &&
               !messages.some((m) => m.id === previewAfterMessageId) &&
               !isSplit && <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />}
             {brief && !briefAfterMessageId && <BriefCard brief={brief} />}
             {awaitingAnglePick && !interruptAfterMessageId && anglePickCard}
-            {awaitingImageOk && !interruptAfterMessageId && (
-              <InterruptCard
-                sending={sending || stopping}
-                onResume={(format) => void onResumeImageGen(format)}
-              />
-            )}
+            {awaitingImageOk && !interruptAfterMessageId && interruptCard}
             {previewMode && !previewAfterMessageId && !isSplit && (
               <PreviewReadyBanner onOpen={() => setPagedPane("preview")} />
             )}

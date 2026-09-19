@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FormatToggle, type ImageFormat } from "@/features/session/components/format-toggle";
 import type { AudiencePersonaOption } from "@/features/session/types";
 import { cn } from "@/lib/utils";
 
@@ -17,8 +18,9 @@ type Props = {
   angles: string[];
   personas?: AudiencePersonaOption[];
   recommendedPersona?: string | null;
+  recommendedImageFormat?: ImageFormat | null;
   sending: boolean;
-  onPick: (angle: number | string, persona?: string) => void;
+  onPick: (angle: number | string, persona?: string, imageFormat?: ImageFormat) => void;
 };
 
 // Highlight follows `active` (hover/arrow/focus all move it), not DOM focus —
@@ -33,12 +35,17 @@ function fallbackPersona(
   return personas[0]?.slug ?? "";
 }
 
+function fallbackFormat(recommended: ImageFormat | null | undefined): ImageFormat {
+  return recommended === "comic_4panel" ? "comic_4panel" : "single";
+}
+
 const EMPTY_PERSONAS: AudiencePersonaOption[] = [];
 
 export function AnglePickCard({
   angles,
   personas = EMPTY_PERSONAS,
   recommendedPersona = null,
+  recommendedImageFormat = null,
   sending,
   onPick,
 }: Props) {
@@ -47,6 +54,9 @@ export function AnglePickCard({
   // 0..angles.length-1 = options; angles.length = the "other" input row.
   const [active, setActive] = useState(0);
   const [persona, setPersona] = useState(() => fallbackPersona(personas, recommendedPersona));
+  const [imageFormat, setImageFormat] = useState<ImageFormat>(() =>
+    fallbackFormat(recommendedImageFormat),
+  );
   const listRef = useRef<HTMLUListElement>(null);
   const otherInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,8 +64,9 @@ export function AnglePickCard({
   useEffect(() => {
     setActive(0);
     setPersona(fallbackPersona(personas, recommendedPersona));
+    setImageFormat(fallbackFormat(recommendedImageFormat));
     if (angles.length > 0) listRef.current?.querySelector("button")?.focus();
-  }, [angles, personas, recommendedPersona]);
+  }, [angles, personas, recommendedPersona, recommendedImageFormat]);
 
   if (angles.length === 0) return null;
 
@@ -63,8 +74,7 @@ export function AnglePickCard({
   const selectedPersona = personas.length > 0 ? persona || undefined : undefined;
 
   function emitPick(angle: number | string) {
-    if (selectedPersona) onPick(angle, selectedPersona);
-    else onPick(angle);
+    onPick(angle, selectedPersona, imageFormat);
   }
 
   // disabled 擋 click/focus 但 pointerenter 仲會 fire — sending 時唔郁 highlight。
@@ -129,6 +139,15 @@ export function AnglePickCard({
           </Select>
         </div>
       )}
+      <div className="flex flex-col gap-1.5">
+        <Label>{t("chat.agent.anglePick.formatLabel")}</Label>
+        <FormatToggle
+          value={imageFormat}
+          onChange={setImageFormat}
+          disabled={sending}
+          groupLabel={t("chat.agent.anglePick.formatLabel")}
+        />
+      </div>
       <ul
         ref={listRef}
         className="flex flex-col gap-2"

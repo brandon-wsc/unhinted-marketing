@@ -153,7 +153,7 @@ nodes:
   control:     route_intent · load_context · chat · ack_confirm
   research:    trend_searcher          # session on-demand PG signal lookup (not background ingest)
   strategy:    brainstormer            # brief ideas, can_do[] / cannot_do[], angles
-               angle_gate              # park for user pick when ≥2 angles (ADR 0028; no LLM)
+               angle_gate              # park for user pick when ≥1 angle (ADR 0028/0030; no LLM)
   execute:     executor_post           # brief → publish-ready post copy
                executor_image_plan     # post + brand context → image prompt / layout spec
                executor_image_gen      # dispatch image worker (no LLM; async job)
@@ -174,7 +174,7 @@ NOT in graph: hot_search_worker · question_generator · DALL-E worker · POST /
 START → route_intent
   ├── chat            → chat → END
   ├── start           → load_context → trend_searcher → brainstormer
-  │                     → angle_gate (park if ≥2 angles; typed pick or POST /choose-angle)
+  │                     → angle_gate (park if ≥1 angle; typed pick or POST /choose-angle)
   │                     → executor_post → grounding_check → reviewer
   ├── revise          → edit_copy → grounding_check → reviewer
   └── confirm_intent  → ack_confirm → END   # sets pending_confirm; does NOT publish
@@ -225,7 +225,7 @@ flowchart TD
 ### Interrupts
 
 - Compile with **`interrupt_before=["angle_gate", "executor_image_plan"]`**. Code that asks "is it parked" must check **which** node is next.
-- Angle pick ([ADR 0028](./adr/0028-angle-pick-before-draft.md)): after `brainstormer` when `brief.angles` ≥ 2, checkpoint pauses at `angle_gate`. Resume via `POST /sessions/{id}/choose-angle` or a typed `POST /messages` (the only park where a message resumes). Non-matching text re-briefs.
+- Angle pick ([ADR 0028](./adr/0028-angle-pick-before-draft.md) / [ADR 0030](./adr/0030-image-format-in-bundled-gate.md)): after `brainstormer` when `brief.angles` ≥ 1, checkpoint pauses at `angle_gate`. Resume via `POST /sessions/{id}/choose-angle` or a typed `POST /messages` (the only park where a message resumes). Non-matching text re-briefs. `GET /messages` returns `recommended_image_format` at this park **and** at the image park.
 - Image OK ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)): after `reviewer` pass → checkpoint pauses before image plan. Resume via `POST /sessions/{id}/resume-image`. `POST /messages` while image-parked returns 409.
 - `POST /stop` while parked discards the turn; Stop mid-resume / mid choose-angle re-parks.
 - Copy-only revise that does not need a new image skips the image interrupt and goes to `persist_preview`.
@@ -247,6 +247,8 @@ review_attempts       # retries toward max_review_retries=2
 pending_confirm       # set by ack_confirm; Confirm handler checks this + approval_token
 approval_token        # per-revision token written with preview_drafts
 need_image            # bool — route reviewer → interrupt vs copy-only persist
+image_format          # single | comic_4panel — locked at angle_gate (ADR 0030)
+chosen_image_format   # pending format pick; sticky across re-brief; cleared after lock
 chosen_angle          # pick locked by angle_gate for executor_post; cleared on that node's output
 angle_feedback        # non-matching pick text → brainstormer re-offer
 awaiting_angle_pick   # bool — mirrored into sessions.state when parked at interrupt_before angle_gate

@@ -90,10 +90,15 @@ class SessionMessagesResponse(BaseModel):
     # From sessions.state — so Stop/openSession can restore BriefCard without SSE.
     brief: SessionBriefData | None = None
     awaiting_image_ok: bool = False
-    # ADR 0028 / 0029 — parked at angle_gate; brief.angles are the options.
+    # ADR 0028 / 0029 / 0030 — parked at angle_gate; brief.angles are the options.
     awaiting_angle_pick: bool = False
     personas: list[AudiencePersonaOption] = Field(default_factory=list)
     recommended_persona: str | None = None
+    image_format_options: list[Literal["single", "comic_4panel"]] = Field(
+        default_factory=list
+    )
+    # Locked format at either park (angle_gate or image) so a reload keeps the toggle.
+    recommended_image_format: Literal["single", "comic_4panel"] | None = None
     # Set when this session is itself a fork (ADR 0017).
     forked_from: ForkOrigin | None = None
 
@@ -127,11 +132,12 @@ class StopSessionResponse(BaseModel):
 
 
 class ChooseAngleRequest(BaseModel):
-    """ADR 0029 pick while parked at angle_gate — index or free text, optional persona."""
+    """ADR 0030 pick while parked at angle_gate — index or free text, optional persona + format."""
 
     angle_index: int | None = Field(default=None, ge=0)
     angle: str | None = Field(default=None, max_length=8000)
     persona: str | None = Field(default=None, max_length=80)
+    image_format: Literal["single", "comic_4panel"] | None = None
 
 
 class ChooseAngleResponse(BaseModel):

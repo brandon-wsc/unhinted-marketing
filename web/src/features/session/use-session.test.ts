@@ -1038,6 +1038,63 @@ describe("useSession", () => {
     expect(result.current.brief?.summary).toBe("Live brief");
   });
 
+  it("hydrates lastImageFormatPick from recommended_image_format at the image park", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [msgA],
+      awaiting_image_ok: true,
+      recommended_image_format: "comic_4panel",
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.awaitingImageOk).toBe(true));
+    expect(result.current.lastImageFormatPick).toBe("comic_4panel");
+  });
+
+  it("stopTurn at the image park restores lastImageFormatPick from hydrate", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [msgA],
+        awaiting_image_ok: true,
+        recommended_image_format: "comic_4panel",
+      })
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [msgA],
+        awaiting_image_ok: true,
+        recommended_image_format: "comic_4panel",
+      });
+    apiResumeSessionImage.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* hang until stop */
+        }),
+    );
+    apiStopSessionTurn.mockResolvedValue({
+      status: "cancelled",
+      interrupted: true,
+      awaiting_image_ok: true,
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.lastImageFormatPick).toBe("comic_4panel"));
+
+    await act(async () => {
+      void result.current.resumeImage("comic_4panel");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      await result.current.stopTurn();
+    });
+
+    expect(result.current.awaitingImageOk).toBe(true);
+    expect(result.current.lastImageFormatPick).toBe("comic_4panel");
+  });
+
   it("resumeImage calls resume-image and clears awaiting when done", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({
@@ -2339,6 +2396,77 @@ describe("useSession", () => {
         "tok",
         "sess-1",
         expect.objectContaining({ angleIndex: 1, persona: "hk_parents" }),
+      );
+    });
+
+    it("hydrates recommended image format and forwards it on chooseAngle", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue({
+        ...ANGLE_PARKED_HYDRATE,
+        recommended_image_format: "comic_4panel",
+      });
+      apiChooseSessionAngle.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+      expect(result.current.recommendedImageFormat).toBe("comic_4panel");
+
+      await act(async () => {
+        await result.current.chooseAngle(1, undefined, "comic_4panel");
+      });
+      expect(apiChooseSessionAngle).toHaveBeenCalledWith(
+        "tok",
+        "sess-1",
+        expect.objectContaining({ angleIndex: 1, imageFormat: "comic_4panel" }),
+      );
+    });
+
+    it("omits image_format on typed retry when the card never sent a format", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue(ANGLE_PARKED_HYDRATE);
+      apiPostSessionMessage.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+      apiChooseSessionAngle.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+
+      await act(async () => {
+        await result.current.sendMessage("第二個");
+      });
+      await act(async () => {
+        await result.current.retryAnglePick();
+      });
+
+      expect(apiChooseSessionAngle).toHaveBeenCalledWith(
+        "tok",
+        "sess-1",
+        expect.objectContaining({ angle: "第二個" }),
+      );
+      const lastCall = apiChooseSessionAngle.mock.calls.at(-1)?.[2] as {
+        imageFormat?: string | null;
+      };
+      expect(lastCall.imageFormat).toBeUndefined();
+    });
+
+    it("retries a card format pick via choose-angle", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue(ANGLE_PARKED_HYDRATE);
+      apiChooseSessionAngle.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+
+      await act(async () => {
+        await result.current.chooseAngle(1, undefined, "comic_4panel");
+      });
+      await act(async () => {
+        await result.current.retryAnglePick();
+      });
+
+      expect(apiChooseSessionAngle).toHaveBeenLastCalledWith(
+        "tok",
+        "sess-1",
+        expect.objectContaining({ angleIndex: 1, imageFormat: "comic_4panel" }),
       );
     });
   });

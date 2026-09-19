@@ -1,6 +1,6 @@
 # ADR 0028 — Angle pick parks before drafting
 
-- **Status:** Superseded by [ADR 0029](./0029-angle-persona-bundled-gate.md)
+- **Status:** Superseded by [ADR 0029](./0029-angle-persona-bundled-gate.md) (persona on the same card); park `>= 2` superseded by [ADR 0030](./0030-image-format-in-bundled-gate.md) §7 (`>= 1`)
 - **Date:** 2026-09-15
 - **Supersedes:** — (adds a second `interrupt_before` park; does not change [ADR 0004](./0004-stop-discard-and-image-resume.md) Stop semantics)
 
@@ -20,7 +20,7 @@
 
 ## Consequences
 
-- Every `start` with ≥2 brainstormed angles now waits for the user — the missing "recommend" step exists as a real checkpoint, not a chat hint.
+- Every `start` with ≥2 brainstormed angles now waits for the user — the missing "recommend" step exists as a real checkpoint, not a chat hint. — **Park count superseded by [ADR 0030](./0030-image-format-in-bundled-gate.md) §7** (`>= 1`).
 - `interrupt_before` has two entries; any code asking "is it parked" must check **which** node is next (`snapshot.next`), not just non-empty.
 - The pick card is the canonical affordance; free text is a convenience path. Both end at `chosen_angle` or `angle_feedback` — no third state.
 - Re-offer loop is bounded by user action only; each cycle costs one brainstormer call.

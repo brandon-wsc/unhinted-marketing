@@ -112,7 +112,13 @@ export async function apiPostSessionMessage(
 export async function apiChooseSessionAngle(
   accessToken: string | null,
   sessionId: string,
-  init: { signal?: AbortSignal; angleIndex?: number; angle?: string; persona?: string },
+  init: {
+    signal?: AbortSignal;
+    angleIndex?: number;
+    angle?: string;
+    persona?: string;
+    imageFormat?: "single" | "comic_4panel";
+  },
 ): Promise<ChooseAngleResponse> {
   const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/choose-angle`, {
     method: "POST",
@@ -121,6 +127,7 @@ export async function apiChooseSessionAngle(
       angle_index: init.angleIndex ?? null,
       angle: init.angle ?? null,
       persona: init.persona ?? null,
+      image_format: init.imageFormat ?? null,
     }),
     signal: init.signal,
   });

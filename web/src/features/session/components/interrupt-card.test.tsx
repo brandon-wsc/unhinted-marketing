@@ -34,4 +34,50 @@ describe("InterruptCard", () => {
     await user.click(screen.getByRole("button", { name: /chat\.agent\.interrupt\.working/ }));
     expect(onResume).not.toHaveBeenCalled();
   });
+
+  it("confirms with the default single format", async () => {
+    const onResume = vi.fn();
+    const user = userEvent.setup();
+    render(<InterruptCard sending={false} onResume={onResume} />);
+    expect(screen.getByText("chat.agent.interrupt.lateSwitchHint")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "chat.agent.interrupt.confirm" }));
+    expect(onResume).toHaveBeenCalledWith("single");
+  });
+
+  it("confirms with a late-switch comic pick", async () => {
+    const onResume = vi.fn();
+    const user = userEvent.setup();
+    render(<InterruptCard sending={false} onResume={onResume} />);
+    await user.click(screen.getByRole("button", { name: "chat.agent.interrupt.formatComic" }));
+    await user.click(screen.getByRole("button", { name: "chat.agent.interrupt.confirm" }));
+    expect(onResume).toHaveBeenCalledWith("comic_4panel");
+  });
+
+  it("defaults to the format already picked on the bundled card", async () => {
+    const onResume = vi.fn();
+    const user = userEvent.setup();
+    render(<InterruptCard sending={false} defaultFormat="comic_4panel" onResume={onResume} />);
+    expect(
+      screen.getByRole("button", { name: "chat.agent.interrupt.formatComic" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "chat.agent.interrupt.confirm" }));
+    expect(onResume).toHaveBeenCalledWith("comic_4panel");
+  });
+
+  it("follows defaultFormat when hydrate arrives after mount", async () => {
+    const onResume = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <InterruptCard sending={false} defaultFormat={null} onResume={onResume} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "chat.agent.interrupt.formatSingle" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    rerender(<InterruptCard sending={false} defaultFormat="comic_4panel" onResume={onResume} />);
+    expect(
+      screen.getByRole("button", { name: "chat.agent.interrupt.formatComic" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "chat.agent.interrupt.confirm" }));
+    expect(onResume).toHaveBeenCalledWith("comic_4panel");
+  });
 });

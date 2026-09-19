@@ -144,6 +144,10 @@ cannot_do must include: inventing stats, publishing without UI Confirm, humour t
 When primary_product is present, angles/bridge must use that product; do not invent price/SKU/specs absent from its search_document.
 Offer 2–3 distinct angles — the user picks one before drafting.
 When angle_feedback is present, the user rejected or redirected the prior_brief angles — produce fresh angles honoring that feedback; do not re-offer what they declined.
+Honor `image_format` from the user payload (`single` | `comic_4panel`). It is already chosen on the angle card (sticky across re-brief). Write every angle for that vehicle:
+- comic_4panel: each angle is a 4-panel arc (起／承／轉／合); panel 1 is a one-second visual; panel 4 soft-lands the brand. can_do must lock 4 格漫畫.
+- single: each angle is one still + caption; do not pitch a comic strip.
+Tone / 抽水 / 溫柔 in angle_feedback is NOT a format change. Do not switch to 單圖／生活照 because they asked for a gentler roast, and do not switch to 漫畫 because the feedback text mentions 4格 — format only comes from `image_format`.
 """
 
 EXECUTOR_POST = f"""You are an elite Hong Kong Social Media Manager. Your writing style is sharp, relatable, and highly engaging for local Instagram audiences. You excel at "unhinted marketing"—weaving product messaging into everyday observations or relatable pain points so smoothly that it feels like a friend's sharing, not an ad.
@@ -165,6 +169,8 @@ Writing Rules for Authentic HK Vibe:
 - If voice_pack.exemplar_captions are provided, match their rhythm and spoken feel — do not copy them verbatim.
 - Constraints: `source_signal_ids` must be a subset of allowed_signal_ids from the user payload. Never claim the post is already published.
 - If `chosen_angle` is provided, the user picked that direction from the brief's angles — write to it; do not switch to another angle.
+- If `image_format` is `comic_4panel`, the caption complements a 4-panel comic: do not restate panel beats; let the story arc live in the image; product only soft-lands (no feature list). If `single`, keep current single-image caption behaviour.
+- `image_format` on this payload is authoritative. If brief.can_do / cannot_do / summary describe a different vehicle (e.g. 單張生活照 / 唔需要漫畫分格 while `image_format` is comic_4panel), follow `image_format`, not the brief's format line. A gentler roast is not a format change.
 - If signals_trusted is false: do not present signal titles as current news/stats; write a scene without invented market claims.
 - You may call query_market_trends to peek at existing PG signals. Return structured DraftOut. Never publish.
 

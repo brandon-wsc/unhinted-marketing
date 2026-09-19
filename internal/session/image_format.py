@@ -2,17 +2,62 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 ImageFormat = Literal["single", "comic_4panel"]
 DEFAULT_IMAGE_FORMAT: ImageFormat = "single"
-_VALID: frozenset[str] = frozenset({"single", "comic_4panel"})
+IMAGE_FORMAT_OPTIONS: tuple[ImageFormat, ...] = ("single", "comic_4panel")
+_VALID: frozenset[str] = frozenset(IMAGE_FORMAT_OPTIONS)
+
+# Brief can_do / cannot_do lines that pick a vehicle (not tone).
+_FORMAT_CONSTRAINT = re.compile(
+    r"(格式|漫畫分格|4\s*格漫畫|四格漫畫|comic_4panel|單圖|"
+    r"carousel|4-panel|four-panel|唔需要漫畫)",
+    re.I,
+)
+_LOCK_CAN_DO: dict[ImageFormat, str] = {
+    "comic_4panel": (
+        "格式鎖定 4 格漫畫：每個 angle 用起、承、轉、合四格節奏寫；"
+        "第 1 格一秒出畫面，第 4 格先圓回品牌。語氣／抽水可改，格式唔改。"
+    ),
+    "single": "格式鎖定單圖：一張主視覺 + caption；語氣／抽水可改，格式唔改做漫畫。",
+}
+_LOCK_CANNOT_DO: dict[ImageFormat, str] = {
+    "comic_4panel": (
+        "唔可以因為想溫柔／少抽水／改語氣而將已鎖定嘅 4 格漫畫"
+        "改做單圖、生活照、長圖拼貼或 6–8 格"
+    ),
+    "single": "唔可以將已鎖定嘅單圖改做 4 格漫畫",
+}
 
 
 def normalize_image_format(raw: Any) -> ImageFormat:
     if isinstance(raw, str) and raw.strip() in _VALID:
         return raw.strip()  # type: ignore[return-value]
     return DEFAULT_IMAGE_FORMAT
+
+
+def lock_brief_to_format(brief: dict[str, Any], fmt: Any) -> dict[str, Any]:
+    """Replace vehicle lines so a sticky pick cannot be rewritten as 單圖/漫畫."""
+    locked = normalize_image_format(fmt)
+    out = dict(brief)
+
+    def _keep(lines: Any) -> list[str]:
+        if not isinstance(lines, list):
+            return []
+        kept: list[str] = []
+        for line in lines:
+            if not isinstance(line, str):
+                continue
+            if _FORMAT_CONSTRAINT.search(line):
+                continue
+            kept.append(line)
+        return kept
+
+    out["can_do"] = [_LOCK_CAN_DO[locked], *_keep(out.get("can_do"))]
+    out["cannot_do"] = [_LOCK_CANNOT_DO[locked], *_keep(out.get("cannot_do"))]
+    return out
 
 
 def image_format_from_text(text: str) -> ImageFormat | None:

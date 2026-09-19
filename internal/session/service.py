@@ -259,6 +259,8 @@ def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str,
         "product_candidates": state.get("product_candidates") or [],
         "grounding_ok": state.get("grounding_ok", True),
         "chosen_persona": state.get("chosen_persona"),
+        "image_format": state.get("image_format"),
+        "chosen_image_format": state.get("chosen_image_format"),
     }
 
 
@@ -496,7 +498,7 @@ async def _repark_graph_at_angle_gate(
     """as_node="brainstormer" with ``chosen_angle=None`` re-seats ``angle_gate``.
 
     Clearing the pick is required so a leftover match does not auto-advance
-    through the gate on Retry; ≥2 angles already route there regardless.
+    through the gate on Retry; ≥1 angles already route there regardless.
     """
     await _repark_graph_at_interrupt(
         db,
@@ -645,6 +647,8 @@ async def _persist_after_invoke(
         "grounding_ok": values.get("grounding_ok", True),
         "error": values.get("error"),
         "chosen_persona": values.get("chosen_persona"),
+        "image_format": values.get("image_format"),
+        "chosen_image_format": values.get("chosen_image_format"),
         # UI hydrate: interrupt_before angle_gate / executor_image_plan
         "awaiting_image_ok": parked_node == IMAGE_PARK_NODE,
         "awaiting_angle_pick": parked_node == ANGLE_GATE_NODE,
@@ -1152,14 +1156,16 @@ async def choose_angle_turn(
     angle_index: int | None = None,
     angle_text: str | None = None,
     persona: str | None = None,
+    image_format: str | None = None,
 ) -> dict[str, Any]:
-    """Resume parked graph at interrupt_before angle_gate (ADR 0029).
+    """Resume parked graph at interrupt_before angle_gate (ADR 0030).
 
     ``angle_index`` picks ``brief.angles[i]`` (0-based, option card);
     ``angle_text`` is a free-form pick — a typed ``POST /messages`` reply while
     angle-parked lands here and is persisted as a user row. Typed replies are
-    angle-only (ADR 0029 §3); ``persona`` is the bundled-card field and may
-    be omitted to keep the agent recommendation / a prior sticky pick.
+    angle-only (ADR 0030 §3); ``persona`` and ``image_format`` are bundled-card
+    fields and may be omitted to keep the agent recommendation / a prior sticky
+    pick / current format.
     """
     await _require_parked(session, "angle")
 
@@ -1184,11 +1190,19 @@ async def choose_angle_turn(
                 raise ValueError("persona is not in the offered catalog")
             picked_persona = slug
 
+    picked_format: str | None = None
+    if image_format is not None:
+        from internal.session.image_format import normalize_image_format
+
+        picked_format = normalize_image_format(image_format)
+
     async def apply_pick(message_dicts: list[dict[str, Any]]) -> None:
         graph = get_session_graph()
         update: dict[str, Any] = {"chosen_angle": chosen, "messages": message_dicts}
         if picked_persona is not None:
             update["chosen_persona"] = picked_persona
+        if picked_format is not None:
+            update["chosen_image_format"] = picked_format
         await graph.aupdate_state(_session_config(session.id), update)
 
     return await _resume_parked_turn(

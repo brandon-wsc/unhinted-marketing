@@ -54,8 +54,11 @@ from internal.session.fast_rules import (
 )
 from internal.session.harness import ChatDeps, stream_chat_reply
 from internal.session.image_format import (
+    DEFAULT_IMAGE_FORMAT,
+    IMAGE_FORMAT_OPTIONS,
     compose_generation_prompt,
     image_format_from_text,
+    lock_brief_to_format,
     normalize_image_format,
 )
 from internal.session.io import (
@@ -234,13 +237,26 @@ def recommended_persona_slug(state: SessionState | dict[str, Any]) -> str | None
     return personas[0]["slug"] if personas else None
 
 
+def recommended_image_format(state: SessionState | dict[str, Any]) -> str:
+    """Sticky chosen_image_format, else state.image_format, else single."""
+    sticky = str(state.get("chosen_image_format") or "").strip()
+    if sticky in IMAGE_FORMAT_OPTIONS:
+        return sticky
+    current = str(state.get("image_format") or "").strip()
+    if current in IMAGE_FORMAT_OPTIONS:
+        return current
+    return DEFAULT_IMAGE_FORMAT
+
+
 def angle_pick_payload(state: SessionState | dict[str, Any]) -> dict[str, Any]:
-    """SSE / hydrate payload for ``draft.awaiting_angle_pick`` (ADR 0029)."""
+    """SSE / hydrate payload for ``draft.awaiting_angle_pick`` (ADR 0030)."""
     return {
         "awaiting": True,
         "angles": offered_angles(state.get("brief")),
         "personas": offered_personas(state.get("audience_catalog")),
         "recommended_persona": recommended_persona_slug(state),
+        "image_format_options": list(IMAGE_FORMAT_OPTIONS),
+        "recommended_image_format": recommended_image_format(state),
     }
 
 
@@ -869,6 +885,7 @@ async def product_matcher(state: SessionState) -> dict[str, Any]:
 async def brainstormer(state: SessionState) -> dict[str, Any]:
     catalog = _audience_catalog(state)
     signals = _ranked_signals(state)[:8]
+    fmt = recommended_image_format(state)
     payload = {
         "company": _slim_company(state),
         "voice_pack": _voice_pack(state),
@@ -881,6 +898,7 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
         "related_products": (state.get("related_products") or [])[:2],
         "prior_brief": state.get("brief") or {},
         "angle_feedback": state.get("angle_feedback"),
+        "image_format": fmt,
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["brainstormer"] or ModelTier.MEDIUM,
@@ -900,6 +918,10 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
             "persona": catalog[0].get("slug") if catalog else None,
             "summary": f"基於近期 HK signals，建議做一則同「{topic}」相關嘅 grounded post。",
         }
+    sticky = str(state.get("chosen_image_format") or "").strip()
+    current = str(state.get("image_format") or "").strip()
+    if sticky in IMAGE_FORMAT_OPTIONS or current in IMAGE_FORMAT_OPTIONS:
+        brief = lock_brief_to_format(brief, fmt)
     active = pick_active_persona(catalog, brief.get("persona"))
     return {
         "mode": MODE_AGENT,
@@ -910,14 +932,16 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
 
 
 async def angle_gate(state: SessionState) -> dict[str, Any]:
-    """ADR 0029 park anchor — runs only on a choose-angle resume.
+    """ADR 0030 park anchor — runs only on a choose-angle resume.
 
     A pick matching an offered ``brief.angles`` entry (exact / 1-based index /
     CJK numeral / substring) locks ``chosen_angle`` for ``executor_post`` and
     resolves ``active_persona`` from ``chosen_persona`` (else ``brief.persona``).
-    Non-matching free text becomes ``angle_feedback`` so ``brainstormer``
-    regenerates options instead of drafting on a guessed direction. A submitted
-    persona slug is left untouched so it survives the re-brief cycle.
+    A submitted ``chosen_image_format`` locks ``image_format``; omitting it
+    leaves the current format untouched. Non-matching free text becomes
+    ``angle_feedback`` so ``brainstormer`` regenerates options instead of
+    drafting on a guessed direction. Submitted persona / format slugs are
+    left untouched so they survive the re-brief cycle.
     """
     chosen = str(state.get("chosen_angle") or "").strip()
     if not chosen:
@@ -930,10 +954,15 @@ async def angle_gate(state: SessionState) -> dict[str, Any]:
     if not slug:
         brief_slug = (state.get("brief") or {}).get("persona")
         slug = str(brief_slug).strip() if brief_slug else None
-    return {
+    out: dict[str, Any] = {
         "chosen_angle": matched,
         "active_persona": pick_active_persona(catalog, slug),
     }
+    raw_fmt = str(state.get("chosen_image_format") or "").strip()
+    if raw_fmt:
+        out["image_format"] = normalize_image_format(raw_fmt)
+        out["chosen_image_format"] = None
+    return out
 
 
 @agent_progress("executor_post")
@@ -952,6 +981,7 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "primary_product": state.get("primary_product"),
         "related_products": (state.get("related_products") or [])[:2],
         "chosen_angle": state.get("chosen_angle"),
+        "image_format": recommended_image_format(state),
     }
     parsed: DraftOut | None = None
     if has_llm_credentials():
@@ -987,6 +1017,7 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "grounding_ok": True,
         "chosen_angle": None,
         "chosen_persona": None,
+        "chosen_image_format": None,
     }
 
 
@@ -1156,7 +1187,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
 
 @agent_progress("executor_image_plan")
 async def executor_image_plan(state: SessionState) -> dict[str, Any]:
-    fmt = normalize_image_format(state.get("image_format"))
+    fmt = recommended_image_format(state)
     payload = {
         "draft": state.get("draft") or {},
         "brief": state.get("brief") or {},
@@ -1320,14 +1351,16 @@ def route_after_product_matcher(state: SessionState) -> str:
 
 
 def route_after_brainstormer(state: SessionState) -> str:
-    """ADR 0029: offer ≥2 angles for the user to pick before drafting.
+    """ADR 0030: park whenever ≥1 angle is offered so the user can confirm.
 
-    Always park at ``angle_gate`` when there is a real choice — including when
-    ``chosen_angle`` is already set. Resume ``aupdate_state`` is attributed to
-    this node; short-circuiting on a non-empty pick skipped the gate and drafted
-    Other/feedback text as a locked angle. Persona rides along on the same park.
+    A lone angle still needs confirm (angle + persona + format). Only a
+    0-angle brief drafts immediately. Always park when there is a real
+    choice — including when ``chosen_angle`` is already set. Resume
+    ``aupdate_state`` is attributed to this node; short-circuiting on a
+    non-empty pick skipped the gate and drafted Other/feedback text as a
+    locked angle.
     """
-    if len(offered_angles(state.get("brief"))) >= 2:
+    if len(offered_angles(state.get("brief"))) >= 1:
         return "angle_gate"
     return "executor_post"
 

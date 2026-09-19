@@ -244,3 +244,75 @@ async def test_choose_angle_rejects_other_users_session(client) -> None:
         json={"angle_index": 0},
     )
     assert res.status_code in (403, 404)
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_forwards_image_format(client) -> None:
+    """ADR 0030 §2 — the bundled card's format pick rides the same submit."""
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+
+    fake_result = {
+        "interrupted": False,
+        "events": [],
+        "values": {"revision": 0, "pending_confirm": False, "approval_token": None},
+    }
+    choose = AsyncMock(return_value=fake_result)
+    with patch("cmd.api.routes.sessions.choose_angle_turn", choose):
+        res = await client.post(
+            f"/api/sessions/{session_id}/choose-angle",
+            headers=headers,
+            json={"angle_index": 0, "image_format": "comic_4panel"},
+        )
+    assert res.status_code == 200, res.text
+    assert choose.await_args.kwargs["image_format"] == "comic_4panel"
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_omitted_image_format_is_none(client) -> None:
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+
+    fake_result = {
+        "interrupted": False,
+        "events": [],
+        "values": {"revision": 0, "pending_confirm": False, "approval_token": None},
+    }
+    choose = AsyncMock(return_value=fake_result)
+    with patch("cmd.api.routes.sessions.choose_angle_turn", choose):
+        res = await client.post(
+            f"/api/sessions/{session_id}/choose-angle",
+            headers=headers,
+            json={"angle_index": 0},
+        )
+    assert res.status_code == 200, res.text
+    assert choose.await_args.kwargs["image_format"] is None
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_rejects_unknown_image_format(client) -> None:
+    """Literal boundary — junk format is a 422 before any graph work."""
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+
+    res = await client.post(
+        f"/api/sessions/{session_id}/choose-angle",
+        headers=headers,
+        json={"angle_index": 0, "image_format": "nope"},
+    )
+    assert res.status_code == 422
