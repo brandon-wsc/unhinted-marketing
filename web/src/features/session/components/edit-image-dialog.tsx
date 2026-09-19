@@ -45,6 +45,9 @@ const SINGLE_COMPOSITION = "subject centered, negative space for optional captio
 const SINGLE_STYLE = "bright, contemporary, editorial";
 const COMIC_VEHICLE =
   /4-panel|four-panel|4\s*panel|comic strip|2x2 comic|comic grid|4\s*格|四格|漫畫分格/i;
+// Composition/style only — broader than COMIC_VEHICLE (layout vocabulary like
+// "2x2 grid" / "four equal panels" that never says the word "comic").
+const COMIC_LAYOUT = /\bpanels?\b|\bgrids?\b|\bgutters?\b|2x2|panel order|格仔|分格/i;
 const INSPIRED_BY = /inspired by:\s*(.+?)(?:,\s*(?:clear gutters|no logos)|$)/i;
 const SINGLE_PROMPT =
   "Clean modern social media image, Hong Kong urban mood, no logos, no unreadable text";
@@ -212,10 +215,13 @@ export function EditImageDialog({
         format,
         panels: [],
         composition:
-          !prev.composition.trim() || COMIC_VEHICLE.test(prev.composition)
+          !prev.composition.trim() ||
+          COMIC_VEHICLE.test(prev.composition) ||
+          COMIC_LAYOUT.test(prev.composition)
             ? SINGLE_COMPOSITION
             : prev.composition,
-        style: /comic/i.test(prev.style) ? SINGLE_STYLE : prev.style,
+        style:
+          /comic/i.test(prev.style) || COMIC_LAYOUT.test(prev.style) ? SINGLE_STYLE : prev.style,
         prompt: COMIC_VEHICLE.test(prev.prompt) ? singlePromptFromComic(prev.prompt) : prev.prompt,
       };
     });

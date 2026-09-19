@@ -46,6 +46,12 @@ _COMIC_VEHICLE = re.compile(
     r"4\s*格|四格|漫畫分格)",
     re.I,
 )
+# Layout vocabulary for composition/style fields only — broader than
+# _COMIC_VEHICLE ("solar panels" in a prompt must not trip the rewrite).
+_COMIC_LAYOUT = re.compile(
+    r"(\bpanels?\b|\bgrids?\b|\bgutters?\b|2x2|panel order|格仔|分格)",
+    re.I,
+)
 _INSPIRED_BY = re.compile(
     r"inspired by:\s*(.+?)(?:,\s*(?:clear gutters|no logos)|$)",
     re.I,
@@ -137,10 +143,17 @@ def adapt_plan_to_format(
 
     out["panels"] = []
     composition = str(out.get("composition") or "").strip()
-    if not composition or _COMIC_VEHICLE.search(composition):
+    if (
+        not composition
+        or _COMIC_VEHICLE.search(composition)
+        or _COMIC_LAYOUT.search(composition)
+    ):
         out["composition"] = SINGLE_COMPOSITION
     style = str(out.get("style") or "").strip()
-    if (style and "comic" in style.lower()) or (switched and not style):
+    if (
+        (style and ("comic" in style.lower() or _COMIC_LAYOUT.search(style)))
+        or (switched and not style)
+    ):
         out["style"] = SINGLE_STYLE
     prompt = str(out.get("prompt") or "").strip()
     if prompt and _COMIC_VEHICLE.search(prompt):
