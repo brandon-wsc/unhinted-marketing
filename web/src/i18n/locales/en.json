@@ -153,17 +153,19 @@
       },
       "interrupt": {
         "title": "Copy is ready",
-        "subtitle": "Pick a visual format, then generate (default: single image).",
+        "subtitle": "Defaults to the format you picked above.",
         "confirm": "Generate image",
         "working": "Generating…",
         "formatLabel": "Image format",
         "formatSingle": "Single image",
-        "formatComic": "4-panel comic"
+        "formatComic": "4-panel comic",
+        "lateSwitchHint": "Changing format here regenerates the image only — caption stays."
       },
       "anglePick": {
-        "title": "Pick an angle and voice",
-        "subtitle": "Choose a direction and audience — or type your own angle below.",
+        "title": "Pick angle, voice, and format",
+        "subtitle": "Choose first, then we draft. A single image and a comic need different copy.",
         "personaLabel": "Voice / audience",
+        "formatLabel": "Image format",
         "optionsLabel": "Content angles",
         "otherLabel": "Custom angle",
         "otherPlaceholder": "Or write your own angle…",

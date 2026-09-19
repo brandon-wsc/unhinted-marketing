@@ -220,6 +220,13 @@ export function filterOfferedAngles(raw: unknown): string[] {
   return raw.filter((a): a is string => typeof a === "string" && a.trim() !== "");
 }
 
+export type ImageFormat = "single" | "comic_4panel";
+
+/** `single` | `comic_4panel` from park payloads / choose-angle (ADR 0030). */
+export function parseImageFormat(raw: unknown): ImageFormat | null {
+  return raw === "single" || raw === "comic_4panel" ? raw : null;
+}
+
 /** Audience-catalog rows — mirrors backend `offered_personas` (ADR 0029). */
 export function filterOfferedPersonas(raw: unknown): AudiencePersonaOption[] {
   if (!Array.isArray(raw)) return [];
@@ -245,6 +252,7 @@ export function anglePickParkFromEvents(
   angles: string[];
   personas: AudiencePersonaOption[];
   recommendedPersona: string | null;
+  recommendedImageFormat: ImageFormat | null;
 } {
   const ev = interrupted ? events?.find((e) => e.type === "draft.awaiting_angle_pick") : undefined;
   const recommended = ev?.data?.recommended_persona;
@@ -254,6 +262,7 @@ export function anglePickParkFromEvents(
     personas: filterOfferedPersonas(ev?.data?.personas),
     recommendedPersona:
       typeof recommended === "string" && recommended.trim() ? recommended.trim() : null,
+    recommendedImageFormat: parseImageFormat(ev?.data?.recommended_image_format),
   };
 }
 

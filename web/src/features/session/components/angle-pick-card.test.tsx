@@ -27,7 +27,7 @@ describe("AnglePickCard", () => {
     const user = userEvent.setup();
     render(<AnglePickCard angles={ANGLES} sending={false} onPick={onPick} />);
     await user.click(screen.getByRole("button", { name: /Angle two/ }));
-    expect(onPick).toHaveBeenCalledWith(1);
+    expect(onPick).toHaveBeenCalledWith(1, undefined, "single");
   });
 
   it("disables options while a pick is in flight", () => {
@@ -112,7 +112,7 @@ describe("AnglePickCard", () => {
       screen.getByLabelText("chat.agent.anglePick.otherLabel"),
       "  My own angle  {Enter}",
     );
-    expect(onPick).toHaveBeenCalledWith("My own angle");
+    expect(onPick).toHaveBeenCalledWith("My own angle", undefined, "single");
   });
 
   const PERSONAS = [
@@ -139,6 +139,41 @@ describe("AnglePickCard", () => {
     );
     expect(screen.getByRole("combobox")).toHaveTextContent("年輕人");
     await user.click(screen.getByRole("button", { name: /Angle two/ }));
-    expect(onPick).toHaveBeenCalledWith(1, "hk_youth");
+    expect(onPick).toHaveBeenCalledWith(1, "hk_youth", "single");
+  });
+
+  it("sends the selected image format with an angle pick", async () => {
+    const onPick = vi.fn();
+    const user = userEvent.setup();
+    render(<AnglePickCard angles={ANGLES} sending={false} onPick={onPick} />);
+    await user.click(screen.getByRole("button", { name: "chat.agent.interrupt.formatComic" }));
+    await user.click(screen.getByRole("button", { name: /Angle two/ }));
+    expect(onPick).toHaveBeenCalledWith(1, undefined, "comic_4panel");
+  });
+
+  it("pre-selects the recommended image format", async () => {
+    const onPick = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AnglePickCard
+        angles={ANGLES}
+        recommendedImageFormat="comic_4panel"
+        sending={false}
+        onPick={onPick}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "chat.agent.interrupt.formatComic" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: /Angle one/ }));
+    expect(onPick).toHaveBeenCalledWith(0, undefined, "comic_4panel");
+  });
+
+  it("disables format chips while a pick is in flight", () => {
+    render(<AnglePickCard angles={ANGLES} sending={true} onPick={vi.fn()} />);
+    expect(
+      screen.getByRole("button", { name: "chat.agent.interrupt.formatSingle" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "chat.agent.interrupt.formatComic" })).toBeDisabled();
   });
 });

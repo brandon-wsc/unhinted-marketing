@@ -4,6 +4,7 @@ import {
   agentNodeFallbackKey,
   agentNodeLabelKey,
   agentTrailHeader,
+  anglePickParkFromEvents,
   asStringList,
   bumpSessionInHistory,
   EMPTY_COMPOSER_DRAFT,
@@ -19,6 +20,7 @@ import {
   parseBrief,
   parseConfirmReceipt,
   parseDraftCopy,
+  parseImageFormat,
   parseTurnDurationMs,
   previewAnchorFromActions,
   readComposerDraft,
@@ -95,6 +97,57 @@ describe("parseDraftCopy", () => {
       caption: "hi",
       hashtags: ["#hk"],
       cta: "go",
+    });
+  });
+});
+
+describe("parseImageFormat", () => {
+  it("accepts the two bundled-card formats", () => {
+    expect(parseImageFormat("single")).toBe("single");
+    expect(parseImageFormat("comic_4panel")).toBe("comic_4panel");
+  });
+
+  it("rejects unknown / empty values", () => {
+    expect(parseImageFormat(null)).toBeNull();
+    expect(parseImageFormat("")).toBeNull();
+    expect(parseImageFormat("nope")).toBeNull();
+  });
+});
+
+describe("anglePickParkFromEvents", () => {
+  it("is not parked when the turn is not interrupted", () => {
+    expect(
+      anglePickParkFromEvents(false, [
+        { type: "draft.awaiting_angle_pick", data: { angles: ["甲"] } },
+      ]),
+    ).toEqual({
+      parked: false,
+      angles: [],
+      personas: [],
+      recommendedPersona: null,
+      recommendedImageFormat: null,
+    });
+  });
+
+  it("reads format recommendation from the park event", () => {
+    expect(
+      anglePickParkFromEvents(true, [
+        {
+          type: "draft.awaiting_angle_pick",
+          data: {
+            awaiting: true,
+            angles: ["甲", "乙"],
+            recommended_persona: "hk_youth",
+            recommended_image_format: "comic_4panel",
+          },
+        },
+      ]),
+    ).toEqual({
+      parked: true,
+      angles: ["甲", "乙"],
+      personas: [],
+      recommendedPersona: "hk_youth",
+      recommendedImageFormat: "comic_4panel",
     });
   });
 });

@@ -153,17 +153,19 @@
       },
       "interrupt": {
         "title": "文案得喇",
-        "subtitle": "揀視覺格式，然後出圖（預設單圖）。",
+        "subtitle": "預設跟返上面揀嘅格式。",
         "confirm": "出圖",
         "working": "出緊圖…",
         "formatLabel": "圖片格式",
         "formatSingle": "單圖",
-        "formatComic": "4格漫畫"
+        "formatComic": "4格漫畫",
+        "lateSwitchHint": "呢度轉格式只會重出圖，caption 唔改。"
       },
       "anglePick": {
-        "title": "先揀角度同語氣",
-        "subtitle": "揀個方向同邊個 audience 先至落筆；都唔啱嘅話，喺下面打自己嘅諗法。",
+        "title": "先揀角度、語氣同圖",
+        "subtitle": "揀完先落筆。單圖同漫畫係兩篇唔同嘅稿。",
         "personaLabel": "語氣／受眾",
+        "formatLabel": "圖片格式",
         "optionsLabel": "內容角度",
         "otherLabel": "自訂角度",
         "otherPlaceholder": "或者自己寫個方向…",
