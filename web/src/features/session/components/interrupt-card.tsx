@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { FormatToggle, type ImageFormat } from "@/features/session/components/format-toggle";
@@ -9,11 +9,16 @@ type Props = {
   onResume: (format?: ImageFormat) => void;
 };
 
+function fallbackFormat(recommended: ImageFormat | null | undefined): ImageFormat {
+  return recommended === "comic_4panel" ? "comic_4panel" : "single";
+}
+
 export function InterruptCard({ sending, defaultFormat = "single", onResume }: Props) {
   const { t } = useTranslation();
-  const [format, setFormat] = useState<ImageFormat>(() =>
-    defaultFormat === "comic_4panel" ? "comic_4panel" : "single",
-  );
+  const [format, setFormat] = useState<ImageFormat>(() => fallbackFormat(defaultFormat));
+  useEffect(() => {
+    setFormat(fallbackFormat(defaultFormat));
+  }, [defaultFormat]);
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-sm shadow-sm">
       <div>

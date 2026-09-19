@@ -63,4 +63,23 @@ describe("InterruptCard", () => {
     await user.click(screen.getByRole("button", { name: "chat.agent.interrupt.confirm" }));
     expect(onResume).toHaveBeenCalledWith("comic_4panel");
   });
+
+  it("follows defaultFormat when hydrate arrives after mount", async () => {
+    const onResume = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <InterruptCard sending={false} defaultFormat={null} onResume={onResume} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "chat.agent.interrupt.formatSingle" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    rerender(
+      <InterruptCard sending={false} defaultFormat="comic_4panel" onResume={onResume} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "chat.agent.interrupt.formatComic" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "chat.agent.interrupt.confirm" }));
+    expect(onResume).toHaveBeenCalledWith("comic_4panel");
+  });
 });

@@ -932,13 +932,18 @@ export function useSession(companyId: string | undefined) {
       setAwaitingImageOk(parkedImage);
       awaitingAnglePickRef.current = parkedAngle;
       setAwaitingAnglePick(parkedAngle);
+      const lockedFormat = parseImageFormat(res.recommended_image_format);
+      if ((parkedImage || parkedAngle) && lockedFormat) {
+        lastImageFormatPickRef.current = lockedFormat;
+        setLastImageFormatPick(lockedFormat);
+      }
       if (parkedAngle) {
         setAngleOptions(filterOfferedAngles(parsedBrief?.angles));
         setAnglePersonas(filterOfferedPersonas(res.personas));
         const rec =
           typeof res.recommended_persona === "string" ? res.recommended_persona.trim() : "";
         setRecommendedPersona(rec || null);
-        setRecommendedImageFormat(parseImageFormat(res.recommended_image_format));
+        setRecommendedImageFormat(lockedFormat);
       }
       const parked = parkedImage || parkedAngle;
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
@@ -965,6 +970,7 @@ export function useSession(companyId: string | undefined) {
       brief?: unknown;
       awaiting_image_ok?: boolean;
       awaiting_angle_pick?: boolean;
+      recommended_image_format?: string | null;
       forked_from?: ForkOrigin | null;
     }) => {
       disconnectSse();
@@ -1248,6 +1254,11 @@ export function useSession(companyId: string | undefined) {
       setAwaitingImageOk(parkedImage);
       awaitingAnglePickRef.current = parkedAngle;
       setAwaitingAnglePick(parkedAngle);
+      const lockedFormat = parseImageFormat(hydrated.recommended_image_format);
+      if ((parkedImage || parkedAngle) && lockedFormat) {
+        lastImageFormatPickRef.current = lockedFormat;
+        setLastImageFormatPick(lockedFormat);
+      }
       if (parkedAngle) {
         setAngleOptions(filterOfferedAngles(parsedBrief?.angles));
         setAnglePersonas(filterOfferedPersonas(hydrated.personas));
@@ -1256,7 +1267,7 @@ export function useSession(companyId: string | undefined) {
             ? hydrated.recommended_persona.trim()
             : "";
         setRecommendedPersona(rec || null);
-        setRecommendedImageFormat(parseImageFormat(hydrated.recommended_image_format));
+        setRecommendedImageFormat(lockedFormat);
       }
       const parked = parkedImage || parkedAngle;
       setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);

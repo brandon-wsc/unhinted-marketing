@@ -1038,6 +1038,20 @@ describe("useSession", () => {
     expect(result.current.brief?.summary).toBe("Live brief");
   });
 
+  it("hydrates lastImageFormatPick from recommended_image_format at the image park", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [msgA],
+      awaiting_image_ok: true,
+      recommended_image_format: "comic_4panel",
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.awaitingImageOk).toBe(true));
+    expect(result.current.lastImageFormatPick).toBe("comic_4panel");
+  });
+
   it("resumeImage calls resume-image and clears awaiting when done", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({

@@ -97,6 +97,7 @@ class SessionMessagesResponse(BaseModel):
     image_format_options: list[Literal["single", "comic_4panel"]] = Field(
         default_factory=list
     )
+    # Locked format at either park (angle_gate or image) so a reload keeps the toggle.
     recommended_image_format: Literal["single", "comic_4panel"] | None = None
     # Set when this session is itself a fork (ADR 0017).
     forked_from: ForkOrigin | None = None

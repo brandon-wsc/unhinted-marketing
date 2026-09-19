@@ -28,7 +28,7 @@ from internal.memory.database import get_db, open_session
 from internal.memory.models import Session, User
 from internal.session.events import format_sse, session_event_bus
 from internal.session.graph import ANGLE_GATE_NODE, IMAGE_PARK_NODE
-from internal.session.nodes import angle_pick_payload
+from internal.session.nodes import angle_pick_payload, recommended_image_format
 from internal.session.service import (
     DEFAULT_PLATFORM,
     SessionTurnConflict,
@@ -628,17 +628,23 @@ async def get_session_messages(
         messages.append(resp)
 
     parked_angle = bool(state.get("awaiting_angle_pick"))
+    parked_image = bool(state.get("awaiting_image_ok"))
     pick = angle_pick_payload(state) if parked_angle else None
+    # Image park still needs the locked format so a reload does not default
+    # the late-switch toggle to single (ADR 0030).
+    locked_format = (
+        recommended_image_format(state) if parked_angle or parked_image else None
+    )
     return SessionMessagesResponse(
         session=_session_response(session),
         messages=messages,
         brief=_brief_from_state(state),
-        awaiting_image_ok=bool(state.get("awaiting_image_ok")),
+        awaiting_image_ok=parked_image,
         awaiting_angle_pick=parked_angle,
         personas=pick["personas"] if pick else [],
         recommended_persona=pick["recommended_persona"] if pick else None,
         image_format_options=pick["image_format_options"] if pick else [],
-        recommended_image_format=pick["recommended_image_format"] if pick else None,
+        recommended_image_format=locked_format,
         forked_from=await _fork_origin(db, session),
     )
 

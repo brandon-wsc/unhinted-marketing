@@ -13,7 +13,7 @@ load_context          → voice_pack, audience_catalog, slim company_context
 trend_searcher        → ranked_signals, source_signal_ids
 product_matcher       → primary_product, related_products[], product_clarify?
 brainstormer          → brief (incl. pain_points), active_persona
-angle_gate            → PARK for user pick when brief.angles ≥ 2 (ADR 0028)
+angle_gate            → PARK for user pick when brief.angles ≥ 1 (ADR 0028/0030)
 executor_post         → draft (chosen_angle direction), refine product_context_ids
 grounding_check       → source_signal_ids + product claims vs retrieved rows
 reviewer              → voice + grounding + craft
@@ -23,11 +23,12 @@ Revise path (`edit_copy`): reuse turn state; re-run `product_matcher` only when 
 
 If `product_clarify` is true after matcher → short-circuit to **chat** (ask which SKU) — do not enter executor with a guessed primary.
 
-### Angle pick gate ([ADR 0029](../adr/0029-angle-persona-bundled-gate.md))
+### Angle pick gate ([ADR 0029](../adr/0029-angle-persona-bundled-gate.md) / [ADR 0030](../adr/0030-image-format-in-bundled-gate.md))
 
-- `brief.angles` ≥ 2 → graph parks at `interrupt_before=["angle_gate"]` (the gate validates any pending `chosen_angle`; a non-empty value is not a skip). `draft.awaiting_angle_pick` carries the offered angles, `personas` (audience catalog), and `recommended_persona`; `session.state.awaiting_angle_pick` hydrates the bundled card.
-- Pick: `POST /sessions/{id}/choose-angle` (`angle_index` or `angle` text, optional `persona`), or a typed `POST /messages` while angle-parked (angle only — persona is the card field; image park still 409s).
-- `angle_gate` resolves angle picks (exact / 1-based index / CJK numeral / substring). Match → `chosen_angle` + resolved `active_persona` → `executor_post` (pick fields cleared on output). Non-match → `angle_feedback` → `brainstormer` regenerates angles and parks again; a submitted `chosen_persona` survives the loop.
+- `brief.angles` ≥ 1 → graph parks at `interrupt_before=["angle_gate"]` (the gate validates any pending `chosen_angle`; a non-empty value is not a skip). Only a 0-angle brief drafts immediately. `draft.awaiting_angle_pick` carries the offered angles, `personas` (audience catalog), `recommended_persona`, `image_format_options`, and `recommended_image_format`; `session.state.awaiting_angle_pick` hydrates the bundled card.
+- Pick: `POST /sessions/{id}/choose-angle` (`angle_index` or `angle` text, optional `persona` + `image_format`), or a typed `POST /messages` while angle-parked (angle only — persona / format are card fields; image park still 409s).
+- `angle_gate` resolves angle picks (exact / 1-based index / CJK numeral / substring). Match → `chosen_angle` + resolved `active_persona` + locked `image_format` → `executor_post` (pick fields cleared on output). Non-match → `angle_feedback` → `brainstormer` regenerates angles and parks again; submitted `chosen_persona` / `chosen_image_format` survive the loop.
+- Reload at the **image park** still returns `recommended_image_format` from `session.state.image_format` so the late-switch toggle does not default to `single`.
 - Stop while parked discards the turn (ADR 0004); Stop mid `choose-angle` re-parks at `angle_gate`.
 
 ---
@@ -49,6 +50,8 @@ If `product_clarify` is true after matcher → short-circuit to **chat** (ask wh
 | `source_signal_ids` | research_ingest, trend_searcher, executor, edit | grounding_check, reviewer |
 | `chosen_angle` | choose-angle resume / typed pick | `angle_gate` (match check), `executor_post` (payload) |
 | `chosen_persona` | choose-angle card field | `angle_gate` (locks `active_persona`); sticky on re-brief |
+| `chosen_image_format` | choose-angle card field | `angle_gate` (locks `image_format`); sticky on re-brief |
+| `image_format` | `angle_gate` / resume-image / `edit_copy` | `executor_post`, `executor_image_plan`, hydrate |
 | `angle_feedback` | `angle_gate` on non-matching text | `brainstormer` (regenerate angles) |
 
 † minimal slice only.
