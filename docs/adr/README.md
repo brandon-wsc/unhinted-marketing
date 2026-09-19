@@ -24,7 +24,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0019](./0019-pydantic-ai-inner-harness.md) | Pydantic AI inner harness; session graph narrows to mode/lifecycle | Accepted |
 | [0020](./0020-org-byok-keys-models-routing.md) | Org BYOK: provider keys, model registry, per-tier routing | Accepted (enum + Completions-only surface amended by 0021; compat image path 2026-09-12) |
 | [0021](./0021-org-byok-native-gemini.md) | Org BYOK: native Gemini + Vertex Express | Accepted |
-| [0022](./0022-real-publish-instagram.md) | Real publish: Instagram adapter, org social accounts, receipt status | Accepted (Confirm image URL amended by 0024; external URL 2026-09-18) |
+| [0022](./0022-real-publish-instagram.md) | Real publish: Instagram adapter, org social accounts, receipt status | Accepted (Confirm image URL amended by 0024; external URL 2026-09-18; OAuth callback from `web_base_url` 2026-09-19) |
 | [0023](./0023-deployment-mode-flag.md) | Deployment mode flag (cloud vs on-prem) | Accepted (first behavior branch: 0024) |
 | [0024](./0024-media-storage-local-and-s3.md) | Media storage: local default on-prem (optional S3-compatible), AWS S3 in cloud | Accepted (§1 superseded by 0025; local browser URLs relative 2026-09-18) |
 | [0025](./0025-db-storage-config-and-portal-migration.md) | DB-backed storage config + portal local→S3 migration | Accepted |

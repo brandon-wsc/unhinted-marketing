@@ -25,7 +25,9 @@ marker keeps the wizard from reappearing.
 One row (`id = 1`, CHECK-enforced) holds:
 
 - `setup_completed_at` — NULL = wizard pending (on-prem)
-- `web_base_url` — invite links, OAuth redirect fallback, Instagram Confirm image fetch
+- `web_base_url` — invite links, Instagram Login callback
+  (`{web_base_url}/api/social/oauth/callback`), OAuth success landing,
+  Instagram Confirm image fetch
 - email delivery: `email_backend` (`link`/`smtp`/`console`), `email_from`,
   `smtp_host/port/user`, `smtp_password_encrypted` (BYOK Fernet KEK,
   last4-only in responses), `smtp_tls`
@@ -37,9 +39,9 @@ already have users as setup-complete so existing installs never see the
 wizard.
 
 `internal.instance.config` publishes an in-process snapshot (8s TTL). Sync
-readers (invite links, Instagram Confirm image fetch, OAuth redirect fallback)
-call `get_snapshot()` and fall back to env values when the cache is cold —
-they must not await a DB load.
+readers (invite links, Instagram Login callback, Instagram Confirm image fetch,
+OAuth success landing) call `get_snapshot()` and fall back to env values when
+the cache is cold — they must not await a DB load.
 
 ### 2. First-run setup claims the only SUPERADMIN
 
@@ -86,9 +88,11 @@ via env" hints.
 
 - First boot on on-prem shows `/setup`; the first human becomes
   `SUPERADMIN` and seeds the first org — no CLI promotion needed.
-- Invite links, media public URLs, OAuth redirects, and invite emails all
-  read the DB-backed instance URL — changing it in **System → Instance**
-  takes effect within the snapshot TTL, no restart.
+- Invite links, Instagram Login callback, Instagram Confirm image fetch, OAuth
+  success landing, and invite emails all read the DB-backed instance URL —
+  changing it in **System → Instance** takes effect within the snapshot TTL,
+  no restart. Meta's Valid OAuth Redirect URI must match
+  `{web_base_url}/api/social/oauth/callback` after a URL change.
 - Anyone hitting an on-prem instance post-setup cannot self-register; access
   is invite-only by design. Cloud behavior is unchanged.
 - `smtp_password` joins BYOK keys under the Fernet KEK — rotating

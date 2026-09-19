@@ -19,6 +19,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Instagram Login callback is `{WEB_BASE_URL}/api/social/oauth/callback`.
+    // Fail instead of hopping to 5174 when 5173 is taken.
+    strictPort: true,
     https,
     // Instagram Login needs a stable HTTPS origin; enable TLS when web/certs pems exist.
     allowedHosts: ["unhinted.localhost", "localhost"],
