@@ -14,8 +14,8 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
+  useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -171,8 +171,37 @@ export function ChatPanel() {
   const [pagedPane, setPagedPane] = useState<PagedPane>("chat");
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
+  const composerObsRef = useRef<{
+    resize: ResizeObserver;
+    mutations: MutationObserver;
+  } | null>(null);
   const [composerH, setComposerH] = useState(0);
+  const composerRef = useCallback((el: HTMLDivElement | null) => {
+    composerObsRef.current?.resize.disconnect();
+    composerObsRef.current?.mutations.disconnect();
+    composerObsRef.current = null;
+    if (!el) return;
+    // Hidden paged panes are display:none (0×0). Don't clobber a real height.
+    const measure = () => {
+      if (el.getClientRects().length === 0) return;
+      setComposerH(overlayStackHeight(el));
+    };
+    const resize = new ResizeObserver(measure);
+    const observeTree = () => {
+      resize.observe(el);
+      for (const node of el.querySelectorAll("*")) {
+        resize.observe(node);
+      }
+    };
+    observeTree();
+    measure();
+    const mutations = new MutationObserver(() => {
+      observeTree();
+      measure();
+    });
+    mutations.observe(el, { childList: true, subtree: true });
+    composerObsRef.current = { resize, mutations };
+  }, []);
   const { ref: shellRef, width: shellWidth } = useContainerWidth();
   const previewMode = mode === "PREVIEW" && !!draft;
   const layoutMode = sessionLayoutMode(shellWidth, {
@@ -243,29 +272,6 @@ export function ChatPanel() {
       showError(t("chat.history.deleteFailed"));
     }
   }
-
-  useLayoutEffect(() => {
-    const el = composerRef.current;
-    if (!el) return;
-    const resize = new ResizeObserver(() => setComposerH(overlayStackHeight(el)));
-    const observeTree = () => {
-      resize.observe(el);
-      for (const node of el.querySelectorAll("*")) {
-        resize.observe(node);
-      }
-    };
-    observeTree();
-    setComposerH(overlayStackHeight(el));
-    const mutations = new MutationObserver(() => {
-      observeTree();
-      setComposerH(overlayStackHeight(el));
-    });
-    mutations.observe(el, { childList: true, subtree: true });
-    return () => {
-      resize.disconnect();
-      mutations.disconnect();
-    };
-  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
