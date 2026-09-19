@@ -1654,7 +1654,7 @@ export type components = {
         };
         /**
          * ChooseAngleRequest
-         * @description ADR 0029 pick while parked at angle_gate — index or free text, optional persona.
+         * @description ADR 0030 pick while parked at angle_gate — index or free text, optional persona + format.
          */
         ChooseAngleRequest: {
             /** Angle Index */
@@ -1663,6 +1663,8 @@ export type components = {
             angle?: string | null;
             /** Persona */
             persona?: string | null;
+            /** Image Format */
+            image_format?: ("single" | "comic_4panel") | null;
         };
         /** ChooseAngleResponse */
         ChooseAngleResponse: {
@@ -1934,6 +1936,10 @@ export type components = {
             personas?: components["schemas"]["AudiencePersonaOption"][];
             /** Recommended Persona */
             recommended_persona?: string | null;
+            /** Image Format Options */
+            image_format_options?: ("single" | "comic_4panel")[];
+            /** Recommended Image Format */
+            recommended_image_format?: ("single" | "comic_4panel") | null;
             forked_from?: components["schemas"]["ForkOrigin"] | null;
             /** Preview Note */
             preview_note?: ("carried_stale" | "not_carried_later") | null;
@@ -2907,6 +2913,10 @@ export type components = {
             personas?: components["schemas"]["AudiencePersonaOption"][];
             /** Recommended Persona */
             recommended_persona?: string | null;
+            /** Image Format Options */
+            image_format_options?: ("single" | "comic_4panel")[];
+            /** Recommended Image Format */
+            recommended_image_format?: ("single" | "comic_4panel") | null;
             forked_from?: components["schemas"]["ForkOrigin"] | null;
         };
         /** SessionResearch */

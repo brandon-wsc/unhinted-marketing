@@ -482,6 +482,7 @@ async def choose_angle(
             angle_index=body.angle_index,
             angle_text=body.angle,
             persona=body.persona,
+            image_format=body.image_format,
         )
     except SessionTurnConflict as exc:
         raise HTTPException(
@@ -636,6 +637,8 @@ async def get_session_messages(
         awaiting_angle_pick=parked_angle,
         personas=pick["personas"] if pick else [],
         recommended_persona=pick["recommended_persona"] if pick else None,
+        image_format_options=pick["image_format_options"] if pick else [],
+        recommended_image_format=pick["recommended_image_format"] if pick else None,
         forked_from=await _fork_origin(db, session),
     )
 

@@ -5796,11 +5796,26 @@
               }
             ],
             "title": "Persona"
+          },
+          "image_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "comic_4panel"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Format"
           }
         },
         "type": "object",
         "title": "ChooseAngleRequest",
-        "description": "ADR 0029 pick while parked at angle_gate — index or free text, optional persona."
+        "description": "ADR 0030 pick while parked at angle_gate — index or free text, optional persona + format."
       },
       "ChooseAngleResponse": {
         "properties": {
@@ -6393,6 +6408,32 @@
               }
             ],
             "title": "Recommended Persona"
+          },
+          "image_format_options": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "single",
+                "comic_4panel"
+              ]
+            },
+            "type": "array",
+            "title": "Image Format Options"
+          },
+          "recommended_image_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "comic_4panel"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Image Format"
           },
           "forked_from": {
             "anyOf": [
@@ -8975,6 +9016,32 @@
               }
             ],
             "title": "Recommended Persona"
+          },
+          "image_format_options": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "single",
+                "comic_4panel"
+              ]
+            },
+            "type": "array",
+            "title": "Image Format Options"
+          },
+          "recommended_image_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "comic_4panel"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Image Format"
           },
           "forked_from": {
             "anyOf": [

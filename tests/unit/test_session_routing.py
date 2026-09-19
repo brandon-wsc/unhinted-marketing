@@ -93,7 +93,6 @@ def test_route_after_brainstormer() -> None:
         route_after_brainstormer({**two, "chosen_angle": "都唔啱，想偏溫柔少抽水啲"})
         == "angle_gate"
     )
-    # <2 offered angles can't make a meaningful pick — draft straight away.
     # ADR 0030 §7: a lone angle still parks for confirm (angle + persona +
     # format); only a 0-angle brief drafts immediately.
     assert route_after_brainstormer({"brief": {"angles": ["甲"]}}) == "angle_gate"

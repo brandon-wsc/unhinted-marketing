@@ -6,7 +6,8 @@ from typing import Any, Literal
 
 ImageFormat = Literal["single", "comic_4panel"]
 DEFAULT_IMAGE_FORMAT: ImageFormat = "single"
-_VALID: frozenset[str] = frozenset({"single", "comic_4panel"})
+IMAGE_FORMAT_OPTIONS: tuple[ImageFormat, ...] = ("single", "comic_4panel")
+_VALID: frozenset[str] = frozenset(IMAGE_FORMAT_OPTIONS)
 
 
 def normalize_image_format(raw: Any) -> ImageFormat:

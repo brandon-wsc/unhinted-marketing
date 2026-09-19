@@ -57,8 +57,11 @@ class SessionState(TypedDict, total=False):
     product_context_ids: NotRequired[list[str]]
     product_candidates: NotRequired[list[dict[str, Any]]]
     error: NotRequired[str]
-    # Visual format for executor_image_plan (default single). Set via resume-image body or revise.
+    # Visual format for executor_image_plan (default single). Set via the
+    # bundled angle_gate pick (ADR 0030), resume-image body, or revise.
     image_format: NotRequired[Literal["single", "comic_4panel"]]
+    # Pending format submitted with choose-angle; consumed by angle_gate.
+    chosen_image_format: NotRequired[str | None]
     # Landing-card handoff (ADR 0018) — warm trend_searcher with question signal refs.
     handoff_signal_ids: NotRequired[list[str]]
     # ADR 0028 / 0029 angle pick — set by choose-angle resume; consumed by executor_post.

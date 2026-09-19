@@ -104,12 +104,16 @@ class AudiencePersonaOption(BaseModel):
 
 
 class DraftAwaitingAnglePickData(BaseModel):
-    """Payload for `draft.awaiting_angle_pick` (interrupt at angle_gate, ADR 0029)."""
+    """Payload for `draft.awaiting_angle_pick` (interrupt at angle_gate, ADR 0030)."""
 
     awaiting: bool = True
     angles: list[str] = Field(default_factory=list)
     personas: list[AudiencePersonaOption] = Field(default_factory=list)
     recommended_persona: str | None = None
+    image_format_options: list[Literal["single", "comic_4panel"]] = Field(
+        default_factory=list
+    )
+    recommended_image_format: Literal["single", "comic_4panel"] | None = None
 
 
 class LlmFailedData(BaseModel):
