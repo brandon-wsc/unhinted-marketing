@@ -133,6 +133,24 @@ def test_adapt_plan_single_to_comic_fills_panels() -> None:
     assert "HK cafe mood" in prompt
 
 
+def test_adapt_plan_comic_to_single_rewrites_layout_composition() -> None:
+    """UAT: '2x2 grid / four equal panels' composition has no comic keywords —
+    COMIC_VEHICLE alone misses it and regen would still paint a grid."""
+    adapted = adapt_plan_to_format(
+        {
+            **_COMIC_PLAN,
+            "format": "single",
+            "composition": (
+                "One image divided into a 2x2 grid of four equal panels "
+                "with clear gutters. Panel order: top-left 1, top-right 2."
+            ),
+        },
+        "single",
+        previous_format="comic_4panel",
+    )
+    assert adapted["composition"] == SINGLE_COMPOSITION
+
+
 def test_adapt_plan_keeps_custom_single_prompt() -> None:
     adapted = adapt_plan_to_format(
         {
