@@ -32,6 +32,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0027](./0027-docker-deploy-packages.md) | Docker deployment packages (all-in-one vs external-DB) | Accepted |
 | [0028](./0028-angle-pick-before-draft.md) | Angle pick parks before drafting | Superseded by 0029 |
 | [0029](./0029-angle-persona-bundled-gate.md) | Bundled angle + persona gate | Accepted |
+| [0030](./0030-image-format-in-bundled-gate.md) | Image format rides the bundled angle gate | Accepted |
 
 ## Format
 
