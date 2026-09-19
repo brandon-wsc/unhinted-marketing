@@ -34,6 +34,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0029](./0029-angle-persona-bundled-gate.md) | Bundled angle + persona gate | Accepted |
 | [0030](./0030-image-format-in-bundled-gate.md) | Image format rides the bundled angle gate | Accepted |
 | [0031](./0031-queue-send-while-image-parked.md) | Queue Send while parked at image OK | Accepted |
+| [0032](./0032-meta-oauth-byo-and-relay.md) | On-prem Meta OAuth: BYO-app default + opt-in relay | Accepted |
 
 ## Format
 
