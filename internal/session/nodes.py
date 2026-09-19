@@ -58,6 +58,7 @@ from internal.session.image_format import (
     IMAGE_FORMAT_OPTIONS,
     compose_generation_prompt,
     image_format_from_text,
+    lock_brief_to_format,
     normalize_image_format,
 )
 from internal.session.io import (
@@ -884,6 +885,7 @@ async def product_matcher(state: SessionState) -> dict[str, Any]:
 async def brainstormer(state: SessionState) -> dict[str, Any]:
     catalog = _audience_catalog(state)
     signals = _ranked_signals(state)[:8]
+    fmt = recommended_image_format(state)
     payload = {
         "company": _slim_company(state),
         "voice_pack": _voice_pack(state),
@@ -896,6 +898,7 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
         "related_products": (state.get("related_products") or [])[:2],
         "prior_brief": state.get("brief") or {},
         "angle_feedback": state.get("angle_feedback"),
+        "image_format": fmt,
     }
     parsed = await _parse_llm_json(
         NODE_MODEL_TIERS["brainstormer"] or ModelTier.MEDIUM,
@@ -915,6 +918,10 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
             "persona": catalog[0].get("slug") if catalog else None,
             "summary": f"基於近期 HK signals，建議做一則同「{topic}」相關嘅 grounded post。",
         }
+    sticky = str(state.get("chosen_image_format") or "").strip()
+    current = str(state.get("image_format") or "").strip()
+    if sticky in IMAGE_FORMAT_OPTIONS or current in IMAGE_FORMAT_OPTIONS:
+        brief = lock_brief_to_format(brief, fmt)
     active = pick_active_persona(catalog, brief.get("persona"))
     return {
         "mode": MODE_AGENT,
@@ -974,7 +981,7 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "primary_product": state.get("primary_product"),
         "related_products": (state.get("related_products") or [])[:2],
         "chosen_angle": state.get("chosen_angle"),
-        "image_format": normalize_image_format(state.get("image_format")),
+        "image_format": recommended_image_format(state),
     }
     parsed: DraftOut | None = None
     if has_llm_credentials():
@@ -1180,7 +1187,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
 
 @agent_progress("executor_image_plan")
 async def executor_image_plan(state: SessionState) -> dict[str, Any]:
-    fmt = normalize_image_format(state.get("image_format"))
+    fmt = recommended_image_format(state)
     payload = {
         "draft": state.get("draft") or {},
         "brief": state.get("brief") or {},

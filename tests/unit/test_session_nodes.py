@@ -606,6 +606,69 @@ async def test_brainstormer_mock_llm_matches_brief_contract(
 
 
 @pytest.mark.asyncio
+async def test_brainstormer_payload_includes_sticky_image_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0030 §4 — re-brief after Other must see the locked vehicle."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    captured: dict = {}
+
+    async def fake_complete_json(**kwargs):
+        captured.update(json.loads(kwargs["user"]))
+        return BriefOut(
+            can_do=["格式：1 張暖調生活照；唔需要漫畫分格", "語氣溫柔"],
+            cannot_do=["未 Confirm 唔發佈"],
+            angles=["凍咗嘅茶"],
+            summary="溫柔少抽水",
+        ).model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    out = await N.brainstormer(
+        _base_state(
+            company_context={"name": "Acme"},
+            ranked_signals=[{"signal_id": "sig_a", "title": "奶茶"}],
+            source_signal_ids=["sig_a"],
+            chosen_image_format="comic_4panel",
+            angle_feedback="都唔啱，想溫柔少抽水啲",
+        )
+    )
+    assert captured["image_format"] == "comic_4panel"
+    assert captured["angle_feedback"] == "都唔啱，想溫柔少抽水啲"
+    can_do = " ".join(out["brief"]["can_do"])
+    assert "4 格漫畫" in can_do
+    assert "唔需要漫畫" not in can_do
+    assert "生活照" not in can_do
+
+
+@pytest.mark.asyncio
+async def test_brainstormer_first_start_does_not_rewrite_brief_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No committed pick yet — do not inject a 格式鎖定 line onto the first card."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+
+    async def fake_complete_json(**kwargs):
+        payload = json.loads(kwargs["user"])
+        assert payload["image_format"] == "single"
+        return BriefOut(
+            can_do=["寫帖"],
+            cannot_do=["未 Confirm 唔發佈"],
+            angles=["熱搜連結品牌"],
+            summary="grounded brief",
+        ).model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    out = await N.brainstormer(
+        _base_state(
+            company_context={"name": "Acme"},
+            ranked_signals=[{"signal_id": "sig_a", "title": "奶茶"}],
+            source_signal_ids=["sig_a"],
+        )
+    )
+    assert out["brief"]["can_do"] == ["寫帖"]
+
+
+@pytest.mark.asyncio
 async def test_executor_post_filters_citations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -698,6 +761,31 @@ async def test_executor_post_payload_defaults_image_format_single(
         )
     )
     assert captured["image_format"] == "single"
+
+
+@pytest.mark.asyncio
+async def test_executor_post_payload_uses_sticky_chosen_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0030 §5 — sticky pick drafts as comic even before angle_gate locks it."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    captured: dict = {}
+
+    async def fake_run(payload: str, _deps: object) -> DraftOut:
+        captured.update(json.loads(payload))
+        return DraftOut(caption="c", source_signal_ids=["sig_a"])
+
+    monkeypatch.setattr(EH, "run_executor_post_agent", fake_run)
+    await N.executor_post(
+        _base_state(
+            source_signal_ids=["sig_a"],
+            company_context={"name": "Acme"},
+            ranked_signals=[],
+            brief={"summary": "格式：1 張生活照；唔需要漫畫分格"},
+            chosen_image_format="comic_4panel",
+        )
+    )
+    assert captured["image_format"] == "comic_4panel"
 
 
 @pytest.mark.asyncio

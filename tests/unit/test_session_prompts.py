@@ -50,6 +50,19 @@ def test_downstream_prompts_respect_signals_trusted() -> None:
     assert "signals_trusted" in REVIEWER
 
 
+def test_brainstorm_honors_locked_image_format() -> None:
+    """UAT S3: tone feedback must not rewrite a sticky comic into 單圖."""
+    assert "image_format" in BRAINSTORM
+    assert "comic_4panel" in BRAINSTORM
+    assert "angle_feedback" in BRAINSTORM
+    assert "4 格漫畫" in BRAINSTORM
+
+
+def test_executor_post_image_format_beats_brief_vehicle() -> None:
+    assert "image_format" in EXECUTOR_POST
+    assert "authoritative" in EXECUTOR_POST
+
+
 def test_craft_bans_mainland_traffic_jargon() -> None:
     assert "流量" in EXECUTOR_POST
     assert "衝流量" in EXECUTOR_POST
