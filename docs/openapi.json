@@ -6527,6 +6527,40 @@
             "type": "boolean",
             "title": "Smtp Tls"
           },
+          "meta_app_id": {
+            "type": "string",
+            "title": "Meta App Id"
+          },
+          "meta_app_secret_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta App Secret Last4"
+          },
+          "meta_oauth_mode": {
+            "type": "string",
+            "enum": [
+              "byo",
+              "relay"
+            ],
+            "title": "Meta Oauth Mode"
+          },
+          "meta_oauth_callback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta Oauth Callback Url"
+          },
           "setup_completed": {
             "type": "boolean",
             "title": "Setup Completed"
@@ -6542,6 +6576,10 @@
           "smtp_user",
           "smtp_password_last4",
           "smtp_tls",
+          "meta_app_id",
+          "meta_app_secret_last4",
+          "meta_oauth_mode",
+          "meta_oauth_callback_url",
           "setup_completed"
         ],
         "title": "InstanceSettingsResponse"
@@ -6569,11 +6607,35 @@
                 "type": "null"
               }
             ]
+          },
+          "meta_app_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta App Id"
+          },
+          "meta_app_secret": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta App Secret"
           }
         },
         "type": "object",
         "title": "InstanceSettingsUpdate",
-        "description": "PUT semantics: omitted fields keep their current value; smtp_password\nonly rotates when a non-empty value is sent (never returned back)."
+        "description": "PUT semantics: omitted fields keep their current value; smtp_password\nand meta_app_secret only rotate when a non-empty value is sent (never\nreturned back). A changed meta_app_id drops the stored secret — the old\nsecret can never pair with a different app."
       },
       "LlmCallRecordDetail": {
         "properties": {
@@ -9606,6 +9668,22 @@
               }
             ],
             "title": "Poll Url"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured",
+            "default": false
+          },
+          "callback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Url"
           }
         },
         "type": "object",

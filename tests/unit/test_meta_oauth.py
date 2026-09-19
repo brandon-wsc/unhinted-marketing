@@ -14,6 +14,8 @@ from internal.auth.meta_oauth import (
     MetaOAuthError,
     _oauth_fields,
     exchange_code,
+    oauth_callback_url,
+    oauth_configured,
     parse_state,
     start_oauth,
 )
@@ -371,3 +373,51 @@ async def test_exchange_code_rejects_stale_state(monkeypatch: pytest.MonkeyPatch
     db = AsyncMock()
     with pytest.raises(MetaOAuthError):
         await exchange_code(db, code="code", state="bogus:state", csrf_token="x")
+
+
+async def test_oauth_status_helpers_from_env_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    assert oauth_configured() is True
+    assert oauth_callback_url() == f"{OAUTH_ORIGIN}/api/social/oauth/callback"
+
+    monkeypatch.setattr(config.settings, "meta_app_secret", None)
+    reset_snapshot_cache()
+    assert oauth_configured() is False
+    # Callback URL still derives from web_base_url alone.
+    assert oauth_callback_url() == f"{OAUTH_ORIGIN}/api/social/oauth/callback"
+
+
+async def test_oauth_fields_read_db_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 0032 — creds come from the instance snapshot (DB-seeded), not env."""
+    _configure(monkeypatch)
+    import dataclasses
+
+    from internal.instance.config import publish_snapshot, snapshot_from_env
+
+    publish_snapshot(
+        dataclasses.replace(
+            snapshot_from_env(), meta_app_id="db-app", meta_app_secret="db-secret"
+        )
+    )
+    monkeypatch.setattr(config.settings, "meta_app_id", None)
+    monkeypatch.setattr(config.settings, "meta_app_secret", None)
+    fields = _oauth_fields()
+    assert fields["client_id"] == "db-app"
+    assert fields["client_secret"] == "db-secret"
+
+
+async def test_oauth_fields_relay_mode_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0032 — meta_oauth_mode=relay is reserved; BYO creds must not fire."""
+    _configure(monkeypatch)
+    import dataclasses
+
+    from internal.instance.config import publish_snapshot, snapshot_from_env
+
+    publish_snapshot(dataclasses.replace(snapshot_from_env(), meta_oauth_mode="relay"))
+    with pytest.raises(MetaOAuthError, match="meta_oauth_mode_unavailable"):
+        _oauth_fields()
+    assert oauth_configured() is False

@@ -7,6 +7,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from schemas.meta import DeploymentMode
 
 EmailBackend = Literal["link", "smtp", "console"]
+MetaOAuthMode = Literal["byo", "relay"]
 
 
 class SetupStatusResponse(BaseModel):
@@ -54,14 +55,23 @@ class InstanceSettingsResponse(BaseModel):
     smtp_user: str
     smtp_password_last4: str | None
     smtp_tls: bool
+    # ADR 0032 — BYO Meta app creds + derived callback the admin whitelists.
+    meta_app_id: str
+    meta_app_secret_last4: str | None
+    meta_oauth_mode: MetaOAuthMode
+    meta_oauth_callback_url: str | None
     setup_completed: bool
 
 
 class InstanceSettingsUpdate(BaseModel):
     """PUT semantics: omitted fields keep their current value; smtp_password
-    only rotates when a non-empty value is sent (never returned back)."""
+    and meta_app_secret only rotate when a non-empty value is sent (never
+    returned back). A changed meta_app_id drops the stored secret — the old
+    secret can never pair with a different app."""
 
     web_base_url: str | None = Field(default=None, max_length=500)
     email_config: SetupEmailConfig | None = None
+    meta_app_id: str | None = Field(default=None, max_length=255)
+    meta_app_secret: str | None = Field(default=None, max_length=255)
 
     _check_url = field_validator("web_base_url")(_clean_url)

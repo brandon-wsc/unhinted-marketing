@@ -725,6 +725,10 @@ class InstanceSettings(Base):
             "email_backend IN ('link', 'smtp', 'console')",
             name="ck_instance_settings_email_backend",
         ),
+        CheckConstraint(
+            "meta_oauth_mode IN ('byo', 'relay')",
+            name="ck_instance_settings_meta_oauth_mode",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
@@ -743,6 +747,14 @@ class InstanceSettings(Base):
     smtp_password_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     smtp_tls: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
+    )
+    # ADR 0032 — BYO Meta app creds; env seeds, portal wins. Empty string
+    # meta_app_id means "cleared in the portal" (NULL = never set, env may seed).
+    meta_app_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    meta_app_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meta_app_secret_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    meta_oauth_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="byo", server_default="byo"
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

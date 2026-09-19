@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 TTL_SECONDS = 8.0
 
 EmailBackend = Literal["link", "smtp", "console"]
+MetaOAuthMode = Literal["byo", "relay"]
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,9 @@ class InstanceSnapshot:
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_tls: bool = True
+    meta_app_id: str = ""
+    meta_app_secret: str = ""
+    meta_oauth_mode: MetaOAuthMode = "byo"
 
 
 def _strip(value: str | None) -> str:
@@ -55,6 +59,8 @@ def snapshot_from_env() -> InstanceSnapshot:
         smtp_user=_strip(settings.smtp_user),
         smtp_password=settings.smtp_password or "",
         smtp_tls=settings.smtp_tls,
+        meta_app_id=_strip(settings.meta_app_id),
+        meta_app_secret=settings.meta_app_secret or "",
     )
 
 
@@ -95,7 +101,14 @@ def _snapshot_from_row(row) -> InstanceSnapshot:
             password = decrypt_key(row.smtp_password_encrypted)
         except ByokEncryptionError:
             logger.warning("instance smtp password could not be decrypted")
+    meta_secret = ""
+    if row.meta_app_secret_encrypted:
+        try:
+            meta_secret = decrypt_key(row.meta_app_secret_encrypted)
+        except ByokEncryptionError:
+            logger.warning("instance meta app secret could not be decrypted")
     backend = _strip(row.email_backend).lower()
+    meta_mode = _strip(row.meta_oauth_mode).lower()
     return InstanceSnapshot(
         web_base_url=_strip(row.web_base_url),
         email_backend=backend if backend in ("link", "smtp", "console") else "link",
@@ -105,6 +118,9 @@ def _snapshot_from_row(row) -> InstanceSnapshot:
         smtp_user=_strip(row.smtp_user),
         smtp_password=password,
         smtp_tls=row.smtp_tls,
+        meta_app_id=_strip(row.meta_app_id),
+        meta_app_secret=meta_secret,
+        meta_oauth_mode=meta_mode if meta_mode in ("byo", "relay") else "byo",
     )
 
 
@@ -116,27 +132,54 @@ async def load_snapshot(db: AsyncSession) -> InstanceSnapshot:
     return snap
 
 
+def _encrypt_seed(raw: str, label: str) -> tuple[str | None, str | None]:
+    """Encrypt an env secret for seeding; returns (encrypted, last4)."""
+    if not raw:
+        return None, None
+    from internal.llm.keys import encrypt_key, mask_key
+
+    try:
+        return encrypt_key(raw), mask_key(raw)
+    except ByokEncryptionError:
+        logger.warning("could not encrypt seeded %s; storing without it", label)
+        return None, None
+
+
+async def _seed_meta_from_env(db: AsyncSession, env_snap: InstanceSnapshot) -> bool:
+    """Backfill Meta app creds when the row never had them (ADR 0032).
+
+    Runs on every boot: ``meta_app_id IS NULL`` means "never set" (a portal
+    clear stores ""), so env-configured deployments keep working after the
+    upgrade while portal edits still win afterwards.
+    """
+    row = await repos.get_instance_settings(db)
+    if row is None or row.meta_app_id is not None or not env_snap.meta_app_id:
+        return False
+    secret_enc, secret_last4 = _encrypt_seed(env_snap.meta_app_secret, "Meta app secret")
+    await repos.upsert_instance_settings(
+        db,
+        meta_app_id=env_snap.meta_app_id,
+        meta_app_secret_encrypted=secret_enc,
+        meta_app_secret_last4=secret_last4,
+    )
+    await db.commit()
+    return True
+
+
 async def ensure_instance_settings_seeded(db: AsyncSession) -> None:
     """Insert the singleton row from env when absent (ADR 0026).
 
     Fresh installs get ``setup_completed_at = NULL`` (wizard pending); the
     migration already back-fills the marker on deployments with users.
     """
+    env_snap = snapshot_from_env()
     row = await repos.get_instance_settings(db)
     if row is not None:
+        await _seed_meta_from_env(db, env_snap)
         await load_snapshot(db)
         return
-    env_snap = snapshot_from_env()
-    password_enc = None
-    last4 = None
-    if env_snap.smtp_password:
-        from internal.llm.keys import encrypt_key, mask_key
-
-        try:
-            password_enc = encrypt_key(env_snap.smtp_password)
-            last4 = mask_key(env_snap.smtp_password)
-        except ByokEncryptionError:
-            logger.warning("could not encrypt seeded SMTP password; storing without it")
+    password_enc, last4 = _encrypt_seed(env_snap.smtp_password, "SMTP password")
+    meta_enc, meta_last4 = _encrypt_seed(env_snap.meta_app_secret, "Meta app secret")
     await repos.upsert_instance_settings(
         db,
         web_base_url=env_snap.web_base_url or None,
@@ -148,6 +191,9 @@ async def ensure_instance_settings_seeded(db: AsyncSession) -> None:
         smtp_password_encrypted=password_enc,
         smtp_password_last4=last4,
         smtp_tls=env_snap.smtp_tls,
+        meta_app_id=env_snap.meta_app_id or None,
+        meta_app_secret_encrypted=meta_enc,
+        meta_app_secret_last4=meta_last4,
     )
     await db.commit()
     await load_snapshot(db)

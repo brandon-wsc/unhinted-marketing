@@ -1970,18 +1970,35 @@ export type components = {
             smtp_password_last4: string | null;
             /** Smtp Tls */
             smtp_tls: boolean;
+            /** Meta App Id */
+            meta_app_id: string;
+            /** Meta App Secret Last4 */
+            meta_app_secret_last4: string | null;
+            /**
+             * Meta Oauth Mode
+             * @enum {string}
+             */
+            meta_oauth_mode: "byo" | "relay";
+            /** Meta Oauth Callback Url */
+            meta_oauth_callback_url: string | null;
             /** Setup Completed */
             setup_completed: boolean;
         };
         /**
          * InstanceSettingsUpdate
          * @description PUT semantics: omitted fields keep their current value; smtp_password
-         *     only rotates when a non-empty value is sent (never returned back).
+         *     and meta_app_secret only rotate when a non-empty value is sent (never
+         *     returned back). A changed meta_app_id drops the stored secret — the old
+         *     secret can never pair with a different app.
          */
         InstanceSettingsUpdate: {
             /** Web Base Url */
             web_base_url?: string | null;
             email_config?: components["schemas"]["SetupEmailConfig"] | null;
+            /** Meta App Id */
+            meta_app_id?: string | null;
+            /** Meta App Secret */
+            meta_app_secret?: string | null;
         };
         /**
          * LlmCallRecordDetail
@@ -3143,6 +3160,13 @@ export type components = {
             authorization_url?: string | null;
             /** Poll Url */
             poll_url?: string | null;
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /** Callback Url */
+            callback_url?: string | null;
         };
         /** StopSessionResponse */
         StopSessionResponse: {

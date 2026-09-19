@@ -200,6 +200,65 @@ async def test_instance_settings_gating(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_instance_settings_meta_app_creds(client: AsyncClient) -> None:
+    """ADR 0032 — BYO Meta app creds live on instance_settings; PUT rotates the
+    secret only on a non-empty value and changing the app id drops it."""
+    owner = await _run_setup(client)
+    headers = auth_header(owner["access_token"])
+
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={
+            "web_base_url": "https://mktg.example.com",
+            "meta_app_id": "999888",
+            "meta_app_secret": "s3cr3t-value",
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["meta_app_id"] == "999888"
+    assert body["meta_app_secret_last4"] == "alue"
+    assert body["meta_oauth_mode"] == "byo"
+    assert (
+        body["meta_oauth_callback_url"]
+        == "https://mktg.example.com/api/social/oauth/callback"
+    )
+    assert "s3cr3t" not in res.text
+
+    # Secret rotates only when a non-empty value is sent.
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={"meta_app_secret": "newsecret99"},
+    )
+    assert res.json()["meta_app_secret_last4"] == "et99"
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={"meta_app_secret": ""},
+    )
+    assert res.json()["meta_app_secret_last4"] == "et99"
+
+    # A different app id can never pair with the old secret.
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={"meta_app_id": "111222"},
+    )
+    assert res.json()["meta_app_id"] == "111222"
+    assert res.json()["meta_app_secret_last4"] is None
+
+    # Clearing the app id stays cleared.
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={"meta_app_id": ""},
+    )
+    assert res.json()["meta_app_id"] == ""
+
+
+@pytest.mark.asyncio
 async def test_invite_url_uses_db_base_url(client: AsyncClient) -> None:
     owner = await _run_setup(client)
     company_id = owner["user"]["organizations"][0]["id"]

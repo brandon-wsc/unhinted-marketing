@@ -16,6 +16,8 @@ from internal.auth.meta_oauth import (
     CSRF_COOKIE,
     MetaOAuthError,
     exchange_code,
+    oauth_callback_url,
+    oauth_configured,
     pending_connect_is_stale,
     start_oauth,
 )
@@ -87,14 +89,19 @@ async def list_accounts(
 
 
 def _oauth_info(company_id: uuid.UUID, row: SocialAccount | None) -> SocialOAuthInfo:
+    config = {
+        "configured": oauth_configured(),
+        "callback_url": oauth_callback_url(),
+    }
     if row is not None and row.oauth_connect_state:
         return SocialOAuthInfo(
             status="pending",
             poll_url=OAUTH_POLL_ROUTE.format(company_id=str(company_id)),
+            **config,
         )
     if social_account_is_connected(row):
-        return SocialOAuthInfo(status="connected")
-    return SocialOAuthInfo(status="not_connected")
+        return SocialOAuthInfo(status="connected", **config)
+    return SocialOAuthInfo(status="not_connected", **config)
 
 
 @router.get("/oauth/status", response_model=SocialOAuthInfo)
@@ -142,6 +149,8 @@ async def oauth_start(
         status="pending",
         authorization_url=started.authorization_url,
         poll_url=OAUTH_POLL_ROUTE.format(company_id=str(company_id)),
+        configured=True,
+        callback_url=oauth_callback_url(),
     )
 
 

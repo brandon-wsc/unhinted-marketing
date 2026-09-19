@@ -27,3 +27,8 @@ class SocialOAuthInfo(BaseModel):
     authorization_url: str | None = None
     # Present when connecting (fetch this URL to poll the result).
     poll_url: str | None = None
+    # ADR 0032 — whether the instance Meta app creds + callback base are set;
+    # False renders the guided BYO setup card instead of a failing Connect.
+    configured: bool = False
+    # Exact string to whitelist under Meta Valid OAuth Redirect URIs.
+    callback_url: str | None = None

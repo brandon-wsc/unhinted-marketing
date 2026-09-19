@@ -244,6 +244,78 @@ async def test_oauth_requires_meta_config(
 
 
 @pytest.mark.asyncio
+async def test_oauth_status_reports_configured_and_callback(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR 0032 — the panel needs `configured` + `callback_url` to render the
+    guided BYO card instead of a failing Connect."""
+    data = await register_user(client)
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(data["access_token"])
+    monkeypatch.setattr(config.settings, "meta_app_id", None)
+    monkeypatch.setattr(config.settings, "meta_app_secret", None)
+    monkeypatch.setattr(config.settings, "web_base_url", OAUTH_ORIGIN)
+    reset_snapshot_cache()
+
+    res = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "not_connected"
+    assert body["configured"] is False
+    assert body["callback_url"] == f"{OAUTH_ORIGIN}{CALLBACK}"
+
+    _patch_meta(monkeypatch)
+    res = await client.get(f"{_base(company_id)}/oauth/status", headers=headers)
+    body = res.json()
+    assert body["configured"] is True
+    assert body["callback_url"] == f"{OAUTH_ORIGIN}{CALLBACK}"
+
+
+@pytest.mark.asyncio
+async def test_oauth_uses_portal_meta_creds(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR 0032 — DB-stored BYO creds drive the connect flow (portal wins)."""
+    owner = await _run_setup_as_superadmin(client)
+    company_id = owner["user"]["organizations"][0]["id"]
+    headers = auth_header(owner["access_token"])
+    monkeypatch.setattr(config.settings, "meta_app_id", None)
+    monkeypatch.setattr(config.settings, "meta_app_secret", None)
+    monkeypatch.setattr(config.settings, "web_base_url", OAUTH_ORIGIN)
+    reset_snapshot_cache()
+
+    put = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={
+            "web_base_url": OAUTH_ORIGIN,
+            "meta_app_id": "777666",
+            "meta_app_secret": "portal-secret",
+        },
+    )
+    assert put.status_code == 200, put.text
+
+    started = await client.post(f"{_base(company_id)}/oauth/start", headers=headers)
+    assert started.status_code == 201, started.text
+    query = parse_qs(urlsplit(started.json()["authorization_url"]).query)
+    assert query["client_id"][0] == "777666"
+
+
+async def _run_setup_as_superadmin(client: AsyncClient) -> dict:
+    res = await client.post(
+        "/api/setup",
+        json={
+            "email": f"admin-{uuid.uuid4().hex[:8]}@example.com",
+            "password": "password123",
+            "display_name": "First Admin",
+            "organization_name": "First Co",
+        },
+    )
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
+@pytest.mark.asyncio
 async def test_oauth_denied_clears_state(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

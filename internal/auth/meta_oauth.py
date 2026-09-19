@@ -75,22 +75,51 @@ def _graph_version() -> str:
 _CALLBACK_PATH = "/api/social/oauth/callback"
 
 
-def _oauth_redirect_uri() -> str:
-    """Exact URI Meta must whitelist — `{web_base_url}/api/social/oauth/callback`."""
+def oauth_callback_url() -> str | None:
+    """Exact URI Meta must whitelist — `{web_base_url}/api/social/oauth/callback`.
+
+    ``None`` when the instance has no web base URL yet (first-run pending).
+    """
     from internal.instance.config import get_snapshot
 
     base = (get_snapshot().web_base_url or "").strip().rstrip("/")
     if not base:
-        raise MetaOAuthError("meta_oauth_not_configured")
+        return None
     return f"{base}{_CALLBACK_PATH}"
 
 
+def oauth_configured() -> bool:
+    """True when the BYO Meta app creds + callback base are all in place."""
+    from internal.instance.config import get_snapshot
+
+    snap = get_snapshot()
+    return bool(
+        snap.meta_oauth_mode == "byo"
+        and snap.meta_app_id
+        and snap.meta_app_secret
+        and (snap.web_base_url or "").strip()
+    )
+
+
+def _oauth_redirect_uri() -> str:
+    uri = oauth_callback_url()
+    if not uri:
+        raise MetaOAuthError("meta_oauth_not_configured")
+    return uri
+
+
 def _oauth_fields(redirect_uri: str | None = None) -> dict[str, str]:
-    if not settings.meta_app_id or not settings.meta_app_secret:
+    from internal.instance.config import get_snapshot
+
+    snap = get_snapshot()
+    # ADR 0032: relay mode is reserved — the vendor fan-out is not built yet.
+    if snap.meta_oauth_mode != "byo":
+        raise MetaOAuthError("meta_oauth_mode_unavailable")
+    if not snap.meta_app_id or not snap.meta_app_secret:
         raise MetaOAuthError("meta_oauth_not_configured")
     return {
-        "client_id": settings.meta_app_id,
-        "client_secret": settings.meta_app_secret,
+        "client_id": snap.meta_app_id,
+        "client_secret": snap.meta_app_secret,
         "redirect_uri": redirect_uri or _oauth_redirect_uri(),
     }
 
