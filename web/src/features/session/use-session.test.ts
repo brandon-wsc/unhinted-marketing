@@ -686,6 +686,27 @@ describe("useSession", () => {
     expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["queued while running"]);
   });
 
+  it("enqueues Send while parked at image OK without Stop", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: { ...sessionFixture, mode: "AGENT" },
+      messages: [msgA],
+      awaiting_image_ok: true,
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.awaitingImageOk).toBe(true));
+
+    await act(async () => {
+      await result.current.sendMessage("想睇 4格漫畫");
+    });
+
+    expect(apiStopSessionTurn).not.toHaveBeenCalled();
+    expect(apiPostSessionMessage).not.toHaveBeenCalled();
+    expect(result.current.awaitingImageOk).toBe(true);
+    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["想睇 4格漫畫"]);
+  });
+
   it("keeps the queue across Stop and drains after unlock", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({

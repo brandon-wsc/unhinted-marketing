@@ -18,7 +18,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0013](./0013-invite-accept-replaces-bootstrap-org.md) | Invite accept replaces bootstrap solo org | Accepted (amended by 0015) |
 | [0014](./0014-invite-public-preview.md) | Public invite preview (email + company name) | Accepted |
 | [0015](./0015-invite-rehome-solo-products.md) | Solo-org invite accept rehomes products to Mine | Accepted |
-| [0016](./0016-queue-send-while-turn-in-flight.md) | Queue send while a turn is in flight | Accepted |
+| [0016](./0016-queue-send-while-turn-in-flight.md) | Queue send while a turn is in flight | Accepted (§6 superseded by 0031) |
 | [0017](./0017-session-fork.md) | Session fork (branch a chat at an assistant message) | Accepted (shared media keys: 0024 GC) |
 | [0018](./0018-recommended-questions-worker-graph.md) | Recommended questions worker graph + fill contract | Accepted |
 | [0019](./0019-pydantic-ai-inner-harness.md) | Pydantic AI inner harness; session graph narrows to mode/lifecycle | Accepted |
@@ -33,6 +33,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0028](./0028-angle-pick-before-draft.md) | Angle pick parks before drafting | Superseded by 0029 |
 | [0029](./0029-angle-persona-bundled-gate.md) | Bundled angle + persona gate | Accepted |
 | [0030](./0030-image-format-in-bundled-gate.md) | Image format rides the bundled angle gate | Accepted |
+| [0031](./0031-queue-send-while-image-parked.md) | Queue Send while parked at image OK | Accepted |
 
 ## Format
 

@@ -1328,16 +1328,11 @@ export function useSession(companyId: string | undefined) {
       if (!text || !accessToken || !companyId || stoppingRef.current) {
         return;
       }
-      if (sendingRef.current || options?.queueIndex != null) {
+      if (sendingRef.current || awaitingImageOkRef.current || options?.queueIndex != null) {
         enqueueQueuedAt(text, options?.queueIndex);
         return;
       }
-      // Backend rejects sends while parked (409) — discard the parked image
-      // turn first (Stop semantics), then continue as a normal message.
-      if (awaitingImageOkRef.current) {
-        await stopTurn();
-        if (stoppingRef.current || !accessToken) return;
-      }
+      // Image park + Send queues (ADR 0031); angle park is a typed pick (ADR 0028).
       // A typed reply while angle-parked IS the pick (ADR 0028) — remember it
       // so Retry re-issues the pick; any fresh turn clears the stale one.
       const anglePickText = awaitingAnglePickRef.current ? text : null;
@@ -1541,7 +1536,6 @@ export function useSession(companyId: string | undefined) {
       accessToken,
       companyId,
       session,
-      stopTurn,
       applyTurnEvent,
       ensureOutcomeActions,
       finishRunningActions,

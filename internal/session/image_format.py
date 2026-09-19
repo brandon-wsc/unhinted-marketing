@@ -31,6 +31,26 @@ _LOCK_CANNOT_DO: dict[ImageFormat, str] = {
     "single": "唔可以將已鎖定嘅單圖改做 4 格漫畫",
 }
 
+DEFAULT_COMIC_PANELS: tuple[dict[str, Any], ...] = (
+    {"index": 1, "beat": "hook scene — instant everyday recognition; no product"},
+    {"index": 2, "beat": "escalate human friction / absurdity"},
+    {"index": 3, "beat": "peak pain — still no hard sell"},
+    {"index": 4, "beat": "product as soft remedy; attitude, not feature list"},
+)
+COMIC_COMPOSITION = "2x2 comic grid, equal panels, reading L→R then top→bottom"
+COMIC_STYLE = "clean line comic, contemporary HK urban"
+SINGLE_COMPOSITION = "subject centered, negative space for optional caption overlay"
+SINGLE_STYLE = "bright, contemporary, editorial"
+_COMIC_VEHICLE = re.compile(
+    r"(4-panel|four-panel|4\s*panel|comic strip|2x2 comic|comic grid|"
+    r"4\s*格|四格|漫畫分格)",
+    re.I,
+)
+_INSPIRED_BY = re.compile(
+    r"inspired by:\s*(.+?)(?:,\s*(?:clear gutters|no logos)|$)",
+    re.I,
+)
+
 
 def normalize_image_format(raw: Any) -> ImageFormat:
     if isinstance(raw, str) and raw.strip() in _VALID:
@@ -57,6 +77,74 @@ def lock_brief_to_format(brief: dict[str, Any], fmt: Any) -> dict[str, Any]:
 
     out["can_do"] = [_LOCK_CAN_DO[locked], *_keep(out.get("can_do"))]
     out["cannot_do"] = [_LOCK_CANNOT_DO[locked], *_keep(out.get("cannot_do"))]
+    return out
+
+
+def _has_panel_beats(panels: Any) -> bool:
+    if not isinstance(panels, list):
+        return False
+    return any(
+        isinstance(p, dict) and str(p.get("beat") or "").strip() for p in panels
+    )
+
+
+def _single_prompt_from_comic(prompt: str) -> str:
+    inspired = ""
+    match = _INSPIRED_BY.search(prompt)
+    if match:
+        inspired = match.group(1).strip().rstrip(",")
+    if inspired:
+        return (
+            "Clean modern social media image, Hong Kong urban mood, "
+            f"inspired by: {inspired}, no logos, no unreadable text"
+        )
+    return (
+        "Clean modern social media image, Hong Kong urban mood, "
+        "no logos, no unreadable text"
+    )
+
+
+def adapt_plan_to_format(
+    plan: dict[str, Any],
+    fmt: Any,
+    *,
+    previous_format: Any = None,
+) -> dict[str, Any]:
+    """Rewrite vehicle fields so regen follows the chosen format (UAT S2).
+
+    Stamping ``format`` alone leaves comic panels / 4-panel prompt on a
+    ``single`` row — ``compose_generation_prompt`` then still paints a strip.
+    """
+    target = normalize_image_format(fmt)
+    prev = (
+        normalize_image_format(previous_format)
+        if previous_format is not None
+        else normalize_image_format(plan.get("format"))
+    )
+    out = dict(plan)
+    out["format"] = target
+    switched = prev != target
+    if target == "comic_4panel":
+        if not _has_panel_beats(out.get("panels")):
+            out["panels"] = [dict(p) for p in DEFAULT_COMIC_PANELS]
+        composition = str(out.get("composition") or "").strip()
+        if not composition or "subject centered" in composition.lower():
+            out["composition"] = COMIC_COMPOSITION
+        style = str(out.get("style") or "").strip()
+        if not style or style == SINGLE_STYLE:
+            out["style"] = COMIC_STYLE
+        return out
+
+    out["panels"] = []
+    composition = str(out.get("composition") or "").strip()
+    if not composition or _COMIC_VEHICLE.search(composition):
+        out["composition"] = SINGLE_COMPOSITION
+    style = str(out.get("style") or "").strip()
+    if (style and "comic" in style.lower()) or (switched and not style):
+        out["style"] = SINGLE_STYLE
+    prompt = str(out.get("prompt") or "").strip()
+    if prompt and _COMIC_VEHICLE.search(prompt):
+        out["prompt"] = _single_prompt_from_comic(prompt)
     return out
 
 

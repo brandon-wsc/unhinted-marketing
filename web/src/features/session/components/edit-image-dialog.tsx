@@ -39,6 +39,12 @@ const DEFAULT_COMIC_PANELS = [
   "peak pain — still no hard sell",
   "product as soft remedy; attitude, not feature list",
 ];
+const COMIC_COMPOSITION = "2x2 comic grid, equal panels, reading L→R then top→bottom";
+const COMIC_STYLE = "clean line comic, contemporary HK urban";
+const SINGLE_COMPOSITION = "subject centered, negative space for optional caption overlay";
+const SINGLE_STYLE = "bright, contemporary, editorial";
+const COMIC_VEHICLE =
+  /4-panel|four-panel|4\s*panel|comic strip|2x2 comic|comic grid|4\s*格|四格|漫畫分格/i;
 
 function normalizeFormat(raw: string | undefined, fallback: string): PlanFormat {
   if (raw === "comic_4panel" || raw === "single") return raw;
@@ -183,11 +189,25 @@ export function EditImageDialog({
           format,
           panels,
           composition:
-            prev.composition.trim() || "2x2 comic grid, equal panels, reading L→R then top→bottom",
-          style: prev.style.trim() || "clean line comic, contemporary HK urban",
+            prev.composition.trim() && !/subject centered/i.test(prev.composition)
+              ? prev.composition
+              : COMIC_COMPOSITION,
+          style: prev.style.trim() && prev.style !== SINGLE_STYLE ? prev.style : COMIC_STYLE,
         };
       }
-      return { ...prev, format, panels: [] };
+      return {
+        ...prev,
+        format,
+        panels: [],
+        composition:
+          !prev.composition.trim() || COMIC_VEHICLE.test(prev.composition)
+            ? SINGLE_COMPOSITION
+            : prev.composition,
+        style: /comic/i.test(prev.style) ? SINGLE_STYLE : prev.style,
+        prompt: COMIC_VEHICLE.test(prev.prompt)
+          ? "Clean modern social media image, Hong Kong urban mood, no logos, no unreadable text"
+          : prev.prompt,
+      };
     });
   }
 

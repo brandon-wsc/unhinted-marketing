@@ -26,7 +26,7 @@ The single-vs-comic pick (`image_format`: `single` | `comic_4panel`) is made at 
 
 7. **No single-angle fast path.** `route_after_brainstormer` parks whenever `len(brief.angles) >= 1` — a lone angle still needs user confirm, and the format question always gets asked (supersedes [ADR 0029](./0029-angle-persona-bundled-gate.md) §4's `>= 2` condition). Only a 0-angle brief goes straight to `executor_post` (nothing to confirm). Because the gate always runs when there is anything to confirm, a sticky `chosen_image_format` can never be stranded by a 1-angle re-brief — it is resolved on the next matched pick.
 
-8. **Unchanged boundaries.** No LLM in the gate; `route_intent` is not consulted on resume turns. Stop / cancel / re-park reuse [ADR 0004](./0004-stop-discard-and-image-resume.md) (`kind="choose_angle"`). Queue holds while parked per [ADR 0016](./0016-queue-send-while-turn-in-flight.md) §5. Confirm / publish remains [ADR 0003](./0003-confirm-without-llm.md). Resume `aupdate_state` is still attributed to `brainstormer`; the brainstormer router must still schedule `angle_gate` (same attribution trap as 0028/0029).
+8. **Unchanged boundaries.** No LLM in the gate; `route_intent` is not consulted on resume turns. Stop / cancel / re-park reuse [ADR 0004](./0004-stop-discard-and-image-resume.md) (`kind="choose_angle"`). Queue holds while parked per [ADR 0016](./0016-queue-send-while-turn-in-flight.md) §5; image-park explicit Send also enqueues ([ADR 0031](./0031-queue-send-while-image-parked.md)). Confirm / publish remains [ADR 0003](./0003-confirm-without-llm.md). Resume `aupdate_state` is still attributed to `brainstormer`; the brainstormer router must still schedule `angle_gate` (same attribution trap as 0028/0029).
 
 ## Consequences
 
