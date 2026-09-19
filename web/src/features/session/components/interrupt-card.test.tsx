@@ -73,9 +73,7 @@ describe("InterruptCard", () => {
     expect(
       screen.getByRole("button", { name: "chat.agent.interrupt.formatSingle" }),
     ).toHaveAttribute("aria-pressed", "true");
-    rerender(
-      <InterruptCard sending={false} defaultFormat="comic_4panel" onResume={onResume} />,
-    );
+    rerender(<InterruptCard sending={false} defaultFormat="comic_4panel" onResume={onResume} />);
     expect(
       screen.getByRole("button", { name: "chat.agent.interrupt.formatComic" }),
     ).toHaveAttribute("aria-pressed", "true");
