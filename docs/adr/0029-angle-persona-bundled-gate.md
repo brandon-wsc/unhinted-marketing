@@ -30,7 +30,7 @@ ROADMAP's `chat → recommend → preview` loop still wants a single recommend c
 
 ## Consequences
 
-- Every `start` with ≥2 brainstormed angles now surfaces persona as a first-class choice on the same card as the angle pick.
+- Every `start` with ≥2 brainstormed angles now surfaces persona as a first-class choice on the same card as the angle pick. — **Park count superseded by [ADR 0030](./0030-image-format-in-bundled-gate.md) §7:** the card now appears whenever ≥1 angle is offered.
 - FE renders one bundled card (angle options + persona select) instead of angle-only buttons; typed-reply convenience path is unchanged for angles.
 - `draft.awaiting_angle_pick` grows fields; clients that ignore unknown keys keep working until they render persona.
 - Re-offer loop cost is unchanged (one brainstormer call per「都唔啱」cycle). Persona stickiness across cycles is the only new state to hydrate.

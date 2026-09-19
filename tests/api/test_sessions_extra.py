@@ -27,6 +27,8 @@ async def test_get_session_messages(client) -> None:
     body = res.json()
     assert body["session"]["id"] == session_id
     assert body["messages"] == []
+    assert body["recommended_image_format"] is None
+    assert body["awaiting_image_ok"] is False
 
 
 @pytest.mark.asyncio
@@ -56,6 +58,30 @@ async def test_get_session_messages_image_park_returns_locked_format(
     assert body["awaiting_image_ok"] is True
     assert body["awaiting_angle_pick"] is False
     assert body["recommended_image_format"] == "comic_4panel"
+
+
+@pytest.mark.asyncio
+async def test_get_session_messages_image_park_defaults_format_single(
+    client, db_session
+) -> None:
+    """No locked format in state → hydrate still returns the default, not null."""
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+    row = await db_session.get(Session, uuid.UUID(session_id))
+    assert row is not None
+    row.state = {"awaiting_image_ok": True}
+    await db_session.commit()
+
+    res = await client.get(f"/api/sessions/{session_id}/messages", headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["awaiting_image_ok"] is True
+    assert body["recommended_image_format"] == "single"
 
 
 @pytest.mark.asyncio

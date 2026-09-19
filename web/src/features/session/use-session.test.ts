@@ -1052,6 +1052,49 @@ describe("useSession", () => {
     expect(result.current.lastImageFormatPick).toBe("comic_4panel");
   });
 
+  it("stopTurn at the image park restores lastImageFormatPick from hydrate", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [msgA],
+        awaiting_image_ok: true,
+        recommended_image_format: "comic_4panel",
+      })
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [msgA],
+        awaiting_image_ok: true,
+        recommended_image_format: "comic_4panel",
+      });
+    apiResumeSessionImage.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* hang until stop */
+        }),
+    );
+    apiStopSessionTurn.mockResolvedValue({
+      status: "cancelled",
+      interrupted: true,
+      awaiting_image_ok: true,
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.lastImageFormatPick).toBe("comic_4panel"));
+
+    await act(async () => {
+      void result.current.resumeImage("comic_4panel");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      await result.current.stopTurn();
+    });
+
+    expect(result.current.awaitingImageOk).toBe(true);
+    expect(result.current.lastImageFormatPick).toBe("comic_4panel");
+  });
+
   it("resumeImage calls resume-image and clears awaiting when done", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({

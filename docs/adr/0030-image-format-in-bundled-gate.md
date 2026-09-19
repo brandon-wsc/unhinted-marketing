@@ -22,7 +22,7 @@ The single-vs-comic pick (`image_format`: `single` | `comic_4panel`) is made at 
 
 5. **`executor_post` drafts with the format known.** Its LLM payload gains `image_format`; the prompt directs comic drafts to complement a 4-panel arc (caption does not restate panel beats; product only soft-landed) and single-image drafts to keep current behaviour. `executor_image_plan` is unchanged — it already consumes `state.image_format`.
 
-6. **Late switch retained, image-only.** The image-park toggle (`POST /resume-image` with `image_format`, ADR 0004) stays as an escape hatch, but it re-generates the image only — it does **not** re-run the draft. The UI labels it as such.
+6. **Late switch retained, image-only.** The image-park toggle (`POST /resume-image` with `image_format`, ADR 0004) stays as an escape hatch, but it re-generates the image only — it does **not** re-run the draft. The UI labels it as such. `GET /sessions/{id}/messages` returns `recommended_image_format` at **both** parks (sticky `chosen_image_format`, else `state.image_format`, else `single`) so a reload at the image park does not default the toggle to `single` and silently late-switch a comic draft.
 
 7. **No single-angle fast path.** `route_after_brainstormer` parks whenever `len(brief.angles) >= 1` — a lone angle still needs user confirm, and the format question always gets asked (supersedes [ADR 0029](./0029-angle-persona-bundled-gate.md) §4's `>= 2` condition). Only a 0-angle brief goes straight to `executor_post` (nothing to confirm). Because the gate always runs when there is anything to confirm, a sticky `chosen_image_format` can never be stranded by a 1-angle re-brief — it is resolved on the next matched pick.
 
@@ -33,5 +33,5 @@ The single-vs-comic pick (`image_format`: `single` | `comic_4panel`) is made at 
 - Every `start` with ≥1 brainstormed angle now surfaces format as a first-class choice on the same card as angle + persona; the draft is written for the chosen format. A 0-angle brief still drafts immediately.
 - FE renders one bundled card (angle options + persona select + format segmented control) instead of angle + persona only; typed-reply convenience path is unchanged and angle-only.
 - `draft.awaiting_angle_pick` grows fields again; clients that ignore unknown keys keep working until they render format.
-- A wrong early pick is recoverable two ways: re-`start`, or the late image-park toggle (image-only re-gen, caption untouched).
+- A wrong early pick is recoverable two ways: re-`start`, or the late image-park toggle (image-only re-gen, caption untouched). Reload hydrates the toggle from `GET /messages` `recommended_image_format` at the image park — not from in-memory `lastImageFormatPick` alone.
 - Re-offer loop cost is unchanged (one brainstormer call per cycle). `chosen_image_format` stickiness is the only new gate state to hydrate.
