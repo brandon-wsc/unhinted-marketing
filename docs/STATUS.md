@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-09-15 
+> **Last updated:** 2026-09-19 
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -34,13 +34,13 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | pgvector on dev DB | ✅ Done (PG 18.4 · `pgvector/pgvector:pg18`; enable with `CREATE EXTENSION vector`) |
 
 **Decision (2026-09-02) — Real publish: Instagram adapter + org social accounts:** → [ADR 0022](./adr/0022-real-publish-instagram.md) · plan: [PUBLISH_PLAN.md](./PUBLISH_PLAN.md)
-**Update (2026-09-05) — Meta OAuth connect added:** editor `/settings?tab=instagram` connects via popup + poll; manual token paste removed. Callback URL → `META_OAUTH_REDIRECT_URI`.
+**Update (2026-09-05) — Meta OAuth connect added:** editor `/settings?tab=instagram` connects via popup + poll; manual token paste removed. Callback URL → `{WEB_BASE_URL}/api/social/oauth/callback`.
 **Update (2026-09-06) — Instagram Login:** Business Login for Instagram (`instagram.com/oauth/authorize` + `graph.instagram.com`); Facebook Login / Page lookup removed. Alembic wipe of Facebook-era `social_accounts` rows.
 
 - **Backend shipped** — `social_accounts` + editor HTTP (`GET/PUT/DELETE …/social-accounts`) + `connect-social-account` CLI; Confirm dispatches on `PUBLISH_ADAPTER` (default `stub`); `session.snapshot` hydrates the latest confirm receipt
 - **UI shipped** — preview receipts (`published` / `failed` / `stubbed`) + copy-only Confirm gate; editor-only `/settings?tab=instagram` (last4 only, never the raw token)
 - **`social_accounts` table** — org-scoped IG credentials, Fernet-encrypted (reuses `BYOK_ENCRYPTION_KEY` + `byok_providers` shape)
-- **Instagram Login OAuth (2026-09-06)** — auth-code flow via Instagram dialog (no PKCE, no Facebook Page picker); encrypted connect-state + CSRF on the `social_accounts` row; public `/api/social/oauth/callback` recovers the org from `state`; short-lived token exchanged for 60-day token; `ig_user_id` from `GET /me`. Env: `META_APP_ID` / `META_APP_SECRET` (**Instagram** App ID / Secret), `META_OAUTH_REDIRECT_URI`, `META_OAUTH_SUCCESS_URL`. Scopes: `instagram_business_basic`, `instagram_business_content_publish`. Failures: `meta_oauth_not_professional`, `meta_oauth_missing_publish`. CLI/PUT seeding still available as fallback. Abandoned connect: 10-minute poll timeout + Cancel (`POST …/oauth/cancel`). Publish host: `graph.instagram.com`.
+- **Instagram Login OAuth (2026-09-06)** — auth-code flow via Instagram dialog (no PKCE, no Facebook Page picker); encrypted connect-state + CSRF on the `social_accounts` row; public `/api/social/oauth/callback` recovers the org from `state`; short-lived token exchanged for 60-day token; `ig_user_id` from `GET /me`. Env: `META_APP_ID` / `META_APP_SECRET` (**Instagram** App ID / Secret), `META_OAUTH_SUCCESS_URL`. Callback is `{web_base_url}/api/social/oauth/callback` (no `META_OAUTH_REDIRECT_URI`). Scopes: `instagram_business_basic`, `instagram_business_content_publish`. Failures: `meta_oauth_not_professional`, `meta_oauth_missing_publish`. CLI/PUT seeding still available as fallback. Abandoned connect: 10-minute poll timeout + Cancel (`POST …/oauth/cancel`). Publish host: `graph.instagram.com`.
 - **`PUBLISH_ADAPTER=stub|instagram`** — adapter in `internal/tools/publish.py`; IG two-phase container → media_publish
 - **Copy-only drafts rejected at Confirm** (`400 image_required`); missing IG account → `400 social_account_not_connected`; receipt `stubbed` / `published` / `failed` with optional `permalink` / `error_kind`; failed publish does **not** set `session.status=confirmed`
 - **Boundaries unchanged** — Confirm-only publish ([ADR 0003](./adr/0003-confirm-without-llm.md)); per-revision `approval_token`; user/session-scoped idempotency
@@ -52,7 +52,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 **Decision (2026-09-09) — Media storage (local default on-prem, optional S3-compatible, AWS S3 in cloud):** → [ADR 0024](./adr/0024-media-storage-local-and-s3.md) · config + migrate: [ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)
 
 - **Backend family follows `DEPLOYMENT_MODE`** — no `STORAGE_BACKEND` flag. `onprem` defaults to local disk under `MEDIA_ROOT` (`data/media`); `cloud` is S3. Active backend + credentials live in `storage_configs` ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)); env `S3_*` only seeds the first row
-- **Postgres stores the object key** — `preview_images.url` / `preview_drafts.image_url` hold `sessions/{id}/r{revision}-{hex}.{ext}` (or leftover provider/`placeholder://` URLs). HTTP/SSE still emit a fetchable `url` via `resolve_stored_url`. Unauthenticated `GET /api/media/{key}` streams local files
+- **Postgres stores the object key** — `preview_images.url` / `preview_drafts.image_url` hold `sessions/{id}/r{revision}-{hex}.{ext}` (or leftover provider/`placeholder://` URLs). HTTP/SSE emit a fetchable `url` via `resolve_stored_url` (local: relative `/api/media/{key}`). Confirm / Instagram Graph use `resolve_external_url` (prefixes `WEB_BASE_URL`). Unauthenticated `GET /api/media/{key}` streams local files
 - **Always persist real bytes** — uploads and `data:` generation results always write the store; `placeholder` / no-credentials stay mock URLs (not a storage fallback)
 - **Eager GC on session delete** — after commit, refcount keys against remaining preview rows (forks share URLs; [ADR 0017](./adr/0017-session-fork.md)); refcount-zero keys deleted best-effort. No sweeper. Signed/private URLs stay hardening
 - **Portal local→S3 migrate** — editor HTTP under `/api/companies/{id}/storage` + `/settings?tab=storage`; dual-write so reads/writes never block; human flip gate; rollback free until local cleanup
@@ -65,7 +65,11 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **First user = SUPERADMIN (9)** — `POST /api/setup` (on-prem only, one-shot, row-locked) creates admin + first org owner in one transaction; `GET /api/setup/status` is public; `GET/PUT /api/instance/settings` is admin-read / superadmin-write (**System → Instance** tab)
 - **On-prem register is invite-only** — `403 setup_required` before setup, `403 invite_required` without a pending invite matching the email; invite accept flow unchanged. Cloud register stays open
 - **`/setup` wizard** — account+org → instance URL/email → optional org BYOK LLM → done; LLM + SMTP are skippable; login hides register on on-prem unless carrying an invite
-- **Consumers moved to the instance snapshot** — invite URLs, local media public URLs, OAuth redirect fallback, invite emails (sync readers fall back to env on a cold cache)
+- **Consumers moved to the instance snapshot** — invite URLs, Instagram Login callback, Instagram Confirm image fetch, OAuth return origin (sync readers fall back to env on a cold cache)
+
+**Update (2026-09-18) — Local media preview URLs are relative:** `<img src>` is `/api/media/{key}` so it follows the SPA origin (Vite port hop no longer 404s). Instagram Confirm still absolutizes with `WEB_BASE_URL` (`resolve_external_url`).
+
+**Update (2026-09-19) — Instagram OAuth callback derives from the instance URL:** Meta Valid OAuth Redirect URI is `{web_base_url}/api/social/oauth/callback`. Dropped `META_OAUTH_REDIRECT_URI` so it cannot drift from `WEB_BASE_URL` / System → Instance.
 
 **Decision (2026-09-19) — Image format rides the bundled angle gate:** → [ADR 0030](./adr/0030-image-format-in-bundled-gate.md) (extends [ADR 0029](./adr/0029-angle-persona-bundled-gate.md); supersedes its §4 park condition). The single-vs-comic pick moves from the post-draft image park onto the bundled card: one `POST /choose-angle` submit answers angle + persona + `image_format`, so `executor_post` drafts with the format known (comic captions complement a 4-panel arc). Typed reply while parked stays angle-only; the pick is sticky across re-brainstorm cycles. The image-park toggle remains as an image-only late switch (no re-draft). The gate now parks whenever ≥1 angle is offered — a lone angle still needs confirm and the format question is always asked; only a 0-angle brief drafts immediately.
 
@@ -517,7 +521,7 @@ unhinted-marketing/
 | `AUTH_RATE_LIMIT_MAX` | Max requests per client IP per window (default 30) |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Sliding window length (default 60) |
 | `CORS_ORIGINS` | Default `https://unhinted.localhost:5173` |
-| `WEB_BASE_URL` | Invite links + OAuth return origin; also prefixes local `GET /api/media/{key}` URLs. Seeds `instance_settings` on first boot — afterwards the DB row wins, edit via System → Instance ([ADR 0026](./adr/0026-onprem-first-run-setup.md)) (default `https://unhinted.localhost:5173`) |
+| `WEB_BASE_URL` | Invite links + Instagram Login callback (`{WEB_BASE_URL}/api/social/oauth/callback`) + OAuth return origin + Instagram Confirm image fetch. Seeds `instance_settings` on first boot — afterwards the DB row wins, edit via System → Instance ([ADR 0026](./adr/0026-onprem-first-run-setup.md)) (default `https://unhinted.localhost:5173`). Local preview `<img>` does **not** use this prefix ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)) |
 | `OPENAI_API_KEY` | LLM for questions + session nodes + `python -m scripts.eval_agent` |
 | `LLM_API_BASE` | Optional OpenAI-compatible proxy base URL (OpenRouter, DeepSeek, Azure, …). When set, model ids go through the OpenAI-compatible client (`openai/` prefix); OpenRouter `org/model` slugs are kept intact |
 | `ANTHROPIC_API_KEY` | Optional alternate provider |
@@ -533,8 +537,7 @@ unhinted-marketing/
 | `S3_PUBLIC_BASE_URL` | Seed-only public/CDN base. Empty → `{endpoint}/{bucket}` (path-style) or AWS virtual-host. Instagram publish needs a Meta-reachable HTTPS URL |
 | `PUBLISH_ADAPTER` | Confirm adapter: `stub` (default, never hits Meta) or `instagram` ([ADR 0022](./adr/0022-real-publish-instagram.md)) |
 | `META_GRAPH_API_VERSION` | Instagram Graph version pin (default `v22.0`) |
-| `META_APP_ID` / `META_APP_SECRET` | Instagram App ID / Secret (App Dashboard → Instagram; not the Facebook App ID) |
-| `META_OAUTH_REDIRECT_URI` | Instagram Login Valid OAuth Redirect URI (local: `https://unhinted.localhost:5173/api/social/oauth/callback`) |
+| `META_APP_ID` / `META_APP_SECRET` | Instagram App ID / Secret (App Dashboard → Instagram; not the Facebook App ID). Whitelist `{WEB_BASE_URL}/api/social/oauth/callback` as the Valid OAuth Redirect URI |
 | `META_OAUTH_SUCCESS_URL` | Optional post-connect SPA URL (defaults to `WEB_BASE_URL` + `/settings?tab=instagram`) |
 | `LLM_TIMEOUT_SECONDS` | LiteLLM call timeout (default 45) |
 | `LLM_RECORD_ENABLED` | Persist every LLM call to `llm_call_records` (default true; [ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) |

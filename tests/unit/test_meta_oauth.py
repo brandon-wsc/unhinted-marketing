@@ -17,7 +17,10 @@ from internal.auth.meta_oauth import (
     parse_state,
     start_oauth,
 )
+from internal.instance.config import reset_snapshot_cache
 from internal.memory.models import SocialAccount
+
+OAUTH_ORIGIN = "https://unhinted.localhost:5173"
 
 IG_USER = "17841400000000"
 
@@ -38,6 +41,7 @@ class ScriptedClient:
         self._me_payload = me_payload or {}
         self.get_urls: list[str] = []
         self.post_urls: list[str] = []
+        self.post_data: list[dict] = []
 
     async def __aenter__(self) -> ScriptedClient:
         return self
@@ -49,6 +53,8 @@ class ScriptedClient:
         import httpx
 
         self.post_urls.append(url)
+        if data is not None:
+            self.post_data.append(data)
         if "api.instagram.com/oauth/access_token" in url:
             return httpx.Response(200, json=self._token_payload)
         return httpx.Response(404, json={})
@@ -69,11 +75,8 @@ def _configure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config.settings, "byok_encryption_key", kek)
     monkeypatch.setattr(config.settings, "meta_app_id", "123456")
     monkeypatch.setattr(config.settings, "meta_app_secret", "secret123")
-    monkeypatch.setattr(
-        config.settings,
-        "meta_oauth_redirect_uri",
-        "http://localhost:8000/api/social/oauth/callback",
-    )
+    monkeypatch.setattr(config.settings, "web_base_url", OAUTH_ORIGIN)
+    reset_snapshot_cache()
 
 
 def _account() -> SocialAccount:
@@ -115,6 +118,7 @@ async def test_start_oauth_url_and_state(monkeypatch: pytest.MonkeyPatch) -> Non
 
     query = parse_qs(urlsplit(started.authorization_url).query)
     assert query["scope"][0] == META_OAUTH_SCOPES
+    assert query["redirect_uri"][0] == f"{OAUTH_ORIGIN}/api/social/oauth/callback"
     assert "extras" not in query
     assert "code_challenge" not in query
     assert "auth_type" not in query
@@ -130,6 +134,14 @@ async def test_start_oauth_url_and_state(monkeypatch: pytest.MonkeyPatch) -> Non
 async def test_oauth_fields_require_config(monkeypatch: pytest.MonkeyPatch) -> None:
     _configure(monkeypatch)
     monkeypatch.setattr(config.settings, "meta_app_id", None)
+    with pytest.raises(MetaOAuthError):
+        _oauth_fields()
+
+
+async def test_oauth_fields_require_web_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure(monkeypatch)
+    monkeypatch.setattr(config.settings, "web_base_url", "")
+    reset_snapshot_cache()
     with pytest.raises(MetaOAuthError):
         _oauth_fields()
 
@@ -168,6 +180,38 @@ async def test_exchange_code_success_sets_account(monkeypatch: pytest.MonkeyPatc
     assert any(url.startswith("https://graph.instagram.com/access_token") for url in client.get_urls)
     assert any(url.rstrip("/").endswith("/me") for url in client.get_urls)
     assert not any("/me/accounts" in url for url in client.get_urls)
+
+
+async def test_exchange_code_uses_authorize_time_redirect_uri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mid-flow web_base_url edit must not change the exchange redirect_uri —
+    Meta requires it to equal the authorize-time value."""
+    _configure(monkeypatch)
+    from internal.auth import meta_oauth as mod
+
+    row = _account()
+    monkeypatch.setattr(mod.repos, "get_social_account", AsyncMock(return_value=row))
+    monkeypatch.setattr(mod.repos, "get_social_account_by_id", AsyncMock(return_value=row))
+    monkeypatch.setattr(mod.repos, "upsert_social_account", AsyncMock(return_value=row))
+    client = ScriptedClient(
+        token_payload=_ok_short_token(),
+        me_payload={"user_id": IG_USER, "id": "app-scoped", "account_type": "BUSINESS"},
+    )
+    monkeypatch.setattr(mod.httpx, "AsyncClient", lambda *a, **k: client)
+    db = AsyncMock()
+    db.flush = AsyncMock()
+
+    started = await start_oauth(db, company_id=row.company_id)
+    row.oauth_connect_state = started.connect_state
+    monkeypatch.setattr(config.settings, "web_base_url", "https://moved.example")
+    reset_snapshot_cache()
+
+    result = await exchange_code(
+        db, code="auth-code", state=f"{row.id}:{started.connect_state}", csrf_token=started.csrf_token
+    )
+    assert result.ig_user_id == IG_USER
+    assert client.post_data[0]["redirect_uri"] == f"{OAUTH_ORIGIN}/api/social/oauth/callback"
 
 
 async def test_exchange_code_prefers_user_id_over_id(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -312,7 +356,7 @@ async def test_pending_connect_is_stale(monkeypatch: pytest.MonkeyPatch) -> None
         pending_connect_is_stale,
     )
 
-    blob = _encrypt_connect_state("row", "csrf")
+    blob = _encrypt_connect_state("row", "csrf", f"{OAUTH_ORIGIN}/api/social/oauth/callback")
     assert pending_connect_is_stale(blob) is False
     later = datetime.now(UTC) + OAUTH_PENDING_TTL + timedelta(seconds=1)
     assert pending_connect_is_stale(blob, now=later) is True

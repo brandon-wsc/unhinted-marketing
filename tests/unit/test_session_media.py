@@ -36,7 +36,7 @@ def test_media_item_payload_resolves_store_key(monkeypatch) -> None:
         plan={},
         format="single",
     )
-    assert item["url"] == "https://example.test/api/media/sessions/abc/r1-deadbeef.png"
+    assert item["url"] == "/api/media/sessions/abc/r1-deadbeef.png"
 
 
 def test_preview_updated_payload_resolves_store_key(monkeypatch) -> None:
@@ -61,5 +61,5 @@ def test_preview_updated_payload_resolves_store_key(monkeypatch) -> None:
     )
     assert (
         payload["image_url"]
-        == "https://example.test/api/media/sessions/abc/r2-deadbeef.png"
+        == "/api/media/sessions/abc/r2-deadbeef.png"
     )

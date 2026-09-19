@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from internal.instance.config import reset_snapshot_cache as reset_instance_cache
 from internal.media import storage as S
 from internal.media.config import StorageSnapshot, publish_snapshot, reset_snapshot_cache
 
@@ -36,6 +37,7 @@ def local_media(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(S.settings, "media_root", str(root))
     monkeypatch.setattr(S.settings, "web_base_url", "https://example.test")
     reset_snapshot_cache()
+    reset_instance_cache()
     return root
 
 
@@ -71,14 +73,26 @@ def test_parse_data_url_rejects_non_data() -> None:
 
 
 def test_public_url_local() -> None:
-    assert S.public_url(KEY) == f"https://example.test/api/media/{KEY}"
+    """Browser URLs stay relative so they follow the SPA origin (ADR 0024 2026-09-18)."""
+    assert S.public_url(KEY) == f"/api/media/{KEY}"
 
 
-def test_public_url_local_relative_when_web_base_empty(
+def test_public_url_local_ignores_web_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(S.settings, "web_base_url", "https://example.test")
+    reset_instance_cache()
+    assert S.public_url(KEY) == f"/api/media/{KEY}"
+
+
+def test_external_url_local_prefixes_web_base() -> None:
+    assert S.external_url(KEY) == f"https://example.test/api/media/{KEY}"
+
+
+def test_external_url_relative_when_web_base_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(S.settings, "web_base_url", "")
-    assert S.public_url(KEY) == f"/api/media/{KEY}"
+    reset_instance_cache()
+    assert S.external_url(KEY) == f"/api/media/{KEY}"
 
 
 def test_public_url_s3_uses_snapshot() -> None:
@@ -100,14 +114,16 @@ def test_cloud_virtual_host_when_no_endpoint() -> None:
 
 def test_extract_and_resolve_store_key() -> None:
     assert S.extract_store_key(KEY) == KEY
-    assert S.resolve_stored_url(KEY) == f"https://example.test/api/media/{KEY}"
+    assert S.resolve_stored_url(KEY) == f"/api/media/{KEY}"
+    assert S.resolve_external_url(KEY) == f"https://example.test/api/media/{KEY}"
 
 
 def test_extract_legacy_api_media_url() -> None:
     baked = f"https://old.example/api/media/{KEY}"
     assert S.extract_store_key(baked) == KEY
     assert S.extract_store_key(f"/api/media/{KEY}") == KEY
-    assert S.resolve_stored_url(baked) == f"https://example.test/api/media/{KEY}"
+    assert S.resolve_stored_url(baked) == f"/api/media/{KEY}"
+    assert S.resolve_external_url(baked) == f"https://example.test/api/media/{KEY}"
 
 
 def test_extract_legacy_s3_bases() -> None:
@@ -151,7 +167,7 @@ def test_local_path_rejects_traversal() -> None:
 @pytest.mark.asyncio
 async def test_put_bytes_local_and_delete(local_media: Path) -> None:
     url = await S.put_bytes(key=KEY, data=TINY_PNG, content_type="image/png")
-    assert url == f"https://example.test/api/media/{KEY}"
+    assert url == f"/api/media/{KEY}"
     path = local_media / KEY
     assert path.read_bytes() == TINY_PNG
     await S.delete_key(KEY)
@@ -276,8 +292,11 @@ def test_extract_store_key_rejects_non_key_under_media_prefix() -> None:
 def test_resolve_re_derives_after_web_base_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Changing WEB_BASE_URL applies to old rows on the next read (no backfill)."""
+    """Changing WEB_BASE_URL applies to Confirm/Graph URLs; browser path is stable."""
     stored = KEY
-    assert S.resolve_stored_url(stored) == f"https://example.test/api/media/{KEY}"
+    assert S.resolve_stored_url(stored) == f"/api/media/{KEY}"
+    assert S.resolve_external_url(stored) == f"https://example.test/api/media/{KEY}"
     monkeypatch.setattr(S.settings, "web_base_url", "https://new.example")
-    assert S.resolve_stored_url(stored) == f"https://new.example/api/media/{KEY}"
+    reset_instance_cache()
+    assert S.resolve_stored_url(stored) == f"/api/media/{KEY}"
+    assert S.resolve_external_url(stored) == f"https://new.example/api/media/{KEY}"

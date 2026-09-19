@@ -102,14 +102,14 @@ def local_abs_path(key: str) -> Path:
 
 
 def public_url_for(key: str, snap: StorageSnapshot) -> str:
-    """Browser-fetchable URL for an object key under ``snap``."""
+    """Browser-fetchable URL for an object key under ``snap``.
+
+    Local is always a same-origin path so ``<img>`` follows the SPA origin
+    (Vite may hop ports; baking ``WEB_BASE_URL`` 404s). S3 stays absolute.
+    """
     key = key.lstrip("/")
     if snap.backend == "local":
-        from internal.instance.config import get_snapshot as get_instance_snapshot
-
-        base = _strip(get_instance_snapshot().web_base_url).rstrip("/")
-        path = f"{_API_MEDIA_PREFIX}{key}"
-        return f"{base}{path}" if base else path
+        return f"{_API_MEDIA_PREFIX}{key}"
     pub = _strip(snap.public_base_url).rstrip("/")
     if pub:
         return f"{pub}/{key}"
@@ -121,9 +121,29 @@ def public_url_for(key: str, snap: StorageSnapshot) -> str:
     return f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
 
 
+def _local_web_base() -> str:
+    from internal.instance.config import get_snapshot as get_instance_snapshot
+
+    return _strip(get_instance_snapshot().web_base_url).rstrip("/")
+
+
+def external_url_for(key: str, snap: StorageSnapshot) -> str:
+    """Meta-reachable URL: local prefixes ``WEB_BASE_URL``; S3 uses ``public_url``."""
+    url = public_url_for(key, snap)
+    if url.startswith("/") and not url.startswith("//"):
+        base = _local_web_base()
+        return f"{base}{url}" if base else url
+    return url
+
+
 def public_url(key: str) -> str:
     """Browser-fetchable URL for an object key (not stored in Postgres)."""
     return public_url_for(key, get_snapshot())
+
+
+def external_url(key: str) -> str:
+    """Absolute URL for off-browser fetchers (Instagram Graph ``image_url``)."""
+    return external_url_for(key, get_snapshot())
 
 
 def public_object_url(key: str) -> str:
@@ -186,6 +206,19 @@ def resolve_stored_url(stored: str | None) -> str | None:
     key = extract_store_key(value)
     if key:
         return public_url(key)
+    return value
+
+
+def resolve_external_url(stored: str | None) -> str | None:
+    """Like ``resolve_stored_url`` but absolute — Instagram Confirm / Graph fetch."""
+    if stored is None:
+        return None
+    value = stored.strip()
+    if not value:
+        return None
+    key = extract_store_key(value)
+    if key:
+        return external_url(key)
     return value
 
 

@@ -72,26 +72,40 @@ def _graph_version() -> str:
     return (settings.meta_graph_api_version or "v22.0").strip().lstrip("/v")
 
 
-def _oauth_fields() -> dict[str, str]:
-    if not settings.meta_app_id or not settings.meta_app_secret:
-        raise MetaOAuthError("meta_oauth_not_configured")
-    base = (settings.meta_oauth_redirect_uri or "").strip()
+_CALLBACK_PATH = "/api/social/oauth/callback"
+
+
+def _oauth_redirect_uri() -> str:
+    """Exact URI Meta must whitelist — `{web_base_url}/api/social/oauth/callback`."""
+    from internal.instance.config import get_snapshot
+
+    base = (get_snapshot().web_base_url or "").strip().rstrip("/")
     if not base:
+        raise MetaOAuthError("meta_oauth_not_configured")
+    return f"{base}{_CALLBACK_PATH}"
+
+
+def _oauth_fields(redirect_uri: str | None = None) -> dict[str, str]:
+    if not settings.meta_app_id or not settings.meta_app_secret:
         raise MetaOAuthError("meta_oauth_not_configured")
     return {
         "client_id": settings.meta_app_id,
         "client_secret": settings.meta_app_secret,
-        "redirect_uri": base,
+        "redirect_uri": redirect_uri or _oauth_redirect_uri(),
     }
 
 
-def _encrypt_connect_state(row_id: str, csrf_token: str) -> str:
+def _encrypt_connect_state(row_id: str, csrf_token: str, redirect_uri: str) -> str:
     try:
         return encrypt_key(
             json.dumps(
                 {
                     "row_id": row_id,
                     "csrf_token": csrf_token,
+                    # Meta requires the exchange redirect_uri to equal the
+                    # authorize-time one; pin it so a mid-flow web_base_url
+                    # edit cannot mismatch.
+                    "redirect_uri": redirect_uri,
                     "started_at": datetime.now(UTC).isoformat(),
                 }
             )
@@ -165,7 +179,7 @@ async def start_oauth(db: AsyncSession, *, company_id: uuid.UUID) -> OAuthStart:
         )
         db.add(row)
         await db.flush()
-    blob = _encrypt_connect_state(str(row.id), csrf_token)
+    blob = _encrypt_connect_state(str(row.id), csrf_token, fields["redirect_uri"])
     row.oauth_connect_state = blob
     state = _state_value(str(row.id), blob)
     params = {
@@ -216,7 +230,7 @@ async def exchange_code(
     if not stored_csrf or stored_csrf != (csrf_token or ""):
         raise MetaOAuthError("meta_oauth_csrf_mismatch")
 
-    fields = _oauth_fields()
+    fields = _oauth_fields(redirect_uri=str(payload.get("redirect_uri") or "") or None)
     timeout = httpx.Timeout(30.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         token_resp = await client.post(

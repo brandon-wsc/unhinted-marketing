@@ -22,7 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import bearer_scheme, get_current_user, resolve_current_user
 from internal.media.gc import collect_session_store_keys, reclaim_unreferenced_keys
-from internal.media.storage import MediaStorageError, resolve_stored_url, stored_ref_is_image
+from internal.media.storage import (
+    MediaStorageError,
+    resolve_external_url,
+    resolve_stored_url,
+    stored_ref_is_image,
+)
 from internal.memory import repos
 from internal.memory.database import get_db, open_session
 from internal.memory.models import Session, User
@@ -941,9 +946,9 @@ async def _publish_image_url(db: AsyncSession, draft) -> str | None:
         if images:
             url = (images[0].url or "").strip()
             if url:
-                return resolve_stored_url(url)
+                return resolve_external_url(url)
     url = (draft.image_url or "").strip()
-    return resolve_stored_url(url) if url else None
+    return resolve_external_url(url) if url else None
 
 
 def _optional_str(payload: dict, key: str) -> str | None:

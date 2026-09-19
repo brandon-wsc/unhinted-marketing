@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal import config
 from internal.auth.meta_oauth import META_OAUTH_SCOPES
+from internal.instance.config import reset_snapshot_cache
 from tests.api.helpers import auth_header, join_org, register_user
+
+OAUTH_ORIGIN = "https://unhinted.localhost:5173"
 
 
 def _base(company_id: str) -> str:
@@ -63,11 +66,8 @@ class ScriptedGraph:
 def _patch_meta(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config.settings, "meta_app_id", "123456")
     monkeypatch.setattr(config.settings, "meta_app_secret", "secret123")
-    monkeypatch.setattr(
-        config.settings,
-        "meta_oauth_redirect_uri",
-        "http://localhost:8000/api/social/oauth/callback",
-    )
+    monkeypatch.setattr(config.settings, "web_base_url", OAUTH_ORIGIN)
+    reset_snapshot_cache()
 
 
 def _ok_token() -> dict:
@@ -123,6 +123,7 @@ async def test_oauth_start_status_callback(
     )
     start_query = parse_qs(urlsplit(body["authorization_url"]).query)
     assert start_query["scope"][0] == META_OAUTH_SCOPES
+    assert start_query["redirect_uri"][0] == f"{OAUTH_ORIGIN}/api/social/oauth/callback"
     assert "extras" not in start_query
     assert "code_challenge" not in start_query
     state = start_query["state"][0]

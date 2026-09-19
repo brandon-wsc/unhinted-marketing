@@ -113,11 +113,10 @@ class Settings(BaseSettings):
 
     # Instagram Login connect (ADR 0022 OAuth slice). These are the Instagram App
     # ID / Secret from App Dashboard → Instagram (often not the Facebook App ID).
+    # Callback URI is `{web_base_url}/api/social/oauth/callback` — whitelist that
+    # exact string in the Meta dashboard (no separate META_OAUTH_REDIRECT_URI).
     meta_app_id: str | None = None
     meta_app_secret: str | None = None
-    # Backend callback — Instagram product → Valid OAuth Redirect URIs:
-    # Dialog scopes: instagram_business_basic, instagram_business_content_publish.
-    meta_oauth_redirect_uri: str = "https://unhinted.localhost:5173/api/social/oauth/callback"
     # Where the browser lands after a successful connect (defaults to WEB_BASE_URL)
     meta_oauth_success_url: str | None = None
 

@@ -3,6 +3,7 @@
 from internal.media.storage import (
     MediaStorageError,
     delete_key,
+    external_url,
     extract_store_key,
     media_backend,
     media_object_key,
@@ -10,6 +11,7 @@ from internal.media.storage import (
     persist_generated_image,
     public_url,
     put_bytes,
+    resolve_external_url,
     resolve_stored_url,
     stored_ref_is_image,
 )
@@ -17,6 +19,7 @@ from internal.media.storage import (
 __all__ = [
     "MediaStorageError",
     "delete_key",
+    "external_url",
     "extract_store_key",
     "media_backend",
     "media_object_key",
@@ -24,6 +27,7 @@ __all__ = [
     "persist_generated_image",
     "public_url",
     "put_bytes",
+    "resolve_external_url",
     "resolve_stored_url",
     "stored_ref_is_image",
 ]

@@ -52,7 +52,7 @@ pnpm install
 pnpm run dev
 ```
 
-Open [https://unhinted.localhost:5173/login](https://unhinted.localhost:5173/login) (not `http://localhost:5173` — Instagram OAuth CSRF is origin-bound). Vite proxies `/api` → `:8000` and serves HTTPS when `web/certs/` pems are present (gitignored). SPA document routes (`/`, `/login`, `/admin`, …) are not proxied. Restart uvicorn after changing `.env` (`--reload` does not reread env).
+Open [https://unhinted.localhost:5173/login](https://unhinted.localhost:5173/login) (not `http://localhost:5173` — Instagram OAuth CSRF is origin-bound, and the callback is `{WEB_BASE_URL}/api/social/oauth/callback`). Vite `strictPort` keeps 5173, proxies `/api` → `:8000`, and serves HTTPS when `web/certs/` pems are present (gitignored). SPA document routes (`/`, `/login`, `/admin`, …) are not proxied. Restart uvicorn after changing `.env` (`--reload` does not reread env).
 
 ---
 
@@ -128,7 +128,7 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 | POST | `/api/sessions/{id}/confirm` | Confirm publish (stub by default; Instagram when `PUBLISH_ADAPTER=instagram`) |
 | GET | `/api/companies/{id}/social-accounts` | List org Instagram credentials (editor; `token_last4` only) |
 | POST | `/api/companies/{id}/social-accounts/oauth/start` | Start Instagram Login (popup URL + CSRF cookie) |
-| GET | `/api/social/oauth/callback` | Instagram Login redirect (public; `META_OAUTH_REDIRECT_URI`) |
+| GET | `/api/social/oauth/callback` | Instagram Login redirect (public; `{WEB_BASE_URL}/api/social/oauth/callback`) |
 | PUT / DELETE | `/api/companies/{id}/social-accounts/instagram` | Save or disconnect the org IG token |
 
 ### Health
