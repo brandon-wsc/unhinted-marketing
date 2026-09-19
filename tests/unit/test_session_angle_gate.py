@@ -58,7 +58,67 @@ async def test_angle_gate_non_match_is_feedback() -> None:
 @pytest.mark.asyncio
 async def test_angle_gate_index_pick_locks() -> None:
     out = await N.angle_gate({"brief": {"angles": ANGLES}, "chosen_angle": "1"})
-    assert out == {"chosen_angle": ANGLES[0]}
+    assert out["chosen_angle"] == ANGLES[0]
+    assert out["active_persona"] is None
+
+
+CATALOG = [
+    {"slug": "hk_youth", "label": "年輕人", "hook": "weekend brunch"},
+    {"slug": "hk_parents", "label": "家長", "hook": "school run"},
+]
+
+
+@pytest.mark.asyncio
+async def test_angle_gate_match_locks_chosen_persona() -> None:
+    out = await N.angle_gate(
+        {
+            "brief": {"angles": ANGLES, "persona": "hk_youth"},
+            "audience_catalog": CATALOG,
+            "chosen_angle": ANGLES[0],
+            "chosen_persona": "hk_parents",
+        }
+    )
+    assert out["chosen_angle"] == ANGLES[0]
+    assert out["active_persona"]["slug"] == "hk_parents"
+
+
+@pytest.mark.asyncio
+async def test_angle_gate_match_falls_back_to_brief_persona() -> None:
+    out = await N.angle_gate(
+        {
+            "brief": {"angles": ANGLES, "persona": "hk_youth"},
+            "audience_catalog": CATALOG,
+            "chosen_angle": ANGLES[1],
+        }
+    )
+    assert out["active_persona"]["slug"] == "hk_youth"
+
+
+def test_recommended_persona_prefers_sticky_pick() -> None:
+    state = {
+        "brief": {"angles": ANGLES, "persona": "hk_youth"},
+        "audience_catalog": CATALOG,
+        "chosen_persona": "hk_parents",
+    }
+    payload = N.angle_pick_payload(state)
+    assert payload["recommended_persona"] == "hk_parents"
+    assert [p["slug"] for p in payload["personas"]] == ["hk_youth", "hk_parents"]
+    assert payload["angles"] == ANGLES
+
+
+@pytest.mark.asyncio
+async def test_feedback_keeps_chosen_persona() -> None:
+    """Non-matching text must not wipe a bundled persona pick (ADR 0029 §5)."""
+    out = await N.angle_gate(
+        {
+            "brief": {"angles": ANGLES},
+            "audience_catalog": CATALOG,
+            "chosen_angle": FEEDBACK,
+            "chosen_persona": "hk_parents",
+        }
+    )
+    assert out == {"chosen_angle": None, "angle_feedback": FEEDBACK}
+    assert "chosen_persona" not in out
 
 
 @pytest.mark.asyncio

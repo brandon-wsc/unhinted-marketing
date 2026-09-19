@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from schemas.contracts import DraftCopy, PreviewMediaItem, SessionBriefData
+from schemas.contracts import AudiencePersonaOption, DraftCopy, PreviewMediaItem, SessionBriefData
 
 
 class CreateSessionRequest(BaseModel):
@@ -90,8 +90,10 @@ class SessionMessagesResponse(BaseModel):
     # From sessions.state — so Stop/openSession can restore BriefCard without SSE.
     brief: SessionBriefData | None = None
     awaiting_image_ok: bool = False
-    # ADR 0028 — parked at angle_gate; brief.angles are the options.
+    # ADR 0028 / 0029 — parked at angle_gate; brief.angles are the options.
     awaiting_angle_pick: bool = False
+    personas: list[AudiencePersonaOption] = Field(default_factory=list)
+    recommended_persona: str | None = None
     # Set when this session is itself a fork (ADR 0017).
     forked_from: ForkOrigin | None = None
 
@@ -125,10 +127,11 @@ class StopSessionResponse(BaseModel):
 
 
 class ChooseAngleRequest(BaseModel):
-    """ADR 0028 pick while parked at angle_gate — index or free text."""
+    """ADR 0029 pick while parked at angle_gate — index or free text, optional persona."""
 
     angle_index: int | None = Field(default=None, ge=0)
     angle: str | None = Field(default=None, max_length=8000)
+    persona: str | None = Field(default=None, max_length=80)
 
 
 class ChooseAngleResponse(BaseModel):

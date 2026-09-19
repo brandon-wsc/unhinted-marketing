@@ -95,11 +95,21 @@ class DraftAwaitingImageOkData(BaseModel):
     awaiting: bool = True
 
 
+class AudiencePersonaOption(BaseModel):
+    """One audience-catalog row on the bundled angle+persona card (ADR 0029)."""
+
+    slug: str
+    label: str
+    hook: str = ""
+
+
 class DraftAwaitingAnglePickData(BaseModel):
-    """Payload for `draft.awaiting_angle_pick` (interrupt at angle_gate, ADR 0028)."""
+    """Payload for `draft.awaiting_angle_pick` (interrupt at angle_gate, ADR 0029)."""
 
     awaiting: bool = True
     angles: list[str] = Field(default_factory=list)
+    personas: list[AudiencePersonaOption] = Field(default_factory=list)
+    recommended_persona: str | None = None
 
 
 class LlmFailedData(BaseModel):
