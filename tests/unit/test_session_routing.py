@@ -94,9 +94,20 @@ def test_route_after_brainstormer() -> None:
         == "angle_gate"
     )
     # <2 offered angles can't make a meaningful pick — draft straight away.
-    assert route_after_brainstormer({"brief": {"angles": ["甲"]}}) == "executor_post"
+    # ADR 0030 §7: a lone angle still parks for confirm (angle + persona +
+    # format); only a 0-angle brief drafts immediately.
+    assert route_after_brainstormer({"brief": {"angles": ["甲"]}}) == "angle_gate"
     assert route_after_brainstormer({"brief": {}}) == "executor_post"
     assert route_after_brainstormer({}) == "executor_post"
+
+
+def test_route_after_brainstormer_parks_with_pending_format_pick() -> None:
+    """ADR 0030 §7 — a sticky chosen_image_format never bypasses the park."""
+    state = {
+        "brief": {"angles": ["甲"]},
+        "chosen_image_format": "comic_4panel",
+    }
+    assert route_after_brainstormer(state) == "angle_gate"
 
 
 def test_route_after_angle_gate() -> None:

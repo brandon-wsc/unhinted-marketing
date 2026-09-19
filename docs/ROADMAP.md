@@ -153,7 +153,7 @@ nodes:
   control:     route_intent · load_context · chat · ack_confirm
   research:    trend_searcher          # session on-demand PG signal lookup (not background ingest)
   strategy:    brainstormer            # brief ideas, can_do[] / cannot_do[], angles
-               angle_gate              # park for user pick when ≥2 angles (ADR 0028; no LLM)
+               angle_gate              # park for user pick when ≥1 angle (ADR 0028/0030; no LLM)
   execute:     executor_post           # brief → publish-ready post copy
                executor_image_plan     # post + brand context → image prompt / layout spec
                executor_image_gen      # dispatch image worker (no LLM; async job)
@@ -174,7 +174,7 @@ NOT in graph: hot_search_worker · question_generator · DALL-E worker · POST /
 START → route_intent
   ├── chat            → chat → END
   ├── start           → load_context → trend_searcher → brainstormer
-  │                     → angle_gate (park if ≥2 angles; typed pick or POST /choose-angle)
+  │                     → angle_gate (park if ≥1 angle; typed pick or POST /choose-angle)
   │                     → executor_post → grounding_check → reviewer
   ├── revise          → edit_copy → grounding_check → reviewer
   └── confirm_intent  → ack_confirm → END   # sets pending_confirm; does NOT publish

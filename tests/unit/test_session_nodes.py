@@ -14,6 +14,7 @@ from internal.session import research_harness as RH
 from internal.session.context import session_db
 from internal.session.io import (
     BriefOut,
+    DraftOut,
     IntentRoute,
     QueryGenOut,
     ResearchFlags,
@@ -647,6 +648,56 @@ async def test_executor_post_fallback_without_llm(no_llm: None) -> None:
     assert "Acme" in out["draft"]["caption"]
     assert out["source_signal_ids"] == ["sig_a"]
     assert out["need_image"] is True
+
+
+@pytest.mark.asyncio
+async def test_executor_post_payload_includes_image_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0030 §5 — the draft is written with the chosen format known."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    captured: dict = {}
+
+    async def fake_run(payload: str, _deps: object) -> DraftOut:
+        captured.update(json.loads(payload))
+        return DraftOut(caption="c", source_signal_ids=["sig_a"])
+
+    monkeypatch.setattr(EH, "run_executor_post_agent", fake_run)
+    out = await N.executor_post(
+        _base_state(
+            source_signal_ids=["sig_a"],
+            company_context={"name": "Acme"},
+            ranked_signals=[],
+            brief={"summary": "x"},
+            image_format="comic_4panel",
+        )
+    )
+    assert captured["image_format"] == "comic_4panel"
+    # Stale picks are cleared with chosen_angle / chosen_persona after drafting.
+    assert out["chosen_image_format"] is None
+
+
+@pytest.mark.asyncio
+async def test_executor_post_payload_defaults_image_format_single(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    captured: dict = {}
+
+    async def fake_run(payload: str, _deps: object) -> DraftOut:
+        captured.update(json.loads(payload))
+        return DraftOut(caption="c", source_signal_ids=["sig_a"])
+
+    monkeypatch.setattr(EH, "run_executor_post_agent", fake_run)
+    await N.executor_post(
+        _base_state(
+            source_signal_ids=["sig_a"],
+            company_context={"name": "Acme"},
+            ranked_signals=[],
+            brief={"summary": "x"},
+        )
+    )
+    assert captured["image_format"] == "single"
 
 
 @pytest.mark.asyncio

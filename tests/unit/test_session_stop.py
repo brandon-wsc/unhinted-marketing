@@ -707,3 +707,269 @@ async def test_persist_emits_awaiting_angle_pick_event() -> None:
     assert ev["data"]["angles"] == brief["angles"]
     assert ev["data"]["personas"] == session.state["audience_catalog"]
     assert ev["data"]["recommended_persona"] == "hk_youth"
+
+
+# --- ADR 0030 — image_format on the bundled card ----------------------------
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_image_format_updates_state() -> None:
+    session = _angle_parked_session()
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+
+    async def fake_invoke(*_a, **_k):
+        return ({"mode": "AGENT", "messages": []}, False, None, None, [], 5)
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=fake_invoke),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": False, "events": [], "values": {}}),
+        ),
+    ):
+        await choose_angle_turn(db, session, angle_index=0, image_format="comic_4panel")
+
+    update = graph.aupdate_state.await_args
+    assert update.args[1]["chosen_angle"] == "用情侶日常帶出產品"
+    assert update.args[1]["chosen_image_format"] == "comic_4panel"
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_omitted_format_not_in_update() -> None:
+    """Omit ≠ reset (ADR 0030 §2) — no format field, no state touch."""
+    session = _angle_parked_session()
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+
+    async def fake_invoke(*_a, **_k):
+        return ({"mode": "AGENT", "messages": []}, False, None, None, [], 5)
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=fake_invoke),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": False, "events": [], "values": {}}),
+        ),
+    ):
+        await choose_angle_turn(db, session, angle_index=0)
+
+    update = graph.aupdate_state.await_args
+    assert "chosen_image_format" not in update.args[1]
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_junk_format_normalized() -> None:
+    """Direct service calls bypass Pydantic — normalize defensively."""
+    session = _angle_parked_session()
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+
+    async def fake_invoke(*_a, **_k):
+        return ({"mode": "AGENT", "messages": []}, False, None, None, [], 5)
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=fake_invoke),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": False, "events": [], "values": {}}),
+        ),
+    ):
+        await choose_angle_turn(db, session, angle_index=0, image_format="nope")
+
+    update = graph.aupdate_state.await_args
+    assert update.args[1]["chosen_image_format"] == "single"
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_provider_error_keeps_format_sticky() -> None:
+    """Provider error re-parks; the submitted format pick is never cleared."""
+    from internal.llm.router import LlmProviderError
+
+    session = _angle_parked_session()
+    err = LlmProviderError("nope", model="x", kind="bad_request")
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+
+    async def fake_persist(_db, sess, **kwargs):
+        sess.state = {
+            **dict(sess.state or {}),
+            "awaiting_angle_pick": kwargs["still_interrupted"],
+        }
+        return {"interrupted": kwargs["still_interrupted"], "values": {}, "events": []}
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch(
+            "internal.session.service._invoke_graph",
+            AsyncMock(return_value=({}, False, None, err, [], 10)),
+        ),
+        patch("internal.session.service._persist_after_invoke", fake_persist),
+        patch(
+            "internal.session.service._repark_graph_at_angle_gate",
+            AsyncMock(),
+        ) as repark,
+    ):
+        result = await choose_angle_turn(
+            db, session, angle_index=0, image_format="comic_4panel"
+        )
+
+    repark.assert_awaited_once()
+    assert result["interrupted"] is True
+    first_update = graph.aupdate_state.await_args_list[0].args[1]
+    assert first_update["chosen_image_format"] == "comic_4panel"
+    for call in graph.aupdate_state.await_args_list:
+        assert call.args[1].get("chosen_image_format") is not None
+
+
+@pytest.mark.asyncio
+async def test_stop_mid_choose_angle_restores_format_pick() -> None:
+    """Stop mid-resume restores the card with the sticky format pick intact."""
+    session = _angle_parked_session()
+    session.state["chosen_image_format"] = "comic_4panel"
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+    started = asyncio.Event()
+
+    async def _slow_invoke(*_a, **_k):
+        started.set()
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            raise
+        return {}, False, None, None, [], 0
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=_slow_invoke),
+        patch(
+            "internal.session.service._restore_parked_after_resume_cancel",
+            AsyncMock(),
+        ) as restore,
+        patch(
+            "internal.session.service._adelete_graph_thread",
+            AsyncMock(),
+        ),
+    ):
+        pick_task = asyncio.create_task(
+            choose_angle_turn(db, session, angle_index=0)
+        )
+        await asyncio.wait_for(started.wait(), timeout=2.0)
+        await stop_session_turn(db, session)
+        with pytest.raises(asyncio.CancelledError):
+            await pick_task
+
+    restore.assert_awaited()
+    assert restore.await_args.kwargs["kind"] == "angle"
+    parked_state = restore.await_args.kwargs["parked_state"]
+    assert parked_state["chosen_image_format"] == "comic_4panel"
+
+
+@pytest.mark.asyncio
+async def test_persist_after_invoke_keeps_image_format_in_state() -> None:
+    """Hydrate: next_state must carry image_format + chosen_image_format."""
+    from internal.session.service import _persist_after_invoke
+
+    session = _session()
+    db = AsyncMock()
+
+    with patch(
+        "internal.session.service.session_event_bus.publish_many",
+        AsyncMock(),
+    ):
+        await _persist_after_invoke(
+            db,
+            session,
+            user_msg=None,
+            message_dicts=[],
+            values={
+                "messages": [],
+                "image_format": "comic_4panel",
+                "chosen_image_format": "comic_4panel",
+            },
+            still_interrupted=False,
+            parked_node=None,
+            progress_events=[],
+            provider_error=None,
+            user_content="",
+            pre_state={},
+            entry=None,
+        )
+
+    assert session.state["image_format"] == "comic_4panel"
+    assert session.state["chosen_image_format"] == "comic_4panel"
+
+
+@pytest.mark.asyncio
+async def test_persist_emits_angle_pick_event_with_image_format() -> None:
+    from internal.session.service import _persist_after_invoke
+
+    session = _angle_parked_session()
+    db = AsyncMock()
+    published: list = []
+
+    with patch(
+        "internal.session.service.session_event_bus.publish_many",
+        AsyncMock(side_effect=lambda _sid, evs: published.extend(evs)),
+    ):
+        await _persist_after_invoke(
+            db,
+            session,
+            user_msg=None,
+            message_dicts=[],
+            values={
+                "messages": [],
+                "brief": session.state["brief"],
+                "audience_catalog": session.state["audience_catalog"],
+                "chosen_image_format": "comic_4panel",
+            },
+            still_interrupted=True,
+            parked_node="angle_gate",
+            progress_events=[],
+            provider_error=None,
+            user_content="",
+            pre_state={},
+            entry=None,
+        )
+
+    ev = next(e for e in published if e["type"] == "draft.awaiting_angle_pick")
+    assert ev["data"]["image_format_options"] == ["single", "comic_4panel"]
+    assert ev["data"]["recommended_image_format"] == "comic_4panel"

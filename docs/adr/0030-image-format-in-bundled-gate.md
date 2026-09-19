@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-19
-- **Supersedes:** — (extends [ADR 0029](./0029-angle-persona-bundled-gate.md); does not change [ADR 0004](./0004-stop-discard-and-image-resume.md) image-park semantics)
+- **Supersedes:** [ADR 0029](./0029-angle-persona-bundled-gate.md) §4 park condition only (gate now parks at ≥1 angle; no single-angle fast path). Otherwise extends ADR 0029; does not change [ADR 0004](./0004-stop-discard-and-image-resume.md) image-park semantics.
 
 ## Context
 
@@ -22,13 +22,15 @@ The single-vs-comic pick (`image_format`: `single` | `comic_4panel`) is made at 
 
 5. **`executor_post` drafts with the format known.** Its LLM payload gains `image_format`; the prompt directs comic drafts to complement a 4-panel arc (caption does not restate panel beats; product only soft-landed) and single-image drafts to keep current behaviour. `executor_image_plan` is unchanged — it already consumes `state.image_format`.
 
-6. **Late switch retained, image-only.** The image-park toggle (`POST /resume-image` with `image_format`, ADR 0004) stays as an escape hatch, but it re-generates the image only — it does **not** re-run the draft. The UI labels it as such. Single-angle briefs keep the fast path (no park) with default `single`; the late toggle is the only format affordance on that path.
+6. **Late switch retained, image-only.** The image-park toggle (`POST /resume-image` with `image_format`, ADR 0004) stays as an escape hatch, but it re-generates the image only — it does **not** re-run the draft. The UI labels it as such.
 
-7. **Unchanged boundaries.** No LLM in the gate; `route_intent` is not consulted on resume turns. Stop / cancel / re-park reuse [ADR 0004](./0004-stop-discard-and-image-resume.md) (`kind="choose_angle"`). Queue holds while parked per [ADR 0016](./0016-queue-send-while-turn-in-flight.md) §5. Confirm / publish remains [ADR 0003](./0003-confirm-without-llm.md). Resume `aupdate_state` is still attributed to `brainstormer`; the brainstormer router must still schedule `angle_gate` (same attribution trap as 0028/0029).
+7. **No single-angle fast path.** `route_after_brainstormer` parks whenever `len(brief.angles) >= 1` — a lone angle still needs user confirm, and the format question always gets asked (supersedes [ADR 0029](./0029-angle-persona-bundled-gate.md) §4's `>= 2` condition). Only a 0-angle brief goes straight to `executor_post` (nothing to confirm). Because the gate always runs when there is anything to confirm, a sticky `chosen_image_format` can never be stranded by a 1-angle re-brief — it is resolved on the next matched pick.
+
+8. **Unchanged boundaries.** No LLM in the gate; `route_intent` is not consulted on resume turns. Stop / cancel / re-park reuse [ADR 0004](./0004-stop-discard-and-image-resume.md) (`kind="choose_angle"`). Queue holds while parked per [ADR 0016](./0016-queue-send-while-turn-in-flight.md) §5. Confirm / publish remains [ADR 0003](./0003-confirm-without-llm.md). Resume `aupdate_state` is still attributed to `brainstormer`; the brainstormer router must still schedule `angle_gate` (same attribution trap as 0028/0029).
 
 ## Consequences
 
-- Every `start` with ≥2 brainstormed angles now surfaces format as a first-class choice on the same card as angle + persona; the draft is written for the chosen format.
+- Every `start` with ≥1 brainstormed angle now surfaces format as a first-class choice on the same card as angle + persona; the draft is written for the chosen format. A 0-angle brief still drafts immediately.
 - FE renders one bundled card (angle options + persona select + format segmented control) instead of angle + persona only; typed-reply convenience path is unchanged and angle-only.
 - `draft.awaiting_angle_pick` grows fields again; clients that ignore unknown keys keep working until they render format.
 - A wrong early pick is recoverable two ways: re-`start`, or the late image-park toggle (image-only re-gen, caption untouched).

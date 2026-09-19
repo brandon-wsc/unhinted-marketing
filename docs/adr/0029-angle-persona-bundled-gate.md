@@ -18,7 +18,7 @@ ROADMAP's `chat → recommend → preview` loop still wants a single recommend c
 
 3. **Typed message = angle only.** Free text while parked still resolves against offered angles (exact / 1-based index / 一二三四 / substring). Persona is changeable only via the explicit card field, so angle copy and persona names cannot collide in substring match.
 
-4. **Park condition unchanged.** `route_after_brainstormer` still parks when `len(brief.angles) >= 2` (including when `chosen_angle` is already set). Persona rides along when the gate parks. Single-angle briefs keep the fast path to `executor_post` with the agent persona.
+4. **Park condition unchanged.** `route_after_brainstormer` still parks when `len(brief.angles) >= 2` (including when `chosen_angle` is already set). Persona rides along when the gate parks. Single-angle briefs keep the fast path to `executor_post` with the agent persona. — **Superseded by [ADR 0030](./0030-image-format-in-bundled-gate.md) §7:** the gate now parks at ≥1 angle; there is no single-angle fast path.
 
 5. **Feedback loop preserved.** Non-matching text → `chosen_angle=None`, `angle_feedback=text` → `brainstormer` regenerates angles → parks again. A submitted persona pick is orthogonal to angles and survives re-brainstorm cycles (the card re-offers with that persona pre-selected). Escape hatch is Stop.
 
