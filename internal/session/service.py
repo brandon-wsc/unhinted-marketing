@@ -29,6 +29,7 @@ from internal.session.graph import (
     IMAGE_PARK_NODE,
     get_session_graph,
 )
+from internal.session.image_format import adapt_plan_to_format
 from internal.session.media import image_format_from_plan, media_item_payload
 from internal.session.nodes import angle_pick_payload, offered_angles, offered_personas
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
@@ -1408,8 +1409,12 @@ async def _bump_preview_revision(
     state["revision"] = rev
     state["approval_token"] = token
     state["image_url"] = primary_url
+    image_format = image_format_from_plan(
+        primary_plan, fallback=str(state.get("image_format") or "single")
+    )
     if primary_plan is not None:
         state["image_plan"] = primary_plan
+        state["image_format"] = image_format
     state["media_ids"] = [str(i) for i in media_ids]
     state["pending_confirm"] = False
     state["need_image"] = False
@@ -1420,19 +1425,22 @@ async def _bump_preview_revision(
 
     graph = get_session_graph()
     config = _session_config(session.id)
+    graph_update: dict[str, Any] = {
+        "draft": draft_copy,
+        "revision": rev,
+        "approval_token": token,
+        "image_url": primary_url,
+        "image_plan": primary_plan or {},
+        "mode": MODE_PREVIEW,
+        "pending_confirm": False,
+        "need_image": False,
+    }
+    if primary_plan is not None:
+        graph_update["image_format"] = image_format
     try:
         await graph.aupdate_state(
             config,
-            {
-                "draft": draft_copy,
-                "revision": rev,
-                "approval_token": token,
-                "image_url": primary_url,
-                "image_plan": primary_plan or {},
-                "mode": MODE_PREVIEW,
-                "pending_confirm": False,
-                "need_image": False,
-            },
+            graph_update,
         )
     except Exception:
         logger.warning(
@@ -1509,8 +1517,9 @@ async def update_session_image_plan(
         raise ValueError("Image not found")
 
     fmt = image_format_from_plan(plan, fallback=old.format)
-    new_plan = dict(plan)
-    new_plan["format"] = fmt
+    old_fmt = image_format_from_plan(old.plan, fallback=old.format)
+    new_plan = adapt_plan_to_format(dict(plan), fmt, previous_format=old_fmt)
+    fmt = image_format_from_plan(new_plan, fallback=fmt)
     row = await repos.insert_preview_image(
         db,
         session_id=session.id,
@@ -1563,8 +1572,10 @@ async def regen_session_image(
         raise ValueError("Image not found")
 
     plan = dict(old.plan or {})
-    fmt = image_format_from_plan(plan, fallback=old.format)
-    plan["format"] = fmt
+    old_fmt = image_format_from_plan(old.plan, fallback=old.format)
+    fmt = image_format_from_plan(plan, fallback=old_fmt)
+    plan = adapt_plan_to_format(plan, fmt, previous_format=old_fmt)
+    fmt = image_format_from_plan(plan, fallback=fmt)
     prompt = compose_generation_prompt(plan)
     if not prompt:
         prompt = f"Clean modern social media image for Hong Kong brand, format={fmt}"
@@ -1622,15 +1633,8 @@ async def add_session_image(
         raise ValueError("No preview draft yet")
     media_ids = list(existing.media_ids or [])
     fmt = image_format_from_plan(plan, fallback=format)
-    new_plan = dict(plan or {})
-    new_plan.setdefault("format", fmt)
-    if fmt == "comic_4panel" and not new_plan.get("panels"):
-        new_plan["panels"] = [
-            {"index": 1, "beat": "hook scene — no product"},
-            {"index": 2, "beat": "escalate friction"},
-            {"index": 3, "beat": "peak pain"},
-            {"index": 4, "beat": "product as soft remedy"},
-        ]
+    new_plan = adapt_plan_to_format(dict(plan or {}), fmt)
+    fmt = image_format_from_plan(new_plan, fallback=fmt)
     seq = len(media_ids)
     row = await repos.insert_preview_image(
         db,

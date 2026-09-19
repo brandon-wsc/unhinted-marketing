@@ -59,3 +59,4 @@ logs/
 pgdata/
 scripts/typescript_gen/node_modules
 scripts/dev-certs.sh
+.playwright-mcp/
