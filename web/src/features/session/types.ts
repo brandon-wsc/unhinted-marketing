@@ -29,6 +29,7 @@ export type ForkRef = components["schemas"]["ForkRef"];
 export type ForkOrigin = components["schemas"]["ForkOrigin"];
 export type ForkSessionResponse = components["schemas"]["ForkSessionResponse"];
 export type ForkPreviewNote = ForkSessionResponse["preview_note"];
+export type AudiencePersonaOption = components["schemas"]["AudiencePersonaOption"];
 
 // --- Generated from JSON Schema mirrors (schemas/ → docs/contracts) ---
 export type AgentProgress = import("./generated/agent-progress").AgentProgressData;

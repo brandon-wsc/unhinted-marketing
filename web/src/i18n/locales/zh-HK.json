@@ -161,8 +161,9 @@
         "formatComic": "4格漫畫"
       },
       "anglePick": {
-        "title": "先揀個角度",
-        "subtitle": "揀個方向先至落筆；都唔啱嘅話，喺下面打自己嘅諗法。",
+        "title": "先揀角度同語氣",
+        "subtitle": "揀個方向同邊個 audience 先至落筆；都唔啱嘅話，喺下面打自己嘅諗法。",
+        "personaLabel": "語氣／受眾",
         "optionsLabel": "內容角度",
         "otherLabel": "自訂角度",
         "otherPlaceholder": "或者自己寫個方向…",

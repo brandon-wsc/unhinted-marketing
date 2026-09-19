@@ -111,6 +111,8 @@ export function ChatPanel() {
     awaitingImageOk,
     awaitingAnglePick,
     angleOptions,
+    anglePersonas,
+    recommendedPersona,
     canRetryAnglePick,
     draft,
     confirmReceipt,
@@ -376,9 +378,9 @@ export function ChatPanel() {
     }
   }
 
-  async function onPickAngle(angle: number | string) {
+  async function onPickAngle(angle: number | string, persona?: string) {
     try {
-      await chooseAngle(angle);
+      await chooseAngle(angle, persona);
     } catch {
       showError(t("chat.error.sendFailed"));
     }
@@ -496,8 +498,10 @@ export function ChatPanel() {
   const anglePickCard = (
     <AnglePickCard
       angles={angleOptions}
+      personas={anglePersonas}
+      recommendedPersona={recommendedPersona}
       sending={sending || stopping}
-      onPick={(i) => void onPickAngle(i)}
+      onPick={(angle, persona) => void onPickAngle(angle, persona)}
     />
   );
 

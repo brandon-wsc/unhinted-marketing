@@ -1,6 +1,7 @@
 import type {
   AgentActionRecord,
   AgentProgress,
+  AudiencePersonaOption,
   ChatMessage,
   ComposerDraft,
   ConfirmSessionResponse,
@@ -219,13 +220,41 @@ export function filterOfferedAngles(raw: unknown): string[] {
   return raw.filter((a): a is string => typeof a === "string" && a.trim() !== "");
 }
 
+/** Audience-catalog rows — mirrors backend `offered_personas` (ADR 0029). */
+export function filterOfferedPersonas(raw: unknown): AudiencePersonaOption[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AudiencePersonaOption[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const rec = row as Record<string, unknown>;
+    const slug = typeof rec.slug === "string" ? rec.slug.trim() : "";
+    if (!slug) continue;
+    const label = typeof rec.label === "string" && rec.label.trim() ? rec.label.trim() : slug;
+    const hook = typeof rec.hook === "string" ? rec.hook : "";
+    out.push({ slug, label, hook });
+  }
+  return out;
+}
+
 /** `draft.awaiting_angle_pick` in a turn response — shared park sniff. */
 export function anglePickParkFromEvents(
   interrupted: boolean,
   events?: { type: string; data?: Record<string, unknown> }[],
-): { parked: boolean; angles: string[] } {
+): {
+  parked: boolean;
+  angles: string[];
+  personas: AudiencePersonaOption[];
+  recommendedPersona: string | null;
+} {
   const ev = interrupted ? events?.find((e) => e.type === "draft.awaiting_angle_pick") : undefined;
-  return { parked: !!ev, angles: filterOfferedAngles(ev?.data?.angles) };
+  const recommended = ev?.data?.recommended_persona;
+  return {
+    parked: !!ev,
+    angles: filterOfferedAngles(ev?.data?.angles),
+    personas: filterOfferedPersonas(ev?.data?.personas),
+    recommendedPersona:
+      typeof recommended === "string" && recommended.trim() ? recommended.trim() : null,
+  };
 }
 
 const IMAGE_RETRY_NODES = new Set(["executor_image_plan", "executor_image_gen"]);
