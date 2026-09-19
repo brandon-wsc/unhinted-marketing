@@ -161,8 +161,9 @@
         "formatComic": "4-panel comic"
       },
       "anglePick": {
-        "title": "Pick an angle first",
-        "subtitle": "Choose a direction and the draft will follow it — or type your own below.",
+        "title": "Pick an angle and voice",
+        "subtitle": "Choose a direction and audience — or type your own angle below.",
+        "personaLabel": "Voice / audience",
         "optionsLabel": "Content angles",
         "otherLabel": "Custom angle",
         "otherPlaceholder": "Or write your own angle…",

@@ -30,7 +30,7 @@ from internal.session.graph import (
     get_session_graph,
 )
 from internal.session.media import image_format_from_plan, media_item_payload
-from internal.session.nodes import offered_angles
+from internal.session.nodes import angle_pick_payload, offered_angles, offered_personas
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
 from internal.session.trace import turn_trace
 from internal.session.turn_registry import TurnEntry, session_turn_registry
@@ -258,6 +258,7 @@ def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str,
         "product_context_ids": state.get("product_context_ids") or [],
         "product_candidates": state.get("product_candidates") or [],
         "grounding_ok": state.get("grounding_ok", True),
+        "chosen_persona": state.get("chosen_persona"),
     }
 
 
@@ -643,6 +644,7 @@ async def _persist_after_invoke(
         "product_candidates": values.get("product_candidates") or [],
         "grounding_ok": values.get("grounding_ok", True),
         "error": values.get("error"),
+        "chosen_persona": values.get("chosen_persona"),
         # UI hydrate: interrupt_before angle_gate / executor_image_plan
         "awaiting_image_ok": parked_node == IMAGE_PARK_NODE,
         "awaiting_angle_pick": parked_node == ANGLE_GATE_NODE,
@@ -689,11 +691,10 @@ async def _persist_after_invoke(
             }
         )
     elif parked_node == ANGLE_GATE_NODE:
-        angles = offered_angles(values.get("brief"))
         events.append(
             {
                 "type": "draft.awaiting_angle_pick",
-                "data": {"awaiting": True, "angles": angles},
+                "data": angle_pick_payload(values),
             }
         )
 
@@ -1150,16 +1151,20 @@ async def choose_angle_turn(
     *,
     angle_index: int | None = None,
     angle_text: str | None = None,
+    persona: str | None = None,
 ) -> dict[str, Any]:
-    """Resume parked graph at interrupt_before angle_gate (ADR 0028).
+    """Resume parked graph at interrupt_before angle_gate (ADR 0029).
 
     ``angle_index`` picks ``brief.angles[i]`` (0-based, option card);
     ``angle_text`` is a free-form pick — a typed ``POST /messages`` reply while
-    angle-parked lands here and is persisted as a user row.
+    angle-parked lands here and is persisted as a user row. Typed replies are
+    angle-only (ADR 0029 §3); ``persona`` is the bundled-card field and may
+    be omitted to keep the agent recommendation / a prior sticky pick.
     """
     await _require_parked(session, "angle")
 
-    offered = offered_angles((session.state or {}).get("brief"))
+    state = session.state or {}
+    offered = offered_angles(state.get("brief"))
     chosen: str | None = None
     if angle_index is not None:
         if not (0 <= angle_index < len(offered)):
@@ -1170,12 +1175,21 @@ async def choose_angle_turn(
     if not chosen:
         raise ValueError("Provide angle_index or angle")
 
+    picked_persona: str | None = None
+    if persona is not None:
+        slug = persona.strip()
+        if slug:
+            slugs = {p["slug"] for p in offered_personas(state.get("audience_catalog"))}
+            if slug not in slugs:
+                raise ValueError("persona is not in the offered catalog")
+            picked_persona = slug
+
     async def apply_pick(message_dicts: list[dict[str, Any]]) -> None:
         graph = get_session_graph()
-        await graph.aupdate_state(
-            _session_config(session.id),
-            {"chosen_angle": chosen, "messages": message_dicts},
-        )
+        update: dict[str, Any] = {"chosen_angle": chosen, "messages": message_dicts}
+        if picked_persona is not None:
+            update["chosen_persona"] = picked_persona
+        await graph.aupdate_state(_session_config(session.id), update)
 
     return await _resume_parked_turn(
         db,

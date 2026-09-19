@@ -28,6 +28,7 @@ from internal.memory.database import get_db, open_session
 from internal.memory.models import Session, User
 from internal.session.events import format_sse, session_event_bus
 from internal.session.graph import ANGLE_GATE_NODE, IMAGE_PARK_NODE
+from internal.session.nodes import angle_pick_payload
 from internal.session.service import (
     DEFAULT_PLATFORM,
     SessionTurnConflict,
@@ -467,7 +468,7 @@ async def choose_angle(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ChooseAngleResponse:
-    """Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0028)."""
+    """Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0029)."""
     session = await _require_owned_session(db, session_id, user)
     if body.angle_index is None and not (body.angle or "").strip():
         raise HTTPException(
@@ -480,6 +481,7 @@ async def choose_angle(
             session,
             angle_index=body.angle_index,
             angle_text=body.angle,
+            persona=body.persona,
         )
     except SessionTurnConflict as exc:
         raise HTTPException(
@@ -624,12 +626,16 @@ async def get_session_messages(
         ]
         messages.append(resp)
 
+    parked_angle = bool(state.get("awaiting_angle_pick"))
+    pick = angle_pick_payload(state) if parked_angle else None
     return SessionMessagesResponse(
         session=_session_response(session),
         messages=messages,
         brief=_brief_from_state(state),
         awaiting_image_ok=bool(state.get("awaiting_image_ok")),
-        awaiting_angle_pick=bool(state.get("awaiting_angle_pick")),
+        awaiting_angle_pick=parked_angle,
+        personas=pick["personas"] if pick else [],
+        recommended_persona=pick["recommended_persona"] if pick else None,
         forked_from=await _fork_origin(db, session),
     )
 

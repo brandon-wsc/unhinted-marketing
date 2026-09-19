@@ -934,7 +934,7 @@ export type paths = {
         put?: never;
         /**
          * Choose Angle
-         * @description Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0028).
+         * @description Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0029).
          */
         post: operations["choose_angle_api_sessions__session_id__choose_angle_post"];
         delete?: never;
@@ -1415,6 +1415,21 @@ export type components = {
                 [key: string]: unknown;
             } | null;
         };
+        /**
+         * AudiencePersonaOption
+         * @description One audience-catalog row on the bundled angle+persona card (ADR 0029).
+         */
+        AudiencePersonaOption: {
+            /** Slug */
+            slug: string;
+            /** Label */
+            label: string;
+            /**
+             * Hook
+             * @default
+             */
+            hook: string;
+        };
         /** Body_import_company_products_api_companies__company_id__products_import_post */
         Body_import_company_products_api_companies__company_id__products_import_post: {
             /** File */
@@ -1639,13 +1654,15 @@ export type components = {
         };
         /**
          * ChooseAngleRequest
-         * @description ADR 0028 pick while parked at angle_gate — index or free text.
+         * @description ADR 0029 pick while parked at angle_gate — index or free text, optional persona.
          */
         ChooseAngleRequest: {
             /** Angle Index */
             angle_index?: number | null;
             /** Angle */
             angle?: string | null;
+            /** Persona */
+            persona?: string | null;
         };
         /** ChooseAngleResponse */
         ChooseAngleResponse: {
@@ -1913,6 +1930,10 @@ export type components = {
              * @default false
              */
             awaiting_angle_pick: boolean;
+            /** Personas */
+            personas?: components["schemas"]["AudiencePersonaOption"][];
+            /** Recommended Persona */
+            recommended_persona?: string | null;
             forked_from?: components["schemas"]["ForkOrigin"] | null;
             /** Preview Note */
             preview_note?: ("carried_stale" | "not_carried_later") | null;
@@ -2882,6 +2903,10 @@ export type components = {
              * @default false
              */
             awaiting_angle_pick: boolean;
+            /** Personas */
+            personas?: components["schemas"]["AudiencePersonaOption"][];
+            /** Recommended Persona */
+            recommended_persona?: string | null;
             forked_from?: components["schemas"]["ForkOrigin"] | null;
         };
         /** SessionResearch */

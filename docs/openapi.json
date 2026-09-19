@@ -3486,7 +3486,7 @@
           "sessions"
         ],
         "summary": "Choose Angle",
-        "description": "Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0028).",
+        "description": "Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0029).",
         "operationId": "choose_angle_api_sessions__session_id__choose_angle_post",
         "security": [
           {
@@ -5086,6 +5086,30 @@
         "type": "object",
         "title": "AddSessionImageRequest"
       },
+      "AudiencePersonaOption": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "hook": {
+            "type": "string",
+            "title": "Hook",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "label"
+        ],
+        "title": "AudiencePersonaOption",
+        "description": "One audience-catalog row on the bundled angle+persona card (ADR 0029)."
+      },
       "Body_import_company_products_api_companies__company_id__products_import_post": {
         "properties": {
           "file": {
@@ -5760,11 +5784,23 @@
               }
             ],
             "title": "Angle"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
           }
         },
         "type": "object",
         "title": "ChooseAngleRequest",
-        "description": "ADR 0028 pick while parked at angle_gate — index or free text."
+        "description": "ADR 0029 pick while parked at angle_gate — index or free text, optional persona."
       },
       "ChooseAngleResponse": {
         "properties": {
@@ -6339,6 +6375,24 @@
             "type": "boolean",
             "title": "Awaiting Angle Pick",
             "default": false
+          },
+          "personas": {
+            "items": {
+              "$ref": "#/components/schemas/AudiencePersonaOption"
+            },
+            "type": "array",
+            "title": "Personas"
+          },
+          "recommended_persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Persona"
           },
           "forked_from": {
             "anyOf": [
@@ -8903,6 +8957,24 @@
             "type": "boolean",
             "title": "Awaiting Angle Pick",
             "default": false
+          },
+          "personas": {
+            "items": {
+              "$ref": "#/components/schemas/AudiencePersonaOption"
+            },
+            "type": "array",
+            "title": "Personas"
+          },
+          "recommended_persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Persona"
           },
           "forked_from": {
             "anyOf": [

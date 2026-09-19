@@ -197,6 +197,33 @@ async def test_choose_angle_happy_path(client) -> None:
     assert body["interrupted"] is True
     assert choose.await_args.kwargs["angle_index"] == 1
     assert choose.await_args.kwargs["angle_text"] is None
+    assert choose.await_args.kwargs["persona"] is None
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_forwards_persona(client) -> None:
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = created.json()["id"]
+
+    fake_result = {
+        "interrupted": False,
+        "events": [],
+        "values": {"revision": 0, "pending_confirm": False, "approval_token": None},
+    }
+    choose = AsyncMock(return_value=fake_result)
+    with patch("cmd.api.routes.sessions.choose_angle_turn", choose):
+        res = await client.post(
+            f"/api/sessions/{session_id}/choose-angle",
+            headers=headers,
+            json={"angle_index": 0, "persona": "hk_parents"},
+        )
+    assert res.status_code == 200, res.text
+    assert choose.await_args.kwargs["persona"] == "hk_parents"
 
 
 @pytest.mark.asyncio

@@ -2040,6 +2040,7 @@ describe("useSession", () => {
       expect(result.current.awaitingAnglePick).toBe(true);
       expect(result.current.awaitingImageOk).toBe(false);
       expect(result.current.angleOptions).toEqual(["甲", "乙"]);
+      expect(result.current.anglePersonas).toEqual([]);
       expect(result.current.interruptAfterMessageId).toBe("u-a");
     });
 
@@ -2311,6 +2312,33 @@ describe("useSession", () => {
         "tok",
         "sess-1",
         expect.objectContaining({ angle: "第二個" }),
+      );
+    });
+
+    it("hydrates personas and forwards a card persona on chooseAngle", async () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue({
+        ...ANGLE_PARKED_HYDRATE,
+        personas: [
+          { slug: "hk_youth", label: "年輕人", hook: "brunch" },
+          { slug: "hk_parents", label: "家長", hook: "school run" },
+        ],
+        recommended_persona: "hk_youth",
+      });
+      apiChooseSessionAngle.mockResolvedValue(ANGLE_REPARK_RESPONSE);
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.awaitingAnglePick).toBe(true));
+      expect(result.current.anglePersonas.map((p) => p.slug)).toEqual(["hk_youth", "hk_parents"]);
+      expect(result.current.recommendedPersona).toBe("hk_youth");
+
+      await act(async () => {
+        await result.current.chooseAngle(1, "hk_parents");
+      });
+      expect(apiChooseSessionAngle).toHaveBeenCalledWith(
+        "tok",
+        "sess-1",
+        expect.objectContaining({ angleIndex: 1, persona: "hk_parents" }),
       );
     });
   });

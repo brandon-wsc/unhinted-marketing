@@ -61,7 +61,10 @@ class SessionState(TypedDict, total=False):
     image_format: NotRequired[Literal["single", "comic_4panel"]]
     # Landing-card handoff (ADR 0018) — warm trend_searcher with question signal refs.
     handoff_signal_ids: NotRequired[list[str]]
-    # ADR 0028 angle pick — set by choose-angle resume; consumed by executor_post.
+    # ADR 0028 / 0029 angle pick — set by choose-angle resume; consumed by executor_post.
     chosen_angle: NotRequired[str | None]
     # Non-matching pick text → brainstormer regenerates angles.
     angle_feedback: NotRequired[str | None]
+    # ADR 0029 — optional persona slug submitted with the bundled card; sticky
+    # across re-brief cycles. Omitted typed picks fall back to brief.persona.
+    chosen_persona: NotRequired[str | None]

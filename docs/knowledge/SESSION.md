@@ -23,11 +23,11 @@ Revise path (`edit_copy`): reuse turn state; re-run `product_matcher` only when 
 
 If `product_clarify` is true after matcher → short-circuit to **chat** (ask which SKU) — do not enter executor with a guessed primary.
 
-### Angle pick gate ([ADR 0028](../adr/0028-angle-pick-before-draft.md))
+### Angle pick gate ([ADR 0029](../adr/0029-angle-persona-bundled-gate.md))
 
-- `brief.angles` ≥ 2 → graph parks at `interrupt_before=["angle_gate"]` (the gate validates any pending `chosen_angle`; a non-empty value is not a skip). `draft.awaiting_angle_pick` carries the offered angles; `session.state.awaiting_angle_pick` hydrates the option card.
-- Pick: `POST /sessions/{id}/choose-angle` (`angle_index` or `angle` text), or a typed `POST /messages` while angle-parked (the only park where a message resumes; image park still 409s).
-- `angle_gate` resolves picks (exact / 1-based index / CJK numeral / substring). Match → `chosen_angle` → `executor_post` (payload field, cleared on output). Non-match → `angle_feedback` → `brainstormer` regenerates angles and parks again.
+- `brief.angles` ≥ 2 → graph parks at `interrupt_before=["angle_gate"]` (the gate validates any pending `chosen_angle`; a non-empty value is not a skip). `draft.awaiting_angle_pick` carries the offered angles, `personas` (audience catalog), and `recommended_persona`; `session.state.awaiting_angle_pick` hydrates the bundled card.
+- Pick: `POST /sessions/{id}/choose-angle` (`angle_index` or `angle` text, optional `persona`), or a typed `POST /messages` while angle-parked (angle only — persona is the card field; image park still 409s).
+- `angle_gate` resolves angle picks (exact / 1-based index / CJK numeral / substring). Match → `chosen_angle` + resolved `active_persona` → `executor_post` (pick fields cleared on output). Non-match → `angle_feedback` → `brainstormer` regenerates angles and parks again; a submitted `chosen_persona` survives the loop.
 - Stop while parked discards the turn (ADR 0004); Stop mid `choose-angle` re-parks at `angle_gate`.
 
 ---
@@ -45,9 +45,10 @@ If `product_clarify` is true after matcher → short-circuit to **chat** (ask wh
 | `product_clarify` | `product_matcher` | route → chat |
 | `product_context_ids` | matcher → executor/edit | grounding_check, reviewer, preview persist |
 | `product_candidates` | `product_matcher` | chat (clarify) |
-| `active_persona` | `brainstormer` | executor_post, reviewer, image_plan† |
+| `active_persona` | `brainstormer` / `angle_gate` | executor_post, reviewer, image_plan† |
 | `source_signal_ids` | research_ingest, trend_searcher, executor, edit | grounding_check, reviewer |
 | `chosen_angle` | choose-angle resume / typed pick | `angle_gate` (match check), `executor_post` (payload) |
+| `chosen_persona` | choose-angle card field | `angle_gate` (locks `active_persona`); sticky on re-brief |
 | `angle_feedback` | `angle_gate` on non-matching text | `brainstormer` (regenerate angles) |
 
 † minimal slice only.

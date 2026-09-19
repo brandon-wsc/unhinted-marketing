@@ -262,7 +262,7 @@ awaiting_image_ok     # bool — mirrored into sessions.state when graph is park
 | `trend_searcher` | tool + LLM (cheap) | `source_signal_ids`, ranked signals | `signals.updated` |
 | `chat` | LLM (stream) | `messages` | `message.delta` (tokens) → `message.assistant`; `llm.failed` on provider/transport errors |
 | `brainstormer` | LLM (medium) | `brief`, `mode=AGENT` | `agent.progress` → `brief.updated` |
-| `angle_gate` | deterministic | `chosen_angle` / `angle_feedback` | persist-side `draft.awaiting_angle_pick` on park |
+| `angle_gate` | deterministic | `chosen_angle` / `chosen_persona` / `angle_feedback` / `active_persona` | persist-side `draft.awaiting_angle_pick` on park |
 | `executor_post` | LLM (medium) | `draft` | `agent.progress` → `draft.copy_updated` |
 | `executor_image_plan` | LLM (medium) | `image_plan` | `agent.progress` → `draft.image_plan_updated` |
 | `executor_image_gen` | async dispatch | `image_url` | `draft.image_pending` → `draft.updated` |

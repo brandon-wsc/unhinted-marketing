@@ -364,7 +364,12 @@ def _angle_parked_session() -> SimpleNamespace:
         "can_do": [],
         "cannot_do": [],
         "angles": ["用情侶日常帶出產品", "數據懶人包"],
+        "persona": "hk_youth",
     }
+    session.state["audience_catalog"] = [
+        {"slug": "hk_youth", "label": "年輕人", "hook": "brunch"},
+        {"slug": "hk_parents", "label": "家長", "hook": "school run"},
+    ]
     return session
 
 
@@ -439,9 +444,51 @@ async def test_choose_angle_updates_state_and_resumes() -> None:
 
     update = graph.aupdate_state.await_args
     assert update.args[1]["chosen_angle"] == "數據懶人包"
+    assert "chosen_persona" not in update.args[1]
     assert persist.await_args.kwargs["user_msg"] is None
     assert persist.await_args.kwargs["parked_node"] == "executor_image_plan"
     assert result["interrupted"] is True
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_persona_updates_state() -> None:
+    session = _angle_parked_session()
+    db = AsyncMock()
+    graph = SimpleNamespace(aupdate_state=AsyncMock())
+
+    async def fake_invoke(*_a, **_k):
+        return ({"mode": "AGENT", "messages": []}, False, None, None, [], 5)
+
+    with (
+        patch(
+            "internal.session.service.get_session_graph",
+            return_value=graph,
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=fake_invoke),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": False, "events": [], "values": {}}),
+        ),
+    ):
+        await choose_angle_turn(
+            db, session, angle_index=0, persona="hk_parents"
+        )
+
+    update = graph.aupdate_state.await_args
+    assert update.args[1]["chosen_angle"] == "用情侶日常帶出產品"
+    assert update.args[1]["chosen_persona"] == "hk_parents"
+
+
+@pytest.mark.asyncio
+async def test_choose_angle_unknown_persona_rejected() -> None:
+    session = _angle_parked_session()
+    db = AsyncMock()
+    with pytest.raises(ValueError, match="persona is not in the offered catalog"):
+        await choose_angle_turn(db, session, angle_index=0, persona="nope")
 
 
 @pytest.mark.asyncio
@@ -637,7 +684,11 @@ async def test_persist_emits_awaiting_angle_pick_event() -> None:
             session,
             user_msg=None,
             message_dicts=[],
-            values={"messages": [], "brief": brief},
+            values={
+                "messages": [],
+                "brief": brief,
+                "audience_catalog": session.state["audience_catalog"],
+            },
             still_interrupted=True,
             parked_node="angle_gate",
             progress_events=[],
@@ -654,3 +705,5 @@ async def test_persist_emits_awaiting_angle_pick_event() -> None:
     ev = next(e for e in published if e["type"] == "draft.awaiting_angle_pick")
     assert ev["data"]["awaiting"] is True
     assert ev["data"]["angles"] == brief["angles"]
+    assert ev["data"]["personas"] == session.state["audience_catalog"]
+    assert ev["data"]["recommended_persona"] == "hk_youth"

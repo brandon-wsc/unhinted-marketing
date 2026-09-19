@@ -114,4 +114,31 @@ describe("AnglePickCard", () => {
     );
     expect(onPick).toHaveBeenCalledWith("My own angle");
   });
+
+  const PERSONAS = [
+    { slug: "hk_youth", label: "年輕人", hook: "brunch" },
+    { slug: "hk_parents", label: "家長", hook: "school run" },
+  ];
+
+  it("hides the persona select when the catalog is empty", () => {
+    render(<AnglePickCard angles={ANGLES} sending={false} onPick={vi.fn()} />);
+    expect(screen.queryByLabelText("chat.agent.anglePick.personaLabel")).not.toBeInTheDocument();
+  });
+
+  it("sends the recommended persona with an angle pick", async () => {
+    const onPick = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AnglePickCard
+        angles={ANGLES}
+        personas={PERSONAS}
+        recommendedPersona="hk_youth"
+        sending={false}
+        onPick={onPick}
+      />,
+    );
+    expect(screen.getByRole("combobox")).toHaveTextContent("年輕人");
+    await user.click(screen.getByRole("button", { name: /Angle two/ }));
+    expect(onPick).toHaveBeenCalledWith(1, "hk_youth");
+  });
 });

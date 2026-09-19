@@ -1,6 +1,6 @@
 # ADR 0028 — Angle pick parks before drafting
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0029](./0029-angle-persona-bundled-gate.md)
 - **Date:** 2026-09-15
 - **Supersedes:** — (adds a second `interrupt_before` park; does not change [ADR 0004](./0004-stop-discard-and-image-resume.md) Stop semantics)
 

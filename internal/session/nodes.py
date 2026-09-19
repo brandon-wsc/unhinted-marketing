@@ -206,6 +206,44 @@ def offered_angles(brief: dict[str, Any] | None) -> list[str]:
     ]
 
 
+def offered_personas(catalog: list[dict[str, Any]] | None) -> list[dict[str, str]]:
+    """Audience-catalog rows for the bundled persona select (ADR 0029)."""
+    out: list[dict[str, str]] = []
+    for row in catalog or []:
+        if not isinstance(row, dict):
+            continue
+        slug = str(row.get("slug") or "").strip()
+        if not slug:
+            continue
+        label = str(row.get("label") or slug).strip() or slug
+        hook = str(row.get("hook") or "").strip()
+        out.append({"slug": slug, "label": label, "hook": hook})
+    return out
+
+
+def recommended_persona_slug(state: SessionState | dict[str, Any]) -> str | None:
+    """Sticky chosen_persona, else brief.persona, else the first catalog row."""
+    personas = offered_personas(state.get("audience_catalog"))
+    slugs = {p["slug"] for p in personas}
+    sticky = str(state.get("chosen_persona") or "").strip()
+    if sticky in slugs:
+        return sticky
+    rec = str(((state.get("brief") or {}).get("persona")) or "").strip()
+    if rec in slugs:
+        return rec
+    return personas[0]["slug"] if personas else None
+
+
+def angle_pick_payload(state: SessionState | dict[str, Any]) -> dict[str, Any]:
+    """SSE / hydrate payload for ``draft.awaiting_angle_pick`` (ADR 0029)."""
+    return {
+        "awaiting": True,
+        "angles": offered_angles(state.get("brief")),
+        "personas": offered_personas(state.get("audience_catalog")),
+        "recommended_persona": recommended_persona_slug(state),
+    }
+
+
 _CJK_NUMERAL_INDEX = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4}
 
 
@@ -872,20 +910,30 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
 
 
 async def angle_gate(state: SessionState) -> dict[str, Any]:
-    """ADR 0028 park anchor — runs only on a choose-angle resume.
+    """ADR 0029 park anchor — runs only on a choose-angle resume.
 
     A pick matching an offered ``brief.angles`` entry (exact / 1-based index /
-    CJK numeral / substring) locks ``chosen_angle`` for ``executor_post``.
+    CJK numeral / substring) locks ``chosen_angle`` for ``executor_post`` and
+    resolves ``active_persona`` from ``chosen_persona`` (else ``brief.persona``).
     Non-matching free text becomes ``angle_feedback`` so ``brainstormer``
-    regenerates options instead of drafting on a guessed direction.
+    regenerates options instead of drafting on a guessed direction. A submitted
+    persona slug is left untouched so it survives the re-brief cycle.
     """
     chosen = str(state.get("chosen_angle") or "").strip()
     if not chosen:
         return {}
     matched = resolve_angle_pick(chosen, offered_angles(state.get("brief")))
-    if matched is not None:
-        return {"chosen_angle": matched}
-    return {"chosen_angle": None, "angle_feedback": chosen}
+    if matched is None:
+        return {"chosen_angle": None, "angle_feedback": chosen}
+    catalog = list(state.get("audience_catalog") or [])
+    slug = str(state.get("chosen_persona") or "").strip() or None
+    if not slug:
+        brief_slug = (state.get("brief") or {}).get("persona")
+        slug = str(brief_slug).strip() if brief_slug else None
+    return {
+        "chosen_angle": matched,
+        "active_persona": pick_active_persona(catalog, slug),
+    }
 
 
 @agent_progress("executor_post")
@@ -938,6 +986,7 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         "need_image": True,
         "grounding_ok": True,
         "chosen_angle": None,
+        "chosen_persona": None,
     }
 
 
@@ -1271,12 +1320,12 @@ def route_after_product_matcher(state: SessionState) -> str:
 
 
 def route_after_brainstormer(state: SessionState) -> str:
-    """ADR 0028: offer ≥2 angles for the user to pick before drafting.
+    """ADR 0029: offer ≥2 angles for the user to pick before drafting.
 
     Always park at ``angle_gate`` when there is a real choice — including when
     ``chosen_angle`` is already set. Resume ``aupdate_state`` is attributed to
     this node; short-circuiting on a non-empty pick skipped the gate and drafted
-    Other/feedback text as a locked angle.
+    Other/feedback text as a locked angle. Persona rides along on the same park.
     """
     if len(offered_angles(state.get("brief"))) >= 2:
         return "angle_gate"
