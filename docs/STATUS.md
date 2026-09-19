@@ -67,7 +67,9 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **`/setup` wizard** — account+org → instance URL/email → optional org BYOK LLM → done; LLM + SMTP are skippable; login hides register on on-prem unless carrying an invite
 - **Consumers moved to the instance snapshot** — invite URLs, local media public URLs, OAuth redirect fallback, invite emails (sync readers fall back to env on a cold cache)
 
-**Decision (2026-09-15) — Angle pick parks before drafting:** → [ADR 0028](./adr/0028-angle-pick-before-draft.md). `brainstormer → executor_post` no longer runs unattended: `brief.angles` ≥ 2 parks the graph at `angle_gate`; user picks via `POST /sessions/{id}/choose-angle` card or a typed reply (the only park where a message resumes). Non-matching text re-briefs. Stop/discard unchanged (ADR 0004).
+**Decision (2026-09-19) — Bundled angle + persona gate:** → [ADR 0029](./adr/0029-angle-persona-bundled-gate.md) (supersedes [ADR 0028](./adr/0028-angle-pick-before-draft.md)). Same single park after `brainstormer` when `brief.angles` ≥ 2; the card now submits angle **and** persona in one `POST /choose-angle`. Typed reply still resolves angle only (persona via the card field). Soft chat clarify is unchanged; no LLM-initiated structured park.
+
+**Decision (2026-09-15) — Angle pick parks before drafting:** → [ADR 0028](./adr/0028-angle-pick-before-draft.md) (superseded by [ADR 0029](./adr/0029-angle-persona-bundled-gate.md)). `brainstormer → executor_post` no longer runs unattended: `brief.angles` ≥ 2 parks the graph at `angle_gate`; user picks via `POST /sessions/{id}/choose-angle` card or a typed reply (the only park where a message resumes). Non-matching text re-briefs. Stop/discard unchanged (ADR 0004).
 
 **Decision (2026-09-13) — Docker deployment packages (all-in-one vs external-DB):** → [ADR 0027](./adr/0027-docker-deploy-packages.md)
 
