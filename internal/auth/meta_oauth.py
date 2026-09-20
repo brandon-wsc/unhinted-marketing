@@ -8,9 +8,14 @@ double-submit CSRF cookie set at ``start`` time and verified at the callback.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
+import hmac
 import json
 import logging
 import secrets
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -77,6 +82,13 @@ _RELAY_CALLBACK_PATH = "/meta/callback"
 _RELAY_AUTHORIZE_PATH = "/authorize"
 RELAY_FINISH_PATH = "/api/social/oauth/relay-finish"
 
+# ADR 0033 — Meta Live mode requires these two endpoints on the app.
+_DEAUTHORIZE_PATH = "/api/social/meta/deauthorize"
+_DATA_DELETION_PATH = "/api/social/meta/data-deletion"
+# Relay mode: the vendor app points at the Worker's fixed URLs instead.
+_RELAY_DEAUTHORIZE_PATH = "/meta/deauthorize"
+_RELAY_DATA_DELETION_PATH = "/meta/data-deletion"
+
 
 def oauth_callback_url() -> str | None:
     """Exact URI Meta must whitelist — mode-aware (ADR 0032).
@@ -96,6 +108,29 @@ def oauth_callback_url() -> str | None:
     if not base:
         return None
     return f"{base}{_CALLBACK_PATH}"
+
+
+def meta_platform_callback_urls() -> dict[str, str | None]:
+    """The two dashboard URLs Meta requires before an app can go Live (ADR 0033).
+
+    BYO: derived from ``web_base_url`` — the admin whitelists these exact
+    strings under Instagram → API setup. Relay: the Worker's fixed URLs,
+    whitelisted once on the vendor app (disclosure only, like the callback).
+    """
+    from internal.instance.config import get_snapshot
+
+    snap = get_snapshot()
+    if snap.meta_oauth_mode == "relay":
+        relay = (snap.meta_oauth_relay_url or "").strip().rstrip("/")
+        return {
+            "deauthorize_url": f"{relay}{_RELAY_DEAUTHORIZE_PATH}" if relay else None,
+            "data_deletion_url": f"{relay}{_RELAY_DATA_DELETION_PATH}" if relay else None,
+        }
+    base = (snap.web_base_url or "").strip().rstrip("/")
+    return {
+        "deauthorize_url": f"{base}{_DEAUTHORIZE_PATH}" if base else None,
+        "data_deletion_url": f"{base}{_DATA_DELETION_PATH}" if base else None,
+    }
 
 
 def oauth_configured() -> bool:
@@ -548,3 +583,175 @@ def _graph_error_hint(payload: dict[str, Any], status_code: int) -> str:
     if status_code == 400 and "error" in payload:
         return "meta_oauth_denied"
     return f"meta_oauth_graph_error:{status_code}"
+
+
+# --- Meta platform callbacks (ADR 0033) — Live mode requirements ---
+
+
+def _b64url_decode(raw: str) -> bytes:
+    return base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))
+
+
+def parse_signed_request(raw: str, secret: str) -> dict[str, Any] | None:
+    """Verify a Meta ``signed_request`` (``<b64url sig>.<b64url json>``).
+
+    The signature is HMAC-SHA256 over the payload segment keyed by the app
+    secret — it is the only auth these unauthenticated endpoints get.
+    """
+    if not raw or not secret:
+        return None
+    sig_b64, sep, payload_b64 = raw.partition(".")
+    if not sep or not sig_b64 or not payload_b64:
+        return None
+    try:
+        sig = _b64url_decode(sig_b64)
+        payload = json.loads(_b64url_decode(payload_b64))
+    except (ValueError, binascii.Error):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if str(payload.get("algorithm") or "").upper() != "HMAC-SHA256":
+        return None
+    # Meta signs the base64url-encoded payload text, not the decoded bytes.
+    expected = hmac.new(secret.encode(), payload_b64.encode(), hashlib.sha256).digest()
+    if not hmac.compare_digest(sig, expected):
+        return None
+    return payload
+
+
+async def _disconnect_ig_user(db: AsyncSession, ig_user_id: str) -> int:
+    deleted = await repos.delete_social_accounts_by_ig_user_id(db, ig_user_id)
+    if deleted:
+        logger.info(
+            "meta platform callback disconnected ig_user_id=%s rows=%d",
+            ig_user_id,
+            deleted,
+        )
+    return deleted
+
+
+def _signed_request_ig_user_id(raw: str, secret: str) -> str:
+    payload = parse_signed_request(raw, secret)
+    if payload is None:
+        raise MetaOAuthError("meta_oauth_invalid_signed_request")
+    return str(payload.get("user_id") or "").strip()
+
+
+def _data_deletion_code(ig_user_id: str) -> str:
+    """Stateless confirmation code — HMAC-signed under JWT_SECRET (ADR 0033 §1)."""
+    body = (
+        base64.urlsafe_b64encode(
+            json.dumps(
+                {"u": ig_user_id, "t": int(time.time())}, separators=(",", ":")
+            ).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
+    sig = hmac.new(settings.jwt_secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+    return f"{body}.{sig}"
+
+
+def verify_data_deletion_code(code: str) -> str | None:
+    """Return the ig_user_id when the status code is one we issued."""
+    body, sep, sig = code.partition(".")
+    if not sep:
+        return None
+    expected = hmac.new(
+        settings.jwt_secret.encode(), body.encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return None
+    try:
+        payload = json.loads(_b64url_decode(body))
+    except (ValueError, binascii.Error):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return str(payload.get("u") or "") or None
+
+
+def _data_deletion_status_url(code: str) -> str:
+    from internal.instance.config import get_snapshot
+
+    base = (get_snapshot().web_base_url or "").strip().rstrip("/")
+    return f"{base}{_DATA_DELETION_PATH}/{code}"
+
+
+async def process_deauthorize(db: AsyncSession, *, signed_request: str) -> str:
+    """Meta deauthorize callback: the user removed the app — drop every stored
+    connection for that IG user. Returns the ig_user_id ("" when the payload
+    carries none — still a valid, signed ping). Caller owns the transaction."""
+    from internal.instance.config import get_snapshot
+
+    snap = get_snapshot()
+    if snap.meta_oauth_mode == "relay":
+        # Meta only ever calls the vendor app; the relay forwards these via
+        # process_relay_platform_event instead.
+        raise MetaOAuthError("meta_oauth_mode_unavailable")
+    ig_user_id = _signed_request_ig_user_id(signed_request, snap.meta_app_secret)
+    if ig_user_id:
+        await _disconnect_ig_user(db, ig_user_id)
+    return ig_user_id
+
+
+async def process_data_deletion(
+    db: AsyncSession, *, signed_request: str
+) -> tuple[str, str]:
+    """Meta data-deletion callback — returns ``(confirmation_code, status_url)``.
+
+    Deletion is synchronous (the social_accounts row is all we hold keyed to
+    the IG user), so the status URL always reports ``completed``. Caller owns
+    the transaction.
+    """
+    from internal.instance.config import get_snapshot
+
+    snap = get_snapshot()
+    if snap.meta_oauth_mode == "relay":
+        raise MetaOAuthError("meta_oauth_mode_unavailable")
+    ig_user_id = _signed_request_ig_user_id(signed_request, snap.meta_app_secret)
+    if ig_user_id:
+        await _disconnect_ig_user(db, ig_user_id)
+    code = _data_deletion_code(ig_user_id)
+    return code, _data_deletion_status_url(code)
+
+
+RELAY_EVENT_KINDS = frozenset({"deauthorize", "data_deletion"})
+
+
+def relay_event_signature(kind: str, ig_user_id: str, instance_id: str) -> str:
+    """Shared-secret signature the relay puts on forwarded platform events
+    (ADR 0033 §3): HMAC-SHA256 keyed by this install's registry slug."""
+    return hmac.new(
+        instance_id.encode(), f"{kind}:{ig_user_id}".encode(), hashlib.sha256
+    ).hexdigest()
+
+
+async def process_relay_platform_event(
+    db: AsyncSession, *, kind: str, ig_user_id: str, sig: str
+) -> dict[str, Any]:
+    """Relay-forwarded deauthorize / data-deletion (ADR 0033 §3).
+
+    In relay mode the instance has no app secret, so the vendor relay verifies
+    Meta's ``signed_request`` and re-signs the event with this install's
+    registry slug. Caller owns the transaction.
+    """
+    from internal.instance.config import get_snapshot
+
+    snap = get_snapshot()
+    if snap.meta_oauth_mode != "relay":
+        raise MetaOAuthError("meta_oauth_mode_unavailable")
+    instance_id = snap.meta_oauth_instance_id
+    expected = relay_event_signature(kind, ig_user_id, instance_id)
+    if (
+        kind not in RELAY_EVENT_KINDS
+        or not ig_user_id
+        or not instance_id
+        or not hmac.compare_digest(sig or "", expected)
+    ):
+        raise MetaOAuthError("meta_oauth_invalid_signed_request")
+    await _disconnect_ig_user(db, ig_user_id)
+    if kind == "deauthorize":
+        return {"ok": True}
+    code = _data_deletion_code(ig_user_id)
+    return {"url": _data_deletion_status_url(code), "confirmation_code": code}

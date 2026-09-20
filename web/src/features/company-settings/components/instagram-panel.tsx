@@ -35,6 +35,28 @@ type InstagramPanelProps = {
   companyId: string;
 };
 
+/** One copyable Meta-dashboard URL row in the guided setup card (ADR 0033). */
+function DashboardUrlRow({ url }: { url: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <Input value={url} readOnly className="flex-1" />
+      <Button
+        type="button"
+        variant="outline"
+        className={copied ? "text-success" : undefined}
+        onClick={() => {
+          void navigator.clipboard.writeText(url);
+          setCopied(true);
+        }}
+      >
+        {copied ? t("common.copied") : t("common.copy")}
+      </Button>
+    </div>
+  );
+}
+
 const POLL_INTERVAL_MS = 2500;
 export const OAUTH_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -56,7 +78,8 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const [configured, setConfigured] = useState(false);
   const [oauthMode, setOauthMode] = useState<"byo" | "relay">("byo");
   const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
-  const [callbackCopied, setCallbackCopied] = useState(false);
+  const [deauthorizeUrl, setDeauthorizeUrl] = useState<string | null>(null);
+  const [dataDeletionUrl, setDataDeletionUrl] = useState<string | null>(null);
   const [manualIgUserId, setManualIgUserId] = useState("");
   const [manualToken, setManualToken] = useState("");
   const [manualExpires, setManualExpires] = useState("");
@@ -94,6 +117,8 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
           setConfigured(Boolean(oauth?.configured));
           setOauthMode(oauth?.mode ?? "byo");
           setCallbackUrl(oauth?.callback_url ?? null);
+          setDeauthorizeUrl(oauth?.deauthorize_url ?? null);
+          setDataDeletionUrl(oauth?.data_deletion_url ?? null);
         }
       } catch (err) {
         setError(
@@ -365,22 +390,32 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
               <li>{t("settings.instagram.needsAppStep2")}</li>
               <li>{t("settings.instagram.needsAppStep3")}</li>
             </ol>
-            {callbackUrl && (
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input value={callbackUrl} readOnly className="flex-1" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={callbackCopied ? "text-success" : undefined}
-                  onClick={() => {
-                    void navigator.clipboard.writeText(callbackUrl);
-                    setCallbackCopied(true);
-                  }}
-                >
-                  {callbackCopied ? t("common.copied") : t("common.copy")}
-                </Button>
-              </div>
-            )}
+            {(
+              [
+                {
+                  label: t("settings.instagram.needsAppRedirectLabel"),
+                  url: callbackUrl,
+                },
+                {
+                  label: t("settings.instagram.needsAppDeauthorizeLabel"),
+                  url: deauthorizeUrl,
+                },
+                {
+                  label: t("settings.instagram.needsAppDataDeletionLabel"),
+                  url: dataDeletionUrl,
+                },
+              ] as const
+            )
+              .filter((row): row is { label: string; url: string } => Boolean(row.url))
+              .map((row) => (
+                <div key={row.label} className="space-y-1">
+                  <p className="text-xs text-muted-foreground">{row.label}</p>
+                  <DashboardUrlRow url={row.url} />
+                </div>
+              ))}
+            <p className="text-xs text-muted-foreground">
+              {t("settings.instagram.needsAppLiveNote")}
+            </p>
             <Alert variant="info">
               <AlertDescription>{t("settings.instagram.standardAccessNote")}</AlertDescription>
             </Alert>

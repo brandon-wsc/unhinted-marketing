@@ -24,7 +24,17 @@ export interface Env {
 const CALLBACK_PATH = "/meta/callback";
 const AUTHORIZE_PATH = "/authorize";
 const FINISH_PATH = "/api/social/oauth/relay-finish";
+// ADR 0033 — Meta Live mode also requires deauthorize + data-deletion URLs on
+// the vendor app; the relay verifies signed_request and forwards to the
+// owning install (it holds no app secret and cannot verify Meta itself).
+const DEAUTHORIZE_PATH = "/meta/deauthorize";
+const DATA_DELETION_PATH = "/meta/data-deletion";
+const DATA_DELETION_STATUS_PATH = "/meta/data-deletion-status";
+const INSTANCE_RELAY_PATH = "/api/social/meta/relay";
 const TICKET_TTL_SECONDS = 60;
+// ig_user_id -> instance_id routing so Meta platform callbacks reach the
+// right install. Covers the 60-day long-lived token with headroom.
+const USER_MAP_TTL_SECONDS = 90 * 24 * 60 * 60;
 const DIALOG_URL = "https://www.instagram.com/oauth/authorize";
 const META_OAUTH_SCOPES =
   "instagram_business_basic,instagram_business_content_publish";
@@ -59,11 +69,28 @@ function asJson(raw: unknown): Record<string, unknown> {
 function graphErrorCode(payload: Record<string, unknown>, status: number): string {
   const err = payload.error;
   if (err !== null && typeof err === "object") {
-    const code = (err as Record<string, unknown>).code;
+    const e = err as Record<string, unknown>;
+    const code = e.code;
+    // Error metadata only — no params, no tokens (transit-only posture).
+    console.warn(
+      "meta graph error",
+      JSON.stringify({
+        code,
+        subcode: e.error_subcode,
+        type: e.type,
+        fbtrace: e.fbtrace_id,
+      }),
+    );
     if (typeof code === "number") return `meta_oauth_graph_error:${code}`;
   }
   if (typeof payload.error_type === "string") return payload.error_type;
   return `meta_oauth_graph_error:${status}`;
+}
+
+/** Mirror of meta_oauth.py::_graph_version — META_GRAPH_API_VERSION already
+ * carries the "v" prefix, so normalize before embedding it in a path. */
+function graphVersion(env: Env): string {
+  return (env.META_GRAPH_API_VERSION || "v22.0").trim().replace(/^[/v]+/, "");
 }
 
 function scopeList(raw: unknown): string[] {
@@ -140,7 +167,7 @@ async function exchangeCode(
     : null;
 
   const meUrl = new URL(
-    `https://graph.instagram.com/v${env.META_GRAPH_API_VERSION}/me`,
+    `https://graph.instagram.com/v${graphVersion(env)}/me`,
   );
   meUrl.searchParams.set("fields", ME_FIELDS);
   meUrl.searchParams.set("access_token", accessToken);
@@ -173,6 +200,82 @@ async function exchangeCode(
 
 function finishUrl(base: string, state: string): URL {
   return new URL(FINISH_PATH, base.endsWith("/") ? base : `${base}/`);
+}
+
+function b64urlToBytes(s: string): Uint8Array {
+  const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function toHex(buf: ArrayBuffer): string {
+  return [...new Uint8Array(buf)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function hmacSha256(secret: string, msg: string): Promise<ArrayBuffer> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return crypto.subtle.sign("HMAC", key, new TextEncoder().encode(msg));
+}
+
+/** Verify Meta's `signed_request` (`<b64url sig>.<b64url json>`, HMAC-SHA256
+ * over the encoded payload keyed by the app secret). */
+async function parseSignedRequest(
+  raw: string,
+  secret: string,
+): Promise<Record<string, unknown> | null> {
+  if (!raw || !secret) return null;
+  const dot = raw.indexOf(".");
+  if (dot <= 0 || dot === raw.length - 1) return null;
+  const sigB64 = raw.slice(0, dot);
+  const payloadB64 = raw.slice(dot + 1);
+  let payload: Record<string, unknown>;
+  try {
+    payload = asJson(JSON.parse(new TextDecoder().decode(b64urlToBytes(payloadB64))));
+  } catch {
+    return null;
+  }
+  if (String(payload.algorithm ?? "").toUpperCase() !== "HMAC-SHA256") return null;
+  const expected = new Uint8Array(await hmacSha256(secret, payloadB64));
+  let actual: Uint8Array;
+  try {
+    actual = b64urlToBytes(sigB64);
+  } catch {
+    return null;
+  }
+  if (actual.length !== expected.length) return null;
+  let diff = 0;
+  for (let i = 0; i < actual.length; i++) diff |= actual[i] ^ expected[i];
+  return diff === 0 ? payload : null;
+}
+
+/** Forward a verified Meta platform event to the install that owns the IG
+ * user (ADR 0033 §3). sig re-signs the event with the registry slug so the
+ * instance can tell it came from the relay. */
+async function forwardToInstance(
+  env: Env,
+  kind: "deauthorize" | "data_deletion",
+  igUserId: string,
+): Promise<Response | null> {
+  const instanceId = await env.TICKETS.get(`u:${igUserId}`);
+  if (!instanceId) return null;
+  const base = await env.REGISTRY.get(instanceId);
+  if (!base) return null;
+  const sig = toHex(await hmacSha256(instanceId, `${kind}:${igUserId}`));
+  return fetch(`${base.replace(/\/+$/, "")}${INSTANCE_RELAY_PATH}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind, ig_user_id: igUserId, sig }),
+  });
 }
 
 /**
@@ -231,6 +334,11 @@ async function onCallback(request: Request, env: Env): Promise<Response> {
     await env.TICKETS.put(ticket, JSON.stringify(payload), {
       expirationTtl: TICKET_TTL_SECONDS,
     });
+    // ig_user_id -> instance_id so Meta platform callbacks (deauthorize /
+    // data-deletion) can be routed to the owning install later.
+    await env.TICKETS.put(`u:${payload.ig_user_id}`, instanceId, {
+      expirationTtl: USER_MAP_TTL_SECONDS,
+    });
     finish.searchParams.set("ticket", ticket);
   } catch (err) {
     finish.searchParams.set(
@@ -239,6 +347,65 @@ async function onCallback(request: Request, env: Env): Promise<Response> {
     );
   }
   return redirect(finish.toString());
+}
+
+/** Meta calls this on the vendor app when a user removes it (ADR 0033).
+ * Verified here, then forwarded to the owning install so it can drop the
+ * stored connection. Meta only needs a 200 back. */
+async function onMetaDeauthorize(request: Request, env: Env): Promise<Response> {
+  const form = await request.formData().catch(() => null);
+  if (!form) return text("invalid signed_request", 400);
+  const payload = await parseSignedRequest(
+    String(form.get("signed_request") ?? ""),
+    env.META_APP_SECRET,
+  );
+  if (!payload) return text("invalid signed_request", 400);
+  const igUserId = String(payload.user_id ?? "").trim();
+  if (igUserId) {
+    try {
+      await forwardToInstance(env, "deauthorize", igUserId);
+    } catch {
+      // Best effort — Meta only needs a 200; a dead install keeps a dead token.
+    }
+    await env.TICKETS.delete(`u:${igUserId}`);
+  }
+  return text("ok");
+}
+
+/** Meta data-deletion request on the vendor app (ADR 0033). The instance
+ * owns the data, so we proxy its {url, confirmation_code} back to Meta; when
+ * no routing record exists (connect predates the map) the relay answers
+ * itself — it retains nothing to delete. */
+async function onMetaDataDeletion(request: Request, env: Env): Promise<Response> {
+  const form = await request.formData().catch(() => null);
+  if (!form) return text("invalid signed_request", 400);
+  const payload = await parseSignedRequest(
+    String(form.get("signed_request") ?? ""),
+    env.META_APP_SECRET,
+  );
+  if (!payload) return text("invalid signed_request", 400);
+  const igUserId = String(payload.user_id ?? "").trim();
+  if (igUserId) {
+    try {
+      const resp = await forwardToInstance(env, "data_deletion", igUserId);
+      if (resp && resp.ok) {
+        return new Response(await resp.text(), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+    } catch {
+      // Fall through to the static answer.
+    }
+  }
+  const code = crypto.randomUUID();
+  const url = new URL(request.url);
+  return new Response(
+    JSON.stringify({
+      url: `${url.origin}${DATA_DELETION_STATUS_PATH}?code=${code}`,
+      confirmation_code: code,
+    }),
+    { headers: { "content-type": "application/json" } },
+  );
 }
 
 async function onTicket(request: Request, env: Env, id: string): Promise<Response> {
@@ -259,6 +426,15 @@ export default {
     }
     if (url.pathname === CALLBACK_PATH && request.method === "GET") {
       return onCallback(request, env);
+    }
+    if (url.pathname === DEAUTHORIZE_PATH && request.method === "POST") {
+      return onMetaDeauthorize(request, env);
+    }
+    if (url.pathname === DATA_DELETION_PATH && request.method === "POST") {
+      return onMetaDataDeletion(request, env);
+    }
+    if (url.pathname === DATA_DELETION_STATUS_PATH && request.method === "GET") {
+      return text("Data deletion completed. This relay stores no user data.");
     }
     const ticketMatch = /^\/ticket\/([0-9a-f-]{36})$/i.exec(url.pathname);
     if (ticketMatch && request.method === "GET") {

@@ -47,9 +47,10 @@ async def _setup_pending(db: AsyncSession) -> bool:
 
 
 def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
-    from internal.auth.meta_oauth import oauth_callback_url
+    from internal.auth.meta_oauth import meta_platform_callback_urls, oauth_callback_url
 
     callback_url = oauth_callback_url()
+    platform_urls = meta_platform_callback_urls()
     if row is None:
         return InstanceSettingsResponse(
             web_base_url="",
@@ -64,6 +65,8 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
             meta_app_secret_last4=None,
             meta_oauth_mode="byo",
             meta_oauth_callback_url=callback_url,
+            meta_oauth_deauthorize_url=platform_urls["deauthorize_url"],
+            meta_oauth_data_deletion_url=platform_urls["data_deletion_url"],
             meta_oauth_relay_url="",
             meta_oauth_instance_id="",
             setup_completed=False,
@@ -81,6 +84,8 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
         meta_app_secret_last4=row.meta_app_secret_last4,
         meta_oauth_mode=row.meta_oauth_mode,  # type: ignore[arg-type]
         meta_oauth_callback_url=callback_url,
+        meta_oauth_deauthorize_url=platform_urls["deauthorize_url"],
+        meta_oauth_data_deletion_url=platform_urls["data_deletion_url"],
         meta_oauth_relay_url=row.meta_oauth_relay_url or "",
         meta_oauth_instance_id=row.meta_oauth_instance_id or "",
         setup_completed=row.setup_completed_at is not None,

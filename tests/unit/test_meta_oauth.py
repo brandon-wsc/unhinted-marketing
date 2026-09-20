@@ -638,3 +638,193 @@ async def test_exchange_code_blocked_in_relay_mode(
         await exchange_code(
             db=AsyncMock(), code="c", state="a:b", csrf_token=None
         )
+
+
+# --- Meta platform callbacks (ADR 0033) ---
+
+import base64
+import hashlib
+import hmac as hmac_mod
+import json as json_mod
+
+from internal.auth.meta_oauth import (
+    meta_platform_callback_urls,
+    parse_signed_request,
+    process_data_deletion,
+    process_deauthorize,
+    process_relay_platform_event,
+    relay_event_signature,
+    verify_data_deletion_code,
+)
+
+APP_SECRET = "secret123"
+
+
+def _signed_request(payload: dict, secret: str = APP_SECRET) -> str:
+    body = (
+        base64.urlsafe_b64encode(json_mod.dumps(payload).encode()).decode().rstrip("=")
+    )
+    sig = base64.urlsafe_b64encode(
+        hmac_mod.new(secret.encode(), body.encode(), hashlib.sha256).digest()
+    ).decode().rstrip("=")
+    return f"{sig}.{body}"
+
+
+async def test_parse_signed_request_roundtrip(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure(monkeypatch)
+    raw = _signed_request(
+        {"algorithm": "HMAC-SHA256", "user_id": IG_USER, "issued_at": 1}
+    )
+    payload = parse_signed_request(raw, APP_SECRET)
+    assert payload is not None
+    assert payload["user_id"] == IG_USER
+
+
+async def test_parse_signed_request_rejects_tamper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    assert parse_signed_request(
+        _signed_request({"user_id": IG_USER}), "other-secret"
+    ) is None
+    body = base64.urlsafe_b64encode(
+        json_mod.dumps({"algorithm": "HMAC-SHA256", "user_id": "999"}).encode()
+    ).decode().rstrip("=")
+    # valid sig for a different payload must not verify
+    raw = _signed_request({"algorithm": "HMAC-SHA256", "user_id": IG_USER})
+    sig = raw.split(".", 1)[0]
+    assert parse_signed_request(f"{sig}.{body}", APP_SECRET) is None
+    assert parse_signed_request("not-a-request", APP_SECRET) is None
+    assert parse_signed_request("", APP_SECRET) is None
+    assert parse_signed_request(raw, "") is None
+    # payload that is not a dict
+    body_list = base64.urlsafe_b64encode(b"[1,2]").decode().rstrip("=")
+    sig_list = base64.urlsafe_b64encode(
+        hmac_mod.new(APP_SECRET.encode(), body_list.encode(), hashlib.sha256).digest()
+    ).decode().rstrip("=")
+    assert parse_signed_request(f"{sig_list}.{body_list}", APP_SECRET) is None
+
+
+async def test_meta_platform_callback_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure(monkeypatch)
+    urls = meta_platform_callback_urls()
+    assert urls["deauthorize_url"] == f"{OAUTH_ORIGIN}/api/social/meta/deauthorize"
+    assert urls["data_deletion_url"] == f"{OAUTH_ORIGIN}/api/social/meta/data-deletion"
+
+    _relay_snapshot(monkeypatch)
+    urls = meta_platform_callback_urls()
+    assert urls["deauthorize_url"] == "https://connect.example.com/meta/deauthorize"
+    assert urls["data_deletion_url"] == "https://connect.example.com/meta/data-deletion"
+
+
+async def test_process_deauthorize_disconnects(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure(monkeypatch)
+    from internal.auth import meta_oauth as mod
+
+    deleted: list[str] = []
+
+    async def fake_delete(db, ig_user_id):
+        deleted.append(ig_user_id)
+        return 1
+
+    monkeypatch.setattr(
+        mod.repos, "delete_social_accounts_by_ig_user_id", fake_delete
+    )
+    raw = _signed_request(
+        {"algorithm": "HMAC-SHA256", "user_id": IG_USER}
+    )
+    ig_user_id = await process_deauthorize(AsyncMock(), signed_request=raw)
+    assert ig_user_id == IG_USER
+    assert deleted == [IG_USER]
+
+
+async def test_process_deauthorize_bad_signature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    with pytest.raises(MetaOAuthError, match="meta_oauth_invalid_signed_request"):
+        await process_deauthorize(
+            AsyncMock(), signed_request=_signed_request({"user_id": IG_USER}, "nope")
+        )
+
+
+async def test_process_deauthorize_blocked_in_relay_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Relay mode: Meta calls the vendor app — the instance must refuse the
+    raw signed_request path and rely on the relay forward instead."""
+    _relay_snapshot(monkeypatch)
+    with pytest.raises(MetaOAuthError, match="meta_oauth_mode_unavailable"):
+        await process_deauthorize(AsyncMock(), signed_request="a.b")
+
+
+async def test_process_data_deletion_returns_status_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    from internal.auth import meta_oauth as mod
+
+    monkeypatch.setattr(
+        mod.repos,
+        "delete_social_accounts_by_ig_user_id",
+        AsyncMock(return_value=1),
+    )
+    raw = _signed_request({"algorithm": "HMAC-SHA256", "user_id": IG_USER})
+    code, url = await process_data_deletion(AsyncMock(), signed_request=raw)
+    assert url.startswith(f"{OAUTH_ORIGIN}/api/social/meta/data-deletion/")
+    assert url.endswith(code)
+    assert verify_data_deletion_code(code) == IG_USER
+    assert verify_data_deletion_code(code + "x") is None
+    assert verify_data_deletion_code("bogus") is None
+
+
+async def test_relay_platform_event_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    _relay_snapshot(monkeypatch)
+    from internal.auth import meta_oauth as mod
+
+    deleted: list[str] = []
+
+    async def fake_delete(db, ig_user_id):
+        deleted.append(ig_user_id)
+        return 1
+
+    monkeypatch.setattr(
+        mod.repos, "delete_social_accounts_by_ig_user_id", fake_delete
+    )
+    sig = relay_event_signature("deauthorize", IG_USER, "inst-abc")
+    result = await process_relay_platform_event(
+        AsyncMock(), kind="deauthorize", ig_user_id=IG_USER, sig=sig
+    )
+    assert result == {"ok": True}
+    assert deleted == [IG_USER]
+
+    sig = relay_event_signature("data_deletion", IG_USER, "inst-abc")
+    result = await process_relay_platform_event(
+        AsyncMock(), kind="data_deletion", ig_user_id=IG_USER, sig=sig
+    )
+    assert result["url"].startswith(f"{OAUTH_ORIGIN}/api/social/meta/data-deletion/")
+    assert result["confirmation_code"]
+
+
+async def test_relay_platform_event_rejects_bad_sig_and_byo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _relay_snapshot(monkeypatch)
+    with pytest.raises(MetaOAuthError, match="meta_oauth_invalid_signed_request"):
+        await process_relay_platform_event(
+            AsyncMock(), kind="deauthorize", ig_user_id=IG_USER, sig="bad"
+        )
+    sig_other = relay_event_signature("deauthorize", IG_USER, "inst-OTHER")
+    with pytest.raises(MetaOAuthError, match="meta_oauth_invalid_signed_request"):
+        await process_relay_platform_event(
+            AsyncMock(), kind="deauthorize", ig_user_id=IG_USER, sig=sig_other
+        )
+
+    _configure(monkeypatch)
+    with pytest.raises(MetaOAuthError, match="meta_oauth_mode_unavailable"):
+        await process_relay_platform_event(
+            AsyncMock(),
+            kind="deauthorize",
+            ig_user_id=IG_USER,
+            sig=relay_event_signature("deauthorize", IG_USER, "inst-abc"),
+        )

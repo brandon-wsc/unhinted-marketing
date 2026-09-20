@@ -1773,6 +1773,16 @@ async def delete_social_account(
     return True
 
 
+async def delete_social_accounts_by_ig_user_id(db: AsyncSession, ig_user_id: str) -> int:
+    """Meta platform callbacks (ADR 0033): drop every connection an IG user
+    has across orgs — the deauthorize/data-deletion payload only carries the
+    user id, not a company."""
+    result = await db.execute(
+        delete(SocialAccount).where(SocialAccount.ig_user_id == ig_user_id)
+    )
+    return result.rowcount or 0
+
+
 # --- Media storage config / migrate (ADR 0025) ---
 
 OPEN_MIGRATION_STATES = (

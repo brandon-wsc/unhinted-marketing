@@ -25,6 +25,8 @@ def _configure(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(config.settings, "meta_app_id", "env-app-id")
     monkeypatch.setattr(config.settings, "meta_app_secret", "env-secret")
+    monkeypatch.setattr(config.settings, "oauth_relay_url", None)
+    monkeypatch.setattr(config.settings, "meta_oauth_instance_id", None)
     reset_snapshot_cache()
 
 

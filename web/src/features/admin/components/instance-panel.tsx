@@ -25,6 +25,40 @@ import {
 import { mapApiError } from "@/lib/map-api-error";
 import { isSuperAdmin } from "@/lib/platform-level";
 
+function CopyUrlField({
+  id,
+  label,
+  value,
+  hint,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  hint: string;
+}) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  return (
+    <FormField id={id} label={label}>
+      <div className="flex gap-2">
+        <Input id={id} value={value} readOnly className="flex-1" />
+        <Button
+          type="button"
+          variant="outline"
+          className={copied ? "text-success" : undefined}
+          onClick={() => {
+            void navigator.clipboard.writeText(value);
+            setCopied(true);
+          }}
+        >
+          {copied ? t("common.copied") : t("common.copy")}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </FormField>
+  );
+}
+
 /** Platform instance settings (ADR 0026) — view ADMIN+, edit SUPERADMIN. */
 export function InstancePanel() {
   const { t } = useTranslation();
@@ -48,7 +82,6 @@ export function InstancePanel() {
   const [metaAppSecret, setMetaAppSecret] = useState("");
   const [metaMode, setMetaMode] = useState<MetaOAuthMode>("byo");
   const [relayUrl, setRelayUrl] = useState("");
-  const [callbackCopied, setCallbackCopied] = useState(false);
   const [instanceIdCopied, setInstanceIdCopied] = useState(false);
 
   useEffect(() => {
@@ -342,36 +375,34 @@ export function InstancePanel() {
           </FormField>
         </>
       )}
-      <FormField id="inst-meta-callback" label={t("system.instance.metaCallbackUrl")}>
-        {settings.meta_oauth_callback_url ? (
-          <>
-            <div className="flex gap-2">
-              <Input
-                id="inst-meta-callback"
-                value={settings.meta_oauth_callback_url}
-                readOnly
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className={callbackCopied ? "text-success" : undefined}
-                onClick={() => {
-                  void navigator.clipboard.writeText(settings.meta_oauth_callback_url ?? "");
-                  setCallbackCopied(true);
-                }}
-              >
-                {callbackCopied ? t("common.copied") : t("common.copy")}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("system.instance.metaCallbackHint")}</p>
-          </>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {t("system.instance.metaCallbackMissing")}
-          </p>
-        )}
-      </FormField>
+      {settings.meta_oauth_callback_url ? (
+        <>
+          <CopyUrlField
+            id="inst-meta-callback"
+            label={t("system.instance.metaCallbackUrl")}
+            value={settings.meta_oauth_callback_url}
+            hint={t("system.instance.metaCallbackHint")}
+          />
+          {settings.meta_oauth_deauthorize_url && (
+            <CopyUrlField
+              id="inst-meta-deauthorize"
+              label={t("system.instance.metaDeauthorizeUrl")}
+              value={settings.meta_oauth_deauthorize_url}
+              hint={t("system.instance.metaDeauthorizeHint")}
+            />
+          )}
+          {settings.meta_oauth_data_deletion_url && (
+            <CopyUrlField
+              id="inst-meta-data-deletion"
+              label={t("system.instance.metaDataDeletionUrl")}
+              value={settings.meta_oauth_data_deletion_url}
+              hint={t("system.instance.metaDataDeletionHint")}
+            />
+          )}
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">{t("system.instance.metaCallbackMissing")}</p>
+      )}
       {canEdit && (
         <Button type="submit" disabled={saving}>
           {saving ? t("setup.submitting") : t("common.save")}

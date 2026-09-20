@@ -790,6 +790,8 @@ export type SocialOAuthInfo = {
   poll_url?: string | null;
   configured?: boolean;
   callback_url?: string | null;
+  deauthorize_url?: string | null;
+  data_deletion_url?: string | null;
   mode?: "byo" | "relay";
 };
 

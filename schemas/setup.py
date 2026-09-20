@@ -60,6 +60,9 @@ class InstanceSettingsResponse(BaseModel):
     meta_app_secret_last4: str | None
     meta_oauth_mode: MetaOAuthMode
     meta_oauth_callback_url: str | None
+    # ADR 0033 — dashboard URLs Meta requires before the app can go Live.
+    meta_oauth_deauthorize_url: str | None
+    meta_oauth_data_deletion_url: str | None
     # ADR 0032 §3 — relay opt-in: vendor relay base + this install's registry
     # slug (read-only; the relay's REGISTRY maps it to web_base_url).
     meta_oauth_relay_url: str

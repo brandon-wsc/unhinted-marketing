@@ -39,8 +39,17 @@ POST /oauth/start  →  authorization_url:
 |---|---|
 | `GET /authorize?state=…` | Instance OAuth start target — 302s to Instagram with vendor creds |
 | `GET /meta/callback` | Meta redirect target (whitelisted URI) |
+| `POST /meta/deauthorize` | Meta deauthorize callback — verifies signed_request, forwards to the owning install (`u:{ig_user_id}` → REGISTRY slug map written at ticket time) |
+| `POST /meta/data-deletion` | Meta data-deletion callback — same routing; proxies the install's `{url, confirmation_code}` |
+| `GET /meta/data-deletion-status?code=…` | Static status page when no routing record exists (relay retains nothing) |
 | `GET /ticket/{uuid}` | One-time redeem — read-once, 60s TTL |
 | `GET /healthz` | Smoke check |
+
+Vendor app dashboard (Live mode, ADR 0033): whitelist
+`{RELAY_BASE}/meta/callback` as the OAuth redirect URI and paste
+`{RELAY_BASE}/meta/deauthorize` + `{RELAY_BASE}/meta/data-deletion` into the
+Instagram product's callback fields, plus a Privacy Policy URL under App
+Settings → Basic.
 
 ## Setup
 

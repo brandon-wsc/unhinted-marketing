@@ -2031,6 +2031,133 @@
         }
       }
     },
+    "/api/social/meta/deauthorize": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Meta Deauthorize",
+        "description": "Meta deauthorize callback (ADR 0033) — user removed the app in their\nInstagram settings. Meta POSTs a form ``signed_request``; the signature\n(HMAC-SHA256 with the app secret) is the only auth on this public route.",
+        "operationId": "meta_deauthorize_api_social_meta_deauthorize_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/social/meta/data-deletion": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Meta Data Deletion",
+        "description": "Meta data-deletion callback (ADR 0033) — delete the IG user's stored\nconnection, then answer the JSON Meta expects: a status URL plus a\nconfirmation code.",
+        "operationId": "meta_data_deletion_api_social_meta_data_deletion_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaDataDeletionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/social/meta/data-deletion/{code}": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Meta Data Deletion Status",
+        "description": "User-facing status page Meta shows next to the confirmation code.\nDeletion already ran before we answered Meta, so a valid code is always\n``completed``.",
+        "operationId": "meta_data_deletion_status_api_social_meta_data_deletion__code__get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaDataDeletionStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/social/meta/relay": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Meta Relay Event",
+        "description": "Relay-forwarded platform event (ADR 0033 §3) — the vendor relay verified\nMeta's signed_request and re-signed this with our registry slug.",
+        "operationId": "meta_relay_event_api_social_meta_relay_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetaRelayEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaRelayResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/companies/{company_id}/storage/config": {
       "get": {
         "tags": [
@@ -6641,6 +6768,28 @@
             ],
             "title": "Meta Oauth Callback Url"
           },
+          "meta_oauth_deauthorize_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta Oauth Deauthorize Url"
+          },
+          "meta_oauth_data_deletion_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta Oauth Data Deletion Url"
+          },
           "meta_oauth_relay_url": {
             "type": "string",
             "title": "Meta Oauth Relay Url"
@@ -6668,6 +6817,8 @@
           "meta_app_secret_last4",
           "meta_oauth_mode",
           "meta_oauth_callback_url",
+          "meta_oauth_deauthorize_url",
+          "meta_oauth_data_deletion_url",
           "meta_oauth_relay_url",
           "meta_oauth_instance_id",
           "setup_completed"
@@ -7255,6 +7406,110 @@
           "password"
         ],
         "title": "LoginRequest"
+      },
+      "MetaDataDeletionResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "confirmation_code": {
+            "type": "string",
+            "title": "Confirmation Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "confirmation_code"
+        ],
+        "title": "MetaDataDeletionResponse",
+        "description": "Meta data-deletion callback answer — Meta shows the user url + code."
+      },
+      "MetaDataDeletionStatus": {
+        "properties": {
+          "confirmation_code": {
+            "type": "string",
+            "title": "Confirmation Code"
+          },
+          "status": {
+            "type": "string",
+            "const": "completed",
+            "title": "Status",
+            "default": "completed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmation_code"
+        ],
+        "title": "MetaDataDeletionStatus",
+        "description": "Status lookup behind the confirmation code (deletion is synchronous)."
+      },
+      "MetaRelayEvent": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "deauthorize",
+              "data_deletion"
+            ],
+            "title": "Kind"
+          },
+          "ig_user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Ig User Id"
+          },
+          "sig": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sig"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "ig_user_id",
+          "sig"
+        ],
+        "title": "MetaRelayEvent",
+        "description": "Relay-forwarded platform event (ADR 0033 §3). ``sig`` is HMAC-SHA256\nover ``{kind}:{ig_user_id}`` keyed by this install's registry slug."
+      },
+      "MetaRelayResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "confirmation_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Code"
+          }
+        },
+        "type": "object",
+        "title": "MetaRelayResult"
       },
       "MetaResponse": {
         "properties": {
@@ -9810,6 +10065,28 @@
             ],
             "title": "Mode",
             "default": "byo"
+          },
+          "deauthorize_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deauthorize Url"
+          },
+          "data_deletion_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Deletion Url"
           }
         },
         "type": "object",

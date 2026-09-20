@@ -10,7 +10,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class OAuthStatus(StrEnum):
@@ -36,3 +36,36 @@ class SocialOAuthInfo(BaseModel):
     callback_url: str | None = None
     # ADR 0032 §3 — which path connect uses; the UI discloses relay transit.
     mode: Literal["byo", "relay"] = "byo"
+    # ADR 0033 — dashboard URLs Meta requires before the app can go Live
+    # (BYO: derived from web_base_url; relay: the vendor's fixed URLs).
+    deauthorize_url: str | None = None
+    data_deletion_url: str | None = None
+
+
+class MetaDataDeletionResponse(BaseModel):
+    """Meta data-deletion callback answer — Meta shows the user url + code."""
+
+    url: str
+    confirmation_code: str
+
+
+class MetaDataDeletionStatus(BaseModel):
+    """Status lookup behind the confirmation code (deletion is synchronous)."""
+
+    confirmation_code: str
+    status: Literal["completed"] = "completed"
+
+
+class MetaRelayEvent(BaseModel):
+    """Relay-forwarded platform event (ADR 0033 §3). ``sig`` is HMAC-SHA256
+    over ``{kind}:{ig_user_id}`` keyed by this install's registry slug."""
+
+    kind: Literal["deauthorize", "data_deletion"]
+    ig_user_id: str = Field(min_length=1, max_length=64)
+    sig: str = Field(min_length=1, max_length=128)
+
+
+class MetaRelayResult(BaseModel):
+    ok: bool = True
+    url: str | None = None
+    confirmation_code: str | None = None
