@@ -2098,15 +2098,17 @@ export type components = {
             meta_oauth_relay_url: string;
             /** Meta Oauth Instance Id */
             meta_oauth_instance_id: string;
+            /** Meta Oauth Relay Secret Last4 */
+            meta_oauth_relay_secret_last4: string | null;
             /** Setup Completed */
             setup_completed: boolean;
         };
         /**
          * InstanceSettingsUpdate
-         * @description PUT semantics: omitted fields keep their current value; smtp_password
-         *     and meta_app_secret only rotate when a non-empty value is sent (never
-         *     returned back). A changed meta_app_id drops the stored secret — the old
-         *     secret can never pair with a different app.
+         * @description PUT semantics: omitted fields keep their current value; smtp_password,
+         *     meta_app_secret and meta_oauth_relay_secret only rotate when a non-empty
+         *     value is sent (never returned back). A changed meta_app_id drops the
+         *     stored secret — the old secret can never pair with a different app.
          */
         InstanceSettingsUpdate: {
             /** Web Base Url */
@@ -2118,6 +2120,8 @@ export type components = {
             meta_app_secret?: string | null;
             /** Meta Oauth Mode */
             meta_oauth_mode?: ("byo" | "relay") | null;
+            /** Meta Oauth Relay Secret */
+            meta_oauth_relay_secret?: string | null;
         };
         /**
          * LlmCallRecordDetail
