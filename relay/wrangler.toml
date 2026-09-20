@@ -1,0 +1,25 @@
+name = "unhinted-oauth-relay"
+main = "src/index.ts"
+compatibility_date = "2026-09-20"
+
+# Non-secret config. Same Instagram App ID as the app's .env META_APP_ID.
+[vars]
+META_APP_ID = "1381157764130031"
+META_GRAPH_API_VERSION = "v22.0"
+
+# instance_id -> instance base URL (e.g. "acme" -> "https://marketing.acme.com").
+# Entries are added by hand (v1 allowlist): wrangler kv key put.
+# Uncomment after `wrangler kv namespace create` prints the ids.
+[[kv_namespaces]]
+binding = "REGISTRY"
+id = "fcb5053c60f1416ea93d08d02ae93f20"
+
+# one-time ticket -> token payload, 60s TTL, deleted on redeem.
+[[kv_namespaces]]
+binding = "TICKETS"
+id = "03b6f9135c274b7e9baad129ea49e227"
+
+# Custom domain (recommended — workers.dev works without it):
+# routes = [{ pattern = "connect.example.com", custom_domain = true }]
+
+# Secret (set via `wrangler secret put`, never here): META_APP_SECRET
