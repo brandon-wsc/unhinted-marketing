@@ -116,6 +116,39 @@ async def test_seed_meta_from_env_skips_when_already_set(
     assert fields["meta_oauth_instance_id"]
 
 
+async def test_seed_relay_url_env_overrides_seeded_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Relay URL has no portal writer — a later OAUTH_RELAY_URL change must
+    still apply on the next boot (env is authoritative for this field)."""
+    _configure(monkeypatch)
+    row = InstanceSettings(id=1, meta_oauth_relay_url=HOSTED_OAUTH_RELAY_URL)
+    upsert, _ = _mock_repos(monkeypatch, row)
+    db = AsyncMock()
+
+    monkeypatch.setattr(config.settings, "oauth_relay_url", "https://relay.example.com")
+    reset_snapshot_cache()
+    seeded = await _seed_meta_from_env(db, snapshot_from_env())
+
+    assert seeded is True
+    assert upsert.await_args.kwargs["meta_oauth_relay_url"] == "https://relay.example.com"
+
+
+async def test_seed_relay_url_env_unset_restores_hosted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Removing OAUTH_RELAY_URL falls the row back to the hosted relay."""
+    _configure(monkeypatch)
+    row = InstanceSettings(id=1, meta_oauth_relay_url="https://relay.example.com")
+    upsert, _ = _mock_repos(monkeypatch, row)
+    db = AsyncMock()
+
+    seeded = await _seed_meta_from_env(db, snapshot_from_env())
+
+    assert seeded is True
+    assert upsert.await_args.kwargs["meta_oauth_relay_url"] == HOSTED_OAUTH_RELAY_URL
+
+
 async def test_ensure_seeded_creates_row_with_meta(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -60,7 +60,6 @@ export type InstanceSettingsUpdate = {
   meta_app_id?: string;
   meta_app_secret?: string;
   meta_oauth_mode?: MetaOAuthMode;
-  meta_oauth_relay_url?: string;
 };
 
 export async function apiGetSetupStatus(): Promise<SetupStatus> {

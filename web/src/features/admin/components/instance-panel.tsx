@@ -81,7 +81,6 @@ export function InstancePanel() {
   const [metaAppId, setMetaAppId] = useState("");
   const [metaAppSecret, setMetaAppSecret] = useState("");
   const [metaMode, setMetaMode] = useState<MetaOAuthMode>("byo");
-  const [relayUrl, setRelayUrl] = useState("");
   const [instanceIdCopied, setInstanceIdCopied] = useState(false);
 
   useEffect(() => {
@@ -99,7 +98,6 @@ export function InstancePanel() {
         setSmtpTls(row.smtp_tls);
         setMetaAppId(row.meta_app_id);
         setMetaMode(row.meta_oauth_mode);
-        setRelayUrl(row.meta_oauth_relay_url);
       })
       .catch((err) => {
         if (!cancelled) setError(mapApiError(err instanceof Error ? err.message : "", t));
@@ -128,7 +126,6 @@ export function InstancePanel() {
         meta_app_id: metaAppId.trim(),
         meta_app_secret: metaAppSecret || undefined,
         meta_oauth_mode: metaMode,
-        meta_oauth_relay_url: relayUrl.trim() || undefined,
       });
       setSettings(next);
       setSmtpPassword("");
@@ -331,7 +328,12 @@ export function InstancePanel() {
       {metaMode === "relay" && (
         <>
           <FormField id="inst-meta-relay-url" label={t("system.instance.metaRelayUrl")}>
-            <Input id="inst-meta-relay-url" value={relayUrl} readOnly autoComplete="off" />
+            <Input
+              id="inst-meta-relay-url"
+              value={settings.meta_oauth_relay_url}
+              readOnly
+              autoComplete="off"
+            />
             <p className="text-xs text-muted-foreground">{t("system.instance.metaRelayUrlHint")}</p>
           </FormField>
           <FormField id="inst-meta-instance-id" label={t("system.instance.metaInstanceId")}>

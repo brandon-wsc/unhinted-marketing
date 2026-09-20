@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -229,6 +230,21 @@ async def oauth_callback(
     )
 
 
+# Error codes the relay may put on the relay-finish redirect (relay/src/index.ts).
+# Anything else is dropped to a generic code — the SPA renders ``?status=``
+# verbatim, so a raw query param must never reach the UI.
+_RELAY_FINISH_ERRORS = frozenset(
+    {
+        "access_denied",
+        "meta_oauth_missing_params",
+        "meta_oauth_exchange_failed",
+        "meta_oauth_not_professional",
+        "meta_oauth_missing_publish",
+    }
+)
+_RELAY_GRAPH_ERROR_RE = re.compile(r"meta_oauth_graph_error:\d{1,10}")
+
+
 @oauth_callback_router.get("/oauth/relay-finish")
 async def oauth_relay_finish(
     request: Request,
@@ -244,7 +260,13 @@ async def oauth_relay_finish(
         logger.warning("meta oauth relay finish failed upstream: %s", error)
         await repos.clear_social_oauth_state_for_state(db, state)
         await db.commit()
-        return _oauth_redirect(detail=error)
+        detail = (
+            error
+            if error in _RELAY_FINISH_ERRORS
+            or _RELAY_GRAPH_ERROR_RE.fullmatch(error)
+            else "meta_oauth_exchange_failed"
+        )
+        return _oauth_redirect(detail=detail)
 
     if not ticket or not state:
         await repos.clear_social_oauth_state_for_state(db, state)

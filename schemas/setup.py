@@ -81,7 +81,5 @@ class InstanceSettingsUpdate(BaseModel):
     meta_app_id: str | None = Field(default=None, max_length=255)
     meta_app_secret: str | None = Field(default=None, max_length=255)
     meta_oauth_mode: MetaOAuthMode | None = None
-    meta_oauth_relay_url: str | None = Field(default=None, max_length=500)
 
     _check_url = field_validator("web_base_url")(_clean_url)
-    _check_relay_url = field_validator("meta_oauth_relay_url")(_clean_url)

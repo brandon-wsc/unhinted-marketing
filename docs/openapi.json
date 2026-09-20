@@ -6887,18 +6887,6 @@
               }
             ],
             "title": "Meta Oauth Mode"
-          },
-          "meta_oauth_relay_url": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 500
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meta Oauth Relay Url"
           }
         },
         "type": "object",

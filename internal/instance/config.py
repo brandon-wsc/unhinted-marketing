@@ -171,7 +171,12 @@ async def _seed_meta_from_env(db: AsyncSession, env_snap: InstanceSnapshot) -> b
         fields["meta_app_id"] = env_snap.meta_app_id
         fields["meta_app_secret_encrypted"] = secret_enc
         fields["meta_app_secret_last4"] = secret_last4
-    if row.meta_oauth_relay_url is None and env_snap.meta_oauth_relay_url:
+    if env_snap.meta_oauth_relay_url and row.meta_oauth_relay_url != (
+        env_snap.meta_oauth_relay_url
+    ):
+        # No portal writer for this field — env (or the hosted default it
+        # falls back to) is authoritative, so a later OAUTH_RELAY_URL change
+        # still takes effect on the next boot.
         fields["meta_oauth_relay_url"] = env_snap.meta_oauth_relay_url
     if not row.meta_oauth_instance_id:
         # Registry slug the relay maps to this install's web_base_url —

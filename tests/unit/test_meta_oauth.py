@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac as hmac_mod
+import json as json_mod
 import uuid
 from unittest.mock import AsyncMock
 
@@ -14,12 +18,19 @@ from internal.auth.meta_oauth import (
     MetaOAuthError,
     _oauth_fields,
     exchange_code,
+    meta_platform_callback_urls,
     oauth_callback_url,
     oauth_configured,
     parse_relay_state,
+    parse_signed_request,
     parse_state,
+    process_data_deletion,
+    process_deauthorize,
+    process_relay_platform_event,
     redeem_relay_ticket,
+    relay_event_signature,
     start_oauth,
+    verify_data_deletion_code,
 )
 from internal.instance.config import reset_snapshot_cache
 from internal.memory.models import SocialAccount
@@ -641,21 +652,6 @@ async def test_exchange_code_blocked_in_relay_mode(
 
 
 # --- Meta platform callbacks (ADR 0033) ---
-
-import base64
-import hashlib
-import hmac as hmac_mod
-import json as json_mod
-
-from internal.auth.meta_oauth import (
-    meta_platform_callback_urls,
-    parse_signed_request,
-    process_data_deletion,
-    process_deauthorize,
-    process_relay_platform_event,
-    relay_event_signature,
-    verify_data_deletion_code,
-)
 
 APP_SECRET = "secret123"
 

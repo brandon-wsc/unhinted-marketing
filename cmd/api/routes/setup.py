@@ -212,9 +212,6 @@ async def put_instance_settings(
             ) from exc
     if body.meta_oauth_mode is not None:
         fields["meta_oauth_mode"] = body.meta_oauth_mode
-    if body.meta_oauth_relay_url is not None:
-        # "" clears; a relay switch needs the matching REGISTRY entry anyway.
-        fields["meta_oauth_relay_url"] = body.meta_oauth_relay_url or None
     if fields:
         row = await repos.upsert_instance_settings(db, **fields)
     await db.commit()
