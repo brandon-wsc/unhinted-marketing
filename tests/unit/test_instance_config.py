@@ -28,6 +28,7 @@ def _configure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config.settings, "meta_app_secret", "env-secret")
     monkeypatch.setattr(config.settings, "oauth_relay_url", None)
     monkeypatch.setattr(config.settings, "meta_oauth_instance_id", None)
+    monkeypatch.setattr(config.settings, "oauth_relay_secret", None)
     reset_snapshot_cache()
 
 
@@ -147,6 +148,38 @@ async def test_seed_relay_url_env_unset_restores_hosted(
 
     assert seeded is True
     assert upsert.await_args.kwargs["meta_oauth_relay_url"] == HOSTED_OAUTH_RELAY_URL
+
+
+async def test_seed_relay_secret_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0034 — OAUTH_RELAY_SECRET seeds the row only while unset."""
+    _configure(monkeypatch)
+    monkeypatch.setattr(config.settings, "oauth_relay_secret", "relay-secret-xyz")
+    row = InstanceSettings(id=1)
+    _mock_repos(monkeypatch, row)
+    db = AsyncMock()
+
+    seeded = await _seed_meta_from_env(db, snapshot_from_env())
+
+    assert seeded is True
+    assert row.meta_oauth_relay_secret_last4 == "-xyz"
+    assert decrypt_key(row.meta_oauth_relay_secret_encrypted) == "relay-secret-xyz"
+
+
+async def test_seed_relay_secret_skips_when_already_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Portal-pasted secret wins — env must not overwrite it on reboot."""
+    _configure(monkeypatch)
+    monkeypatch.setattr(config.settings, "oauth_relay_secret", "env-relay-secret")
+    row = InstanceSettings(id=1, meta_oauth_relay_secret_encrypted="enc-existing")
+    upsert, _ = _mock_repos(monkeypatch, row)
+    db = AsyncMock()
+
+    await _seed_meta_from_env(db, snapshot_from_env())
+
+    assert "meta_oauth_relay_secret_encrypted" not in upsert.await_args.kwargs
 
 
 async def test_ensure_seeded_creates_row_with_meta(

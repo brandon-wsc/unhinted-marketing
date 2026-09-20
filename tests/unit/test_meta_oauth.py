@@ -29,6 +29,7 @@ from internal.auth.meta_oauth import (
     process_relay_platform_event,
     redeem_relay_ticket,
     relay_event_signature,
+    relay_ticket_signature,
     start_oauth,
     verify_data_deletion_code,
 )
@@ -436,6 +437,9 @@ async def test_oauth_fields_relay_mode_unavailable(
     assert oauth_configured() is False
 
 
+RELAY_SECRET = "relay-shared-secret-abc"
+
+
 def _relay_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     """Publish a relay-mode instance snapshot."""
     import dataclasses
@@ -449,6 +453,7 @@ def _relay_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
             meta_oauth_mode="relay",
             meta_oauth_relay_url="https://connect.example.com",
             meta_oauth_instance_id="inst-abc",
+            meta_oauth_relay_secret=RELAY_SECRET,
         )
     )
 
@@ -516,10 +521,14 @@ async def test_relay_redeem_ticket(monkeypatch: pytest.MonkeyPatch) -> None:
         async def __aexit__(self, *args):
             return None
 
-        async def get(self, url):
+        async def get(self, url, params=None):
             import httpx
 
             assert url == "https://connect.example.com/ticket/tok-1"
+            # ADR 0034 — the redeem must carry the shared-secret proof.
+            assert params == {
+                "sig": relay_ticket_signature(RELAY_SECRET, "tok-1")
+            }
             return httpx.Response(
                 200,
                 json={
@@ -567,7 +576,7 @@ async def test_relay_redeem_rejects_foreign_instance(
         async def __aexit__(self, *args):
             return None
 
-        async def get(self, url):
+        async def get(self, url, params=None):
             import httpx
 
             return httpx.Response(
@@ -612,7 +621,7 @@ async def test_relay_redeem_expired_ticket(monkeypatch: pytest.MonkeyPatch) -> N
         async def __aexit__(self, *args):
             return None
 
-        async def get(self, url):
+        async def get(self, url, params=None):
             import httpx
 
             return httpx.Response(404, text="unknown or expired ticket")
@@ -636,6 +645,57 @@ async def test_relay_redeem_wrong_instance_prefix(
     with pytest.raises(MetaOAuthError, match="meta_oauth_invalid_state"):
         await redeem_relay_ticket(
             db=AsyncMock(), ticket="tok-1", state=state, csrf_token="x"
+        )
+
+
+async def test_relay_redeem_requires_shared_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0034 — without the registration secret the instance cannot prove
+    itself to the relay, so redeem must fail fast as not-configured."""
+    import dataclasses
+
+    from internal.instance.config import publish_snapshot, snapshot_from_env
+
+    _configure(monkeypatch)
+    publish_snapshot(
+        dataclasses.replace(
+            snapshot_from_env(),
+            meta_oauth_mode="relay",
+            meta_oauth_relay_url="https://connect.example.com",
+            meta_oauth_instance_id="inst-abc",
+            meta_oauth_relay_secret="",
+        )
+    )
+    assert oauth_configured() is False
+    with pytest.raises(MetaOAuthError, match="meta_oauth_not_configured"):
+        await redeem_relay_ticket(
+            db=AsyncMock(), ticket="tok-1", state="inst-abc:r:blob", csrf_token="x"
+        )
+
+
+async def test_relay_platform_event_rejects_without_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0034 — an install with no registration secret must not accept any
+    forwarded event (nothing to verify against)."""
+    import dataclasses
+
+    from internal.instance.config import publish_snapshot, snapshot_from_env
+
+    _configure(monkeypatch)
+    publish_snapshot(
+        dataclasses.replace(
+            snapshot_from_env(),
+            meta_oauth_mode="relay",
+            meta_oauth_relay_url="https://connect.example.com",
+            meta_oauth_instance_id="inst-abc",
+            meta_oauth_relay_secret="",
+        )
+    )
+    with pytest.raises(MetaOAuthError, match="meta_oauth_invalid_signed_request"):
+        await process_relay_platform_event(
+            AsyncMock(), kind="deauthorize", ig_user_id=IG_USER, sig="x" * 64
         )
 
 
@@ -787,14 +847,14 @@ async def test_relay_platform_event_dispatch(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(
         mod.repos, "delete_social_accounts_by_ig_user_id", fake_delete
     )
-    sig = relay_event_signature("deauthorize", IG_USER, "inst-abc")
+    sig = relay_event_signature("deauthorize", IG_USER, RELAY_SECRET)
     result = await process_relay_platform_event(
         AsyncMock(), kind="deauthorize", ig_user_id=IG_USER, sig=sig
     )
     assert result == {"ok": True}
     assert deleted == [IG_USER]
 
-    sig = relay_event_signature("data_deletion", IG_USER, "inst-abc")
+    sig = relay_event_signature("data_deletion", IG_USER, RELAY_SECRET)
     result = await process_relay_platform_event(
         AsyncMock(), kind="data_deletion", ig_user_id=IG_USER, sig=sig
     )
@@ -810,7 +870,8 @@ async def test_relay_platform_event_rejects_bad_sig_and_byo(
         await process_relay_platform_event(
             AsyncMock(), kind="deauthorize", ig_user_id=IG_USER, sig="bad"
         )
-    sig_other = relay_event_signature("deauthorize", IG_USER, "inst-OTHER")
+    # A sig keyed by the public slug (or any other secret) must not verify.
+    sig_other = relay_event_signature("deauthorize", IG_USER, "inst-abc")
     with pytest.raises(MetaOAuthError, match="meta_oauth_invalid_signed_request"):
         await process_relay_platform_event(
             AsyncMock(), kind="deauthorize", ig_user_id=IG_USER, sig=sig_other
@@ -822,5 +883,5 @@ async def test_relay_platform_event_rejects_bad_sig_and_byo(
             AsyncMock(),
             kind="deauthorize",
             ig_user_id=IG_USER,
-            sig=relay_event_signature("deauthorize", IG_USER, "inst-abc"),
+            sig=relay_event_signature("deauthorize", IG_USER, RELAY_SECRET),
         )

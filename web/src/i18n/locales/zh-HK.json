@@ -760,7 +760,10 @@
       "metaRelayUrl": "Relay base URL",
       "metaRelayUrlHint": "由 Unhinted 代管，每個 install 都預設好呢條。唯讀 —— 想自己搞 relay 就 set OAUTH_RELAY_URL。",
       "metaInstanceId": "Instance ID",
-      "metaInstanceIdHint": "喺 relay 註冊呢個 slug（佢會 map 去呢個 install 嘅 URL）。自動生成，唯讀。"
+      "metaInstanceIdHint": "喺 relay 註冊呢個 slug（佢會 map 去呢個 install 嘅 URL）。自動生成，唯讀。",
+      "metaRelaySecret": "Relay secret",
+      "metaRelaySecretSet": "已儲存（…{{last4}}）— 輸入新 secret 先會更新",
+      "metaRelaySecretHint": "由 relay 營運方喺註冊嗰陣發出 — 貼落嚟呢度。Relay 模式要 set 咗先用到 Connect。"
     }
   },
   "admin": {

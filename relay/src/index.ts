@@ -1,13 +1,15 @@
 /**
- * Unhinted OAuth relay (ADR 0032 §3).
+ * Unhinted OAuth relay (ADR 0032 §3, hardened by ADR 0034).
  *
  * Meta Strict Mode requires exact-match redirect URIs, so a vendor app cannot
  * serve arbitrary on-prem domains. This Worker is the single whitelisted
  * callback: Meta 302s here with code+state, we fan the browser out to the
- * customer instance registered in REGISTRY (instance_id -> base URL), exchange
- * the code server-side (the app secret never ships to installs), and hand the
- * long-lived token back via a one-time TICKETS entry the instance redeems
- * server-to-server at /api/social/oauth/relay-finish.
+ * customer instance registered in REGISTRY (instance_id -> {url, secret}),
+ * exchange the code server-side (the app secret never ships to installs), and
+ * hand the long-lived token back via a one-time TICKETS entry the instance
+ * redeems server-to-server at /api/social/oauth/relay-finish — the redeem
+ * must prove the per-install shared secret (ADR 0034), so a leaked redirect
+ * URL alone cannot redeem.
  *
  * Transit-only posture: tokens pass through but are never logged and never
  * persisted beyond the 60s ticket TTL. Do not console.log params.
@@ -202,6 +204,56 @@ function finishUrl(base: string, state: string): URL {
   return new URL(FINISH_PATH, base.endsWith("/") ? base : `${base}/`);
 }
 
+/** ADR 0034 — REGISTRY values are `{"url","secret"}` JSON. Bare-string legacy
+ * entries fail closed (re-register). `url` must be https; http is tolerated
+ * only for loopback dev hosts. */
+type RegistryEntry = { url: string; secret: string };
+
+function parseRegistryEntry(raw: string | null): RegistryEntry | null {
+  if (!raw) return null;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = asJson(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+  const url = String(parsed.url ?? "");
+  const secret = String(parsed.secret ?? "");
+  if (!url || !secret) return null;
+  let base: URL;
+  try {
+    base = new URL(url);
+  } catch {
+    return null;
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(base.hostname);
+  if (base.protocol !== "https:" && !(base.protocol === "http:" && loopback)) {
+    return null;
+  }
+  return { url, secret };
+}
+
+async function registryEntry(env: Env, instanceId: string): Promise<RegistryEntry | null> {
+  if (!instanceId) return null;
+  return parseRegistryEntry(await env.REGISTRY.get(instanceId));
+}
+
+function hexToBytes(hex: string): Uint8Array | null {
+  if (!/^[0-9a-f]+$/i.test(hex) || hex.length % 2 !== 0) return null;
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
 function b64urlToBytes(s: string): Uint8Array {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
   const bin = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
@@ -252,15 +304,13 @@ async function parseSignedRequest(
   } catch {
     return null;
   }
-  if (actual.length !== expected.length) return null;
-  let diff = 0;
-  for (let i = 0; i < actual.length; i++) diff |= actual[i] ^ expected[i];
-  return diff === 0 ? payload : null;
+  return bytesEqual(actual, expected) ? payload : null;
 }
 
 /** Forward a verified Meta platform event to the install that owns the IG
- * user (ADR 0033 §3). sig re-signs the event with the registry slug so the
- * instance can tell it came from the relay. */
+ * user (ADR 0033 §3, key updated by ADR 0034). sig re-signs the event with
+ * the install's shared secret so the instance can tell it came from the
+ * relay — the public routing slug alone proves nothing. */
 async function forwardToInstance(
   env: Env,
   kind: "deauthorize" | "data_deletion",
@@ -268,10 +318,10 @@ async function forwardToInstance(
 ): Promise<Response | null> {
   const instanceId = await env.TICKETS.get(`u:${igUserId}`);
   if (!instanceId) return null;
-  const base = await env.REGISTRY.get(instanceId);
-  if (!base) return null;
-  const sig = toHex(await hmacSha256(instanceId, `${kind}:${igUserId}`));
-  return fetch(`${base.replace(/\/+$/, "")}${INSTANCE_RELAY_PATH}`, {
+  const entry = await registryEntry(env, instanceId);
+  if (!entry) return null;
+  const sig = toHex(await hmacSha256(entry.secret, `${kind}:${igUserId}`));
+  return fetch(`${entry.url.replace(/\/+$/, "")}${INSTANCE_RELAY_PATH}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ kind, ig_user_id: igUserId, sig }),
@@ -288,8 +338,8 @@ async function onAuthorize(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const state = url.searchParams.get("state") ?? "";
   const instanceId = state.split(":", 1)[0] ?? "";
-  const registered = instanceId ? await env.REGISTRY.get(instanceId) : null;
-  if (!registered) {
+  const entry = await registryEntry(env, instanceId);
+  if (!entry) {
     return text("unhinted relay: unknown instance", 400);
   }
   const dialog = new URL(DIALOG_URL);
@@ -305,11 +355,11 @@ async function onCallback(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const state = url.searchParams.get("state") ?? "";
   const instanceId = state.split(":", 1)[0] ?? "";
-  const base = instanceId ? await env.REGISTRY.get(instanceId) : null;
-  if (!base) {
+  const entry = await registryEntry(env, instanceId);
+  if (!entry) {
     return text("unhinted relay: unknown instance", 400);
   }
-  const finish = finishUrl(base, state);
+  const finish = finishUrl(entry.url, state);
   finish.searchParams.set("state", state);
 
   const metaError = url.searchParams.get("error");
@@ -385,7 +435,10 @@ async function onMetaDataDeletion(request: Request, env: Env): Promise<Response>
   );
   if (!payload) return text("invalid signed_request", 400);
   const igUserId = String(payload.user_id ?? "").trim();
-  if (igUserId) {
+  // ADR 0034 §5 — the static "completed" answer is only honest when no
+  // routing entry exists (the relay retains nothing). When the install owns
+  // data but cannot be reached, answer 503 so Meta retries.
+  if (igUserId && (await env.TICKETS.get(`u:${igUserId}`))) {
     try {
       const resp = await forwardToInstance(env, "data_deletion", igUserId);
       if (resp && resp.ok) {
@@ -394,8 +447,9 @@ async function onMetaDataDeletion(request: Request, env: Env): Promise<Response>
         });
       }
     } catch {
-      // Fall through to the static answer.
+      // Fall through to the 503.
     }
+    return text("unhinted relay: instance unreachable", 503);
   }
   const code = crypto.randomUUID();
   const url = new URL(request.url);
@@ -411,6 +465,25 @@ async function onMetaDataDeletion(request: Request, env: Env): Promise<Response>
 async function onTicket(request: Request, env: Env, id: string): Promise<Response> {
   const raw = await env.TICKETS.get(id);
   if (raw === null) return text("unhinted relay: unknown or expired ticket", 404);
+  // ADR 0034 §2 — redeem must prove the install's shared secret:
+  // sig = HMAC-SHA256(secret, "ticket:{id}"). A bad or missing sig neither
+  // redeems nor burns the ticket.
+  let instanceId = "";
+  try {
+    instanceId = String(asJson(JSON.parse(raw)).instance_id ?? "");
+  } catch {
+    // Malformed ticket payload — treated as unbound below.
+  }
+  const entry = await registryEntry(env, instanceId);
+  const provided = hexToBytes(
+    (new URL(request.url).searchParams.get("sig") ?? "").trim(),
+  );
+  const expected = entry
+    ? new Uint8Array(await hmacSha256(entry.secret, `ticket:${id}`))
+    : null;
+  if (!entry || !provided || !expected || !bytesEqual(provided, expected)) {
+    return text("unhinted relay: forbidden", 403);
+  }
   await env.TICKETS.delete(id);
   return new Response(raw, {
     headers: { "content-type": "application/json", "cache-control": "no-store" },

@@ -760,6 +760,15 @@ class InstanceSettings(Base):
     # the relay maps to this install's web_base_url (generated at seed).
     meta_oauth_relay_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     meta_oauth_instance_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # ADR 0034 — per-install shared secret the relay issues at registration;
+    # authenticates ticket redemption + relayed platform events. Fernet at
+    # rest, write-only in the portal (last4 for confirmation).
+    meta_oauth_relay_secret_encrypted: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    meta_oauth_relay_secret_last4: Mapped[str | None] = mapped_column(
+        String(4), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

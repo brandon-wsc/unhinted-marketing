@@ -81,6 +81,7 @@ export function InstancePanel() {
   const [metaAppId, setMetaAppId] = useState("");
   const [metaAppSecret, setMetaAppSecret] = useState("");
   const [metaMode, setMetaMode] = useState<MetaOAuthMode>("byo");
+  const [relaySecret, setRelaySecret] = useState("");
   const [instanceIdCopied, setInstanceIdCopied] = useState(false);
 
   useEffect(() => {
@@ -126,10 +127,12 @@ export function InstancePanel() {
         meta_app_id: metaAppId.trim(),
         meta_app_secret: metaAppSecret || undefined,
         meta_oauth_mode: metaMode,
+        meta_oauth_relay_secret: relaySecret || undefined,
       });
       setSettings(next);
       setSmtpPassword("");
       setMetaAppSecret("");
+      setRelaySecret("");
       showInfo(t("system.instance.saved"));
     } catch (err) {
       setError(mapApiError(err instanceof Error ? err.message : "", t));
@@ -367,6 +370,26 @@ export function InstancePanel() {
                 {t("system.instance.metaCallbackMissing")}
               </p>
             )}
+          </FormField>
+          <FormField id="inst-meta-relay-secret" label={t("system.instance.metaRelaySecret")}>
+            <Input
+              id="inst-meta-relay-secret"
+              type="password"
+              value={relaySecret}
+              onChange={(e) => setRelaySecret(e.target.value)}
+              readOnly={!canEdit}
+              autoComplete="new-password"
+              placeholder={
+                settings.meta_oauth_relay_secret_last4
+                  ? t("system.instance.metaRelaySecretSet", {
+                      last4: settings.meta_oauth_relay_secret_last4,
+                    })
+                  : undefined
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("system.instance.metaRelaySecretHint")}
+            </p>
           </FormField>
         </>
       )}

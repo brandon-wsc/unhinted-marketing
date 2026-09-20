@@ -131,6 +131,11 @@ class Settings(BaseSettings):
     # Optional override for meta_oauth_instance_id (normally auto-generated) —
     # handy for pinning a pre-registered REGISTRY slug in dev/UAT.
     meta_oauth_instance_id: str | None = None
+    # ADR 0034 — per-install shared secret the relay issues at registration.
+    # Seeds instance_settings.meta_oauth_relay_secret (Fernet) while unset;
+    # afterwards the portal wins. Dev/UAT convenience — production installs
+    # paste it via System → Instance.
+    oauth_relay_secret: str | None = None
 
     # Product catalog embeddings (COLLECT K4) — same FastEmbed family as semantic gate
     product_embeddings_enabled: bool = True

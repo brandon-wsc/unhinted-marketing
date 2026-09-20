@@ -44,6 +44,7 @@ class InstanceSnapshot:
     meta_oauth_mode: MetaOAuthMode = "byo"
     meta_oauth_relay_url: str = ""
     meta_oauth_instance_id: str = ""
+    meta_oauth_relay_secret: str = ""
 
 
 def _strip(value: str | None) -> str:
@@ -66,6 +67,7 @@ def snapshot_from_env() -> InstanceSnapshot:
         meta_app_secret=settings.meta_app_secret or "",
         meta_oauth_relay_url=_strip(settings.oauth_relay_url)
         or HOSTED_OAUTH_RELAY_URL,
+        meta_oauth_relay_secret=_strip(settings.oauth_relay_secret),
     )
 
 
@@ -112,6 +114,12 @@ def _snapshot_from_row(row) -> InstanceSnapshot:
             meta_secret = decrypt_key(row.meta_app_secret_encrypted)
         except ByokEncryptionError:
             logger.warning("instance meta app secret could not be decrypted")
+    relay_secret = ""
+    if row.meta_oauth_relay_secret_encrypted:
+        try:
+            relay_secret = decrypt_key(row.meta_oauth_relay_secret_encrypted)
+        except ByokEncryptionError:
+            logger.warning("instance meta oauth relay secret could not be decrypted")
     backend = _strip(row.email_backend).lower()
     meta_mode = _strip(row.meta_oauth_mode).lower()
     return InstanceSnapshot(
@@ -129,6 +137,7 @@ def _snapshot_from_row(row) -> InstanceSnapshot:
         meta_oauth_relay_url=_strip(row.meta_oauth_relay_url)
         or HOSTED_OAUTH_RELAY_URL,
         meta_oauth_instance_id=_strip(row.meta_oauth_instance_id),
+        meta_oauth_relay_secret=relay_secret,
     )
 
 
@@ -184,6 +193,16 @@ async def _seed_meta_from_env(db: AsyncSession, env_snap: InstanceSnapshot) -> b
         fields["meta_oauth_instance_id"] = (
             _strip(settings.meta_oauth_instance_id) or secrets.token_urlsafe(12)
         )
+    if row.meta_oauth_relay_secret_encrypted is None and (
+        env_snap.meta_oauth_relay_secret
+    ):
+        # ADR 0034 — OAUTH_RELAY_SECRET seeds only while unset (dev/UAT);
+        # afterwards the portal-issued registration secret wins.
+        secret_enc, secret_last4 = _encrypt_seed(
+            env_snap.meta_oauth_relay_secret, "OAuth relay secret"
+        )
+        fields["meta_oauth_relay_secret_encrypted"] = secret_enc
+        fields["meta_oauth_relay_secret_last4"] = secret_last4
     if not fields:
         return False
     await repos.upsert_instance_settings(db, **fields)
@@ -205,6 +224,9 @@ async def ensure_instance_settings_seeded(db: AsyncSession) -> None:
         return
     password_enc, last4 = _encrypt_seed(env_snap.smtp_password, "SMTP password")
     meta_enc, meta_last4 = _encrypt_seed(env_snap.meta_app_secret, "Meta app secret")
+    relay_enc, relay_last4 = _encrypt_seed(
+        env_snap.meta_oauth_relay_secret, "OAuth relay secret"
+    )
     await repos.upsert_instance_settings(
         db,
         web_base_url=env_snap.web_base_url or None,
@@ -222,6 +244,8 @@ async def ensure_instance_settings_seeded(db: AsyncSession) -> None:
         meta_oauth_relay_url=env_snap.meta_oauth_relay_url or None,
         meta_oauth_instance_id=_strip(settings.meta_oauth_instance_id)
         or secrets.token_urlsafe(12),
+        meta_oauth_relay_secret_encrypted=relay_enc,
+        meta_oauth_relay_secret_last4=relay_last4,
     )
     await db.commit()
     await load_snapshot(db)

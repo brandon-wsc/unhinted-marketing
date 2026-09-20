@@ -6798,6 +6798,17 @@
             "type": "string",
             "title": "Meta Oauth Instance Id"
           },
+          "meta_oauth_relay_secret_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta Oauth Relay Secret Last4"
+          },
           "setup_completed": {
             "type": "boolean",
             "title": "Setup Completed"
@@ -6821,6 +6832,7 @@
           "meta_oauth_data_deletion_url",
           "meta_oauth_relay_url",
           "meta_oauth_instance_id",
+          "meta_oauth_relay_secret_last4",
           "setup_completed"
         ],
         "title": "InstanceSettingsResponse"
@@ -6887,11 +6899,23 @@
               }
             ],
             "title": "Meta Oauth Mode"
+          },
+          "meta_oauth_relay_secret": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta Oauth Relay Secret"
           }
         },
         "type": "object",
         "title": "InstanceSettingsUpdate",
-        "description": "PUT semantics: omitted fields keep their current value; smtp_password\nand meta_app_secret only rotate when a non-empty value is sent (never\nreturned back). A changed meta_app_id drops the stored secret — the old\nsecret can never pair with a different app."
+        "description": "PUT semantics: omitted fields keep their current value; smtp_password,\nmeta_app_secret and meta_oauth_relay_secret only rotate when a non-empty\nvalue is sent (never returned back). A changed meta_app_id drops the\nstored secret — the old secret can never pair with a different app."
       },
       "LlmCallRecordDetail": {
         "properties": {

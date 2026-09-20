@@ -140,8 +140,13 @@ def oauth_configured() -> bool:
     snap = get_snapshot()
     base = (snap.web_base_url or "").strip()
     if snap.meta_oauth_mode == "relay":
+        # ADR 0034 — the registration secret is required too; without it the
+        # ticket redeem cannot authenticate, so Connect stays guided.
         return bool(
-            base and snap.meta_oauth_relay_url and snap.meta_oauth_instance_id
+            base
+            and snap.meta_oauth_relay_url
+            and snap.meta_oauth_instance_id
+            and snap.meta_oauth_relay_secret
         )
     return bool(snap.meta_app_id and snap.meta_app_secret and base)
 
@@ -158,9 +163,14 @@ def _oauth_fields(redirect_uri: str | None = None) -> dict[str, str]:
 
     snap = get_snapshot()
     if snap.meta_oauth_mode == "relay":
-        # Relay holds the vendor app creds — the instance only needs the
-        # relay base + its registered instance_id for the state prefix.
-        if not snap.meta_oauth_relay_url or not snap.meta_oauth_instance_id:
+        # Relay holds the vendor app creds — the instance needs the relay
+        # base, its registered instance_id for the state prefix, and the
+        # registration secret for the ticket redeem (ADR 0034).
+        if (
+            not snap.meta_oauth_relay_url
+            or not snap.meta_oauth_instance_id
+            or not snap.meta_oauth_relay_secret
+        ):
             raise MetaOAuthError("meta_oauth_not_configured")
         return {
             "client_id": "",
@@ -478,8 +488,9 @@ async def redeem_relay_ticket(
     """Relay-mode finish (ADR 0032 §3): the vendor relay exchanged the code
     already; the browser lands here with a one-time ticket. We re-validate the
     pending state + CSRF cookie exactly like the BYO callback, redeem the
-    ticket server-to-server (read-once, 60s TTL on the relay), verify the
-    payload is bound to this install, then persist the token.
+    ticket server-to-server with the shared-secret proof (ADR 0034 — read-once,
+    60s TTL on the relay), verify the payload is bound to this install, then
+    persist the token.
 
     Caller owns the transaction (commit on success, rollback on failure).
     """
@@ -488,6 +499,9 @@ async def redeem_relay_ticket(
     snap = get_snapshot()
     if snap.meta_oauth_mode != "relay":
         raise MetaOAuthError("meta_oauth_mode_unavailable")
+    if not snap.meta_oauth_relay_secret:
+        # ADR 0034 — no shared secret, no way to prove ourselves to the relay.
+        raise MetaOAuthError("meta_oauth_not_configured")
     parsed = parse_relay_state(state)
     if parsed is None:
         raise MetaOAuthError("meta_oauth_invalid_state")
@@ -496,7 +510,12 @@ async def redeem_relay_ticket(
     relay = snap.meta_oauth_relay_url.rstrip("/")
     timeout = httpx.Timeout(30.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.get(f"{relay}/ticket/{ticket}")
+        resp = await client.get(
+            f"{relay}/ticket/{ticket}",
+            params={
+                "sig": relay_ticket_signature(snap.meta_oauth_relay_secret, ticket)
+            },
+        )
     if resp.status_code == 404:
         raise MetaOAuthError("meta_oauth_relay_ticket_expired")
     if not resp.is_success:
@@ -719,11 +738,21 @@ async def process_data_deletion(
 RELAY_EVENT_KINDS = frozenset({"deauthorize", "data_deletion"})
 
 
-def relay_event_signature(kind: str, ig_user_id: str, instance_id: str) -> str:
+def relay_event_signature(kind: str, ig_user_id: str, secret: str) -> str:
     """Shared-secret signature the relay puts on forwarded platform events
-    (ADR 0033 §3): HMAC-SHA256 keyed by this install's registry slug."""
+    (ADR 0033 §3, key updated by ADR 0034): HMAC-SHA256 keyed by this
+    install's registration secret — the public registry slug proves nothing."""
     return hmac.new(
-        instance_id.encode(), f"{kind}:{ig_user_id}".encode(), hashlib.sha256
+        secret.encode(), f"{kind}:{ig_user_id}".encode(), hashlib.sha256
+    ).hexdigest()
+
+
+def relay_ticket_signature(secret: str, ticket: str) -> str:
+    """ADR 0034 §2 — the redeem-side proof the Worker checks on
+    ``GET /ticket/{id}``: HMAC-SHA256 keyed by the install's shared secret
+    over a domain-separated message."""
+    return hmac.new(
+        secret.encode(), f"ticket:{ticket}".encode(), hashlib.sha256
     ).hexdigest()
 
 
@@ -741,12 +770,12 @@ async def process_relay_platform_event(
     snap = get_snapshot()
     if snap.meta_oauth_mode != "relay":
         raise MetaOAuthError("meta_oauth_mode_unavailable")
-    instance_id = snap.meta_oauth_instance_id
-    expected = relay_event_signature(kind, ig_user_id, instance_id)
+    secret = snap.meta_oauth_relay_secret
+    expected = relay_event_signature(kind, ig_user_id, secret)
     if (
         kind not in RELAY_EVENT_KINDS
         or not ig_user_id
-        or not instance_id
+        or not secret
         or not hmac.compare_digest(sig or "", expected)
     ):
         raise MetaOAuthError("meta_oauth_invalid_signed_request")

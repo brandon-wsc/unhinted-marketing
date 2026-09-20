@@ -760,7 +760,10 @@
       "metaRelayUrl": "Relay base URL",
       "metaRelayUrlHint": "Hosted by Unhinted and pre-configured on every install. Read-only — set OAUTH_RELAY_URL to run your own relay.",
       "metaInstanceId": "Instance ID",
-      "metaInstanceIdHint": "Register this slug with the relay (it maps to this install's URL). Read-only — generated automatically."
+      "metaInstanceIdHint": "Register this slug with the relay (it maps to this install's URL). Read-only — generated automatically.",
+      "metaRelaySecret": "Relay secret",
+      "metaRelaySecretSet": "Saved (…{{last4}}) — enter a new secret to rotate",
+      "metaRelaySecretHint": "Issued by the relay operator at registration — paste it here. Required before Connect works in relay mode."
     }
   },
   "admin": {

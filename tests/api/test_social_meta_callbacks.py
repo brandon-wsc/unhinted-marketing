@@ -29,6 +29,7 @@ from tests.api.helpers import auth_header, register_user
 
 OAUTH_ORIGIN = "https://unhinted.localhost:5173"
 SECRET = "secret123"
+RELAY_SECRET = "relay-shared-secret-abc"
 IG_USER = "17841400000000"
 
 
@@ -206,8 +207,8 @@ async def test_relay_event_rejected_in_byo_mode(
 async def test_relay_event_disconnects_in_relay_mode(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Relay mode (ADR 0033 §3): the verified Meta event arrives via the
-    vendor relay, re-signed with this install's registry slug."""
+    """Relay mode (ADR 0033 §3 + ADR 0034): the verified Meta event arrives via
+    the vendor relay, re-signed with this install's shared secret."""
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
     headers = auth_header(data["access_token"])
@@ -218,6 +219,7 @@ async def test_relay_event_disconnects_in_relay_mode(
             meta_oauth_mode="relay",
             meta_oauth_relay_url="https://connect.example.com",
             meta_oauth_instance_id="inst-abc",
+            meta_oauth_relay_secret=RELAY_SECRET,
         )
     )
     await _seed_account(db_session, company_id)
@@ -227,7 +229,7 @@ async def test_relay_event_disconnects_in_relay_mode(
         json={
             "kind": "deauthorize",
             "ig_user_id": IG_USER,
-            "sig": relay_event_signature("deauthorize", IG_USER, "inst-abc"),
+            "sig": relay_event_signature("deauthorize", IG_USER, RELAY_SECRET),
         },
     )
     assert res.status_code == 200, res.text
@@ -235,12 +237,13 @@ async def test_relay_event_disconnects_in_relay_mode(
     accounts = await client.get(_base(company_id), headers=headers)
     assert accounts.json()["items"] == []
 
+    # A sig keyed by the public slug (ADR 0034: it proves nothing) is rejected.
     bad = await client.post(
         "/api/social/meta/relay",
         json={
             "kind": "deauthorize",
             "ig_user_id": IG_USER,
-            "sig": relay_event_signature("deauthorize", IG_USER, "inst-OTHER"),
+            "sig": relay_event_signature("deauthorize", IG_USER, "inst-abc"),
         },
     )
     assert bad.status_code == 400
@@ -260,6 +263,7 @@ async def test_relay_event_data_deletion_returns_meta_shape(
             meta_oauth_mode="relay",
             meta_oauth_relay_url="https://connect.example.com",
             meta_oauth_instance_id="inst-abc",
+            meta_oauth_relay_secret=RELAY_SECRET,
         )
     )
     await _seed_account(db_session, company_id)
@@ -269,7 +273,7 @@ async def test_relay_event_data_deletion_returns_meta_shape(
         json={
             "kind": "data_deletion",
             "ig_user_id": IG_USER,
-            "sig": relay_event_signature("data_deletion", IG_USER, "inst-abc"),
+            "sig": relay_event_signature("data_deletion", IG_USER, RELAY_SECRET),
         },
     )
     assert res.status_code == 200, res.text

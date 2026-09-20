@@ -240,6 +240,23 @@ async def test_instance_settings_meta_app_creds(client: AsyncClient) -> None:
     )
     assert res.json()["meta_app_secret_last4"] == "et99"
 
+    # ADR 0034 — the relay shared secret follows the same write-only +
+    # last4 rules; the raw value never comes back.
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={"meta_oauth_relay_secret": "relay-secret-1234"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["meta_oauth_relay_secret_last4"] == "1234"
+    assert "relay-secret" not in res.text
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={"meta_oauth_relay_secret": ""},
+    )
+    assert res.json()["meta_oauth_relay_secret_last4"] == "1234"
+
     # A different app id can never pair with the old secret.
     res = await client.put(
         "/api/instance/settings",

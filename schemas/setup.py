@@ -67,19 +67,22 @@ class InstanceSettingsResponse(BaseModel):
     # slug (read-only; the relay's REGISTRY maps it to web_base_url).
     meta_oauth_relay_url: str
     meta_oauth_instance_id: str
+    # ADR 0034 — per-install relay shared secret (write-only; last4 confirms set).
+    meta_oauth_relay_secret_last4: str | None
     setup_completed: bool
 
 
 class InstanceSettingsUpdate(BaseModel):
-    """PUT semantics: omitted fields keep their current value; smtp_password
-    and meta_app_secret only rotate when a non-empty value is sent (never
-    returned back). A changed meta_app_id drops the stored secret — the old
-    secret can never pair with a different app."""
+    """PUT semantics: omitted fields keep their current value; smtp_password,
+    meta_app_secret and meta_oauth_relay_secret only rotate when a non-empty
+    value is sent (never returned back). A changed meta_app_id drops the
+    stored secret — the old secret can never pair with a different app."""
 
     web_base_url: str | None = Field(default=None, max_length=500)
     email_config: SetupEmailConfig | None = None
     meta_app_id: str | None = Field(default=None, max_length=255)
     meta_app_secret: str | None = Field(default=None, max_length=255)
     meta_oauth_mode: MetaOAuthMode | None = None
+    meta_oauth_relay_secret: str | None = Field(default=None, max_length=255)
 
     _check_url = field_validator("web_base_url")(_clean_url)
