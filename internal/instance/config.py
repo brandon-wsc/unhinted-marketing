@@ -172,8 +172,11 @@ async def _seed_meta_from_env(db: AsyncSession, env_snap: InstanceSnapshot) -> b
     if row.meta_oauth_relay_url is None and env_snap.meta_oauth_relay_url:
         fields["meta_oauth_relay_url"] = env_snap.meta_oauth_relay_url
     if not row.meta_oauth_instance_id:
-        # Registry slug the relay maps to this install's web_base_url.
-        fields["meta_oauth_instance_id"] = secrets.token_urlsafe(12)
+        # Registry slug the relay maps to this install's web_base_url —
+        # env may pin it (dev/UAT), otherwise generate.
+        fields["meta_oauth_instance_id"] = (
+            _strip(settings.meta_oauth_instance_id) or secrets.token_urlsafe(12)
+        )
     if not fields:
         return False
     await repos.upsert_instance_settings(db, **fields)
@@ -210,7 +213,8 @@ async def ensure_instance_settings_seeded(db: AsyncSession) -> None:
         meta_app_secret_encrypted=meta_enc,
         meta_app_secret_last4=meta_last4,
         meta_oauth_relay_url=env_snap.meta_oauth_relay_url or None,
-        meta_oauth_instance_id=secrets.token_urlsafe(12),
+        meta_oauth_instance_id=_strip(settings.meta_oauth_instance_id)
+        or secrets.token_urlsafe(12),
     )
     await db.commit()
     await load_snapshot(db)

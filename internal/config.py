@@ -122,6 +122,9 @@ class Settings(BaseSettings):
     # ADR 0032 §3 — opt-in vendor relay base URL (e.g. https://connect.example.com).
     # Seeds instance_settings.meta_oauth_relay_url; portal edits win afterwards.
     oauth_relay_url: str | None = None
+    # Optional override for meta_oauth_instance_id (normally auto-generated) —
+    # handy for pinning a pre-registered REGISTRY slug in dev/UAT.
+    meta_oauth_instance_id: str | None = None
 
     # Product catalog embeddings (COLLECT K4) — same FastEmbed family as semantic gate
     product_embeddings_enabled: bool = True
