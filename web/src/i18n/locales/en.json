@@ -758,7 +758,7 @@
       "metaModeRelay": "Hosted connect (relay)",
       "metaModeHint": "Relay routes authorization through the vendor's hosted service — opt-in; tokens transit vendor infrastructure. BYO keeps everything on this install.",
       "metaRelayUrl": "Relay base URL",
-      "metaRelayUrlHint": "Provided by your vendor (e.g. https://connect.example.com). Do not change unless instructed.",
+      "metaRelayUrlHint": "Hosted by Unhinted and pre-configured on every install. Read-only.",
       "metaInstanceId": "Instance ID",
       "metaInstanceIdHint": "Register this slug with the relay (it maps to this install's URL). Read-only — generated automatically."
     }

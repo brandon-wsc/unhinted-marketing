@@ -78,7 +78,9 @@ to `{base}/api/social/oauth/relay-finish`.
 
 ## On the instance
 
-1. System → Instance → OAuth mode = **relay**, paste the relay base URL
-   (or set env `OAUTH_RELAY_URL` before first boot — it seeds the row).
+1. System → Instance → OAuth mode = **relay**. The relay base URL is
+   pre-configured to the hosted Unhinted relay (read-only in the UI); a
+   self-hosted/dev relay can still be pointed at via env `OAUTH_RELAY_URL`
+   before first boot.
 2. Register `meta_oauth_instance_id` in REGISTRY (above).
 3. Company settings → Instagram → Connect.

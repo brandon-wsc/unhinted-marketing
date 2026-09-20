@@ -758,7 +758,7 @@
       "metaModeRelay": "代管連接（relay）",
       "metaModeHint": "Relay 會經供應商嘅代管服務做授權 — 屬於 opt-in，token 會經過供應商基建。BYO 全部留喺呢個 install。",
       "metaRelayUrl": "Relay base URL",
-      "metaRelayUrlHint": "由供應商提供（例如 https://connect.example.com），冇指示唔好改。",
+      "metaRelayUrlHint": "由 Unhinted 代管，每個 install 都預設好呢條。唯讀。",
       "metaInstanceId": "Instance ID",
       "metaInstanceIdHint": "喺 relay 註冊呢個 slug（佢會 map 去呢個 install 嘅 URL）。自動生成，唯讀。"
     }

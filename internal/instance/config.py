@@ -17,7 +17,7 @@ from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from internal.config import settings
+from internal.config import HOSTED_OAUTH_RELAY_URL, settings
 from internal.llm.keys import ByokEncryptionError, decrypt_key
 from internal.memory import repos
 
@@ -64,7 +64,8 @@ def snapshot_from_env() -> InstanceSnapshot:
         smtp_tls=settings.smtp_tls,
         meta_app_id=_strip(settings.meta_app_id),
         meta_app_secret=settings.meta_app_secret or "",
-        meta_oauth_relay_url=_strip(settings.oauth_relay_url),
+        meta_oauth_relay_url=_strip(settings.oauth_relay_url)
+        or HOSTED_OAUTH_RELAY_URL,
     )
 
 
@@ -125,7 +126,8 @@ def _snapshot_from_row(row) -> InstanceSnapshot:
         meta_app_id=_strip(row.meta_app_id),
         meta_app_secret=meta_secret,
         meta_oauth_mode=meta_mode if meta_mode in ("byo", "relay") else "byo",
-        meta_oauth_relay_url=_strip(row.meta_oauth_relay_url),
+        meta_oauth_relay_url=_strip(row.meta_oauth_relay_url)
+        or HOSTED_OAUTH_RELAY_URL,
         meta_oauth_instance_id=_strip(row.meta_oauth_instance_id),
     )
 

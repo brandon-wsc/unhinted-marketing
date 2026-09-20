@@ -67,7 +67,9 @@ singleton row (ADR 0026), following the `smtp_password` pattern:
 ### 3. Opt-in vendor relay — Cloudflare Worker + one-time tickets
 
 - `instance_settings` gains `meta_oauth_mode`: `byo` (default) | `relay`,
-  `meta_oauth_relay_url` (env `OAUTH_RELAY_URL` seeds; portal wins), and
+  `meta_oauth_relay_url` (defaults to the hosted relay — a fixed product
+  endpoint, read-only in the portal; env `OAUTH_RELAY_URL` only overrides to a
+  self-hosted/dev relay), and
   `meta_oauth_instance_id` (generated at seed — the REGISTRY slug).
   Relay is **opt-in only** and disclosed in the UI — never a silent default
   (Appsmith's backlash).

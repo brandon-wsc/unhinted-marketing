@@ -331,14 +331,7 @@ export function InstancePanel() {
       {metaMode === "relay" && (
         <>
           <FormField id="inst-meta-relay-url" label={t("system.instance.metaRelayUrl")}>
-            <Input
-              id="inst-meta-relay-url"
-              value={relayUrl}
-              onChange={(e) => setRelayUrl(e.target.value)}
-              readOnly={!canEdit}
-              autoComplete="off"
-              placeholder="https://connect.example.com"
-            />
+            <Input id="inst-meta-relay-url" value={relayUrl} readOnly autoComplete="off" />
             <p className="text-xs text-muted-foreground">{t("system.instance.metaRelayUrlHint")}</p>
           </FormField>
           <FormField id="inst-meta-instance-id" label={t("system.instance.metaInstanceId")}>

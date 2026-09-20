@@ -8,6 +8,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from internal import config
+from internal.config import HOSTED_OAUTH_RELAY_URL
 from internal.instance.config import (
     _seed_meta_from_env,
     _snapshot_from_row,
@@ -86,12 +87,14 @@ async def test_seed_meta_from_env_skips_portal_cleared(
 
     seeded = await _seed_meta_from_env(db, snapshot_from_env())
 
-    # Only the generated relay instance_id is written — env creds stay out.
+    # Env creds stay out; only relay fields are written (hosted relay URL +
+    # generated instance_id).
     assert seeded is True
     assert row.meta_app_id == ""
     fields = upsert.await_args.kwargs
     assert "meta_app_id" not in fields
     assert "meta_app_secret_encrypted" not in fields
+    assert fields["meta_oauth_relay_url"] == HOSTED_OAUTH_RELAY_URL
     assert fields["meta_oauth_instance_id"]
 
 
@@ -105,10 +108,11 @@ async def test_seed_meta_from_env_skips_when_already_set(
 
     seeded = await _seed_meta_from_env(db, snapshot_from_env())
 
-    # Creds are left alone; only the missing relay instance_id is generated.
+    # Creds are left alone; missing relay fields are filled (hosted URL +
+    # generated instance_id).
     assert seeded is True
     fields = upsert.await_args.kwargs
-    assert list(fields) == ["meta_oauth_instance_id"]
+    assert fields["meta_oauth_relay_url"] == HOSTED_OAUTH_RELAY_URL
     assert fields["meta_oauth_instance_id"]
 
 
