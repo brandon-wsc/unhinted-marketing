@@ -526,6 +526,115 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/social/oauth/relay-finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Oauth Relay Finish
+         * @description Relay-mode landing (ADR 0032 §3) — the vendor relay already exchanged
+         *     the Meta code; it 302s the browser here with a one-time ticket we redeem
+         *     server-to-server. Same CSRF/state gates as the BYO callback.
+         */
+        get: operations["oauth_relay_finish_api_social_oauth_relay_finish_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/social/meta/deauthorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Meta Deauthorize
+         * @description Meta deauthorize callback (ADR 0033) — user removed the app in their
+         *     Instagram settings. Meta POSTs a form ``signed_request``; the signature
+         *     (HMAC-SHA256 with the app secret) is the only auth on this public route.
+         */
+        post: operations["meta_deauthorize_api_social_meta_deauthorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/social/meta/data-deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Meta Data Deletion
+         * @description Meta data-deletion callback (ADR 0033) — delete the IG user's stored
+         *     connection, then answer the JSON Meta expects: a status URL plus a
+         *     confirmation code.
+         */
+        post: operations["meta_data_deletion_api_social_meta_data_deletion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/social/meta/data-deletion/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Meta Data Deletion Status
+         * @description User-facing status page Meta shows next to the confirmation code.
+         *     Deletion already ran before we answered Meta, so a valid code is always
+         *     ``completed``.
+         */
+        get: operations["meta_data_deletion_status_api_social_meta_data_deletion__code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/social/meta/relay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Meta Relay Event
+         * @description Relay-forwarded platform event (ADR 0033 §3) — the vendor relay verified
+         *     Meta's signed_request and re-signed this with our registry slug.
+         */
+        post: operations["meta_relay_event_api_social_meta_relay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/companies/{company_id}/storage/config": {
         parameters: {
             query?: never;
@@ -1970,18 +2079,49 @@ export type components = {
             smtp_password_last4: string | null;
             /** Smtp Tls */
             smtp_tls: boolean;
+            /** Meta App Id */
+            meta_app_id: string;
+            /** Meta App Secret Last4 */
+            meta_app_secret_last4: string | null;
+            /**
+             * Meta Oauth Mode
+             * @enum {string}
+             */
+            meta_oauth_mode: "byo" | "relay";
+            /** Meta Oauth Callback Url */
+            meta_oauth_callback_url: string | null;
+            /** Meta Oauth Deauthorize Url */
+            meta_oauth_deauthorize_url: string | null;
+            /** Meta Oauth Data Deletion Url */
+            meta_oauth_data_deletion_url: string | null;
+            /** Meta Oauth Relay Url */
+            meta_oauth_relay_url: string;
+            /** Meta Oauth Instance Id */
+            meta_oauth_instance_id: string;
+            /** Meta Oauth Relay Secret Last4 */
+            meta_oauth_relay_secret_last4: string | null;
             /** Setup Completed */
             setup_completed: boolean;
         };
         /**
          * InstanceSettingsUpdate
-         * @description PUT semantics: omitted fields keep their current value; smtp_password
-         *     only rotates when a non-empty value is sent (never returned back).
+         * @description PUT semantics: omitted fields keep their current value; smtp_password,
+         *     meta_app_secret and meta_oauth_relay_secret only rotate when a non-empty
+         *     value is sent (never returned back). A changed meta_app_id drops the
+         *     stored secret — the old secret can never pair with a different app.
          */
         InstanceSettingsUpdate: {
             /** Web Base Url */
             web_base_url?: string | null;
             email_config?: components["schemas"]["SetupEmailConfig"] | null;
+            /** Meta App Id */
+            meta_app_id?: string | null;
+            /** Meta App Secret */
+            meta_app_secret?: string | null;
+            /** Meta Oauth Mode */
+            meta_oauth_mode?: ("byo" | "relay") | null;
+            /** Meta Oauth Relay Secret */
+            meta_oauth_relay_secret?: string | null;
         };
         /**
          * LlmCallRecordDetail
@@ -2113,6 +2253,58 @@ export type components = {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * MetaDataDeletionResponse
+         * @description Meta data-deletion callback answer — Meta shows the user url + code.
+         */
+        MetaDataDeletionResponse: {
+            /** Url */
+            url: string;
+            /** Confirmation Code */
+            confirmation_code: string;
+        };
+        /**
+         * MetaDataDeletionStatus
+         * @description Status lookup behind the confirmation code (deletion is synchronous).
+         */
+        MetaDataDeletionStatus: {
+            /** Confirmation Code */
+            confirmation_code: string;
+            /**
+             * Status
+             * @default completed
+             * @constant
+             */
+            status: "completed";
+        };
+        /**
+         * MetaRelayEvent
+         * @description Relay-forwarded platform event (ADR 0033 §3). ``sig`` is HMAC-SHA256
+         *     over ``{kind}:{ig_user_id}`` keyed by this install's registry slug.
+         */
+        MetaRelayEvent: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "deauthorize" | "data_deletion";
+            /** Ig User Id */
+            ig_user_id: string;
+            /** Sig */
+            sig: string;
+        };
+        /** MetaRelayResult */
+        MetaRelayResult: {
+            /**
+             * Ok
+             * @default true
+             */
+            ok: boolean;
+            /** Url */
+            url?: string | null;
+            /** Confirmation Code */
+            confirmation_code?: string | null;
         };
         /** MetaResponse */
         MetaResponse: {
@@ -3143,6 +3335,23 @@ export type components = {
             authorization_url?: string | null;
             /** Poll Url */
             poll_url?: string | null;
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /** Callback Url */
+            callback_url?: string | null;
+            /**
+             * Mode
+             * @default byo
+             * @enum {string}
+             */
+            mode: "byo" | "relay";
+            /** Deauthorize Url */
+            deauthorize_url?: string | null;
+            /** Data Deletion Url */
+            data_deletion_url?: string | null;
         };
         /** StopSessionResponse */
         StopSessionResponse: {
@@ -4666,6 +4875,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    oauth_relay_finish_api_social_oauth_relay_finish_get: {
+        parameters: {
+            query?: {
+                ticket?: string | null;
+                state?: string | null;
+                error?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    meta_deauthorize_api_social_meta_deauthorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    meta_data_deletion_api_social_meta_data_deletion_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetaDataDeletionResponse"];
+                };
+            };
+        };
+    };
+    meta_data_deletion_status_api_social_meta_data_deletion__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetaDataDeletionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    meta_relay_event_api_social_meta_relay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetaRelayEvent"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetaRelayResult"];
                 };
             };
             /** @description Validation Error */

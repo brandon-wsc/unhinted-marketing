@@ -27,6 +27,10 @@ web/.vite/
 web/coverage/
 web/coverage-*/
 *.tsbuildinfo
+
+# Cloudflare Workers (relay/)
+.wrangler/
+.dev.vars
 *.local
 
 # IDE

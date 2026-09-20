@@ -2,6 +2,11 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# ADR 0032 §3 — hosted vendor relay shared by every relay-mode install.
+# Product surface (a fixed service endpoint), not user input; override via
+# OAUTH_RELAY_URL only for a self-hosted/dev relay.
+HOSTED_OAUTH_RELAY_URL = "https://unhinted-oauth-relay.unhinted.workers.dev"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -119,6 +124,18 @@ class Settings(BaseSettings):
     meta_app_secret: str | None = None
     # Where the browser lands after a successful connect (defaults to WEB_BASE_URL)
     meta_oauth_success_url: str | None = None
+    # ADR 0032 §3 — vendor relay base URL. Defaults to the hosted Unhinted
+    # relay (HOSTED_OAUTH_RELAY_URL); set only to point at a self-hosted/dev
+    # relay. Seeds instance_settings.meta_oauth_relay_url; portal wins after.
+    oauth_relay_url: str | None = None
+    # Optional override for meta_oauth_instance_id (normally auto-generated) —
+    # handy for pinning a pre-registered REGISTRY slug in dev/UAT.
+    meta_oauth_instance_id: str | None = None
+    # ADR 0034 — per-install shared secret the relay issues at registration.
+    # Seeds instance_settings.meta_oauth_relay_secret (Fernet) while unset;
+    # afterwards the portal wins. Dev/UAT convenience — production installs
+    # paste it via System → Instance.
+    oauth_relay_secret: str | None = None
 
     # Product catalog embeddings (COLLECT K4) — same FastEmbed family as semantic gate
     product_embeddings_enabled: bool = True

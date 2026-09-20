@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -16,8 +17,16 @@ from internal.auth.meta_oauth import (
     CSRF_COOKIE,
     MetaOAuthError,
     exchange_code,
+    meta_platform_callback_urls,
+    oauth_callback_url,
+    oauth_configured,
     pending_connect_is_stale,
+    process_data_deletion,
+    process_deauthorize,
+    process_relay_platform_event,
+    redeem_relay_ticket,
     start_oauth,
+    verify_data_deletion_code,
 )
 from internal.auth.org import require_company_settings_editor
 from internal.config import settings
@@ -32,7 +41,13 @@ from internal.memory.repos import (
     social_account_is_connected,
     upsert_social_account,
 )
-from schemas.oauth import SocialOAuthInfo
+from schemas.oauth import (
+    MetaDataDeletionResponse,
+    MetaDataDeletionStatus,
+    MetaRelayEvent,
+    MetaRelayResult,
+    SocialOAuthInfo,
+)
 from schemas.social import SocialAccountItem, SocialAccountList, SocialAccountUpsert
 
 router = APIRouter(prefix="/companies/{company_id}/social-accounts", tags=["social"])
@@ -87,14 +102,23 @@ async def list_accounts(
 
 
 def _oauth_info(company_id: uuid.UUID, row: SocialAccount | None) -> SocialOAuthInfo:
+    from internal.instance.config import get_snapshot as get_instance_snapshot
+
+    config = {
+        "configured": oauth_configured(),
+        "callback_url": oauth_callback_url(),
+        "mode": get_instance_snapshot().meta_oauth_mode,
+        **meta_platform_callback_urls(),
+    }
     if row is not None and row.oauth_connect_state:
         return SocialOAuthInfo(
             status="pending",
             poll_url=OAUTH_POLL_ROUTE.format(company_id=str(company_id)),
+            **config,
         )
     if social_account_is_connected(row):
-        return SocialOAuthInfo(status="connected")
-    return SocialOAuthInfo(status="not_connected")
+        return SocialOAuthInfo(status="connected", **config)
+    return SocialOAuthInfo(status="not_connected", **config)
 
 
 @router.get("/oauth/status", response_model=SocialOAuthInfo)
@@ -138,10 +162,16 @@ async def oauth_start(
         max_age=86400,
         path="/api/social",
     )
+    from internal.instance.config import get_snapshot as get_instance_snapshot
+
     return SocialOAuthInfo(
         status="pending",
         authorization_url=started.authorization_url,
         poll_url=OAUTH_POLL_ROUTE.format(company_id=str(company_id)),
+        configured=True,
+        callback_url=oauth_callback_url(),
+        mode=get_instance_snapshot().meta_oauth_mode,
+        **meta_platform_callback_urls(),
     )
 
 
@@ -198,6 +228,149 @@ async def oauth_callback(
         missing_scopes=",".join(result.missing_scopes) if result.missing_scopes else None,
         ig_user_id=result.ig_user_id,
     )
+
+
+# Error codes the relay may put on the relay-finish redirect (relay/src/index.ts).
+# Anything else is dropped to a generic code — the SPA renders ``?status=``
+# verbatim, so a raw query param must never reach the UI.
+_RELAY_FINISH_ERRORS = frozenset(
+    {
+        "access_denied",
+        "meta_oauth_missing_params",
+        "meta_oauth_exchange_failed",
+        "meta_oauth_not_professional",
+        "meta_oauth_missing_publish",
+    }
+)
+_RELAY_GRAPH_ERROR_RE = re.compile(r"meta_oauth_graph_error:\d{1,10}")
+
+
+@oauth_callback_router.get("/oauth/relay-finish")
+async def oauth_relay_finish(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    ticket: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    """Relay-mode landing (ADR 0032 §3) — the vendor relay already exchanged
+    the Meta code; it 302s the browser here with a one-time ticket we redeem
+    server-to-server. Same CSRF/state gates as the BYO callback."""
+    if error:
+        logger.warning("meta oauth relay finish failed upstream: %s", error)
+        await repos.clear_social_oauth_state_for_state(db, state)
+        await db.commit()
+        detail = (
+            error
+            if error in _RELAY_FINISH_ERRORS
+            or _RELAY_GRAPH_ERROR_RE.fullmatch(error)
+            else "meta_oauth_exchange_failed"
+        )
+        return _oauth_redirect(detail=detail)
+
+    if not ticket or not state:
+        await repos.clear_social_oauth_state_for_state(db, state)
+        await db.commit()
+        return _oauth_redirect(detail="meta_oauth_missing_params")
+
+    try:
+        result = await redeem_relay_ticket(
+            db,
+            ticket=ticket,
+            state=state,
+            csrf_token=request.cookies.get(CSRF_COOKIE),
+        )
+    except MetaOAuthError as exc:
+        logger.warning("meta oauth relay finish failed: %s", exc.message)
+        await repos.clear_social_oauth_state_for_state(db, state)
+        await db.commit()
+        return _oauth_redirect(detail=exc.message)
+
+    await db.commit()
+    logger.info("meta oauth relay finish ok ig_user_id=%s", result.ig_user_id)
+    return _oauth_redirect(
+        detail="ok",
+        missing_scopes=",".join(result.missing_scopes) if result.missing_scopes else None,
+        ig_user_id=result.ig_user_id,
+    )
+
+
+@oauth_callback_router.post("/meta/deauthorize")
+async def meta_deauthorize(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    """Meta deauthorize callback (ADR 0033) — user removed the app in their
+    Instagram settings. Meta POSTs a form ``signed_request``; the signature
+    (HMAC-SHA256 with the app secret) is the only auth on this public route."""
+    form = await request.form()
+    try:
+        ig_user_id = await process_deauthorize(
+            db, signed_request=str(form.get("signed_request") or "")
+        )
+    except MetaOAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message
+        ) from exc
+    await db.commit()
+    logger.info("meta deauthorize ok ig_user_id=%s", ig_user_id)
+    return Response(status_code=status.HTTP_200_OK)
+
+
+@oauth_callback_router.post("/meta/data-deletion", response_model=MetaDataDeletionResponse)
+async def meta_data_deletion(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MetaDataDeletionResponse:
+    """Meta data-deletion callback (ADR 0033) — delete the IG user's stored
+    connection, then answer the JSON Meta expects: a status URL plus a
+    confirmation code."""
+    form = await request.form()
+    try:
+        code, url = await process_data_deletion(
+            db, signed_request=str(form.get("signed_request") or "")
+        )
+    except MetaOAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message
+        ) from exc
+    await db.commit()
+    logger.info("meta data deletion ok")
+    return MetaDataDeletionResponse(url=url, confirmation_code=code)
+
+
+@oauth_callback_router.get(
+    "/meta/data-deletion/{code}", response_model=MetaDataDeletionStatus
+)
+async def meta_data_deletion_status(code: str) -> MetaDataDeletionStatus:
+    """User-facing status page Meta shows next to the confirmation code.
+    Deletion already ran before we answered Meta, so a valid code is always
+    ``completed``."""
+    if verify_data_deletion_code(code) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="unknown confirmation code"
+        )
+    return MetaDataDeletionStatus(confirmation_code=code)
+
+
+@oauth_callback_router.post("/meta/relay", response_model=MetaRelayResult)
+async def meta_relay_event(
+    body: MetaRelayEvent,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MetaRelayResult:
+    """Relay-forwarded platform event (ADR 0033 §3) — the vendor relay verified
+    Meta's signed_request and re-signed this with our registry slug."""
+    try:
+        result = await process_relay_platform_event(
+            db, kind=body.kind, ig_user_id=body.ig_user_id, sig=body.sig
+        )
+    except MetaOAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message
+        ) from exc
+    await db.commit()
+    logger.info("meta relay event %s ok ig_user_id=%s", body.kind, body.ig_user_id)
+    return MetaRelayResult(**result)
 
 
 def _oauth_redirect(

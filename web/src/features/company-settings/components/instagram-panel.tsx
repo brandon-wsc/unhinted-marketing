@@ -1,7 +1,8 @@
-import { Loader2 } from "lucide-react";
+import { CalendarIcon, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { FormField } from "@/components/form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -15,6 +16,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/context/auth-context";
 import {
   apiCancelInstagramOAuth,
@@ -22,14 +26,39 @@ import {
   apiGetInstagramOAuthStatus,
   apiListSocialAccounts,
   apiStartInstagramOAuth,
+  apiUpsertSocialAccount,
   type SocialAccountItem,
   type SocialOAuthStatus,
 } from "@/features/company-settings/api";
 import { mapApiError } from "@/lib/map-api-error";
+import { isSuperAdmin } from "@/lib/platform-level";
+import { cn } from "@/lib/utils";
 
 type InstagramPanelProps = {
   companyId: string;
 };
+
+/** One copyable Meta-dashboard URL row in the guided setup card (ADR 0033). */
+function DashboardUrlRow({ url }: { url: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <Input value={url} readOnly className="flex-1" />
+      <Button
+        type="button"
+        variant="outline"
+        className={copied ? "text-success" : undefined}
+        onClick={() => {
+          void navigator.clipboard.writeText(url);
+          setCopied(true);
+        }}
+      >
+        {copied ? t("common.copied") : t("common.copy")}
+      </Button>
+    </div>
+  );
+}
 
 const POLL_INTERVAL_MS = 2500;
 export const OAUTH_POLL_TIMEOUT_MS = 10 * 60 * 1000;
@@ -42,12 +71,23 @@ function isExpired(expiresAt: string | null): boolean {
 
 export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const { t, i18n } = useTranslation();
-  const { accessToken } = useAuth();
+  const { user, accessToken } = useAuth();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [account, setAccount] = useState<SocialAccountItem | null>(null);
   const [status, setStatus] = useState<SocialOAuthStatus>("not_connected");
+  const [configured, setConfigured] = useState(false);
+  const [oauthMode, setOauthMode] = useState<"byo" | "relay">("byo");
+  const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
+  const [deauthorizeUrl, setDeauthorizeUrl] = useState<string | null>(null);
+  const [dataDeletionUrl, setDataDeletionUrl] = useState<string | null>(null);
+  const [manualIgUserId, setManualIgUserId] = useState("");
+  const [manualToken, setManualToken] = useState("");
+  const [manualExpires, setManualExpires] = useState<Date | undefined>(undefined);
+  const [expiresOpen, setExpiresOpen] = useState(false);
+  const [manualBusy, setManualBusy] = useState(false);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<"disconnected" | null>(null);
@@ -76,7 +116,14 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
         ]);
         const row = items.find((item) => item.platform === "instagram") ?? null;
         setAccount(row);
-        if (withStatus) setStatus(oauth?.status ?? "not_connected");
+        if (withStatus) {
+          setStatus(oauth?.status ?? "not_connected");
+          setConfigured(Boolean(oauth?.configured));
+          setOauthMode(oauth?.mode ?? "byo");
+          setCallbackUrl(oauth?.callback_url ?? null);
+          setDeauthorizeUrl(oauth?.deauthorize_url ?? null);
+          setDataDeletionUrl(oauth?.data_deletion_url ?? null);
+        }
       } catch (err) {
         setError(
           err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.loadFailed"),
@@ -121,6 +168,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
         const oauth = await apiGetInstagramOAuthStatus(accessToken, companyId);
         // User cancel / timeout already stopped the interval; ignore stale replies.
         if (!pollRef.current) return;
+        setConfigured(Boolean(oauth.configured));
         if (oauth.status === "connected") {
           stopPolling();
           setStatus("connected");
@@ -190,6 +238,9 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
       popupRef.current = window.open(oauth.authorization_url, "_blank", "noopener,noreferrer");
       pollStatus();
     } catch (err) {
+      if (err instanceof Error && err.message === "meta_oauth_not_configured") {
+        setConfigured(false);
+      }
       setError(
         err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.saveFailed"),
       );
@@ -197,6 +248,29 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
       setBusy(false);
     }
   }, [accessToken, companyId, pollStatus, t]);
+
+  async function onManualSave() {
+    setManualBusy(true);
+    setError(null);
+    try {
+      const expires = manualExpires ? manualExpires.toISOString() : null;
+      await apiUpsertSocialAccount(accessToken, companyId, "instagram", {
+        ig_user_id: manualIgUserId.trim(),
+        access_token: manualToken.trim(),
+        expires_at: expires,
+      });
+      setManualIgUserId("");
+      setManualToken("");
+      setManualExpires(undefined);
+      await loadAccounts(true);
+    } catch (err) {
+      setError(
+        err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.saveFailed"),
+      );
+    } finally {
+      setManualBusy(false);
+    }
+  }
 
   async function onDisconnect() {
     setBusy(true);
@@ -222,6 +296,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const expired = isExpired(account?.expires_at ?? null);
   const connected = status === "connected" || Boolean(account?.ig_user_id?.trim());
   const connecting = status === "pending";
+  const canConfigure = isSuperAdmin(user?.platform_level);
 
   const expiresLabel = useMemo(() => {
     if (!account?.expires_at) return t("common.notAvailable");
@@ -309,24 +384,64 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
           </div>
         )}
 
-        {!connecting && (
-          <div
-            className={
-              connected
-                ? "flex flex-wrap items-center justify-end gap-2"
-                : "flex flex-wrap items-center justify-start gap-2"
-            }
-          >
-            {connected ? (
+        {!connecting && !connected && !configured && (
+          <div className="space-y-3 rounded-lg border border-border bg-secondary px-4 py-4">
+            <p className="text-sm font-medium tracking-tight text-foreground">
+              {t("settings.instagram.needsAppTitle")}
+            </p>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+              <li>{t("settings.instagram.needsAppStep1")}</li>
+              <li>{t("settings.instagram.needsAppStep2")}</li>
+              <li>{t("settings.instagram.needsAppStep3")}</li>
+            </ol>
+            {(
+              [
+                {
+                  label: t("settings.instagram.needsAppRedirectLabel"),
+                  url: callbackUrl,
+                },
+                {
+                  label: t("settings.instagram.needsAppDeauthorizeLabel"),
+                  url: deauthorizeUrl,
+                },
+                {
+                  label: t("settings.instagram.needsAppDataDeletionLabel"),
+                  url: dataDeletionUrl,
+                },
+              ] as const
+            )
+              .filter((row): row is { label: string; url: string } => Boolean(row.url))
+              .map((row) => (
+                <div key={row.label} className="space-y-1">
+                  <p className="text-xs text-muted-foreground">{row.label}</p>
+                  <DashboardUrlRow url={row.url} />
+                </div>
+              ))}
+            <p className="text-xs text-muted-foreground">
+              {t("settings.instagram.needsAppLiveNote")}
+            </p>
+            <Alert variant="info">
+              <AlertDescription>{t("settings.instagram.standardAccessNote")}</AlertDescription>
+            </Alert>
+            {canConfigure ? (
               <Button
                 type="button"
                 variant="outline"
-                disabled={busy}
-                onClick={() => void startConnect()}
+                onClick={() => navigate("/system?tab=instance")}
               >
-                {t("settings.instagram.rotate")}
+                {t("settings.instagram.openInstanceSettings")}
               </Button>
             ) : (
+              <p className="text-sm text-muted-foreground">
+                {t("settings.instagram.needsAppViewerNote")}
+              </p>
+            )}
+          </div>
+        )}
+
+        {!connecting && !connected && configured && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-start gap-2">
               <Button
                 type="button"
                 variant="default"
@@ -335,19 +450,104 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
               >
                 {t("settings.instagram.connect")}
               </Button>
-            )}
-            {connected && (
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {oauthMode === "relay"
+                ? t("settings.instagram.readyCaptionRelay")
+                : t("settings.instagram.readyCaption")}
+            </p>
+          </div>
+        )}
+
+        {connected && !connecting && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void startConnect()}
+            >
+              {t("settings.instagram.rotate")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-destructive/40 text-destructive hover:enabled:bg-destructive-soft"
+              disabled={busy}
+              onClick={() => setDisconnectOpen(true)}
+            >
+              {t("settings.instagram.disconnect")}
+            </Button>
+          </div>
+        )}
+
+        {!connecting && !connected && (
+          <details className="rounded-lg border border-border px-4 py-3 text-sm">
+            <summary className="cursor-pointer select-none text-muted-foreground">
+              {t("settings.instagram.manualToggle")}
+            </summary>
+            <div className="mt-3 space-y-3">
+              <FormField id="ig-manual-user" label={t("settings.instagram.igUserId")}>
+                <Input
+                  id="ig-manual-user"
+                  value={manualIgUserId}
+                  onChange={(e) => setManualIgUserId(e.target.value)}
+                  autoComplete="off"
+                />
+              </FormField>
+              <FormField id="ig-manual-token" label={t("settings.instagram.accessToken")}>
+                <Input
+                  id="ig-manual-token"
+                  type="password"
+                  value={manualToken}
+                  onChange={(e) => setManualToken(e.target.value)}
+                  autoComplete="off"
+                />
+              </FormField>
+              <FormField id="ig-manual-expires" label={t("settings.instagram.expiresAt")}>
+                <Popover open={expiresOpen} onOpenChange={setExpiresOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="ig-manual-expires"
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !manualExpires && "text-muted-foreground",
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 size-4" />
+                      {manualExpires
+                        ? manualExpires.toLocaleDateString(
+                            i18n.language === "en" ? "en" : "zh-HK",
+                            { year: "numeric", month: "2-digit", day: "2-digit" },
+                          )
+                        : t("settings.instagram.pickDate")}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={manualExpires}
+                      onSelect={(day) => {
+                        setManualExpires(day);
+                        setExpiresOpen(false);
+                      }}
+                      captionLayout="dropdown"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </FormField>
               <Button
                 type="button"
                 variant="outline"
-                className="border-destructive/40 text-destructive hover:enabled:bg-destructive-soft"
-                disabled={busy}
-                onClick={() => setDisconnectOpen(true)}
+                disabled={manualBusy || !manualIgUserId.trim() || !manualToken.trim()}
+                onClick={() => void onManualSave()}
               >
-                {t("settings.instagram.disconnect")}
+                {manualBusy ? t("common.saving") : t("common.save")}
               </Button>
-            )}
-          </div>
+            </div>
+          </details>
         )}
       </div>
 

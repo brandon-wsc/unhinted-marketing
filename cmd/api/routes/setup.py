@@ -47,6 +47,10 @@ async def _setup_pending(db: AsyncSession) -> bool:
 
 
 def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
+    from internal.auth.meta_oauth import meta_platform_callback_urls, oauth_callback_url
+
+    callback_url = oauth_callback_url()
+    platform_urls = meta_platform_callback_urls()
     if row is None:
         return InstanceSettingsResponse(
             web_base_url="",
@@ -57,6 +61,15 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
             smtp_user="",
             smtp_password_last4=None,
             smtp_tls=True,
+            meta_app_id="",
+            meta_app_secret_last4=None,
+            meta_oauth_mode="byo",
+            meta_oauth_callback_url=callback_url,
+            meta_oauth_deauthorize_url=platform_urls["deauthorize_url"],
+            meta_oauth_data_deletion_url=platform_urls["data_deletion_url"],
+            meta_oauth_relay_url="",
+            meta_oauth_instance_id="",
+            meta_oauth_relay_secret_last4=None,
             setup_completed=False,
         )
     return InstanceSettingsResponse(
@@ -68,6 +81,15 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
         smtp_user=row.smtp_user or "",
         smtp_password_last4=row.smtp_password_last4,
         smtp_tls=row.smtp_tls,
+        meta_app_id=row.meta_app_id or "",
+        meta_app_secret_last4=row.meta_app_secret_last4,
+        meta_oauth_mode=row.meta_oauth_mode,  # type: ignore[arg-type]
+        meta_oauth_callback_url=callback_url,
+        meta_oauth_deauthorize_url=platform_urls["deauthorize_url"],
+        meta_oauth_data_deletion_url=platform_urls["data_deletion_url"],
+        meta_oauth_relay_url=row.meta_oauth_relay_url or "",
+        meta_oauth_instance_id=row.meta_oauth_instance_id or "",
+        meta_oauth_relay_secret_last4=row.meta_oauth_relay_secret_last4,
         setup_completed=row.setup_completed_at is not None,
     )
 
@@ -168,15 +190,46 @@ async def put_instance_settings(
     _super: SuperAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InstanceSettingsResponse:
+    row = await repos.get_instance_settings(db)
     fields: dict = {}
     if body.web_base_url is not None:
         fields["web_base_url"] = body.web_base_url
     if body.email_config is not None:
         fields.update(_email_fields(body.email_config))
+    if body.meta_app_id is not None:
+        # "" clears; the stored secret only survives an unchanged app id.
+        new_app_id = body.meta_app_id.strip()
+        fields["meta_app_id"] = new_app_id
+        current_app_id = (row.meta_app_id or "") if row is not None else ""
+        if new_app_id != current_app_id:
+            fields["meta_app_secret_encrypted"] = None
+            fields["meta_app_secret_last4"] = None
+    if body.meta_app_secret:
+        try:
+            fields["meta_app_secret_encrypted"] = encrypt_key(body.meta_app_secret)
+            fields["meta_app_secret_last4"] = mask_key(body.meta_app_secret)
+        except ByokEncryptionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            ) from exc
+    if body.meta_oauth_mode is not None:
+        fields["meta_oauth_mode"] = body.meta_oauth_mode
+    if body.meta_oauth_relay_secret:
+        # ADR 0034 — the secret the relay issued at registration; rotates only
+        # on a non-empty value (same rule as meta_app_secret).
+        try:
+            fields["meta_oauth_relay_secret_encrypted"] = encrypt_key(
+                body.meta_oauth_relay_secret
+            )
+            fields["meta_oauth_relay_secret_last4"] = mask_key(
+                body.meta_oauth_relay_secret
+            )
+        except ByokEncryptionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            ) from exc
     if fields:
         row = await repos.upsert_instance_settings(db, **fields)
-    else:
-        row = await repos.get_instance_settings(db)
     await db.commit()
     await load_snapshot(db)
     return _settings_out(row)

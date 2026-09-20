@@ -32,6 +32,8 @@ export type SetupRequestBody = {
   email_config?: SetupEmailConfig;
 };
 
+export type MetaOAuthMode = "byo" | "relay";
+
 export type InstanceSettings = {
   web_base_url: string;
   email_backend: SetupEmailBackend;
@@ -41,12 +43,25 @@ export type InstanceSettings = {
   smtp_user: string;
   smtp_password_last4: string | null;
   smtp_tls: boolean;
+  meta_app_id: string;
+  meta_app_secret_last4: string | null;
+  meta_oauth_mode: MetaOAuthMode;
+  meta_oauth_callback_url: string | null;
+  meta_oauth_deauthorize_url: string | null;
+  meta_oauth_data_deletion_url: string | null;
+  meta_oauth_relay_url: string;
+  meta_oauth_instance_id: string;
+  meta_oauth_relay_secret_last4: string | null;
   setup_completed: boolean;
 };
 
 export type InstanceSettingsUpdate = {
   web_base_url?: string;
   email_config?: SetupEmailConfig;
+  meta_app_id?: string;
+  meta_app_secret?: string;
+  meta_oauth_mode?: MetaOAuthMode;
+  meta_oauth_relay_secret?: string;
 };
 
 export async function apiGetSetupStatus(): Promise<SetupStatus> {
