@@ -43,6 +43,9 @@ export function InstancePanel() {
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
   const [smtpTls, setSmtpTls] = useState(true);
+  const [metaAppId, setMetaAppId] = useState("");
+  const [metaAppSecret, setMetaAppSecret] = useState("");
+  const [callbackCopied, setCallbackCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +60,7 @@ export function InstancePanel() {
         setSmtpPort(String(row.smtp_port));
         setSmtpUser(row.smtp_user);
         setSmtpTls(row.smtp_tls);
+        setMetaAppId(row.meta_app_id);
       })
       .catch((err) => {
         if (!cancelled) setError(mapApiError(err instanceof Error ? err.message : "", t));
@@ -82,9 +86,12 @@ export function InstancePanel() {
           smtp_password: smtpPassword || undefined,
           smtp_tls: smtpTls,
         },
+        meta_app_id: metaAppId.trim(),
+        meta_app_secret: metaAppSecret || undefined,
       });
       setSettings(next);
       setSmtpPassword("");
+      setMetaAppSecret("");
       showInfo(t("system.instance.saved"));
     } catch (err) {
       setError(mapApiError(err instanceof Error ? err.message : "", t));
@@ -227,6 +234,69 @@ export function InstancePanel() {
           </label>
         </>
       )}
+      <h2 className="pt-2 text-sm font-semibold text-foreground">
+        {t("system.instance.metaSection")}
+      </h2>
+      <FormField id="inst-meta-app-id" label={t("system.instance.metaAppId")}>
+        <Input
+          id="inst-meta-app-id"
+          value={metaAppId}
+          onChange={(e) => setMetaAppId(e.target.value)}
+          readOnly={!canEdit}
+          autoComplete="off"
+        />
+        <p className="text-xs text-muted-foreground">{t("system.instance.metaAppIdHint")}</p>
+        {canEdit && metaAppId.trim() !== settings.meta_app_id && !metaAppSecret && (
+          <p className="text-xs text-destructive">{t("system.instance.metaAppIdChanged")}</p>
+        )}
+      </FormField>
+      <FormField id="inst-meta-app-secret" label={t("system.instance.metaAppSecret")}>
+        <Input
+          id="inst-meta-app-secret"
+          type="password"
+          value={metaAppSecret}
+          onChange={(e) => setMetaAppSecret(e.target.value)}
+          readOnly={!canEdit}
+          autoComplete="new-password"
+          placeholder={
+            settings.meta_app_secret_last4
+              ? t("system.instance.metaAppSecretSet", {
+                  last4: settings.meta_app_secret_last4,
+                })
+              : undefined
+          }
+        />
+      </FormField>
+      <FormField id="inst-meta-callback" label={t("system.instance.metaCallbackUrl")}>
+        {settings.meta_oauth_callback_url ? (
+          <>
+            <div className="flex gap-2">
+              <Input
+                id="inst-meta-callback"
+                value={settings.meta_oauth_callback_url}
+                readOnly
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className={callbackCopied ? "text-success" : undefined}
+                onClick={() => {
+                  void navigator.clipboard.writeText(settings.meta_oauth_callback_url ?? "");
+                  setCallbackCopied(true);
+                }}
+              >
+                {callbackCopied ? t("common.copied") : t("common.copy")}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">{t("system.instance.metaCallbackHint")}</p>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {t("system.instance.metaCallbackMissing")}
+          </p>
+        )}
+      </FormField>
       {canEdit && (
         <Button type="submit" disabled={saving}>
           {saving ? t("setup.submitting") : t("common.save")}

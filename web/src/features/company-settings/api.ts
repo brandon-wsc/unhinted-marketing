@@ -751,6 +751,27 @@ export async function apiListSocialAccounts(
   return body.items ?? [];
 }
 
+export type SocialAccountUpsertBody = {
+  ig_user_id: string;
+  access_token: string;
+  expires_at?: string | null;
+};
+
+export async function apiUpsertSocialAccount(
+  accessToken: string | null,
+  companyId: string,
+  platform: string,
+  body: SocialAccountUpsertBody,
+): Promise<SocialAccountItem> {
+  const res = await fetchWithAuth(accessToken, socialPath(companyId, `/${platform}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res);
+  return res.json();
+}
+
 export async function apiDisconnectInstagramAccount(
   accessToken: string | null,
   companyId: string,
@@ -767,6 +788,8 @@ export type SocialOAuthInfo = {
   status: SocialOAuthStatus;
   authorization_url?: string | null;
   poll_url?: string | null;
+  configured?: boolean;
+  callback_url?: string | null;
 };
 
 export async function apiStartInstagramOAuth(
