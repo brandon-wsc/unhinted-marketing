@@ -16,7 +16,9 @@ from internal.auth.meta_oauth import (
     exchange_code,
     oauth_callback_url,
     oauth_configured,
+    parse_relay_state,
     parse_state,
+    redeem_relay_ticket,
     start_oauth,
 )
 from internal.instance.config import reset_snapshot_cache
@@ -411,13 +413,228 @@ async def test_oauth_fields_read_db_snapshot(monkeypatch: pytest.MonkeyPatch) ->
 async def test_oauth_fields_relay_mode_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """ADR 0032 — meta_oauth_mode=relay is reserved; BYO creds must not fire."""
+    """ADR 0032 §3 — relay mode without a relay URL/instance_id is unconfigured."""
     _configure(monkeypatch)
     import dataclasses
 
     from internal.instance.config import publish_snapshot, snapshot_from_env
 
     publish_snapshot(dataclasses.replace(snapshot_from_env(), meta_oauth_mode="relay"))
-    with pytest.raises(MetaOAuthError, match="meta_oauth_mode_unavailable"):
+    with pytest.raises(MetaOAuthError, match="meta_oauth_not_configured"):
         _oauth_fields()
     assert oauth_configured() is False
+
+
+def _relay_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Publish a relay-mode instance snapshot."""
+    import dataclasses
+
+    from internal.instance.config import publish_snapshot, snapshot_from_env
+
+    _configure(monkeypatch)
+    publish_snapshot(
+        dataclasses.replace(
+            snapshot_from_env(),
+            meta_oauth_mode="relay",
+            meta_oauth_relay_url="https://connect.example.com",
+            meta_oauth_instance_id="inst-abc",
+        )
+    )
+
+
+async def test_relay_mode_callback_and_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Relay mode derives the fixed vendor callback and needs no local creds."""
+    _relay_snapshot(monkeypatch)
+    assert oauth_callback_url() == "https://connect.example.com/meta/callback"
+    assert oauth_configured() is True
+    fields = _oauth_fields()
+    assert fields["redirect_uri"] == "https://connect.example.com/meta/callback"
+
+
+async def test_start_oauth_relay_prefixes_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Relay start sends the browser to /authorize with an instance-prefixed state."""
+    _relay_snapshot(monkeypatch)
+    company_id = uuid.uuid4()
+    db = AsyncMock()
+    row = _account()
+    from internal.auth import meta_oauth as mod
+
+    async def fake_get(*a, **k):
+        return row
+
+    monkeypatch.setattr(mod.repos, "get_social_account", fake_get)
+
+    started = await start_oauth(db, company_id=company_id)
+    assert started.authorization_url.startswith("https://connect.example.com/authorize?")
+    from urllib.parse import parse_qs, urlsplit
+
+    state = parse_qs(urlsplit(started.authorization_url).query)["state"][0]
+    assert state.startswith("inst-abc:")
+    parsed = parse_relay_state(state)
+    assert parsed is not None
+    assert parsed[0] == str(row.id)
+
+
+async def test_relay_redeem_ticket(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Happy path: valid pending state + ticket redeem upserts the account."""
+    _relay_snapshot(monkeypatch)
+    from internal.auth import meta_oauth as mod
+    from internal.auth.meta_oauth import _encrypt_connect_state
+
+    row = _account()
+    row.oauth_connect_state = _encrypt_connect_state(
+        str(row.id), "csrf-tok", "https://connect.example.com/meta/callback"
+    )
+
+    async def fake_get_by_id(*a, **k):
+        return row
+
+    upserted: list[dict] = []
+
+    async def fake_upsert(db, **kwargs):
+        upserted.append(kwargs)
+        return row
+
+    monkeypatch.setattr(mod.repos, "get_social_account_by_id", fake_get_by_id)
+    monkeypatch.setattr(mod.repos, "upsert_social_account", fake_upsert)
+
+    class TicketClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url):
+            import httpx
+
+            assert url == "https://connect.example.com/ticket/tok-1"
+            return httpx.Response(
+                200,
+                json={
+                    "instance_id": "inst-abc",
+                    "ig_user_id": IG_USER,
+                    "access_token": "IGQW-relay-long",
+                    "expires_at": "2026-11-19T00:00:00+00:00",
+                    "missing_scopes": [],
+                },
+            )
+
+    monkeypatch.setattr(mod.httpx, "AsyncClient", lambda **k: TicketClient())
+
+    state = f"inst-abc:{row.id}:{row.oauth_connect_state}"
+    result = await redeem_relay_ticket(
+        db=AsyncMock(), ticket="tok-1", state=state, csrf_token="csrf-tok"
+    )
+    assert result.ig_user_id == IG_USER
+    assert upserted and upserted[0]["ig_user_id"] == IG_USER
+    assert row.oauth_connect_state is None
+
+
+async def test_relay_redeem_rejects_foreign_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ticket payload bound to another install must not persist here."""
+    _relay_snapshot(monkeypatch)
+    from internal.auth import meta_oauth as mod
+    from internal.auth.meta_oauth import _encrypt_connect_state
+
+    row = _account()
+    row.oauth_connect_state = _encrypt_connect_state(
+        str(row.id), "csrf-tok", "https://connect.example.com/meta/callback"
+    )
+
+    async def fake_get_by_id(*a, **k):
+        return row
+
+    monkeypatch.setattr(mod.repos, "get_social_account_by_id", fake_get_by_id)
+
+    class TicketClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url):
+            import httpx
+
+            return httpx.Response(
+                200,
+                json={
+                    "instance_id": "inst-OTHER",
+                    "ig_user_id": IG_USER,
+                    "access_token": "tok",
+                    "expires_at": None,
+                    "missing_scopes": [],
+                },
+            )
+
+    monkeypatch.setattr(mod.httpx, "AsyncClient", lambda **k: TicketClient())
+
+    state = f"inst-abc:{row.id}:{row.oauth_connect_state}"
+    with pytest.raises(MetaOAuthError, match="meta_oauth_invalid_state"):
+        await redeem_relay_ticket(
+            db=AsyncMock(), ticket="tok-1", state=state, csrf_token="csrf-tok"
+        )
+
+
+async def test_relay_redeem_expired_ticket(monkeypatch: pytest.MonkeyPatch) -> None:
+    _relay_snapshot(monkeypatch)
+    from internal.auth import meta_oauth as mod
+    from internal.auth.meta_oauth import _encrypt_connect_state
+
+    row = _account()
+    row.oauth_connect_state = _encrypt_connect_state(
+        str(row.id), "csrf-tok", "https://connect.example.com/meta/callback"
+    )
+
+    async def fake_get_by_id(*a, **k):
+        return row
+
+    monkeypatch.setattr(mod.repos, "get_social_account_by_id", fake_get_by_id)
+
+    class TicketClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url):
+            import httpx
+
+            return httpx.Response(404, text="unknown or expired ticket")
+
+    monkeypatch.setattr(mod.httpx, "AsyncClient", lambda **k: TicketClient())
+
+    state = f"inst-abc:{row.id}:{row.oauth_connect_state}"
+    with pytest.raises(MetaOAuthError, match="meta_oauth_relay_ticket_expired"):
+        await redeem_relay_ticket(
+            db=AsyncMock(), ticket="tok-1", state=state, csrf_token="csrf-tok"
+        )
+
+
+async def test_relay_redeem_wrong_instance_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """State prefixed for a different registry slug never reaches redemption."""
+    _relay_snapshot(monkeypatch)
+    row = _account()
+    state = f"inst-OTHER:{row.id}:blob"
+    with pytest.raises(MetaOAuthError, match="meta_oauth_invalid_state"):
+        await redeem_relay_ticket(
+            db=AsyncMock(), ticket="tok-1", state=state, csrf_token="x"
+        )
+
+
+async def test_exchange_code_blocked_in_relay_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In relay mode Meta never calls this instance — the BYO callback path
+    must refuse rather than attempt an exchange with empty creds."""
+    _relay_snapshot(monkeypatch)
+    with pytest.raises(MetaOAuthError, match="meta_oauth_mode_unavailable"):
+        await exchange_code(
+            db=AsyncMock(), code="c", state="a:b", csrf_token=None
+        )

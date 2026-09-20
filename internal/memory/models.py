@@ -756,6 +756,10 @@ class InstanceSettings(Base):
     meta_oauth_mode: Mapped[str] = mapped_column(
         String(16), nullable=False, default="byo", server_default="byo"
     )
+    # ADR 0032 §3 — relay opt-in: vendor relay base URL + the REGISTRY slug
+    # the relay maps to this install's web_base_url (generated at seed).
+    meta_oauth_relay_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    meta_oauth_instance_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -54,6 +54,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const [account, setAccount] = useState<SocialAccountItem | null>(null);
   const [status, setStatus] = useState<SocialOAuthStatus>("not_connected");
   const [configured, setConfigured] = useState(false);
+  const [oauthMode, setOauthMode] = useState<"byo" | "relay">("byo");
   const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
   const [callbackCopied, setCallbackCopied] = useState(false);
   const [manualIgUserId, setManualIgUserId] = useState("");
@@ -91,6 +92,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
         if (withStatus) {
           setStatus(oauth?.status ?? "not_connected");
           setConfigured(Boolean(oauth?.configured));
+          setOauthMode(oauth?.mode ?? "byo");
           setCallbackUrl(oauth?.callback_url ?? null);
         }
       } catch (err) {
@@ -410,7 +412,11 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
                 {t("settings.instagram.connect")}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">{t("settings.instagram.readyCaption")}</p>
+            <p className="text-xs text-muted-foreground">
+              {oauthMode === "relay"
+                ? t("settings.instagram.readyCaptionRelay")
+                : t("settings.instagram.readyCaption")}
+            </p>
           </div>
         )}
 

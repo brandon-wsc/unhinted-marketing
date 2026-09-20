@@ -499,10 +499,11 @@
       "oauthFailed": "Connection failed. Please try again.",
       "oauthAborted": "Authorization was cancelled or timed out. Please reconnect.",
       "oauthNotConfigured": "Instagram Login isn't configured yet — a platform admin needs to add the Meta app credentials under System → Instance.",
-      "oauthModeUnavailable": "Hosted connect isn't available yet — set up your own Meta app under System → Instance.",
+      "oauthModeUnavailable": "The connect flow doesn't match the configured mode — check the OAuth mode under System → Instance.",
       "oauthNotProfessional": "This Instagram account isn't a professional account (Business or Creator). Convert it in Instagram before connecting.",
       "oauthMissingPublish": "Authorized, but posting permission wasn't granted. Reconnect and allow instagram_business_content_publish.",
       "oauthCsrfMismatch": "The connect window didn't match this browser session. Try Connect again.",
+      "oauthRelayTicketExpired": "The connect session expired before the relay handed back the result. Try Connect again.",
       "needsAppTitle": "Set up your Meta app first",
       "needsAppStep1": "Create an app at Meta for Developers and add the Instagram use case (API setup with Instagram login).",
       "needsAppStep2": "In the app's Instagram settings, paste the redirect URI below into Valid OAuth Redirect URIs, and add your Instagram professional account to the app.",
@@ -511,6 +512,7 @@
       "openInstanceSettings": "Open System → Instance",
       "needsAppViewerNote": "A platform admin needs to add the Meta app credentials under System → Instance first.",
       "readyCaption": "Connects through this instance's own Meta app.",
+      "readyCaptionRelay": "Connects via the vendor's hosted relay — tokens transit vendor infrastructure (transit-only, not stored).",
       "manualToggle": "Advanced: paste a token manually",
       "accessToken": "Access token"
     },
@@ -741,7 +743,15 @@
       "metaAppSecretSet": "Saved (…{{last4}}) — enter a new secret to rotate",
       "metaCallbackUrl": "OAuth redirect URI",
       "metaCallbackHint": "Whitelist this exact URL under Valid OAuth Redirect URIs in the Meta dashboard.",
-      "metaCallbackMissing": "Set the instance URL above first — the redirect URI derives from it."
+      "metaCallbackMissing": "Set the instance URL above first — the redirect URI derives from it.",
+      "metaMode": "OAuth mode",
+      "metaModeByo": "Own Meta app (default)",
+      "metaModeRelay": "Hosted connect (relay)",
+      "metaModeHint": "Relay routes authorization through the vendor's hosted service — opt-in; tokens transit vendor infrastructure. BYO keeps everything on this install.",
+      "metaRelayUrl": "Relay base URL",
+      "metaRelayUrlHint": "Provided by your vendor (e.g. https://connect.example.com). Do not change unless instructed.",
+      "metaInstanceId": "Instance ID",
+      "metaInstanceIdHint": "Register this slug with the relay (it maps to this install's URL). Read-only — generated automatically."
     }
   },
   "admin": {

@@ -10,6 +10,7 @@ await a DB load.
 from __future__ import annotations
 
 import logging
+import secrets
 import time
 from dataclasses import dataclass
 from typing import Literal
@@ -41,6 +42,8 @@ class InstanceSnapshot:
     meta_app_id: str = ""
     meta_app_secret: str = ""
     meta_oauth_mode: MetaOAuthMode = "byo"
+    meta_oauth_relay_url: str = ""
+    meta_oauth_instance_id: str = ""
 
 
 def _strip(value: str | None) -> str:
@@ -61,6 +64,7 @@ def snapshot_from_env() -> InstanceSnapshot:
         smtp_tls=settings.smtp_tls,
         meta_app_id=_strip(settings.meta_app_id),
         meta_app_secret=settings.meta_app_secret or "",
+        meta_oauth_relay_url=_strip(settings.oauth_relay_url),
     )
 
 
@@ -121,6 +125,8 @@ def _snapshot_from_row(row) -> InstanceSnapshot:
         meta_app_id=_strip(row.meta_app_id),
         meta_app_secret=meta_secret,
         meta_oauth_mode=meta_mode if meta_mode in ("byo", "relay") else "byo",
+        meta_oauth_relay_url=_strip(row.meta_oauth_relay_url),
+        meta_oauth_instance_id=_strip(row.meta_oauth_instance_id),
     )
 
 
@@ -153,15 +159,24 @@ async def _seed_meta_from_env(db: AsyncSession, env_snap: InstanceSnapshot) -> b
     upgrade while portal edits still win afterwards.
     """
     row = await repos.get_instance_settings(db)
-    if row is None or row.meta_app_id is not None or not env_snap.meta_app_id:
+    if row is None:
         return False
-    secret_enc, secret_last4 = _encrypt_seed(env_snap.meta_app_secret, "Meta app secret")
-    await repos.upsert_instance_settings(
-        db,
-        meta_app_id=env_snap.meta_app_id,
-        meta_app_secret_encrypted=secret_enc,
-        meta_app_secret_last4=secret_last4,
-    )
+    fields: dict = {}
+    if row.meta_app_id is None and env_snap.meta_app_id:
+        secret_enc, secret_last4 = _encrypt_seed(
+            env_snap.meta_app_secret, "Meta app secret"
+        )
+        fields["meta_app_id"] = env_snap.meta_app_id
+        fields["meta_app_secret_encrypted"] = secret_enc
+        fields["meta_app_secret_last4"] = secret_last4
+    if row.meta_oauth_relay_url is None and env_snap.meta_oauth_relay_url:
+        fields["meta_oauth_relay_url"] = env_snap.meta_oauth_relay_url
+    if not row.meta_oauth_instance_id:
+        # Registry slug the relay maps to this install's web_base_url.
+        fields["meta_oauth_instance_id"] = secrets.token_urlsafe(12)
+    if not fields:
+        return False
+    await repos.upsert_instance_settings(db, **fields)
     await db.commit()
     return True
 
@@ -194,6 +209,8 @@ async def ensure_instance_settings_seeded(db: AsyncSession) -> None:
         meta_app_id=env_snap.meta_app_id or None,
         meta_app_secret_encrypted=meta_enc,
         meta_app_secret_last4=meta_last4,
+        meta_oauth_relay_url=env_snap.meta_oauth_relay_url or None,
+        meta_oauth_instance_id=secrets.token_urlsafe(12),
     )
     await db.commit()
     await load_snapshot(db)

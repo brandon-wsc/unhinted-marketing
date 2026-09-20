@@ -47,6 +47,8 @@ export type InstanceSettings = {
   meta_app_secret_last4: string | null;
   meta_oauth_mode: MetaOAuthMode;
   meta_oauth_callback_url: string | null;
+  meta_oauth_relay_url: string;
+  meta_oauth_instance_id: string;
   setup_completed: boolean;
 };
 
@@ -55,6 +57,8 @@ export type InstanceSettingsUpdate = {
   email_config?: SetupEmailConfig;
   meta_app_id?: string;
   meta_app_secret?: string;
+  meta_oauth_mode?: MetaOAuthMode;
+  meta_oauth_relay_url?: string;
 };
 
 export async function apiGetSetupStatus(): Promise<SetupStatus> {

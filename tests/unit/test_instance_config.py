@@ -84,9 +84,13 @@ async def test_seed_meta_from_env_skips_portal_cleared(
 
     seeded = await _seed_meta_from_env(db, snapshot_from_env())
 
-    assert seeded is False
+    # Only the generated relay instance_id is written — env creds stay out.
+    assert seeded is True
     assert row.meta_app_id == ""
-    upsert.assert_not_awaited()
+    fields = upsert.await_args.kwargs
+    assert "meta_app_id" not in fields
+    assert "meta_app_secret_encrypted" not in fields
+    assert fields["meta_oauth_instance_id"]
 
 
 async def test_seed_meta_from_env_skips_when_already_set(
@@ -99,8 +103,11 @@ async def test_seed_meta_from_env_skips_when_already_set(
 
     seeded = await _seed_meta_from_env(db, snapshot_from_env())
 
-    assert seeded is False
-    upsert.assert_not_awaited()
+    # Creds are left alone; only the missing relay instance_id is generated.
+    assert seeded is True
+    fields = upsert.await_args.kwargs
+    assert list(fields) == ["meta_oauth_instance_id"]
+    assert fields["meta_oauth_instance_id"]
 
 
 async def test_ensure_seeded_creates_row_with_meta(

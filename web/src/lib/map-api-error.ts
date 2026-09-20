@@ -26,6 +26,7 @@ const API_ERROR_KEYS: Record<string, string> = {
   meta_oauth_exchange_failed: "settings.instagram.oauthFailed",
   meta_oauth_invalid_state: "settings.instagram.oauthFailed",
   meta_oauth_no_pending_connect: "settings.instagram.oauthAborted",
+  meta_oauth_relay_ticket_expired: "settings.instagram.oauthRelayTicketExpired",
   access_denied: "settings.instagram.oauthAborted",
 };
 

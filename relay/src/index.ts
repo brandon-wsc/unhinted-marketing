@@ -22,8 +22,12 @@ export interface Env {
 }
 
 const CALLBACK_PATH = "/meta/callback";
+const AUTHORIZE_PATH = "/authorize";
 const FINISH_PATH = "/api/social/oauth/relay-finish";
 const TICKET_TTL_SECONDS = 60;
+const DIALOG_URL = "https://www.instagram.com/oauth/authorize";
+const META_OAUTH_SCOPES =
+  "instagram_business_basic,instagram_business_content_publish";
 const SHORT_LIVED_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
 const LONG_LIVED_TOKEN_URL = "https://graph.instagram.com/access_token";
 const ME_FIELDS = "user_id,id,username,account_type";
@@ -171,6 +175,29 @@ function finishUrl(base: string, state: string): URL {
   return new URL(FINISH_PATH, base.endsWith("/") ? base : `${base}/`);
 }
 
+/**
+ * The instance's OAuth start points the browser here instead of at Instagram
+ * directly — this Worker injects the vendor client_id and its own fixed
+ * redirect_uri, so installs never need to know the vendor app. The state
+ * prefix is validated against REGISTRY so this isn't an open bounce.
+ */
+async function onAuthorize(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const state = url.searchParams.get("state") ?? "";
+  const instanceId = state.split(":", 1)[0] ?? "";
+  const registered = instanceId ? await env.REGISTRY.get(instanceId) : null;
+  if (!registered) {
+    return text("unhinted relay: unknown instance", 400);
+  }
+  const dialog = new URL(DIALOG_URL);
+  dialog.searchParams.set("client_id", env.META_APP_ID);
+  dialog.searchParams.set("redirect_uri", `${url.origin}${CALLBACK_PATH}`);
+  dialog.searchParams.set("scope", META_OAUTH_SCOPES);
+  dialog.searchParams.set("state", state);
+  dialog.searchParams.set("response_type", "code");
+  return redirect(dialog.toString());
+}
+
 async function onCallback(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const state = url.searchParams.get("state") ?? "";
@@ -227,6 +254,9 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/healthz") return text("ok");
+    if (url.pathname === AUTHORIZE_PATH && request.method === "GET") {
+      return onAuthorize(request, env);
+    }
     if (url.pathname === CALLBACK_PATH && request.method === "GET") {
       return onCallback(request, env);
     }

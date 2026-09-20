@@ -790,6 +790,7 @@ export type SocialOAuthInfo = {
   poll_url?: string | null;
   configured?: boolean;
   callback_url?: string | null;
+  mode?: "byo" | "relay";
 };
 
 export async function apiStartInstagramOAuth(

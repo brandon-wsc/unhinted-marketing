@@ -1951,6 +1951,86 @@
         }
       }
     },
+    "/api/social/oauth/relay-finish": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "summary": "Oauth Relay Finish",
+        "description": "Relay-mode landing (ADR 0032 §3) — the vendor relay already exchanged\nthe Meta code; it 302s the browser here with a one-time ticket we redeem\nserver-to-server. Same CSRF/state gates as the BYO callback.",
+        "operationId": "oauth_relay_finish_api_social_oauth_relay_finish_get",
+        "parameters": [
+          {
+            "name": "ticket",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ticket"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/companies/{company_id}/storage/config": {
       "get": {
         "tags": [
@@ -6561,6 +6641,14 @@
             ],
             "title": "Meta Oauth Callback Url"
           },
+          "meta_oauth_relay_url": {
+            "type": "string",
+            "title": "Meta Oauth Relay Url"
+          },
+          "meta_oauth_instance_id": {
+            "type": "string",
+            "title": "Meta Oauth Instance Id"
+          },
           "setup_completed": {
             "type": "boolean",
             "title": "Setup Completed"
@@ -6580,6 +6668,8 @@
           "meta_app_secret_last4",
           "meta_oauth_mode",
           "meta_oauth_callback_url",
+          "meta_oauth_relay_url",
+          "meta_oauth_instance_id",
           "setup_completed"
         ],
         "title": "InstanceSettingsResponse"
@@ -6631,6 +6721,33 @@
               }
             ],
             "title": "Meta App Secret"
+          },
+          "meta_oauth_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "byo",
+                  "relay"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta Oauth Mode"
+          },
+          "meta_oauth_relay_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta Oauth Relay Url"
           }
         },
         "type": "object",
@@ -9684,6 +9801,15 @@
               }
             ],
             "title": "Callback Url"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "byo",
+              "relay"
+            ],
+            "title": "Mode",
+            "default": "byo"
           }
         },
         "type": "object",

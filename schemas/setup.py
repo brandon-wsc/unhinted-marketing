@@ -31,7 +31,7 @@ def _clean_url(value: str | None) -> str | None:
         return None
     cleaned = value.strip().rstrip("/")
     if cleaned and not cleaned.startswith(("http://", "https://")):
-        raise ValueError("web_base_url must start with http:// or https://")
+        raise ValueError("must start with http:// or https://")
     return cleaned or None
 
 
@@ -60,6 +60,10 @@ class InstanceSettingsResponse(BaseModel):
     meta_app_secret_last4: str | None
     meta_oauth_mode: MetaOAuthMode
     meta_oauth_callback_url: str | None
+    # ADR 0032 §3 — relay opt-in: vendor relay base + this install's registry
+    # slug (read-only; the relay's REGISTRY maps it to web_base_url).
+    meta_oauth_relay_url: str
+    meta_oauth_instance_id: str
     setup_completed: bool
 
 
@@ -73,5 +77,8 @@ class InstanceSettingsUpdate(BaseModel):
     email_config: SetupEmailConfig | None = None
     meta_app_id: str | None = Field(default=None, max_length=255)
     meta_app_secret: str | None = Field(default=None, max_length=255)
+    meta_oauth_mode: MetaOAuthMode | None = None
+    meta_oauth_relay_url: str | None = Field(default=None, max_length=500)
 
     _check_url = field_validator("web_base_url")(_clean_url)
+    _check_relay_url = field_validator("meta_oauth_relay_url")(_clean_url)

@@ -19,6 +19,7 @@ from internal.auth.meta_oauth import (
     oauth_callback_url,
     oauth_configured,
     pending_connect_is_stale,
+    redeem_relay_ticket,
     start_oauth,
 )
 from internal.auth.org import require_company_settings_editor
@@ -89,9 +90,12 @@ async def list_accounts(
 
 
 def _oauth_info(company_id: uuid.UUID, row: SocialAccount | None) -> SocialOAuthInfo:
+    from internal.instance.config import get_snapshot as get_instance_snapshot
+
     config = {
         "configured": oauth_configured(),
         "callback_url": oauth_callback_url(),
+        "mode": get_instance_snapshot().meta_oauth_mode,
     }
     if row is not None and row.oauth_connect_state:
         return SocialOAuthInfo(
@@ -145,12 +149,15 @@ async def oauth_start(
         max_age=86400,
         path="/api/social",
     )
+    from internal.instance.config import get_snapshot as get_instance_snapshot
+
     return SocialOAuthInfo(
         status="pending",
         authorization_url=started.authorization_url,
         poll_url=OAUTH_POLL_ROUTE.format(company_id=str(company_id)),
         configured=True,
         callback_url=oauth_callback_url(),
+        mode=get_instance_snapshot().meta_oauth_mode,
     )
 
 
@@ -202,6 +209,50 @@ async def oauth_callback(
 
     await db.commit()
     logger.info("meta oauth callback ok ig_user_id=%s", result.ig_user_id)
+    return _oauth_redirect(
+        detail="ok",
+        missing_scopes=",".join(result.missing_scopes) if result.missing_scopes else None,
+        ig_user_id=result.ig_user_id,
+    )
+
+
+@oauth_callback_router.get("/oauth/relay-finish")
+async def oauth_relay_finish(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    ticket: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    """Relay-mode landing (ADR 0032 §3) — the vendor relay already exchanged
+    the Meta code; it 302s the browser here with a one-time ticket we redeem
+    server-to-server. Same CSRF/state gates as the BYO callback."""
+    if error:
+        logger.warning("meta oauth relay finish failed upstream: %s", error)
+        await repos.clear_social_oauth_state_for_state(db, state)
+        await db.commit()
+        return _oauth_redirect(detail=error)
+
+    if not ticket or not state:
+        await repos.clear_social_oauth_state_for_state(db, state)
+        await db.commit()
+        return _oauth_redirect(detail="meta_oauth_missing_params")
+
+    try:
+        result = await redeem_relay_ticket(
+            db,
+            ticket=ticket,
+            state=state,
+            csrf_token=request.cookies.get(CSRF_COOKIE),
+        )
+    except MetaOAuthError as exc:
+        logger.warning("meta oauth relay finish failed: %s", exc.message)
+        await repos.clear_social_oauth_state_for_state(db, state)
+        await db.commit()
+        return _oauth_redirect(detail=exc.message)
+
+    await db.commit()
+    logger.info("meta oauth relay finish ok ig_user_id=%s", result.ig_user_id)
     return _oauth_redirect(
         detail="ok",
         missing_scopes=",".join(result.missing_scopes) if result.missing_scopes else None,

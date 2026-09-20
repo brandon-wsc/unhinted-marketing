@@ -64,6 +64,8 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
             meta_app_secret_last4=None,
             meta_oauth_mode="byo",
             meta_oauth_callback_url=callback_url,
+            meta_oauth_relay_url="",
+            meta_oauth_instance_id="",
             setup_completed=False,
         )
     return InstanceSettingsResponse(
@@ -79,6 +81,8 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
         meta_app_secret_last4=row.meta_app_secret_last4,
         meta_oauth_mode=row.meta_oauth_mode,  # type: ignore[arg-type]
         meta_oauth_callback_url=callback_url,
+        meta_oauth_relay_url=row.meta_oauth_relay_url or "",
+        meta_oauth_instance_id=row.meta_oauth_instance_id or "",
         setup_completed=row.setup_completed_at is not None,
     )
 
@@ -201,6 +205,11 @@ async def put_instance_settings(
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
             ) from exc
+    if body.meta_oauth_mode is not None:
+        fields["meta_oauth_mode"] = body.meta_oauth_mode
+    if body.meta_oauth_relay_url is not None:
+        # "" clears; a relay switch needs the matching REGISTRY entry anyway.
+        fields["meta_oauth_relay_url"] = body.meta_oauth_relay_url or None
     if fields:
         row = await repos.upsert_instance_settings(db, **fields)
     await db.commit()

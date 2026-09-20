@@ -8,6 +8,7 @@ connection state is serialized.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -30,5 +31,8 @@ class SocialOAuthInfo(BaseModel):
     # ADR 0032 — whether the instance Meta app creds + callback base are set;
     # False renders the guided BYO setup card instead of a failing Connect.
     configured: bool = False
-    # Exact string to whitelist under Meta Valid OAuth Redirect URIs.
+    # Exact string to whitelist under Meta Valid OAuth Redirect URIs (BYO);
+    # in relay mode this is the vendor relay's fixed URI (disclosure only).
     callback_url: str | None = None
+    # ADR 0032 §3 — which path connect uses; the UI discloses relay transit.
+    mode: Literal["byo", "relay"] = "byo"

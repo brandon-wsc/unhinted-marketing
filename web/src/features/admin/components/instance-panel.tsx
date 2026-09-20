@@ -19,6 +19,7 @@ import {
   apiGetInstanceSettings,
   apiPutInstanceSettings,
   type InstanceSettings,
+  type MetaOAuthMode,
   type SetupEmailBackend,
 } from "@/features/setup/api";
 import { mapApiError } from "@/lib/map-api-error";
@@ -45,7 +46,10 @@ export function InstancePanel() {
   const [smtpTls, setSmtpTls] = useState(true);
   const [metaAppId, setMetaAppId] = useState("");
   const [metaAppSecret, setMetaAppSecret] = useState("");
+  const [metaMode, setMetaMode] = useState<MetaOAuthMode>("byo");
+  const [relayUrl, setRelayUrl] = useState("");
   const [callbackCopied, setCallbackCopied] = useState(false);
+  const [instanceIdCopied, setInstanceIdCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +65,8 @@ export function InstancePanel() {
         setSmtpUser(row.smtp_user);
         setSmtpTls(row.smtp_tls);
         setMetaAppId(row.meta_app_id);
+        setMetaMode(row.meta_oauth_mode);
+        setRelayUrl(row.meta_oauth_relay_url);
       })
       .catch((err) => {
         if (!cancelled) setError(mapApiError(err instanceof Error ? err.message : "", t));
@@ -88,6 +94,8 @@ export function InstancePanel() {
         },
         meta_app_id: metaAppId.trim(),
         meta_app_secret: metaAppSecret || undefined,
+        meta_oauth_mode: metaMode,
+        meta_oauth_relay_url: relayUrl.trim() || undefined,
       });
       setSettings(next);
       setSmtpPassword("");
@@ -237,36 +245,103 @@ export function InstancePanel() {
       <h2 className="pt-2 text-sm font-semibold text-foreground">
         {t("system.instance.metaSection")}
       </h2>
-      <FormField id="inst-meta-app-id" label={t("system.instance.metaAppId")}>
-        <Input
-          id="inst-meta-app-id"
-          value={metaAppId}
-          onChange={(e) => setMetaAppId(e.target.value)}
-          readOnly={!canEdit}
-          autoComplete="off"
-        />
-        <p className="text-xs text-muted-foreground">{t("system.instance.metaAppIdHint")}</p>
-        {canEdit && metaAppId.trim() !== settings.meta_app_id && !metaAppSecret && (
-          <p className="text-xs text-destructive">{t("system.instance.metaAppIdChanged")}</p>
-        )}
+      <FormField id="inst-meta-mode" label={t("system.instance.metaMode")}>
+        <Select
+          value={metaMode}
+          onValueChange={(v) => setMetaMode(v as MetaOAuthMode)}
+          disabled={!canEdit}
+        >
+          <SelectTrigger id="inst-meta-mode" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="byo">{t("system.instance.metaModeByo")}</SelectItem>
+            <SelectItem value="relay">{t("system.instance.metaModeRelay")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">{t("system.instance.metaModeHint")}</p>
       </FormField>
-      <FormField id="inst-meta-app-secret" label={t("system.instance.metaAppSecret")}>
-        <Input
-          id="inst-meta-app-secret"
-          type="password"
-          value={metaAppSecret}
-          onChange={(e) => setMetaAppSecret(e.target.value)}
-          readOnly={!canEdit}
-          autoComplete="new-password"
-          placeholder={
-            settings.meta_app_secret_last4
-              ? t("system.instance.metaAppSecretSet", {
-                  last4: settings.meta_app_secret_last4,
-                })
-              : undefined
-          }
-        />
-      </FormField>
+      {metaMode === "byo" && (
+        <>
+          <FormField id="inst-meta-app-id" label={t("system.instance.metaAppId")}>
+            <Input
+              id="inst-meta-app-id"
+              value={metaAppId}
+              onChange={(e) => setMetaAppId(e.target.value)}
+              readOnly={!canEdit}
+              autoComplete="off"
+            />
+            <p className="text-xs text-muted-foreground">{t("system.instance.metaAppIdHint")}</p>
+            {canEdit && metaAppId.trim() !== settings.meta_app_id && !metaAppSecret && (
+              <p className="text-xs text-destructive">{t("system.instance.metaAppIdChanged")}</p>
+            )}
+          </FormField>
+          <FormField id="inst-meta-app-secret" label={t("system.instance.metaAppSecret")}>
+            <Input
+              id="inst-meta-app-secret"
+              type="password"
+              value={metaAppSecret}
+              onChange={(e) => setMetaAppSecret(e.target.value)}
+              readOnly={!canEdit}
+              autoComplete="new-password"
+              placeholder={
+                settings.meta_app_secret_last4
+                  ? t("system.instance.metaAppSecretSet", {
+                      last4: settings.meta_app_secret_last4,
+                    })
+                  : undefined
+              }
+            />
+          </FormField>
+        </>
+      )}
+      {metaMode === "relay" && (
+        <>
+          <FormField id="inst-meta-relay-url" label={t("system.instance.metaRelayUrl")}>
+            <Input
+              id="inst-meta-relay-url"
+              value={relayUrl}
+              onChange={(e) => setRelayUrl(e.target.value)}
+              readOnly={!canEdit}
+              autoComplete="off"
+              placeholder="https://connect.example.com"
+            />
+            <p className="text-xs text-muted-foreground">{t("system.instance.metaRelayUrlHint")}</p>
+          </FormField>
+          <FormField id="inst-meta-instance-id" label={t("system.instance.metaInstanceId")}>
+            {settings.meta_oauth_instance_id ? (
+              <>
+                <div className="flex gap-2">
+                  <Input
+                    id="inst-meta-instance-id"
+                    value={settings.meta_oauth_instance_id}
+                    readOnly
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={instanceIdCopied ? "text-success" : undefined}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(settings.meta_oauth_instance_id);
+                      setInstanceIdCopied(true);
+                    }}
+                  >
+                    {instanceIdCopied ? t("common.copied") : t("common.copy")}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("system.instance.metaInstanceIdHint")}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t("system.instance.metaCallbackMissing")}
+              </p>
+            )}
+          </FormField>
+        </>
+      )}
       <FormField id="inst-meta-callback" label={t("system.instance.metaCallbackUrl")}>
         {settings.meta_oauth_callback_url ? (
           <>

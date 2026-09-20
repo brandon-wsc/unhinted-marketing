@@ -119,6 +119,9 @@ class Settings(BaseSettings):
     meta_app_secret: str | None = None
     # Where the browser lands after a successful connect (defaults to WEB_BASE_URL)
     meta_oauth_success_url: str | None = None
+    # ADR 0032 §3 — opt-in vendor relay base URL (e.g. https://connect.example.com).
+    # Seeds instance_settings.meta_oauth_relay_url; portal edits win afterwards.
+    oauth_relay_url: str | None = None
 
     # Product catalog embeddings (COLLECT K4) — same FastEmbed family as semantic gate
     product_embeddings_enabled: bool = True

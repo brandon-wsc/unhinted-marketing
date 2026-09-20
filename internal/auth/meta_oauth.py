@@ -73,32 +73,42 @@ def _graph_version() -> str:
 
 
 _CALLBACK_PATH = "/api/social/oauth/callback"
+_RELAY_CALLBACK_PATH = "/meta/callback"
+_RELAY_AUTHORIZE_PATH = "/authorize"
+RELAY_FINISH_PATH = "/api/social/oauth/relay-finish"
 
 
 def oauth_callback_url() -> str | None:
-    """Exact URI Meta must whitelist — `{web_base_url}/api/social/oauth/callback`.
+    """Exact URI Meta must whitelist — mode-aware (ADR 0032).
 
-    ``None`` when the instance has no web base URL yet (first-run pending).
+    BYO: `{web_base_url}/api/social/oauth/callback`. Relay: the fixed vendor
+    URI `{relay}/meta/callback` (whitelisted once on the vendor app — shown
+    read-only for disclosure, not for the admin to whitelist).
+    ``None`` when the pieces needed for the active mode are missing.
     """
     from internal.instance.config import get_snapshot
 
-    base = (get_snapshot().web_base_url or "").strip().rstrip("/")
+    snap = get_snapshot()
+    if snap.meta_oauth_mode == "relay":
+        relay = (snap.meta_oauth_relay_url or "").strip().rstrip("/")
+        return f"{relay}{_RELAY_CALLBACK_PATH}" if relay else None
+    base = (snap.web_base_url or "").strip().rstrip("/")
     if not base:
         return None
     return f"{base}{_CALLBACK_PATH}"
 
 
 def oauth_configured() -> bool:
-    """True when the BYO Meta app creds + callback base are all in place."""
+    """True when the active mode has everything OAuth start needs."""
     from internal.instance.config import get_snapshot
 
     snap = get_snapshot()
-    return bool(
-        snap.meta_oauth_mode == "byo"
-        and snap.meta_app_id
-        and snap.meta_app_secret
-        and (snap.web_base_url or "").strip()
-    )
+    base = (snap.web_base_url or "").strip()
+    if snap.meta_oauth_mode == "relay":
+        return bool(
+            base and snap.meta_oauth_relay_url and snap.meta_oauth_instance_id
+        )
+    return bool(snap.meta_app_id and snap.meta_app_secret and base)
 
 
 def _oauth_redirect_uri() -> str:
@@ -112,9 +122,16 @@ def _oauth_fields(redirect_uri: str | None = None) -> dict[str, str]:
     from internal.instance.config import get_snapshot
 
     snap = get_snapshot()
-    # ADR 0032: relay mode is reserved — the vendor fan-out is not built yet.
-    if snap.meta_oauth_mode != "byo":
-        raise MetaOAuthError("meta_oauth_mode_unavailable")
+    if snap.meta_oauth_mode == "relay":
+        # Relay holds the vendor app creds — the instance only needs the
+        # relay base + its registered instance_id for the state prefix.
+        if not snap.meta_oauth_relay_url or not snap.meta_oauth_instance_id:
+            raise MetaOAuthError("meta_oauth_not_configured")
+        return {
+            "client_id": "",
+            "client_secret": "",
+            "redirect_uri": redirect_uri or _oauth_redirect_uri(),
+        }
     if not snap.meta_app_id or not snap.meta_app_secret:
         raise MetaOAuthError("meta_oauth_not_configured")
     return {
@@ -174,12 +191,20 @@ def pending_connect_is_stale(blob: str, *, now: datetime | None = None) -> bool:
     return (now or datetime.now(UTC)) - started > OAUTH_PENDING_TTL
 
 
-def _state_value(row_id: str, token: str) -> str:
+def _state_value(row_id: str, token: str, instance_id: str = "") -> str:
+    # Relay mode prefixes the registry slug so the worker can fan the browser
+    # out to the right install: `{instance_id}:{row_id}:{blob}`.
+    if instance_id:
+        return f"{instance_id}:{row_id}:{token}"
     return f"{row_id}:{token}"
 
 
 def parse_state(state: str) -> tuple[str, str] | None:
-    """Return (row_id, encrypted blob) when the state value looks like ours."""
+    """Return (row_id, encrypted blob) when the state value looks like ours.
+
+    Relay states carry an `{instance_id}:` prefix; ``parse_relay_state``
+    strips it after verifying the slug.
+    """
     try:
         row_id, token = state.split(":", 1)
     except ValueError:
@@ -189,11 +214,24 @@ def parse_state(state: str) -> tuple[str, str] | None:
     return row_id, token
 
 
+def parse_relay_state(state: str) -> tuple[str, str] | None:
+    """Strip and verify the `{instance_id}:` relay prefix, then parse."""
+    from internal.instance.config import get_snapshot
+
+    instance_id, _, rest = state.partition(":")
+    if not instance_id or instance_id != get_snapshot().meta_oauth_instance_id:
+        return None
+    return parse_state(rest)
+
+
 async def start_oauth(db: AsyncSession, *, company_id: uuid.UUID) -> OAuthStart:
     """Create the dialog URL + persist the encrypted pending state + CSRF token.
 
     Caller owns the transaction (commit on success, rollback on failure).
     """
+    from internal.instance.config import get_snapshot
+
+    snap = get_snapshot()
     fields = _oauth_fields()
     csrf_token = secrets.token_urlsafe(32)
     row = await repos.get_social_account(db, company_id, "instagram")
@@ -210,6 +248,16 @@ async def start_oauth(db: AsyncSession, *, company_id: uuid.UUID) -> OAuthStart:
         await db.flush()
     blob = _encrypt_connect_state(str(row.id), csrf_token, fields["redirect_uri"])
     row.oauth_connect_state = blob
+    if snap.meta_oauth_mode == "relay":
+        # The browser goes to the relay, which 302s to Instagram with the
+        # vendor app creds — the instance never sees the vendor client_id.
+        relay = snap.meta_oauth_relay_url.rstrip("/")
+        state = _state_value(str(row.id), blob, snap.meta_oauth_instance_id)
+        return OAuthStart(
+            authorization_url=f"{relay}{_RELAY_AUTHORIZE_PATH}?{urlencode({'state': state})}",
+            connect_state=blob,
+            csrf_token=csrf_token,
+        )
     state = _state_value(str(row.id), blob)
     params = {
         "client_id": fields["client_id"],
@@ -222,6 +270,62 @@ async def start_oauth(db: AsyncSession, *, company_id: uuid.UUID) -> OAuthStart:
         authorization_url=f"{DIALOG_PATH}?{urlencode(params)}",
         connect_state=blob,
         csrf_token=csrf_token,
+    )
+
+
+async def _validated_pending_row(
+    db: AsyncSession,
+    row_id_str: str,
+    csrf_token: str | None,
+) -> tuple[SocialAccount, dict[str, str]]:
+    """Shared pending-state gate for both finish paths: row exists, encrypted
+    blob decrypts, row_id matches, and the double-submit CSRF cookie value
+    matches the token embedded at start time."""
+    try:
+        row_uuid = uuid.UUID(row_id_str)
+    except ValueError:
+        raise MetaOAuthError("meta_oauth_invalid_state") from None
+    row = await repos.get_social_account_by_id(db, row_uuid)
+    if row is None or not row.oauth_connect_state:
+        raise MetaOAuthError("meta_oauth_no_pending_connect")
+    payload = _decrypt_connect_state(row.oauth_connect_state)
+    if payload is None:
+        raise MetaOAuthError("meta_oauth_no_pending_connect")
+    if str(payload.get("row_id") or "") != row_id_str:
+        raise MetaOAuthError("meta_oauth_invalid_state")
+    stored_csrf = str(payload.get("csrf_token") or "")
+    if not stored_csrf or stored_csrf != (csrf_token or ""):
+        raise MetaOAuthError("meta_oauth_csrf_mismatch")
+    return row, payload
+
+
+async def _persist_token_result(
+    db: AsyncSession,
+    row: SocialAccount,
+    *,
+    access_token: str,
+    ig_user_id: str,
+    expires_at: datetime | None,
+    missing_scopes: list[str],
+) -> OAuthTokenResult:
+    await repos.upsert_social_account(
+        db,
+        company_id=row.company_id,
+        platform="instagram",
+        ig_user_id=ig_user_id,
+        access_token_encrypted=encrypt_key(access_token),
+        token_last4=mask_key(access_token),
+        expires_at=expires_at,
+        created_by=None,
+    )
+    repos.social_pending_state_clear(row)
+    await db.flush()
+    return OAuthTokenResult(
+        access_token=access_token,
+        fb_user_id="",
+        ig_user_id=ig_user_id,
+        expires_at=expires_at,
+        missing_scopes=missing_scopes,
     )
 
 
@@ -238,26 +342,16 @@ async def exchange_code(
     embedded in the encrypted state blob (proves the same browser started it).
     Caller owns the transaction (commit on success, rollback on failure).
     """
+    from internal.instance.config import get_snapshot
+
+    if get_snapshot().meta_oauth_mode == "relay":
+        # In relay mode Meta never calls this instance — the relay exchanged
+        # the code; the browser lands on /oauth/relay-finish instead.
+        raise MetaOAuthError("meta_oauth_mode_unavailable")
     parsed = parse_state(state)
     if parsed is None:
         raise MetaOAuthError("meta_oauth_invalid_state")
-    row_id_str, _ = parsed
-    try:
-        row_uuid = uuid.UUID(row_id_str)
-    except ValueError:
-        raise MetaOAuthError("meta_oauth_invalid_state") from None
-    row = await repos.get_social_account_by_id(db, row_uuid)
-    if row is None or not row.oauth_connect_state:
-        raise MetaOAuthError("meta_oauth_no_pending_connect")
-    payload = _decrypt_connect_state(row.oauth_connect_state)
-    if payload is None:
-        raise MetaOAuthError("meta_oauth_no_pending_connect")
-    stored_row_id = str(payload.get("row_id") or "")
-    stored_csrf = str(payload.get("csrf_token") or "")
-    if stored_row_id != row_id_str:
-        raise MetaOAuthError("meta_oauth_invalid_state")
-    if not stored_csrf or stored_csrf != (csrf_token or ""):
-        raise MetaOAuthError("meta_oauth_csrf_mismatch")
+    row, payload = await _validated_pending_row(db, parsed[0], csrf_token)
 
     fields = _oauth_fields(redirect_uri=str(payload.get("redirect_uri") or "") or None)
     timeout = httpx.Timeout(30.0)
@@ -329,21 +423,80 @@ async def exchange_code(
     required = {s.strip() for s in META_OAUTH_SCOPES.split(",") if s.strip()}
     missing_scopes = [s for s in sorted(required) if granted_scopes and s not in granted_scopes]
 
-    await repos.upsert_social_account(
+    return await _persist_token_result(
         db,
-        company_id=row.company_id,
-        platform="instagram",
-        ig_user_id=ig_user_id,
-        access_token_encrypted=encrypt_key(access_token),
-        token_last4=mask_key(access_token),
-        expires_at=expires_at,
-        created_by=None,
-    )
-    repos.social_pending_state_clear(row)
-    await db.flush()
-    return OAuthTokenResult(
+        row,
         access_token=access_token,
-        fb_user_id="",
+        ig_user_id=ig_user_id,
+        expires_at=expires_at,
+        missing_scopes=missing_scopes,
+    )
+
+
+async def redeem_relay_ticket(
+    db: AsyncSession,
+    *,
+    ticket: str,
+    state: str,
+    csrf_token: str | None,
+) -> OAuthTokenResult:
+    """Relay-mode finish (ADR 0032 §3): the vendor relay exchanged the code
+    already; the browser lands here with a one-time ticket. We re-validate the
+    pending state + CSRF cookie exactly like the BYO callback, redeem the
+    ticket server-to-server (read-once, 60s TTL on the relay), verify the
+    payload is bound to this install, then persist the token.
+
+    Caller owns the transaction (commit on success, rollback on failure).
+    """
+    from internal.instance.config import get_snapshot
+
+    snap = get_snapshot()
+    if snap.meta_oauth_mode != "relay":
+        raise MetaOAuthError("meta_oauth_mode_unavailable")
+    parsed = parse_relay_state(state)
+    if parsed is None:
+        raise MetaOAuthError("meta_oauth_invalid_state")
+    row, _ = await _validated_pending_row(db, parsed[0], csrf_token)
+
+    relay = snap.meta_oauth_relay_url.rstrip("/")
+    timeout = httpx.Timeout(30.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        resp = await client.get(f"{relay}/ticket/{ticket}")
+    if resp.status_code == 404:
+        raise MetaOAuthError("meta_oauth_relay_ticket_expired")
+    if not resp.is_success:
+        raise MetaOAuthError("meta_oauth_exchange_failed")
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    if str(payload.get("instance_id") or "") != snap.meta_oauth_instance_id:
+        # Ticket redeemed against a payload bound to a different install.
+        raise MetaOAuthError("meta_oauth_invalid_state")
+    access_token = str(payload.get("access_token") or "")
+    ig_user_id = str(payload.get("ig_user_id") or "")
+    if not access_token or not ig_user_id:
+        raise MetaOAuthError("meta_oauth_exchange_failed")
+    expires_at: datetime | None = None
+    raw_expires = str(payload.get("expires_at") or "")
+    if raw_expires:
+        try:
+            expires_at = datetime.fromisoformat(raw_expires)
+        except ValueError:
+            expires_at = None
+        if expires_at is not None and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+    raw_missing = payload.get("missing_scopes")
+    missing_scopes = (
+        [str(s) for s in raw_missing] if isinstance(raw_missing, list) else []
+    )
+
+    return await _persist_token_result(
+        db,
+        row,
+        access_token=access_token,
         ig_user_id=ig_user_id,
         expires_at=expires_at,
         missing_scopes=missing_scopes,

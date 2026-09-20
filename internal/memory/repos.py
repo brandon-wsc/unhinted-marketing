@@ -1732,13 +1732,19 @@ async def cancel_social_oauth(
 async def find_social_account_by_oauth_state(
     db: AsyncSession, state: str
 ) -> SocialAccount | None:
-    """Resolve the SocialAccount row from a callback state (row_id before the colon)."""
-    try:
-        row_id_str, _ = state.split(":", 1)
-        row_uuid = uuid.UUID(row_id_str)
-    except (ValueError, AttributeError):
-        return None
-    return await get_social_account_by_id(db, row_uuid)
+    """Resolve the SocialAccount row from a callback state.
+
+    BYO state is `{row_id}:{blob}`; relay state prefixes the registry slug —
+    `{instance_id}:{row_id}:{blob}` — so take whichever segment parses as a
+    UUID.
+    """
+    for segment in (state or "").split(":")[:2]:
+        try:
+            row_uuid = uuid.UUID(segment)
+        except (ValueError, AttributeError):
+            continue
+        return await get_social_account_by_id(db, row_uuid)
+    return None
 
 
 async def clear_social_oauth_state_for_state(

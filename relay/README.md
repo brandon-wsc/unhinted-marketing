@@ -8,20 +8,22 @@ redirect URIs and the list is dashboard-only, so one fixed URI
 ## Flow
 
 ```
-instance (relay mode)          Meta                      this Worker              instance
-POST /oauth/start  →  authorize URL:
-                      redirect_uri={RELAY}/meta/callback
-                      state={instance_id}:{row_id}:{blob}
-user authorizes   →   GET /meta/callback?code&state
-                                                  →  REGISTRY[instance_id] → base URL
-                                                  →  POST api.instagram.com/oauth/access_token
-                                                  →  GET  graph.instagram.com/access_token (long-lived)
-                                                  →  GET  graph.instagram.com/v{v}/me
-                                                  →  TICKETS[ticket] = payload (60s TTL)
-                                                  →  302 {base}/api/social/oauth/relay-finish?ticket&state
-                                                                            →  GET {RELAY}/ticket/{id}
-                                                                               (redeem + delete)
-                                                                            →  upsert social_accounts
+instance (relay mode)          this Worker               Meta              instance
+POST /oauth/start  →  authorization_url:
+                      {RELAY}/authorize?state={iid}:{row}:{blob}
+                  →   validates iid ∈ REGISTRY
+                  →   302 instagram.com/oauth/authorize
+                      (injects vendor client_id + own redirect_uri)
+                      Meta → GET /meta/callback?code&state
+                  →   REGISTRY[iid] → base URL
+                  →   POST api.instagram.com/oauth/access_token
+                  →   GET  graph.instagram.com/access_token (long-lived)
+                  →   GET  graph.instagram.com/v{v}/me
+                  →   TICKETS[ticket] = payload (60s TTL)
+                  →   302 {base}/api/social/oauth/relay-finish?ticket&state
+                                                          →  GET {RELAY}/ticket/{id}
+                                                             (redeem + delete)
+                                                          →  upsert social_accounts
 ```
 
 - **Transit-only**: the app secret lives here (`wrangler secret put`), tokens
@@ -35,17 +37,12 @@ user authorizes   →   GET /meta/callback?code&state
 
 | Route | Purpose |
 |---|---|
+| `GET /authorize?state=…` | Instance OAuth start target — 302s to Instagram with vendor creds |
 | `GET /meta/callback` | Meta redirect target (whitelisted URI) |
 | `GET /ticket/{uuid}` | One-time redeem — read-once, 60s TTL |
 | `GET /healthz` | Smoke check |
 
 ## Setup
-
-```bash
-scripts/setup-oauth-relay.sh   # wizard: account → URL → KV → secret → Meta whitelist → deploy → register
-```
-
-Manual equivalent:
 
 ```bash
 cd relay
@@ -60,19 +57,19 @@ npx wrangler deploy
 
 ## Register an install
 
+The install's `meta_oauth_instance_id` is auto-generated and shown read-only
+under **System → Instance** (relay mode). Register it:
+
 ```bash
 npx wrangler kv key put --namespace-id <REGISTRY_ID> "<instance_id>" "https://marketing.acme.com"
 ```
 
-`instance_id` must match the id the on-prem backend puts at the front of
-OAuth `state` (`{instance_id}:{row_id}:{blob}`) — the backend exposes it under
-System → Instance once the relay slice lands.
+The value must be the install's public base URL — the Worker 302s the browser
+to `{base}/api/social/oauth/relay-finish`.
 
-## Pending backend slice (not in this worker)
+## On the instance
 
-- `meta_oauth_mode=relay` on `instance_settings` + `OAUTH_RELAY_URL`
-- `start_oauth` relay path: `redirect_uri={relay}/meta/callback`, state prefixed
-  with the instance id
-- `GET /api/social/oauth/relay-finish` — verify state+CSRF cookie, redeem the
-  ticket, upsert `social_accounts` (same as the BYO callback)
-- UI disclosure on the ready caption ("routed via the Unhinted connect service")
+1. System → Instance → OAuth mode = **relay**, paste the relay base URL
+   (or set env `OAUTH_RELAY_URL` before first boot — it seeds the row).
+2. Register `meta_oauth_instance_id` in REGISTRY (above).
+3. Company settings → Instagram → Connect.

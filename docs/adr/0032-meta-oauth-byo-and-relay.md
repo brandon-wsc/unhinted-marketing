@@ -64,23 +64,43 @@ singleton row (ADR 0026), following the `smtp_password` pattern:
 - Manual token paste (`PUT …/social-accounts/{platform}`) stays the escape hatch
   for installs that cannot or will not run OAuth.
 
-### 3. Opt-in vendor relay — contract reserved, build deferred
+### 3. Opt-in vendor relay — Cloudflare Worker + one-time tickets
 
-- `instance_settings` gains `meta_oauth_mode`: `byo` (default) | `relay`.
-  Relay is **opt-in only** and disclosed in the UI ("routed via the Unhinted
-  connect service") — never a silent default (Appsmith's backlash).
-- When built: the vendor app whitelists one URI, e.g.
-  `https://<relay>/meta/callback`; `authorize` uses it as `redirect_uri` and
-  `state` carries an instance id. The relay resolves `instance_id → domain` from
-  a **server-side registry** (license/first-boot activation) and 302s the browser
-  onward — the destination must never come from raw `state` input (open redirect
-  + code leak).
+- `instance_settings` gains `meta_oauth_mode`: `byo` (default) | `relay`,
+  `meta_oauth_relay_url` (env `OAUTH_RELAY_URL` seeds; portal wins), and
+  `meta_oauth_instance_id` (generated at seed — the REGISTRY slug).
+  Relay is **opt-in only** and disclosed in the UI — never a silent default
+  (Appsmith's backlash).
+- The relay is a **Cloudflare Worker** (`relay/` in this repo): Workers Secrets
+  hold the vendor app secret, two KV namespaces provide `REGISTRY`
+  (instance_id → base URL) and `TICKETS` (one-time payloads).
+- Protocol:
+  1. `POST /oauth/start` in relay mode returns
+     `{relay}/authorize?state={instance_id}:{row_id}:{blob}` — the Worker
+     validates the `instance_id` prefix against REGISTRY, then 302s to
+     `instagram.com/oauth/authorize` injecting the vendor `client_id` and its
+     own fixed `redirect_uri` (`{relay}/meta/callback`, whitelisted once on the
+     vendor app). The instance never sees vendor creds.
+  2. Meta redirects to `{relay}/meta/callback`; the Worker runs the same
+     exchange as BYO (short → long-lived → `/me` → professional + publish-scope
+     checks), stores the result under a UUID in `TICKETS` (60s TTL), and 302s
+     to `{REGISTRY[instance_id]}/api/social/oauth/relay-finish?ticket&state`.
+  3. `relay-finish` re-validates pending state + the double-submit CSRF cookie
+     exactly like the BYO callback, redeems the ticket server-to-server
+     (read-once delete), verifies `payload.instance_id` matches this install,
+     then upserts `social_accounts` identically.
+- Destinations come only from the server-side registry — raw `state` never
+  supplies a URL (open redirect + code leak). v1 registration is a manual
+  `wrangler kv key put` allowlist; self-serve registration is deferred.
 - Exchange placement is **relay-side**: the app secret never leaves vendor
-  infrastructure. Accepted cost — tokens transit vendor infra (transit-only, no
-  storage); the exact handoff (one-time ticket vs signed server POST) is
-  specified at build time. Shipping the secret inside every on-prem image is
+  infrastructure. Accepted cost — tokens transit vendor infra (transit-only,
+  TTL-bound, never logged). Shipping the secret inside every on-prem image is
   rejected (public secret, single-point revocation). Zero-trust customers stay
   on BYO.
+- Known limit: KV `get` + `delete` is not atomic — two racing redeems could
+  both read a live ticket. Impact is bounded (60s TTL, only the instance
+  redeems, upsert is idempotent); a Durable Object swap is the hardening path
+  if replay becomes a concern.
 
 ## Consequences
 
