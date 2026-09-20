@@ -4,8 +4,6 @@ AI marketing assistant for the Hong Kong market — background signal ingestion 
 
 ## Self-host (Docker)
 
-Two Compose packages — [full ops guide](deploy/README.md):
-
 **All-in-one** — bundled pgvector Postgres, single box:
 
 ```bash
@@ -22,7 +20,8 @@ cp env.example .env   # DATABASE_URL, JWT_SECRET, BYOK_ENCRYPTION_KEY, WEB_BASE_
 docker compose -f compose.external-db.yaml up -d
 ```
 
-From a checkout instead: `cd deploy && docker compose up -d --build` (external DB: `-f docker-compose.external-db.yml`).
+From a checkout instead: `cd deploy && docker compose up -d` — pulls prebuilt
+images; add `--build` to build from source. [Full ops guide](deploy/README.md).
 
 ## Develop
 
