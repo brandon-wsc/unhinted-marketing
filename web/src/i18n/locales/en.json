@@ -483,6 +483,7 @@
       "subtitle": "Connect the professional account Confirm publishes to.",
       "igUserId": "Instagram user ID",
       "expiresAt": "Expires (optional)",
+      "pickDate": "Pick a date",
       "tokenMasked": "Token",
       "connected": "Connected",
       "expiredTitle": "Token expired",

@@ -483,6 +483,7 @@
       "subtitle": "Confirm 出帖會用呢個專業帳號。",
       "igUserId": "Instagram 用戶 ID",
       "expiresAt": "到期（可選）",
+      "pickDate": "揀日期",
       "tokenMasked": "Token",
       "connected": "已連接",
       "expiredTitle": "Token 過咗期",

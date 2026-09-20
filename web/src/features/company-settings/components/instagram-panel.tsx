@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { CalendarIcon, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -16,7 +16,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/context/auth-context";
 import {
   apiCancelInstagramOAuth,
@@ -30,6 +32,7 @@ import {
 } from "@/features/company-settings/api";
 import { mapApiError } from "@/lib/map-api-error";
 import { isSuperAdmin } from "@/lib/platform-level";
+import { cn } from "@/lib/utils";
 
 type InstagramPanelProps = {
   companyId: string;
@@ -82,7 +85,8 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const [dataDeletionUrl, setDataDeletionUrl] = useState<string | null>(null);
   const [manualIgUserId, setManualIgUserId] = useState("");
   const [manualToken, setManualToken] = useState("");
-  const [manualExpires, setManualExpires] = useState("");
+  const [manualExpires, setManualExpires] = useState<Date | undefined>(undefined);
+  const [expiresOpen, setExpiresOpen] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -249,7 +253,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
     setManualBusy(true);
     setError(null);
     try {
-      const expires = manualExpires ? new Date(manualExpires).toISOString() : null;
+      const expires = manualExpires ? manualExpires.toISOString() : null;
       await apiUpsertSocialAccount(accessToken, companyId, "instagram", {
         ig_user_id: manualIgUserId.trim(),
         access_token: manualToken.trim(),
@@ -257,7 +261,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
       });
       setManualIgUserId("");
       setManualToken("");
-      setManualExpires("");
+      setManualExpires(undefined);
       await loadAccounts(true);
     } catch (err) {
       setError(
@@ -501,12 +505,38 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
                 />
               </FormField>
               <FormField id="ig-manual-expires" label={t("settings.instagram.expiresAt")}>
-                <Input
-                  id="ig-manual-expires"
-                  type="datetime-local"
-                  value={manualExpires}
-                  onChange={(e) => setManualExpires(e.target.value)}
-                />
+                <Popover open={expiresOpen} onOpenChange={setExpiresOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="ig-manual-expires"
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !manualExpires && "text-muted-foreground",
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 size-4" />
+                      {manualExpires
+                        ? manualExpires.toLocaleDateString(
+                            i18n.language === "en" ? "en" : "zh-HK",
+                            { year: "numeric", month: "2-digit", day: "2-digit" },
+                          )
+                        : t("settings.instagram.pickDate")}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={manualExpires}
+                      onSelect={(day) => {
+                        setManualExpires(day);
+                        setExpiresOpen(false);
+                      }}
+                      captionLayout="dropdown"
+                    />
+                  </PopoverContent>
+                </Popover>
               </FormField>
               <Button
                 type="button"
