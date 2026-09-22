@@ -2600,6 +2600,26 @@ export type components = {
              */
             awaiting_image_ok: boolean;
         };
+        /**
+         * PreviewUpdatedData
+         * @description Payload for SSE / turn event `preview.updated`.
+         */
+        PreviewUpdatedData: {
+            /** Revision */
+            revision: number;
+            /** Approval Token */
+            approval_token: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Media */
+            media: components["schemas"]["PreviewMediaItem"][];
+            copy: components["schemas"]["DraftCopy"];
+            /**
+             * Platform
+             * @default instagram
+             */
+            platform: string;
+        };
         /** ProductCreateRequest */
         ProductCreateRequest: {
             /** Name */
@@ -2988,7 +3008,7 @@ export type components = {
         };
         /**
          * ResumeImageRequest
-         * @description Optional visual format when continuing past the image interrupt.
+         * @description Optional format echo. Must match the locked plan; a change is a new script (ADR 0036).
          */
         ResumeImageRequest: {
             /** Image Format */
@@ -3394,6 +3414,8 @@ export type components = {
              * @default false
              */
             awaiting_angle_pick: boolean;
+            /** Latest preview after Stop. Null when the session has no draft. */
+            preview: components["schemas"]["PreviewUpdatedData"] | null;
         };
         /** StorageConfigOut */
         StorageConfigOut: {

@@ -57,7 +57,7 @@ from internal.tools.publish import (
     PublishPreconditionError,
     publish_social_post,
 )
-from schemas.contracts import DraftCopy, PreviewMediaItem, SessionBriefData
+from schemas.contracts import DraftCopy, PreviewMediaItem, PreviewUpdatedData, SessionBriefData
 from schemas.session import (
     AddSessionImageRequest,
     ChooseAngleRequest,
@@ -535,12 +535,19 @@ async def stop_session(
     session = await _require_owned_session(db, session_id, user)
     result = await stop_session_turn(db, session, mode=body.mode)
     await db.commit()
+    raw_preview = result.get("preview")
+    preview = (
+        PreviewUpdatedData.model_validate(raw_preview)
+        if isinstance(raw_preview, dict)
+        else None
+    )
     return StopSessionResponse(
         status=result["status"],
         interrupted=bool(result.get("interrupted")),
         kept=bool(result.get("kept")),
         awaiting_image_ok=bool(result.get("awaiting_image_ok")),
         awaiting_angle_pick=bool(result.get("awaiting_angle_pick")),
+        preview=preview,
     )
 
 

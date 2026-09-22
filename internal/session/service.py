@@ -154,6 +154,110 @@ def preview_updated_payload(
     ).model_dump(by_alias=True)
 
 
+def _coerce_preview_draft(
+    draft: Any,
+) -> tuple[int, str, dict[str, Any], str | None, dict[str, Any] | None, list[Any], str] | None:
+    """Real preview row fields, or None for a missing / non-row stand-in."""
+    if draft is None:
+        return None
+    revision = getattr(draft, "revision", None)
+    token = getattr(draft, "approval_token", None)
+    if not isinstance(revision, int) or not isinstance(token, str) or not token:
+        return None
+    copy = getattr(draft, "copy", None)
+    if not isinstance(copy, dict):
+        copy = {}
+    image_url = getattr(draft, "image_url", None)
+    if not isinstance(image_url, str):
+        image_url = None
+    plan = getattr(draft, "image_plan", None)
+    if not isinstance(plan, dict):
+        plan = None
+    media_ids = getattr(draft, "media_ids", None)
+    if not isinstance(media_ids, list):
+        media_ids = []
+    platform = getattr(draft, "platform", None)
+    if not isinstance(platform, str) or not platform:
+        platform = DEFAULT_PLATFORM
+    return revision, token, copy, image_url, plan, media_ids, platform
+
+
+def _discard_revision_ceiling(
+    restored: dict[str, Any], accepted_revision: int | None
+) -> int:
+    """Highest revision Discard keeps.
+
+    Prefer the lower of the anchor's ``accepted_revision`` and the pre-turn
+    ``revision`` so a pending number on either field still drops the unexecuted
+    row (ADR 0036).
+    """
+    raw = restored.get("revision")
+    state_rev = raw if isinstance(raw, int) else None
+    explicit = accepted_revision if isinstance(accepted_revision, int) else None
+    if explicit is not None and state_rev is not None:
+        return min(explicit, state_rev)
+    if explicit is not None:
+        return explicit
+    if state_rev is not None:
+        return state_rev
+    return 0
+
+
+def _apply_surviving_draft(restored: dict[str, Any], draft: Any) -> None:
+    """Copy the surviving preview row onto session state after a discard."""
+    parsed = _coerce_preview_draft(draft)
+    if parsed is None:
+        return
+    revision, token, copy, image_url, plan, media_ids, _platform = parsed
+    restored["draft"] = normalize_draft_copy(copy)
+    restored["revision"] = revision
+    restored["approval_token"] = token
+    restored["image_url"] = image_url
+    if plan is not None:
+        restored["image_plan"] = plan
+        restored["image_format"] = image_format_from_plan(
+            plan, fallback=str(restored.get("image_format") or "single")
+        )
+    ids: list[str] = []
+    for raw_id in media_ids:
+        if isinstance(raw_id, uuid.UUID):
+            ids.append(str(raw_id))
+        elif isinstance(raw_id, str):
+            ids.append(raw_id)
+    restored["media_ids"] = ids
+
+
+async def latest_preview_payload(
+    db: AsyncSession, session: Session
+) -> dict[str, Any] | None:
+    """`preview.updated` body for the latest draft, or None when there is no row."""
+    draft = await repos.get_latest_preview_draft(db, session.id)
+    parsed = _coerce_preview_draft(draft)
+    if parsed is None:
+        return None
+    revision, token, copy, image_url, _plan, _media_ids, platform = parsed
+    media: list[dict[str, Any]] = []
+    try:
+        loaded = await list_latest_session_media(db, session)
+    except Exception:
+        logger.debug("latest preview media lookup failed", exc_info=True)
+        loaded = []
+    if isinstance(loaded, list):
+        media = [
+            item
+            for item in loaded
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        ]
+    return preview_updated_payload(
+        revision=revision,
+        approval_token=token,
+        image_url=image_url,
+        copy=copy,
+        platform=platform,
+        media=media,
+    )
+
+
 def _payloads_from_image_rows(
     rows: list[PreviewImage],
 ) -> tuple[list[dict[str, Any]], str | None, dict[str, Any] | None]:
@@ -520,33 +624,43 @@ async def _discard_turn_state(
     pre_state: dict[str, Any],
     message_ids: list[uuid.UUID],
     pre_mode: str | None = None,
-) -> None:
+    accepted_revision: int | None = None,
+) -> dict[str, Any] | None:
     """Restore pre-turn session.state, delete turn messages, wipe graph thread.
 
     Pending preview revisions written for an unexecuted image version are
-    removed so Discard shows the last accepted caption (ADR 0036).
+    removed so Discard shows the last accepted caption (ADR 0036). Returns
+    the surviving preview payload (or None when no draft row remains).
     """
     session_event_bus.end_turn_progress(session.id)
     restored = _strip_discard_meta(pre_state)
     restored.update(_park_flag_data(None))
-    session.state = restored
     if isinstance(pre_mode, str) and pre_mode:
         session.mode = pre_mode
     if message_ids:
         await repos.delete_session_messages_by_ids(db, session.id, message_ids)
-    accepted = int(restored.get("revision") or 0)
+    accepted = _discard_revision_ceiling(restored, accepted_revision)
     await repos.delete_preview_drafts_above(db, session.id, accepted)
+    surviving = await repos.get_latest_preview_draft(db, session.id)
+    _apply_surviving_draft(restored, surviving)
+    session.state = restored
     await _adelete_graph_thread(session.id)
     await db.flush()
+    preview = await latest_preview_payload(db, session)
     await session_event_bus.publish_many(
         session.id,
         [
             {
                 "type": "turn.cancelled",
-                "data": {"reason": "stop", **_park_flag_data(None)},
+                "data": {
+                    "reason": "stop",
+                    **_park_flag_data(None),
+                    "preview": preview,
+                },
             }
         ],
     )
+    return preview
 
 
 async def _interrupt_turn_state(
@@ -1397,6 +1511,15 @@ async def choose_angle_turn(
     )
 
 
+async def _stop_response(
+    db: AsyncSession, session: Session, **fields: Any
+) -> dict[str, Any]:
+    """Attach the latest preview so the Stop body can repaint the pane."""
+    if "preview" not in fields:
+        fields["preview"] = await latest_preview_payload(db, session)
+    return fields
+
+
 async def stop_session_turn(
     db: AsyncSession,
     session: Session,
@@ -1416,12 +1539,14 @@ async def stop_session_turn(
             await entry.discarded.wait()
             await db.refresh(session)
             awaiting = _session_park_flags(session)
-            return {
-                "status": "cancelled",
-                "interrupted": any(awaiting.values()),
-                "kept": entry.mode == "interrupt",
+            return await _stop_response(
+                db,
+                session,
+                status="cancelled",
+                interrupted=any(awaiting.values()),
+                kept=entry.mode == "interrupt",
                 **awaiting,
-            }
+            )
         if mode == "interrupt" and entry.kind == "message":
             entry.mode = "interrupt"
         entry.cancelling = True
@@ -1455,12 +1580,14 @@ async def stop_session_turn(
         await session_turn_registry.clear(session.id, entry=entry)
         await db.refresh(session)
         awaiting = _session_park_flags(session)
-        return {
-            "status": "cancelled",
-            "interrupted": any(awaiting.values()),
-            "kept": entry.mode == "interrupt" and entry.kind == "message",
+        return await _stop_response(
+            db,
+            session,
+            status="cancelled",
+            interrupted=any(awaiting.values()),
+            kept=entry.mode == "interrupt" and entry.kind == "message",
             **awaiting,
-        }
+        )
 
     # Parked discard (no in-flight task) — drop the agent turn that created the draft.
     if await session_is_parked(session):
@@ -1480,24 +1607,30 @@ async def stop_session_turn(
             with contextlib.suppress(ValueError):
                 message_ids.append(uuid.UUID(str(anchor["user_message_id"])))
         pre_mode = anchor.get("pre_mode") if isinstance(anchor.get("pre_mode"), str) else None
-        await _discard_turn_state(
+        raw_accepted = anchor.get("accepted_revision")
+        accepted_revision = raw_accepted if isinstance(raw_accepted, int) else None
+        preview = await _discard_turn_state(
             db,
             session,
             pre_state=pre_state,
             message_ids=message_ids,
             pre_mode=pre_mode,
+            accepted_revision=accepted_revision,
         )
         return {
             "status": "cancelled",
             "interrupted": False,
+            "preview": preview,
             **_park_flag_data(None),
         }
 
-    return {
-        "status": "idle",
-        "interrupted": False,
+    return await _stop_response(
+        db,
+        session,
+        status="idle",
+        interrupted=False,
         **_park_flag_data(None),
-    }
+    )
 
 
 async def update_session_draft(

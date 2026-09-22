@@ -7,6 +7,7 @@ import type {
   DraftCopy,
   ForkSessionResponse,
   PostMessageResponse,
+  PreviewDraft,
   PreviewMediaMutationResponse,
   RecommendedQuestionsGenerating,
   RecommendedQuestionsResponse,
@@ -162,6 +163,8 @@ export async function apiStopSessionTurn(
   kept?: boolean;
   awaiting_image_ok?: boolean;
   awaiting_angle_pick?: boolean;
+  /** Present after this contract: restored preview, or null when no draft remains. */
+  preview?: PreviewDraft | null;
 }> {
   const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/stop`, {
     method: "POST",
