@@ -1063,7 +1063,7 @@ export type paths = {
         put?: never;
         /**
          * Stop Session
-         * @description Discard in-flight or parked turn (ADR 0004).
+         * @description Discard in-flight/parked turn, or keep it on interrupt (ADR 0004 / 0035).
          */
         post: operations["stop_session_api_sessions__session_id__stop_post"];
         delete?: never;
@@ -3353,6 +3353,18 @@ export type components = {
             /** Data Deletion Url */
             data_deletion_url?: string | null;
         };
+        /**
+         * StopSessionRequest
+         * @description ADR 0035 — interrupt keeps an in-flight turn's messages; discard wipes them.
+         */
+        StopSessionRequest: {
+            /**
+             * Mode
+             * @default discard
+             * @enum {string}
+             */
+            mode: "discard" | "interrupt";
+        };
         /** StopSessionResponse */
         StopSessionResponse: {
             /** Status */
@@ -3362,6 +3374,11 @@ export type components = {
              * @default false
              */
             interrupted: boolean;
+            /**
+             * Kept
+             * @default false
+             */
+            kept: boolean;
             /**
              * Awaiting Image Ok
              * @default false
@@ -5957,7 +5974,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StopSessionRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

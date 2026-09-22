@@ -25,6 +25,11 @@ class TurnEntry:
     discarded: asyncio.Event = field(default_factory=asyncio.Event)
     kind: TurnKind = "message"
     parked_restore: dict[str, Any] | None = None
+    # ADR 0035: "interrupt" keeps the turn's messages on cancel; "discard" wipes.
+    mode: str = "discard"
+    # Persisted transcript length when the turn started — diff cursor for
+    # salvaging completed-node assistant output on interrupt.
+    prior_message_count: int = 0
 
 
 class SessionTurnRegistry:

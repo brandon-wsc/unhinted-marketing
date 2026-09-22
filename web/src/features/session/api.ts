@@ -155,14 +155,18 @@ export async function apiResumeSessionImage(
 export async function apiStopSessionTurn(
   accessToken: string | null,
   sessionId: string,
+  mode: "discard" | "interrupt" = "discard",
 ): Promise<{
   status: string;
   interrupted?: boolean;
+  kept?: boolean;
   awaiting_image_ok?: boolean;
   awaiting_angle_pick?: boolean;
 }> {
   const res = await fetchWithAuth(accessToken, `${API_BASE}/sessions/${sessionId}/stop`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
   });
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();

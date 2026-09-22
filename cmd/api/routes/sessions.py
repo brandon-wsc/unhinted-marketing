@@ -81,6 +81,7 @@ from schemas.session import (
     SessionMediaListResponse,
     SessionMessagesResponse,
     SessionResponse,
+    StopSessionRequest,
     StopSessionResponse,
     UpdateDraftRequest,
     UpdateDraftResponse,
@@ -523,14 +524,16 @@ async def stop_session(
     session_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    body: Annotated[StopSessionRequest, Body()] = StopSessionRequest(),
 ) -> StopSessionResponse:
-    """Discard in-flight or parked turn (ADR 0004)."""
+    """Discard in-flight/parked turn, or keep it on interrupt (ADR 0004 / 0035)."""
     session = await _require_owned_session(db, session_id, user)
-    result = await stop_session_turn(db, session)
+    result = await stop_session_turn(db, session, mode=body.mode)
     await db.commit()
     return StopSessionResponse(
         status=result["status"],
         interrupted=bool(result.get("interrupted")),
+        kept=bool(result.get("kept")),
         awaiting_image_ok=bool(result.get("awaiting_image_ok")),
         awaiting_angle_pick=bool(result.get("awaiting_angle_pick")),
     )

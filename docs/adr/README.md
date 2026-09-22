@@ -36,6 +36,8 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0031](./0031-queue-send-while-image-parked.md) | Queue Send while parked at image OK | Accepted |
 | [0032](./0032-meta-oauth-byo-and-relay.md) | On-prem Meta OAuth: BYO-app default + opt-in relay | Accepted |
 | [0033](./0033-meta-live-mode-platform-callbacks.md) | Meta Live mode: deauthorize + data-deletion callbacks | Accepted |
+| [0034](./0034-relay-per-install-shared-secret.md) | OAuth relay per-install shared secret | Accepted |
+| [0035](./0035-queue-then-interrupt.md) | Empty Enter interrupts a queued in-flight turn (keeps the turn) | Accepted |
 
 ## Format
 

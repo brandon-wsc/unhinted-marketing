@@ -150,6 +150,140 @@ async def test_stop_parked_discards_messages_and_state() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stop_interrupt_keeps_messages_and_salvages_partial() -> None:
+    """mode=interrupt cancels but keeps the turn's rows (ADR 0035)."""
+    session = _session()
+    db = AsyncMock()
+    user_msg = SimpleNamespace(
+        id=uuid.uuid4(), role="user", content="hi", metadata_={}
+    )
+    salvaged = SimpleNamespace(id=uuid.uuid4())
+    started = asyncio.Event()
+
+    async def _slow_invoke(*_a, **_k):
+        started.set()
+        await asyncio.sleep(60)
+
+    snapshot = SimpleNamespace(
+        values={
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "寫到一半"},
+            ]
+        }
+    )
+    graph = SimpleNamespace(aget_state=AsyncMock(return_value=snapshot))
+
+    with (
+        patch(
+            "internal.session.service.graph_parked_node",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "internal.session.service.repos.add_session_message",
+            AsyncMock(side_effect=[user_msg, salvaged]),
+        ) as add_msg,
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[user_msg]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=_slow_invoke),
+        patch("internal.session.service.get_session_graph", return_value=graph),
+        patch(
+            "internal.session.service._adelete_graph_thread",
+            AsyncMock(),
+        ) as delete_thread,
+        patch(
+            "internal.session.service.repos.delete_session_messages_by_ids",
+            AsyncMock(),
+        ) as delete_msgs,
+        patch(
+            "internal.session.service.session_event_bus.publish_many",
+            AsyncMock(),
+        ) as publish,
+    ):
+        turn_task = asyncio.create_task(
+            run_session_turn(db, session, user_content="hi")
+        )
+        await asyncio.wait_for(started.wait(), timeout=2.0)
+        result = await stop_session_turn(db, session, mode="interrupt")
+        with pytest.raises(asyncio.CancelledError):
+            await turn_task
+
+    assert result["status"] == "cancelled"
+    assert result["kept"] is True
+    delete_msgs.assert_not_awaited()
+    delete_thread.assert_awaited_once()
+    # user row + salvaged completed-node assistant reply both persisted.
+    assert add_msg.await_count == 2
+    assert add_msg.await_args_list[1].kwargs["role"] == "assistant"
+    assert add_msg.await_args_list[1].kwargs["content"] == "寫到一半"
+    assert user_msg.metadata_["interrupted"] is True
+    events = publish.await_args.args[1]
+    assert events[0]["type"] == "turn.cancelled"
+    assert events[0]["data"]["reason"] == "interrupt"
+    assert events[0]["data"]["kept"] is True
+
+
+@pytest.mark.asyncio
+async def test_stop_discard_still_wipes_in_flight_turn() -> None:
+    """Default mode keeps ADR 0004 discard semantics."""
+    session = _session()
+    db = AsyncMock()
+    user_msg = SimpleNamespace(
+        id=uuid.uuid4(), role="user", content="hi", metadata_={}
+    )
+    started = asyncio.Event()
+
+    async def _slow_invoke(*_a, **_k):
+        started.set()
+        await asyncio.sleep(60)
+
+    with (
+        patch(
+            "internal.session.service.graph_parked_node",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "internal.session.service.repos.add_session_message",
+            AsyncMock(return_value=user_msg),
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[user_msg]),
+        ),
+        patch("internal.session.service._invoke_graph", side_effect=_slow_invoke),
+        patch(
+            "internal.session.service.repos.delete_session_messages_by_ids",
+            AsyncMock(return_value=1),
+        ) as delete_msgs,
+        patch(
+            "internal.session.service._adelete_graph_thread",
+            AsyncMock(),
+        ) as delete_thread,
+        patch(
+            "internal.session.service.session_event_bus.publish_many",
+            AsyncMock(),
+        ) as publish,
+    ):
+        turn_task = asyncio.create_task(
+            run_session_turn(db, session, user_content="hi")
+        )
+        await asyncio.wait_for(started.wait(), timeout=2.0)
+        result = await stop_session_turn(db, session)
+        with pytest.raises(asyncio.CancelledError):
+            await turn_task
+
+    assert result["status"] == "cancelled"
+    assert result["kept"] is False
+    delete_msgs.assert_awaited_once()
+    delete_thread.assert_awaited_once()
+    events = publish.await_args.args[1]
+    assert events[0]["data"]["reason"] == "stop"
+    assert events[0]["data"].get("kept") is not True
+
+
+@pytest.mark.asyncio
 async def test_stop_mid_resume_image_reparks() -> None:
     """Stop during resume-image restores parked CTA (does not discard agent turn)."""
     session = _session(

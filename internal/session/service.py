@@ -21,7 +21,7 @@ from internal.llm.resolve import company_llm_scope
 from internal.llm.router import LlmProviderError
 from internal.media.storage import resolve_stored_url, sniff_image_bytes
 from internal.memory import repos
-from internal.memory.models import PreviewImage, Session
+from internal.memory.models import PreviewImage, Session, SessionMessage
 from internal.session.context import session_db
 from internal.session.events import session_event_bus
 from internal.session.graph import (
@@ -536,6 +536,60 @@ async def _discard_turn_state(
     )
 
 
+async def _interrupt_turn_state(
+    db: AsyncSession,
+    session: Session,
+    *,
+    entry: TurnEntry,
+    user_msg: Any | None = None,
+) -> None:
+    """Interrupt-mode cancel: keep the turn's messages (ADR 0035).
+
+    Unlike discard, nothing is deleted and ``session.state`` is left alone —
+    it is only written at end-of-turn, so it still holds pre-turn values.
+    Assistant output from completed graph nodes is salvaged via the last
+    checkpoint; mid-node streamed tokens are SSE-only and lost either way.
+    The graph thread is still wiped — the next turn rebuilds context from the
+    persisted transcript.
+    """
+    session_event_bus.end_turn_progress(session.id)
+    try:
+        snapshot = await get_session_graph().aget_state(_session_config(session.id))
+        values = dict(snapshot.values or {})
+    except Exception:
+        logger.warning(
+            "aget_state after interrupt failed (session=%s)",
+            session.id,
+            exc_info=True,
+        )
+        values = {}
+    for msg in (values.get("messages") or [])[entry.prior_message_count :]:
+        if msg.get("role") == "assistant":
+            saved = await repos.add_session_message(
+                db,
+                session_id=session.id,
+                role="assistant",
+                content=str(msg.get("content") or ""),
+            )
+            session_turn_registry.track_message(session.id, saved.id)
+    if user_msg is None:
+        user_msg = await db.get(SessionMessage, entry.user_message_id)
+    if user_msg is not None:
+        # Assign a new dict — plain attribute instrumentation marks it dirty.
+        user_msg.metadata_ = {**dict(user_msg.metadata_ or {}), "interrupted": True}
+    await _adelete_graph_thread(session.id)
+    await db.flush()
+    await session_event_bus.publish_many(
+        session.id,
+        [
+            {
+                "type": "turn.cancelled",
+                "data": {"reason": "interrupt", "kept": True, **_park_flag_data(None)},
+            }
+        ],
+    )
+
+
 async def _repark_graph(db: AsyncSession, session: Session, kind: ParkKind) -> None:
     """Re-seat the interrupt for `kind` (module-level fns stay patch points)."""
     if kind == "angle":
@@ -944,6 +998,7 @@ async def run_session_turn(
         pre_state=pre_state,
         user_message_id=user_msg.id,
     )
+    entry.prior_message_count = len(message_dicts)
 
     try:
         (
@@ -976,12 +1031,15 @@ async def run_session_turn(
             duration_ms=duration_ms,
         )
     except asyncio.CancelledError:
-        await _discard_turn_state(
-            db,
-            session,
-            pre_state=entry.pre_state,
-            message_ids=list(entry.message_ids),
-        )
+        if entry.mode == "interrupt":
+            await _interrupt_turn_state(db, session, entry=entry, user_msg=user_msg)
+        else:
+            await _discard_turn_state(
+                db,
+                session,
+                pre_state=entry.pre_state,
+                message_ids=list(entry.message_ids),
+            )
         # Commit before signaling Stop waiters (separate request/session).
         await db.commit()
         entry.discarded.set()
@@ -1220,12 +1278,15 @@ async def choose_angle_turn(
 async def stop_session_turn(
     db: AsyncSession,
     session: Session,
+    *,
+    mode: str = "discard",
 ) -> dict[str, Any]:
-    """Cancel in-flight turn or discard parked interrupt (ADR 0004 / 0028).
+    """Cancel in-flight turn or discard parked interrupt (ADR 0004 / 0028 / 0035).
 
     Stopping mid resume (image or angle) re-parks at that interrupt (CTA
     returns). Stopping a normal message turn or an idle parked session
-    discards the turn.
+    discards the turn — unless ``mode="interrupt"``, which keeps an in-flight
+    message turn's messages instead (queue-interrupt path).
     """
     entry = session_turn_registry.get(session.id)
     if entry is not None and not entry.task.done():
@@ -1236,8 +1297,11 @@ async def stop_session_turn(
             return {
                 "status": "cancelled",
                 "interrupted": any(awaiting.values()),
+                "kept": entry.mode == "interrupt",
                 **awaiting,
             }
+        if mode == "interrupt" and entry.kind == "message":
+            entry.mode = "interrupt"
         entry.cancelling = True
         entry.task.cancel()
         try:
@@ -1245,7 +1309,9 @@ async def stop_session_turn(
         except TimeoutError:
             logger.error("Timed out waiting for turn discard (session=%s)", session.id)
             if not entry.discarded.is_set():
-                if (
+                if entry.mode == "interrupt" and entry.kind == "message":
+                    await _interrupt_turn_state(db, session, entry=entry)
+                elif (
                     entry.kind in ("resume_image", "choose_angle")
                     and entry.parked_restore is not None
                 ):
@@ -1270,6 +1336,7 @@ async def stop_session_turn(
         return {
             "status": "cancelled",
             "interrupted": any(awaiting.values()),
+            "kept": entry.mode == "interrupt" and entry.kind == "message",
             **awaiting,
         }
 
