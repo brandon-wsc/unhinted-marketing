@@ -105,6 +105,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-08-19) — Queue send while turn in-flight:** → [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md) (supersedes ADR 0004 composer lock; §6 superseded by [ADR 0031](./adr/0031-queue-send-while-image-parked.md)). Composer stays open; Send enqueues in the SPA (max 3); Stop discards the running turn only; drain after idle unless parked at image OK or the angle pick.
 
+**Decision (2026-09-22) — Empty Enter interrupts a queued in-flight turn:** → [ADR 0035](./adr/0035-queue-then-interrupt.md). Enter with text while a turn is in flight still enqueues. Enter on an empty composer with a non-empty queue is `POST /stop` `mode: "interrupt"` — the turn's messages are kept, then drain. Empty Enter with an empty queue does nothing. Image park and angle park do not take this path. The Stop button still discards (`mode: "discard"`, ADR 0004).
+
 **Decision (2026-09-19) — Queue Send while parked at image OK:** → [ADR 0031](./adr/0031-queue-send-while-image-parked.md). Explicit composer Send at `awaiting_image_ok` enqueues (does not `stopTurn`); angle-park Send stays a typed pick. PREVIEW edit→regen that changes `image_format` rewrites the plan (panels / vehicle prompt / composition) and syncs `session.state.image_format` so a comic→single regen is not a stamped format on an old 4-panel prompt.
 
 **Decision (2026-08-23) — Session switch isolation + composer drafts:** Leave ≠ Stop. In-flight REST apply / `sending` / agent trail are bound to the session on screen. Queue + textarea (incl. mid-edit) save/restore per session in SPA memory; still lost on refresh.
