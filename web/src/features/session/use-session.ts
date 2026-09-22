@@ -1815,7 +1815,10 @@ export function useSession(companyId: string | undefined) {
       setDraftSaving(true);
       try {
         const res = await apiUpdateSessionDraft(accessToken, boundId, copy);
-        return applyMediaMutation(res, boundId);
+        return applyMediaMutation(
+          { ...res, awaiting_image_ok: awaitingImageOkRef.current },
+          boundId,
+        );
       } finally {
         if (stillOn(boundId)) setDraftSaving(false);
       }
@@ -1923,7 +1926,7 @@ export function useSession(companyId: string | undefined) {
           const saved = await apiUpdateSessionDraft(accessToken, boundId, localCopy);
           token = saved.approval_token;
           platform = saved.platform;
-          applyMediaMutation(saved, boundId);
+          applyMediaMutation({ ...saved, awaiting_image_ok: awaitingImageOkRef.current }, boundId);
         }
         if (!token) throw new Error("Missing approval_token");
 
