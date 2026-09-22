@@ -1,6 +1,6 @@
 # ADR 0016 — Queue send while a turn is in flight
 
-- **Status:** Accepted (§6 superseded by [ADR 0031](./0031-queue-send-while-image-parked.md); empty-Enter interrupt: [ADR 0035](./0035-queue-then-interrupt.md))
+- **Status:** Accepted (§6 superseded by [ADR 0031](./0031-queue-send-while-image-parked.md))
 - **Date:** 2026-08-19
 - **Supersedes:** [ADR 0004](./0004-stop-discard-and-image-resume.md) §1 (composer lock while in-flight)
 
@@ -12,7 +12,7 @@ Cursor / Codex let the user type and Send without interrupting the running agent
 
 ## Decision
 
-1. **Composer stays open while a turn is in flight.** Textarea and Send remain usable. Send does **not** call `POST /messages` and does **not** Stop. It enqueues the text (FIFO, max 3) in the SPA. **Empty Enter** while that queue is non-empty is Stop, then drain ([ADR 0035](./0035-queue-then-interrupt.md)); empty Enter with an empty queue does nothing.
+1. **Composer stays open while a turn is in flight.** Textarea and Send remain usable. Send does **not** call `POST /messages` and does **not** Stop. It enqueues the text (FIFO, max 3) in the SPA.
 2. **Stop is beside Send**, not a replacement. Stop still discards only the **running** turn (ADR 0004 §2–6). Stop does **not** clear the queue. After Stop unlocks (and the session is not parked at image OK or the angle pick), the client drains the queue.
 3. **Queue lives on the frontend only.** No pending-messages table. Lost on **refresh**. **Session switch** save/restores that session’s queue **and** composer textarea (SPA memory, including mid-edit of a queued row). Another tab that `POST`s while busy still gets **409**. Queue chrome sits **on the composer card** (Codex desktop: list above the textarea), not as transcript bubbles. Rows can be deleted or popped back into the input to edit (re-insert at the same index).
 4. **Leave ≠ Stop.** Switching session (or New chat) does **not** cancel the left session’s server turn. Client apply is bound to session id: in-flight REST/SSE from A must not paint B. `sending` / Stop / agent trail belong only to the session on screen. Returning to A while its POST is still open restores `sending`.

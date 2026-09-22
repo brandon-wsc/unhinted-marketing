@@ -24,7 +24,6 @@ import {
   parseTurnDurationMs,
   previewAnchorFromActions,
   readComposerDraft,
-  shouldInterruptQueuedTurn,
   shouldRetryResumeImage,
   sortSessionHistory,
   stashComposerDraft,
@@ -345,36 +344,6 @@ describe("newQueuedChatMessage", () => {
     const item = newQueuedChatMessage("  hi  ");
     expect(item.content).toBe("hi");
     expect(item.id).toMatch(/^local-q-/);
-  });
-});
-
-describe("shouldInterruptQueuedTurn", () => {
-  const ready = {
-    sending: true,
-    stopping: false,
-    queuedCount: 1,
-    composerText: "",
-    editingQueued: false,
-    awaitingImageOk: false,
-    awaitingAnglePick: false,
-  };
-
-  it("is true for an empty composer while a queued turn is in flight", () => {
-    expect(shouldInterruptQueuedTurn(ready)).toBe(true);
-    expect(shouldInterruptQueuedTurn({ ...ready, composerText: "   " })).toBe(true);
-  });
-
-  it("is false when the queue is empty or the composer has text", () => {
-    expect(shouldInterruptQueuedTurn({ ...ready, queuedCount: 0 })).toBe(false);
-    expect(shouldInterruptQueuedTurn({ ...ready, composerText: "改 caption" })).toBe(false);
-  });
-
-  it("is false while stopped, editing a queued row, or parked", () => {
-    expect(shouldInterruptQueuedTurn({ ...ready, sending: false })).toBe(false);
-    expect(shouldInterruptQueuedTurn({ ...ready, stopping: true })).toBe(false);
-    expect(shouldInterruptQueuedTurn({ ...ready, editingQueued: true })).toBe(false);
-    expect(shouldInterruptQueuedTurn({ ...ready, awaitingImageOk: true })).toBe(false);
-    expect(shouldInterruptQueuedTurn({ ...ready, awaitingAnglePick: true })).toBe(false);
   });
 });
 

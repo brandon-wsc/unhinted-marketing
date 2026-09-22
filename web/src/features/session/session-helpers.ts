@@ -123,27 +123,6 @@ export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
   editInsertAt: null,
 };
 
-/** Empty Enter while a turn is in flight and the queue has a row (ADR 0035). */
-export function shouldInterruptQueuedTurn(input: {
-  sending: boolean;
-  stopping: boolean;
-  queuedCount: number;
-  composerText: string;
-  editingQueued: boolean;
-  awaitingImageOk: boolean;
-  awaitingAnglePick: boolean;
-}): boolean {
-  return (
-    input.sending &&
-    !input.stopping &&
-    input.queuedCount > 0 &&
-    input.composerText.trim() === "" &&
-    !input.editingQueued &&
-    !input.awaitingImageOk &&
-    !input.awaitingAnglePick
-  );
-}
-
 /** Pinned first, then newest ``updated_at`` — same order as ``GET /api/sessions``. */
 export function sortSessionHistory(rows: SessionListItem[]): SessionListItem[] {
   return [...rows].sort((a, b) => {
