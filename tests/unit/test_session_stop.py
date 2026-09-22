@@ -132,6 +132,7 @@ async def test_stop_idle_is_noop() -> None:
         "interrupted": False,
         "awaiting_image_ok": False,
         "awaiting_angle_pick": False,
+        "preview": None,
     }
 
 @pytest.mark.asyncio
@@ -169,6 +170,7 @@ async def test_stop_parked_discards_messages_and_state() -> None:
         "interrupted": False,
         "awaiting_image_ok": False,
         "awaiting_angle_pick": False,
+        "preview": None,
     }
     assert session.state.get("awaiting_image_ok") is False
     assert "turn_discard" not in (session.state or {})
@@ -178,6 +180,79 @@ async def test_stop_parked_discards_messages_and_state() -> None:
     events = publish.await_args.args[1]
     assert events[0]["type"] == "turn.cancelled"
     assert events[0]["data"]["awaiting_image_ok"] is False
+    assert events[0]["data"]["preview"] is None
+
+
+@pytest.mark.asyncio
+async def test_stop_parked_discards_pending_revision_and_returns_accepted_preview() -> None:
+    """Pending N+1 with a stale revision on pre_state still restores N (ADR 0036)."""
+    image_id = uuid.uuid4()
+    accepted = SimpleNamespace(
+        revision=4,
+        approval_token="tok-accepted",
+        copy={"caption": "星期六朝早，藍天、綠樹", "hashtags": [], "cta": ""},
+        image_url="https://cdn.example/outdoor.png",
+        image_plan={"prompt": "outdoor morning", "format": "single"},
+        media_ids=[image_id],
+        platform="instagram",
+    )
+    image = SimpleNamespace(
+        id=image_id,
+        url="https://cdn.example/outdoor.png",
+        plan={"prompt": "outdoor morning", "format": "single"},
+        format="single",
+        role="primary",
+        seq=0,
+        status="ready",
+    )
+    session = _session(
+        awaiting=True,
+        turn_discard={
+            "pre_state": {
+                "revision": 5,
+                "draft": {"caption": "收咗工，霓虹燈", "hashtags": [], "cta": ""},
+                "image_url": None,
+            },
+            "accepted_revision": 4,
+            "pre_mode": "PREVIEW",
+            "message_ids": [],
+        },
+    )
+    db = AsyncMock()
+
+    with (
+        patch("internal.session.service.session_is_parked", AsyncMock(return_value=True)),
+        patch(
+            "internal.session.service.repos.delete_preview_drafts_above",
+            AsyncMock(return_value=1),
+        ) as delete_drafts,
+        patch(
+            "internal.session.service.repos.get_latest_preview_draft",
+            AsyncMock(return_value=accepted),
+        ),
+        patch(
+            "internal.session.service.repos.get_preview_images_by_ids",
+            AsyncMock(return_value=[image]),
+        ),
+        patch("internal.session.service._adelete_graph_thread", AsyncMock()),
+        patch("internal.session.service.session_event_bus.publish_many", AsyncMock()),
+    ):
+        result = await stop_session_turn(db, session)
+
+    delete_drafts.assert_awaited()
+    assert delete_drafts.await_args.args[2] == 4
+    assert result["status"] == "cancelled"
+    assert result["awaiting_image_ok"] is False
+    preview = result["preview"]
+    assert preview["revision"] == 4
+    assert preview["copy"]["caption"] == "星期六朝早，藍天、綠樹"
+    assert preview["image_url"] == "https://cdn.example/outdoor.png"
+    assert preview["media"][0]["url"] == "https://cdn.example/outdoor.png"
+    assert session.state["revision"] == 4
+    assert session.state["draft"]["caption"] == "星期六朝早，藍天、綠樹"
+    assert session.state["image_url"] == "https://cdn.example/outdoor.png"
+    assert session.state.get("awaiting_image_ok") is False
+    assert session.mode == "PREVIEW"
 
 
 @pytest.mark.asyncio

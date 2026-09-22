@@ -41,6 +41,7 @@ import {
   parseImageFormat,
   parseMediaItems,
   previewAnchorFromActions,
+  previewDraftFromPayload,
   readComposerDraft,
   sortSessionHistory,
   stashComposerDraft,
@@ -560,6 +561,9 @@ export function useSession(companyId: string | undefined) {
         } else {
           setInterruptAfterMessageId(null);
           // Keep brief until stopTurn hydrates from sessions.state (may still exist).
+          // REST Stop is the source of truth; this paints early when SSE includes it.
+          const restored = previewDraftFromPayload(data.preview);
+          if (restored) setDraft(restored);
           setStreamingText(null);
           setAgentProgress(null);
           // Optimistic prune — stopTurn hydrate is source of truth right after.
@@ -1240,6 +1244,16 @@ export function useSession(companyId: string | undefined) {
       try {
         const stopped = await apiStopSessionTurn(accessToken, sessionId, mode);
         if (!stillOn(sessionId)) return;
+        // Parked discard returns the last accepted preview. A missing key
+        // (older responses) leaves the in-memory draft alone.
+        if ("preview" in stopped) {
+          if (stopped.preview === null) {
+            setDraft(null);
+          } else {
+            const restored = previewDraftFromPayload(stopped.preview);
+            if (restored) setDraft(restored);
+          }
+        }
         const stillParkedImage = stopped.awaiting_image_ok === true;
         const stillParkedAngle = stopped.awaiting_angle_pick === true;
         // Reload transcript after stop — discard may drop rows, interrupt keeps them.

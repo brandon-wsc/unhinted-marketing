@@ -112,6 +112,58 @@ async def test_chat_direction_change_stages_script_then_execute(
 
 
 @pytest.mark.asyncio
+async def test_chat_direction_discard_restores_accepted_preview(
+    client, db_session, monkeypatch
+) -> None:
+    """Chat pending revision N+1 → Discard → revision N caption and image."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: False)
+    monkeypatch.setattr("internal.llm.router.has_llm_credentials", lambda: False)
+    monkeypatch.setattr(N, "reviewer", _passing_reviewer)
+    monkeypatch.setattr(N, "fast_rule_checker", _skip_research)
+    set_session_graph(None)
+
+    data = await register_user(client)
+    headers = auth_header(data["access_token"])
+    user_id = uuid.UUID(data["user"]["id"])
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    session_id = await seed_preview_session(
+        db_session, user_id=user_id, company_id=company_id
+    )
+
+    try:
+        posted = await client.post(
+            f"/api/sessions/{session_id}/messages",
+            headers=headers,
+            json={"content": DIRECTION},
+        )
+        assert posted.status_code == 200, posted.text
+        pending = next(
+            ev for ev in posted.json()["events"] if ev["type"] == "preview.updated"
+        )
+        assert pending["data"]["revision"] > 1
+        assert "藍色天空" in pending["data"]["copy"]["caption"]
+
+        stopped = await client.post(f"/api/sessions/{session_id}/stop", headers=headers)
+        assert stopped.status_code == 200, stopped.text
+        body = stopped.json()
+        assert body["awaiting_image_ok"] is False
+        preview = body["preview"]
+        assert preview["revision"] == 1
+        assert preview["copy"]["caption"] == "seed"
+        assert "藍色天空" not in preview["copy"]["caption"]
+        assert preview["image_url"] == "placeholder://seed"
+        assert preview["media"][0]["url"] == "placeholder://seed"
+
+        db_session.expire_all()
+        restored = await repos.get_latest_preview_draft(db_session, session_id)
+        assert restored is not None
+        assert restored.revision == 1
+        assert (restored.copy or {}).get("caption") == "seed"
+    finally:
+        set_session_graph(None)
+
+
+@pytest.mark.asyncio
 async def test_discard_pending_direction_restores_accepted_caption(
     client, db_session, monkeypatch
 ) -> None:
@@ -149,13 +201,27 @@ async def test_discard_pending_direction_restores_accepted_caption(
 
     stopped = await client.post(f"/api/sessions/{session_id}/stop", headers=headers)
     assert stopped.status_code == 200, stopped.text
-    assert stopped.json()["status"] == "cancelled"
+    body = stopped.json()
+    assert body["status"] == "cancelled"
+    assert body["awaiting_image_ok"] is False
+    preview = body["preview"]
+    assert preview["revision"] == 1
+    assert preview["copy"]["caption"] == "seed"
+    assert preview["image_url"] == "placeholder://seed"
+    assert preview["media"][0]["url"] == "placeholder://seed"
+    assert preview["media"][0]["status"] == "ready"
 
     db_session.expire_all()
     restored = await repos.get_latest_preview_draft(db_session, session_id)
     assert restored is not None
     assert restored.revision == 1
     assert (restored.copy or {}).get("caption") == "seed"
+    session = await db_session.get(Session, session_id)
+    assert session is not None
+    assert (session.state or {}).get("revision") == 1
+    assert ((session.state or {}).get("draft") or {}).get("caption") == "seed"
+    assert (session.state or {}).get("image_url") == "placeholder://seed"
+    assert (session.state or {}).get("awaiting_image_ok") is False
 
 
 @pytest.mark.asyncio

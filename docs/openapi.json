@@ -8244,6 +8244,58 @@
         "title": "PreviewMediaMutationResponse",
         "description": "Shared shape after plan edit / regen / add (new draft revision)."
       },
+      "PreviewUpdatedData": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "approval_token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Approval Token"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "media": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMediaItem"
+            },
+            "type": "array",
+            "title": "Media"
+          },
+          "copy": {
+            "$ref": "#/components/schemas/DraftCopy"
+          },
+          "platform": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Platform",
+            "default": "instagram"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "approval_token",
+          "image_url",
+          "media",
+          "copy",
+          "platform"
+        ],
+        "title": "PreviewUpdatedData",
+        "description": "Payload for SSE / turn event `preview.updated`."
+      },
       "ProductCreateRequest": {
         "properties": {
           "name": {
@@ -9209,7 +9261,7 @@
         },
         "type": "object",
         "title": "ResumeImageRequest",
-        "description": "Optional visual format when continuing past the image interrupt."
+        "description": "Optional format echo. Must match the locked plan; a change is a new script (ADR 0036)."
       },
       "ResumeImageResponse": {
         "properties": {
@@ -10164,6 +10216,16 @@
             "type": "boolean",
             "title": "Awaiting Angle Pick",
             "default": false
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviewUpdatedData"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

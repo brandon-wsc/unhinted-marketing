@@ -44,6 +44,24 @@ export function parseDraftCopy(data: unknown): DraftCopy | null {
   return { caption, hashtags, cta };
 }
 
+/** Full preview from a Stop / `turn.cancelled` payload. Null when the shape is incomplete. */
+export function previewDraftFromPayload(data: unknown): PreviewDraft | null {
+  if (!data || typeof data !== "object") return null;
+  const raw = data as Record<string, unknown>;
+  const copy = parseDraftCopy(raw.copy);
+  const approvalToken = typeof raw.approval_token === "string" ? raw.approval_token : "";
+  const revision = typeof raw.revision === "number" ? raw.revision : null;
+  if (!copy || !approvalToken || revision == null) return null;
+  return {
+    copy,
+    image_url: typeof raw.image_url === "string" ? raw.image_url : null,
+    media: parseMediaItems(raw.media) ?? [],
+    revision,
+    approval_token: approvalToken,
+    platform: typeof raw.platform === "string" && raw.platform ? raw.platform : "instagram",
+  };
+}
+
 const CONFIRM_SUCCESS_STATUSES = new Set(["stubbed", "published"]);
 
 export function isConfirmSuccessStatus(status: string | null | undefined): boolean {

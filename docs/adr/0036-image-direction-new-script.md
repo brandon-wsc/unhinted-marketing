@@ -28,7 +28,7 @@ Execute stays a human click. A chat message must not generate the image by itsel
 
 6. **Chat while image-parked is the regret cycle, not a queue.** Explicit Send does not `stopTurn` and does not `ainvoke(None)`. It runs a revise turn from the pending script, writes another script + plan, and re-parks. A line queued during the in-flight turn drains into that same revise once the park lands. Angle-park Send stays a typed pick ([ADR 0028](./0028-angle-pick-before-draft.md)). The angle-park queue hold is unchanged.
 
-7. **Discard restores the last accepted version.** Stop while parked deletes preview revisions above the pre-turn revision and restores `sessions.state` (and mode) from the discard anchor. Stop mid-Execute still re-parks ([ADR 0004](./0004-stop-discard-and-image-resume.md) §2). Confirm / publish stays [ADR 0003](./0003-confirm-without-llm.md).
+7. **Discard restores the last accepted version.** Stop while parked deletes preview revisions above the discard anchor (`accepted_revision` when set, otherwise the pre-turn revision) and restores `sessions.state` (and mode) from that anchor, then aligns caption, image, and revision to the surviving `preview_drafts` row. `POST /stop` returns that preview (`preview`) so the client paints caption, media, and revision; `turn.cancelled` carries the same object. Stop mid-Execute still re-parks ([ADR 0004](./0004-stop-discard-and-image-resume.md) §2) and does not roll the preview back. Confirm / publish stays [ADR 0003](./0003-confirm-without-llm.md).
 
 ## Consequences
 

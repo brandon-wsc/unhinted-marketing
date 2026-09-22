@@ -4,7 +4,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from schemas.contracts import AudiencePersonaOption, DraftCopy, PreviewMediaItem, SessionBriefData
+from schemas.contracts import (
+    AudiencePersonaOption,
+    DraftCopy,
+    PreviewMediaItem,
+    PreviewUpdatedData,
+    SessionBriefData,
+)
 
 
 class CreateSessionRequest(BaseModel):
@@ -136,6 +142,9 @@ class StopSessionResponse(BaseModel):
     kept: bool = False
     awaiting_image_ok: bool = False
     awaiting_angle_pick: bool = False
+    # Latest preview after Stop. Parked discard rolls this back to the last
+    # accepted revision (ADR 0036). Null when the session has no draft row.
+    preview: PreviewUpdatedData | None = None
 
 
 class ChooseAngleRequest(BaseModel):
