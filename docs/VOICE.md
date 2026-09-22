@@ -117,7 +117,7 @@ Default Level: `1` (if unspecified in `entities.profile.roast_level`).
 - **Claims Boundary:** NEVER invent specs, stats, or claim the post is published. Factual market claims need `source_signal_ids`.
 - **Tone Safety:** Avoid political rants, disaster/crisis humor, or target-specific individuals/institutions as the punchline.
 - **Code:** `roast_level` on `entities.profile`; injected as `company_context.voice` — see prompts in `internal/session/prompts.py`.
-- **Image format:** `single` (default) or `comic_4panel` via Generate-image chips / `POST /resume-image` / revise「4格」— same `executor_image_plan` node; still one `image_url`.
+- **Image format:** `single` (default) or `comic_4panel` is chosen with the angle ([ADR 0030](docs/adr/0030-image-format-in-bundled-gate.md)). A later direction or format change writes a new script and plan, then Execute ([ADR 0036](docs/adr/0036-image-direction-new-script.md)). Still one `image_url`.
 
 ---
 

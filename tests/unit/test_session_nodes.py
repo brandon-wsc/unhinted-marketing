@@ -876,7 +876,22 @@ async def test_edit_copy_fallback_appends_note(no_llm: None) -> None:
     )
     assert "原稿" in out["draft"]["caption"]
     assert "短啲" in out["draft"]["caption"]
+    assert out["need_image"] is False
     DraftCopy.model_validate(out["draft"])
+
+
+@pytest.mark.asyncio
+async def test_edit_copy_direction_change_needs_new_image(no_llm: None) -> None:
+    note = "唔要黃色雨傘，改成藍色天空"
+    out = await N.edit_copy(
+        _base_state(
+            mode=MODE_PREVIEW,
+            draft={"caption": "原稿", "hashtags": [], "cta": ""},
+            messages=[{"role": "user", "content": note}],
+        )
+    )
+    assert out["need_image"] is True
+    assert "藍色天空" in out["draft"]["caption"]
 
 
 @pytest.mark.asyncio

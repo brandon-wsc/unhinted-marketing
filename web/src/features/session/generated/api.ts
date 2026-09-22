@@ -1023,7 +1023,7 @@ export type paths = {
         put?: never;
         /**
          * Resume Image
-         * @description Resume parked interrupt_before executor_image_plan (ADR 0004).
+         * @description Resume parked interrupt_before executor_image_gen (ADR 0004 / 0036).
          */
         post: operations["resume_image_api_sessions__session_id__resume_image_post"];
         delete?: never;
@@ -2594,6 +2594,11 @@ export type components = {
             platform: string;
             /** Mode */
             mode: string;
+            /**
+             * Awaiting Image Ok
+             * @default false
+             */
+            awaiting_image_ok: boolean;
         };
         /** ProductCreateRequest */
         ProductCreateRequest: {

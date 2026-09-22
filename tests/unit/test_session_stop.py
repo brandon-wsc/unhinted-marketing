@@ -44,12 +44,43 @@ def _session(*, awaiting: bool = False, turn_discard: dict | None = None) -> Sim
 
 
 @pytest.mark.asyncio
-async def test_run_session_turn_rejects_when_parked() -> None:
+async def test_run_session_turn_image_park_starts_regret_revise() -> None:
     session = _session(awaiting=True)
     db = AsyncMock()
-    with pytest.raises(SessionTurnConflict) as exc:
+    with patch(
+        "internal.session.service.revise_while_image_parked",
+        AsyncMock(return_value={"ok": True}),
+    ) as revise:
+        result = await run_session_turn(
+            db, session, user_content="唔要黃色雨傘，改成藍色天空"
+        )
+    revise.assert_awaited_once()
+    assert revise.await_args.kwargs["user_content"] == "唔要黃色雨傘，改成藍色天空"
+    assert result == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_run_session_turn_rejects_unknown_park() -> None:
+    session = _session()
+    db = AsyncMock()
+    with (
+        patch(
+            "internal.session.service.session_park_kind",
+            AsyncMock(return_value="unknown"),
+        ),
+        pytest.raises(SessionTurnConflict) as exc,
+    ):
         await run_session_turn(db, session, user_content="hello")
     assert exc.value.reason == "parked"
+
+
+@pytest.mark.asyncio
+async def test_resume_image_rejects_format_change() -> None:
+    session = _session(awaiting=True)
+    session.state["image_format"] = "single"
+    db = AsyncMock()
+    with pytest.raises(ValueError, match="locked"):
+        await resume_image_turn(db, session, image_format="comic_4panel")
 
 
 @pytest.mark.asyncio
@@ -428,7 +459,7 @@ async def test_persist_resume_keeps_turn_discard_and_emits_parked_on_llm_error()
             message_dicts=[],
             values={"error": err.message, "messages": [], "draft": session.state["draft"]},
             still_interrupted=True,
-            parked_node="executor_image_plan",
+            parked_node="executor_image_gen",
             progress_events=[],
             provider_error=err,
             user_content="",
@@ -553,7 +584,7 @@ async def test_choose_angle_updates_state_and_resumes() -> None:
         return (
             {"mode": "AGENT", "messages": [], "draft": {"caption": "c"}},
             True,
-            "executor_image_plan",
+            "executor_image_gen",
             None,
             [],
             5,
@@ -580,7 +611,7 @@ async def test_choose_angle_updates_state_and_resumes() -> None:
     assert update.args[1]["chosen_angle"] == "數據懶人包"
     assert "chosen_persona" not in update.args[1]
     assert persist.await_args.kwargs["user_msg"] is None
-    assert persist.await_args.kwargs["parked_node"] == "executor_image_plan"
+    assert persist.await_args.kwargs["parked_node"] == "executor_image_gen"
     assert result["interrupted"] is True
 
 

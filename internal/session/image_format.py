@@ -173,6 +173,29 @@ def image_format_from_text(text: str) -> ImageFormat | None:
     return None
 
 
+def plan_direction_changed(previous: dict[str, Any] | None, new: dict[str, Any] | None) -> bool:
+    """True when prompt, format, layout, or panel beats differ (ADR 0036)."""
+    prev = previous or {}
+    nxt = new or {}
+    if normalize_image_format(prev.get("format")) != normalize_image_format(nxt.get("format")):
+        return True
+    for key in ("prompt", "composition", "style"):
+        if str(prev.get(key) or "").strip() != str(nxt.get(key) or "").strip():
+            return True
+
+    def _beats(plan: dict[str, Any]) -> str:
+        panels = plan.get("panels") or []
+        if not isinstance(panels, list):
+            return ""
+        parts: list[str] = []
+        for panel in panels:
+            if isinstance(panel, dict):
+                parts.append(str(panel.get("beat") or "").strip())
+        return "|".join(parts)
+
+    return _beats(prev) != _beats(nxt)
+
+
 def compose_generation_prompt(plan: dict[str, Any]) -> str:
     """Build the string passed to the image model (one image either way)."""
     fmt = normalize_image_format(plan.get("format"))

@@ -36,27 +36,18 @@ async def test_session_media_list_plan_regen_add(client, db_session, monkeypatch
     image_id = media[0]["id"]
     assert media[0]["plan"]["prompt"] == "seed plan"
 
-    patched = await client.patch(
-        f"/api/sessions/{session_id}/media/{image_id}/plan",
-        headers=headers,
-        json={"plan": {"prompt": "edited", "format": "single", "style": "clean"}},
-    )
-    assert patched.status_code == 200, patched.text
-    body = patched.json()
-    assert body["revision"] == 2
-    assert body["media"][0]["plan"]["prompt"] == "edited"
-    assert body["media"][0]["id"] != image_id
-    new_id = body["media"][0]["id"]
-
     regen = await client.post(
-        f"/api/sessions/{session_id}/media/{new_id}/regen",
+        f"/api/sessions/{session_id}/media/{image_id}/regen",
         headers=headers,
     )
     assert regen.status_code == 200, regen.text
     regen_body = regen.json()
-    assert regen_body["revision"] == 3
+    assert regen_body["revision"] == 2
+    assert regen_body["copy"]["caption"] == "seed"
+    assert regen_body["awaiting_image_ok"] is False
     assert regen_body["media"][0]["url"]
-    assert regen_body["media"][0]["id"] != new_id
+    assert regen_body["media"][0]["id"] != image_id
+    regen_id = regen_body["media"][0]["id"]
 
     added = await client.post(
         f"/api/sessions/{session_id}/media",
@@ -65,9 +56,30 @@ async def test_session_media_list_plan_regen_add(client, db_session, monkeypatch
     )
     assert added.status_code == 200, added.text
     add_body = added.json()
-    assert add_body["revision"] == 4
+    assert add_body["revision"] == 3
     assert len(add_body["media"]) == 2
     assert add_body["media"][1]["status"] == "pending"
+    primary_id = add_body["media"][0]["id"]
+    assert primary_id == regen_id
+
+    patched = await client.patch(
+        f"/api/sessions/{session_id}/media/{primary_id}/plan",
+        headers=headers,
+        json={"plan": {"prompt": "edited", "format": "single", "style": "clean"}},
+    )
+    assert patched.status_code == 200, patched.text
+    body = patched.json()
+    assert body["revision"] == 4
+    assert body["awaiting_image_ok"] is True
+    assert "edited" in body["copy"]["caption"]
+    assert body["media"][0]["plan"]["prompt"] == "edited"
+    assert body["media"][0]["id"] != primary_id
+
+    refused = await client.post(
+        f"/api/sessions/{session_id}/media/{body['media'][0]['id']}/regen",
+        headers=headers,
+    )
+    assert refused.status_code == 400, refused.text
 
 
 @pytest.mark.asyncio
@@ -233,9 +245,12 @@ async def test_session_media_format_switch_rewrites_plan(
         json={"plan": comic_plan},
     )
     assert comic.status_code == 200, comic.text
-    comic_id = comic.json()["media"][0]["id"]
-    assert comic.json()["media"][0]["format"] == "comic_4panel"
-    assert len(comic.json()["media"][0]["plan"]["panels"]) == 4
+    comic_body = comic.json()
+    comic_id = comic_body["media"][0]["id"]
+    assert comic_body["awaiting_image_ok"] is True
+    assert "4格漫畫" in comic_body["copy"]["caption"]
+    assert comic_body["media"][0]["format"] == "comic_4panel"
+    assert len(comic_body["media"][0]["plan"]["panels"]) == 4
 
     stamped = await client.patch(
         f"/api/sessions/{session_id}/media/{comic_id}/plan",
@@ -245,6 +260,9 @@ async def test_session_media_format_switch_rewrites_plan(
     assert stamped.status_code == 200, stamped.text
     body = stamped.json()
     plan = body["media"][0]["plan"]
+    assert body["awaiting_image_ok"] is True
+    assert body["copy"]["caption"] != "seed"
+    assert "單圖" in body["copy"]["caption"]
     assert body["media"][0]["format"] == "single"
     assert plan["format"] == "single"
     assert plan["panels"] == []
@@ -255,13 +273,10 @@ async def test_session_media_format_switch_rewrites_plan(
     session = await db_session.get(Session, session_id)
     assert session is not None
     assert (session.state or {}).get("image_format") == "single"
+    assert (session.state or {}).get("awaiting_image_ok") is True
 
     regen = await client.post(
         f"/api/sessions/{session_id}/media/{body['media'][0]['id']}/regen",
         headers=headers,
     )
-    assert regen.status_code == 200, regen.text
-    regen_plan = regen.json()["media"][0]["plan"]
-    assert regen_plan["format"] == "single"
-    assert regen_plan["panels"] == []
-    assert "4-panel" not in regen_plan["prompt"].lower()
+    assert regen.status_code == 400, regen.text

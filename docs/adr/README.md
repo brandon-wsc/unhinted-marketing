@@ -32,8 +32,9 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0027](./0027-docker-deploy-packages.md) | Docker deployment packages (all-in-one vs external-DB) | Accepted |
 | [0028](./0028-angle-pick-before-draft.md) | Angle pick parks before drafting | Superseded by 0029 |
 | [0029](./0029-angle-persona-bundled-gate.md) | Bundled angle + persona gate | Accepted |
-| [0030](./0030-image-format-in-bundled-gate.md) | Image format rides the bundled angle gate | Accepted |
-| [0031](./0031-queue-send-while-image-parked.md) | Queue Send while parked at image OK | Accepted |
+| [0030](./0030-image-format-in-bundled-gate.md) | Image format rides the bundled angle gate | Accepted (§6 superseded by 0036) |
+| [0031](./0031-queue-send-while-image-parked.md) | Queue Send while parked at image OK | Superseded by 0036 |
+| [0036](./0036-image-direction-new-script.md) | Image direction change is a new script, then Discard or Execute | Accepted |
 | [0032](./0032-meta-oauth-byo-and-relay.md) | On-prem Meta OAuth: BYO-app default + opt-in relay | Accepted |
 | [0033](./0033-meta-live-mode-platform-callbacks.md) | Meta Live mode: deauthorize + data-deletion callbacks | Accepted |
 | [0034](./0034-relay-per-install-shared-secret.md) | OAuth relay per-install shared secret | Accepted |

@@ -83,7 +83,7 @@
       "edit": "改訊息",
       "more": "更多",
       "full": "最多排 3 條 — 等呢轉搞掂先再送。",
-      "holdForImage": "等你揀圖或者撳停，先會送排隊嗰啲。",
+      "holdForImage": "而家送出會先改稿，再等你出圖。",
       "holdForAngle": "等你揀個角度或者撳停，先會送排隊嗰啲。",
       "interrupt": "再撳 Enter 打斷送出 — 呢轉寫咗嘅嘢會留返。"
     },
@@ -155,14 +155,14 @@
         "angles": "角度"
       },
       "interrupt": {
-        "title": "文案得喇",
-        "subtitle": "預設跟返上面揀嘅格式。",
+        "title": "稿同圖計劃得喇",
+        "subtitle": "格式已經鎖死。可以棄置，或者出圖。想轉格式要先寫過一篇稿。",
         "confirm": "出圖",
         "working": "出緊圖…",
+        "discard": "棄置",
         "formatLabel": "圖片格式",
         "formatSingle": "單圖",
-        "formatComic": "4格漫畫",
-        "lateSwitchHint": "呢度轉格式只會重出圖，caption 唔改。"
+        "formatComic": "4格漫畫"
       },
       "anglePick": {
         "title": "先揀角度、語氣同圖",
@@ -275,7 +275,8 @@
       "title": "圖像 Plan",
       "edit": "編輯圖片",
       "editTitle": "編輯圖片",
-      "editHint": "可以儲存 Plan、出圖／再出一次，或者上載檔案。",
+      "editHint": "改 prompt 或者格式會寫過一篇稿同圖計劃。未撳出圖之前唔會重畫。",
+      "stageDirection": "更新稿",
       "empty": "未有圖 — 加一張再改 Plan。",
       "prompt": "Prompt",
       "additionalPrompt": "額外 Prompt",

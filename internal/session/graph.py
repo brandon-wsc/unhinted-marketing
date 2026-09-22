@@ -16,10 +16,11 @@ from internal.session.state import SessionState
 logger = logging.getLogger(__name__)
 
 # Nodes that pause for human OK (ROADMAP interrupt contract): angle pick
-# (ADR 0028) before drafting, image plan (ADR 0004) before image gen.
-INTERRUPT_BEFORE = ["angle_gate", "executor_image_plan"]
+# (ADR 0028) before drafting; image gen (ADR 0036) after the plan is written.
+# The plan runs first so the pending script+plan can land before Execute.
+INTERRUPT_BEFORE = ["angle_gate", "executor_image_gen"]
 ANGLE_GATE_NODE = "angle_gate"
-IMAGE_PARK_NODE = "executor_image_plan"
+IMAGE_PARK_NODE = "executor_image_gen"
 
 _compiled_graph: Any | None = None
 
