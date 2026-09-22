@@ -3752,7 +3752,7 @@
           "sessions"
         ],
         "summary": "Stop Session",
-        "description": "Discard in-flight or parked turn (ADR 0004).",
+        "description": "Discard in-flight/parked turn, or keep it on interrupt (ADR 0004 / 0035).",
         "operationId": "stop_session_api_sessions__session_id__stop_post",
         "security": [
           {
@@ -3771,6 +3771,18 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StopSessionRequest",
+                "default": {
+                  "mode": "discard"
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -10105,6 +10117,22 @@
         "title": "SocialOAuthInfo",
         "description": "Current connection state for an org's Instagram account."
       },
+      "StopSessionRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "discard",
+              "interrupt"
+            ],
+            "title": "Mode",
+            "default": "discard"
+          }
+        },
+        "type": "object",
+        "title": "StopSessionRequest",
+        "description": "ADR 0035 — interrupt keeps an in-flight turn's messages; discard wipes them."
+      },
       "StopSessionResponse": {
         "properties": {
           "status": {
@@ -10114,6 +10142,11 @@
           "interrupted": {
             "type": "boolean",
             "title": "Interrupted",
+            "default": false
+          },
+          "kept": {
+            "type": "boolean",
+            "title": "Kept",
             "default": false
           },
           "awaiting_image_ok": {

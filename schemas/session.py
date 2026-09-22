@@ -124,9 +124,16 @@ class PostMessageResponse(BaseModel):
     events: list[dict] = Field(default_factory=list)
 
 
+class StopSessionRequest(BaseModel):
+    """ADR 0035 — interrupt keeps an in-flight turn's messages; discard wipes them."""
+
+    mode: Literal["discard", "interrupt"] = "discard"
+
+
 class StopSessionResponse(BaseModel):
     status: str  # cancelled | idle
     interrupted: bool = False
+    kept: bool = False
     awaiting_image_ok: bool = False
     awaiting_angle_pick: bool = False
 

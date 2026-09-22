@@ -563,7 +563,9 @@ export function useSession(companyId: string | undefined) {
           setStreamingText(null);
           setAgentProgress(null);
           // Optimistic prune — stopTurn hydrate is source of truth right after.
-          if (discardedAnchor) {
+          // kept: interrupt cancels generation but the turn's messages stay
+          // in the transcript (ADR 0035) — nothing to prune.
+          if (discardedAnchor && data.kept !== true) {
             const drop = (id: string) => id === discardedAnchor || id.startsWith("local-");
             messagesRef.current = messagesRef.current.filter((m) => !drop(m.id));
             setMessages(messagesRef.current);
@@ -1225,86 +1227,90 @@ export function useSession(companyId: string | undefined) {
       });
   }, [companyId, accessToken, openSession, refreshHistory, startNewChat]);
 
-  const stopTurn = useCallback(async () => {
-    if (!accessToken || !sessionId || stoppingRef.current) return;
-    if (!sendingRef.current && !awaitingImageOkRef.current && !awaitingAnglePickRef.current) return;
-    stoppingRef.current = true;
-    setStopping(true);
-    // Invalidate in-flight send/resume before abort so late resolves are dropped.
-    bumpEpoch(sessionId);
-    suppressLiveTurnEventsRef.current = true;
-    inFlightBySessionRef.current.get(sessionId)?.abort();
-    try {
-      const stopped = await apiStopSessionTurn(accessToken, sessionId);
-      if (!stillOn(sessionId)) return;
-      const stillParkedImage = stopped.awaiting_image_ok === true;
-      const stillParkedAngle = stopped.awaiting_angle_pick === true;
-      // Reload transcript after discard (user message / draft may be gone).
-      const hydrated = await apiGetSessionMessages(accessToken, sessionId);
-      if (!stillOn(sessionId)) return;
-      messagesRef.current = hydrated.messages;
-      setMessages(hydrated.messages);
-      setMode(hydrated.session.mode);
-      setSession(hydrated.session);
-      const lastUser = [...hydrated.messages].reverse().find((m) => m.role === "user");
-      const parsedBrief = parseBrief(hydrated.brief);
-      const parkedImage = stillParkedImage || hydrated.awaiting_image_ok === true;
-      const parkedAngle = stillParkedAngle || hydrated.awaiting_angle_pick === true;
-      awaitingImageOkRef.current = parkedImage;
-      setAwaitingImageOk(parkedImage);
-      awaitingAnglePickRef.current = parkedAngle;
-      setAwaitingAnglePick(parkedAngle);
-      const lockedFormat = parseImageFormat(hydrated.recommended_image_format);
-      if ((parkedImage || parkedAngle) && lockedFormat) {
-        lastImageFormatPickRef.current = lockedFormat;
-        setLastImageFormatPick(lockedFormat);
+  const stopTurn = useCallback(
+    async (mode: "discard" | "interrupt" = "discard") => {
+      if (!accessToken || !sessionId || stoppingRef.current) return;
+      if (!sendingRef.current && !awaitingImageOkRef.current && !awaitingAnglePickRef.current)
+        return;
+      stoppingRef.current = true;
+      setStopping(true);
+      // Invalidate in-flight send/resume before abort so late resolves are dropped.
+      bumpEpoch(sessionId);
+      suppressLiveTurnEventsRef.current = true;
+      inFlightBySessionRef.current.get(sessionId)?.abort();
+      try {
+        const stopped = await apiStopSessionTurn(accessToken, sessionId, mode);
+        if (!stillOn(sessionId)) return;
+        const stillParkedImage = stopped.awaiting_image_ok === true;
+        const stillParkedAngle = stopped.awaiting_angle_pick === true;
+        // Reload transcript after stop — discard may drop rows, interrupt keeps them.
+        const hydrated = await apiGetSessionMessages(accessToken, sessionId);
+        if (!stillOn(sessionId)) return;
+        messagesRef.current = hydrated.messages;
+        setMessages(hydrated.messages);
+        setMode(hydrated.session.mode);
+        setSession(hydrated.session);
+        const lastUser = [...hydrated.messages].reverse().find((m) => m.role === "user");
+        const parsedBrief = parseBrief(hydrated.brief);
+        const parkedImage = stillParkedImage || hydrated.awaiting_image_ok === true;
+        const parkedAngle = stillParkedAngle || hydrated.awaiting_angle_pick === true;
+        awaitingImageOkRef.current = parkedImage;
+        setAwaitingImageOk(parkedImage);
+        awaitingAnglePickRef.current = parkedAngle;
+        setAwaitingAnglePick(parkedAngle);
+        const lockedFormat = parseImageFormat(hydrated.recommended_image_format);
+        if ((parkedImage || parkedAngle) && lockedFormat) {
+          lastImageFormatPickRef.current = lockedFormat;
+          setLastImageFormatPick(lockedFormat);
+        }
+        if (parkedAngle) {
+          setAngleOptions(filterOfferedAngles(parsedBrief?.angles));
+          setAnglePersonas(filterOfferedPersonas(hydrated.personas));
+          const rec =
+            typeof hydrated.recommended_persona === "string"
+              ? hydrated.recommended_persona.trim()
+              : "";
+          setRecommendedPersona(rec || null);
+          setRecommendedImageFormat(lockedFormat);
+        }
+        const parked = parkedImage || parkedAngle;
+        setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
+        // Restore BriefCard from sessions.state (Stop must not wipe a surviving brief).
+        setBrief(parsedBrief);
+        setBriefAfterMessageId(parsedBrief && lastUser ? lastUser.id : null);
+        if (!parked) {
+          turnAnchorRef.current = null;
+        }
+        setStreamingText(null);
+        setAgentProgress(null);
+        const actions = agentActionsFromMessages(hydrated.messages);
+        setAgentActions(actions);
+        if (hydrated.session.mode === "PREVIEW") {
+          setPreviewAfterMessageId(previewAnchorFromActions(actions, hydrated.messages));
+        } else {
+          setPreviewAfterMessageId(null);
+        }
+        finishRunningActions();
+        void refreshHistory();
+      } finally {
+        dropInFlight(sessionId);
+        if (stillOn(sessionId)) {
+          stoppingRef.current = false;
+          setStopping(false);
+          drainQueueRef.current();
+        }
       }
-      if (parkedAngle) {
-        setAngleOptions(filterOfferedAngles(parsedBrief?.angles));
-        setAnglePersonas(filterOfferedPersonas(hydrated.personas));
-        const rec =
-          typeof hydrated.recommended_persona === "string"
-            ? hydrated.recommended_persona.trim()
-            : "";
-        setRecommendedPersona(rec || null);
-        setRecommendedImageFormat(lockedFormat);
-      }
-      const parked = parkedImage || parkedAngle;
-      setInterruptAfterMessageId(parked && lastUser ? lastUser.id : null);
-      // Restore BriefCard from sessions.state (Stop must not wipe a surviving brief).
-      setBrief(parsedBrief);
-      setBriefAfterMessageId(parsedBrief && lastUser ? lastUser.id : null);
-      if (!parked) {
-        turnAnchorRef.current = null;
-      }
-      setStreamingText(null);
-      setAgentProgress(null);
-      const actions = agentActionsFromMessages(hydrated.messages);
-      setAgentActions(actions);
-      if (hydrated.session.mode === "PREVIEW") {
-        setPreviewAfterMessageId(previewAnchorFromActions(actions, hydrated.messages));
-      } else {
-        setPreviewAfterMessageId(null);
-      }
-      finishRunningActions();
-      void refreshHistory();
-    } finally {
-      dropInFlight(sessionId);
-      if (stillOn(sessionId)) {
-        stoppingRef.current = false;
-        setStopping(false);
-        drainQueueRef.current();
-      }
-    }
-  }, [
-    accessToken,
-    sessionId,
-    finishRunningActions,
-    refreshHistory,
-    bumpEpoch,
-    stillOn,
-    dropInFlight,
-  ]);
+    },
+    [
+      accessToken,
+      sessionId,
+      finishRunningActions,
+      refreshHistory,
+      bumpEpoch,
+      stillOn,
+      dropInFlight,
+    ],
+  );
 
   const enqueueQueuedAt = useCallback((content: string, index?: number): boolean => {
     const text = content.trim();

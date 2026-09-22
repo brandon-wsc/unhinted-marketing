@@ -84,7 +84,8 @@
       "more": "More",
       "full": "Queue is full (3). Wait for this turn to finish.",
       "holdForImage": "Queued messages wait until you pick an image format or Stop.",
-      "holdForAngle": "Queued messages wait until you pick an angle or Stop."
+      "holdForAngle": "Queued messages wait until you pick an angle or Stop.",
+      "interrupt": "Press Enter again to interrupt and send — this turn's messages stay."
     },
     "live": "Live",
     "offline": "Offline",

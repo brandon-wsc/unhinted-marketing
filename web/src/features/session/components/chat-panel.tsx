@@ -49,6 +49,7 @@ import {
   MAX_QUEUED_SESSION_MESSAGES,
   parseTurnDurationMs,
   QUEUE_TUCK_PX,
+  shouldInterruptQueuedTurn,
   shouldRetryResumeImage,
 } from "@/features/session/session-helpers";
 import {
@@ -406,6 +407,14 @@ export function ChatPanel() {
     }
   }
 
+  async function onInterruptTurn() {
+    try {
+      await stopTurn("interrupt");
+    } catch {
+      showError(t("chat.error.stopFailed"));
+    }
+  }
+
   async function onApplyDraft(copy: DraftCopy) {
     try {
       await updateDraft(copy);
@@ -469,6 +478,16 @@ export function ChatPanel() {
     }
   }
 
+  const interruptOnEmptyEnter = shouldInterruptQueuedTurn({
+    sending,
+    stopping,
+    queuedCount: queuedMessages.length,
+    composerText: composerInput,
+    editingQueued: editInsertAt != null,
+    awaitingImageOk,
+    awaitingAnglePick,
+  });
+
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     // isComposing guard: Enter must not send while a CJK IME candidate is open.
     if (stopping) return;
@@ -479,6 +498,10 @@ export function ChatPanel() {
     }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
+      if (interruptOnEmptyEnter) {
+        void onInterruptTurn();
+        return;
+      }
       void onSubmit();
     }
   }
@@ -697,9 +720,11 @@ export function ChatPanel() {
               onSubmit={onSubmit}
               className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
             >
-              {((awaitingImageOk || awaitingAnglePick) && queuedMessages.length > 0) ||
+              {interruptOnEmptyEnter ||
+              ((awaitingImageOk || awaitingAnglePick) && queuedMessages.length > 0) ||
               queueFull ? (
                 <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
+                  {interruptOnEmptyEnter ? <p>{t("chat.queue.interrupt")}</p> : null}
                   {awaitingImageOk && queuedMessages.length > 0 ? (
                     <p>{t("chat.queue.holdForImage")}</p>
                   ) : null}
