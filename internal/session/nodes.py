@@ -227,9 +227,7 @@ def _wants_image_change(text: str) -> bool:
     if image_format_from_text(text):
         return True
     if any(k in text or k in lower for k in _DIRECTION_CUES):
-        if any(k in lower for k in _COPY_ONLY):
-            return False
-        return True
+        return not any(k in lower for k in _COPY_ONLY)
     return False
 
 

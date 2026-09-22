@@ -3414,8 +3414,7 @@ export type components = {
              * @default false
              */
             awaiting_angle_pick: boolean;
-            /** Latest preview after Stop. Null when the session has no draft. */
-            preview: components["schemas"]["PreviewUpdatedData"] | null;
+            preview?: components["schemas"]["PreviewUpdatedData"] | null;
         };
         /** StorageConfigOut */
         StorageConfigOut: {
