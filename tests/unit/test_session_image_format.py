@@ -8,6 +8,7 @@ from internal.session.image_format import (
     image_format_from_text,
     lock_brief_to_format,
     normalize_image_format,
+    plan_direction_changed,
 )
 
 
@@ -169,3 +170,10 @@ def test_adapt_plan_keeps_custom_single_prompt() -> None:
     assert adapted["prompt"] == "Warm street photo of a milk tea cup"
     assert adapted["composition"] == "tight crop on the cup"
     assert adapted["style"] == "film still"
+
+
+def test_plan_direction_changed() -> None:
+    base = {"format": "single", "prompt": "yellow umbrella", "style": "clean", "composition": "center"}
+    assert plan_direction_changed(base, dict(base)) is False
+    assert plan_direction_changed(base, {**base, "prompt": "blue sky"}) is True
+    assert plan_direction_changed(base, {**base, "format": "comic_4panel"}) is True

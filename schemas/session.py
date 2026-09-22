@@ -159,7 +159,7 @@ class ChooseAngleResponse(BaseModel):
 
 
 class ResumeImageRequest(BaseModel):
-    """Optional visual format when continuing past the image interrupt."""
+    """Optional format echo. Must match the locked plan; a change is a new script (ADR 0036)."""
 
     image_format: Literal["single", "comic_4panel"] | None = None
 
@@ -237,6 +237,7 @@ class PreviewMediaMutationResponse(BaseModel):
     media: list[PreviewMediaItem] = Field(default_factory=list)
     platform: str
     mode: str
+    awaiting_image_ok: bool = False
 
 
 class SessionEvent(BaseModel):

@@ -197,9 +197,40 @@ def _signals_trusted(state: SessionState) -> bool | None:
     return bool(research.get("signals_trusted"))
 
 
+_IMAGE_WORDS = ("圖", "图片", "圖片", "image", "photo", "visual", "封面", "畫面", "背景")
+_DIRECTION_CUES = ("唔要", "不要", "改成", "換成", "改做", "instead of", "change to")
+# Caption-only edits must not force a new image (ADR 0036).
+_COPY_ONLY = (
+    "caption",
+    "文案",
+    "hashtag",
+    "cta",
+    "短",
+    "長",
+    "語氣",
+    "抽水",
+    "tone",
+    "搞笑",
+    "認真",
+)
+
+
 def _wants_image_change(text: str) -> bool:
+    """True when the user is changing the picture, not only the words.
+
+    「唔要黃色雨傘，改成藍色天空」 is a direction change even without 圖.
+    「改成短啲」 stays caption-only.
+    """
     lower = text.lower()
-    return any(k in lower for k in ("圖", "图片", "圖片", "image", "photo", "visual", "封面"))
+    if any(k.lower() in lower for k in _IMAGE_WORDS):
+        return True
+    if image_format_from_text(text):
+        return True
+    if any(k in text or k in lower for k in _DIRECTION_CUES):
+        if any(k in lower for k in _COPY_ONLY):
+            return False
+        return True
+    return False
 
 
 def offered_angles(brief: dict[str, Any] | None) -> list[str]:

@@ -635,19 +635,44 @@ describe("useSession", () => {
     expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["a", "b"]);
   });
 
-  it("does not drain the queue while parked at image OK", async () => {
+  it("drains a queued line into a direction change when the image park lands", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({
       session: sessionFixture,
       messages: [],
     });
     let resolveFirst: (value: unknown) => void = () => {};
-    apiPostSessionMessage.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveFirst = resolve;
-        }),
-    );
+    apiPostSessionMessage
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u-b",
+            session_id: "sess-1",
+            role: "user",
+            content: "queued while running",
+            created_at: "2026-01-01T00:00:02Z",
+          },
+        ],
+        interrupted: true,
+        mode: "PREVIEW",
+        revision: 2,
+        pending_confirm: false,
+        approval_token: "tok",
+        events: [
+          { type: "draft.awaiting_image_ok", data: { awaiting: true } },
+          {
+            type: "preview.updated",
+            data: { copy: { caption: "queued while running", hashtags: [], cta: "" } },
+          },
+        ],
+      });
 
     const { result } = renderHook(() => useSession("co-1"));
     await waitFor(() => expect(result.current.restoring).toBe(false));
@@ -681,17 +706,37 @@ describe("useSession", () => {
       });
     });
 
-    await waitFor(() => expect(result.current.awaitingImageOk).toBe(true));
-    expect(apiPostSessionMessage).toHaveBeenCalledTimes(1);
-    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["queued while running"]);
+    await waitFor(() => expect(apiPostSessionMessage).toHaveBeenCalledTimes(2));
+    expect(apiPostSessionMessage.mock.calls[1]?.[2]).toBe("queued while running");
+    expect(result.current.queuedMessages).toEqual([]);
+    expect(result.current.awaitingImageOk).toBe(true);
   });
 
-  it("enqueues Send while parked at image OK without Stop", async () => {
+  it("sends a direction change while parked at image OK without Stop", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({
       session: { ...sessionFixture, mode: "AGENT" },
       messages: [msgA],
       awaiting_image_ok: true,
+    });
+    apiPostSessionMessage.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [
+        msgA,
+        {
+          id: "u-dir",
+          session_id: "sess-1",
+          role: "user",
+          content: "想睇 4格漫畫",
+          created_at: "2026-01-01T00:00:02Z",
+        },
+      ],
+      interrupted: true,
+      mode: "PREVIEW",
+      revision: 2,
+      pending_confirm: false,
+      approval_token: "tok",
+      events: [{ type: "draft.awaiting_image_ok", data: { awaiting: true } }],
     });
 
     const { result } = renderHook(() => useSession("co-1"));
@@ -702,9 +747,10 @@ describe("useSession", () => {
     });
 
     expect(apiStopSessionTurn).not.toHaveBeenCalled();
-    expect(apiPostSessionMessage).not.toHaveBeenCalled();
+    expect(apiPostSessionMessage).toHaveBeenCalledTimes(1);
+    expect(apiPostSessionMessage.mock.calls[0]?.[2]).toBe("想睇 4格漫畫");
     expect(result.current.awaitingImageOk).toBe(true);
-    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["想睇 4格漫畫"]);
+    expect(result.current.queuedMessages).toEqual([]);
   });
 
   it("keeps the queue across Stop and drains after unlock", async () => {

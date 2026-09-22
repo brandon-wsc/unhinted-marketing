@@ -3634,7 +3634,7 @@
           "sessions"
         ],
         "summary": "Resume Image",
-        "description": "Resume parked interrupt_before executor_image_plan (ADR 0004).",
+        "description": "Resume parked interrupt_before executor_image_gen (ADR 0004 / 0036).",
         "operationId": "resume_image_api_sessions__session_id__resume_image_post",
         "security": [
           {
@@ -8223,6 +8223,11 @@
           "mode": {
             "type": "string",
             "title": "Mode"
+          },
+          "awaiting_image_ok": {
+            "type": "boolean",
+            "title": "Awaiting Image Ok",
+            "default": false
           }
         },
         "type": "object",
@@ -8233,7 +8238,8 @@
           "image_url",
           "media",
           "platform",
-          "mode"
+          "mode",
+          "awaiting_image_ok"
         ],
         "title": "PreviewMediaMutationResponse",
         "description": "Shared shape after plan edit / regen / add (new draft revision)."

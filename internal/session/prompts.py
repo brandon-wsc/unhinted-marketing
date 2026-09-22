@@ -202,7 +202,9 @@ Return JSON only:
   "source_signal_ids": ["..."]
 }}
 {_CRAFT_BLOCK}
-Set need_image true only if the user asked to change the visual / image / 圖 / 圖片.
+Set need_image true when the user changes what the picture shows — objects, colors, scene, background, or the image format — including 「唔要…改成…」 of a visual even if they never say 圖. Rewrite the caption so it matches that new picture. A format change (single vs comic_4panel) is a new script, not a caption-preserving re-image.
+Set need_image false for caption-only edits (shorter, longer, tone, hashtags, CTA).
+If image_plan or image_format is on the payload, the caption must match that vehicle and scene.
 Keep grounding: source_signal_ids ⊆ input signal ids.
 Preserve roast_level unless the user explicitly asks for more/less 抽水 or a safer tone.
 You may call query_market_trends to peek at existing PG signals. Return structured EditOut. Never publish.

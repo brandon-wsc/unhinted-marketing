@@ -29,7 +29,7 @@ from internal.session.graph import (
     IMAGE_PARK_NODE,
     get_session_graph,
 )
-from internal.session.image_format import adapt_plan_to_format
+from internal.session.image_format import adapt_plan_to_format, plan_direction_changed
 from internal.session.media import image_format_from_plan, media_item_payload
 from internal.session.nodes import angle_pick_payload, offered_angles, offered_personas
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
@@ -483,11 +483,15 @@ async def _repark_graph_at_image_interrupt(
     db: AsyncSession,
     session: Session,
 ) -> None:
-    """as_node="reviewer" with ``need_image=True`` schedules ``executor_image_plan``."""
+    """as_node=executor_image_plan schedules executor_image_gen (ADR 0036).
+
+    The plan is already in session state. Re-seating via reviewer would run
+    the plan node again on the next resume.
+    """
     await _repark_graph_at_interrupt(
         db,
         session,
-        as_node="reviewer",
+        as_node="executor_image_plan",
         extra_values={"need_image": True, "reviewer_passed": True},
     )
 
@@ -515,14 +519,23 @@ async def _discard_turn_state(
     *,
     pre_state: dict[str, Any],
     message_ids: list[uuid.UUID],
+    pre_mode: str | None = None,
 ) -> None:
-    """Restore pre-turn session.state, delete turn messages, wipe graph thread."""
+    """Restore pre-turn session.state, delete turn messages, wipe graph thread.
+
+    Pending preview revisions written for an unexecuted image version are
+    removed so Discard shows the last accepted caption (ADR 0036).
+    """
     session_event_bus.end_turn_progress(session.id)
     restored = _strip_discard_meta(pre_state)
     restored.update(_park_flag_data(None))
     session.state = restored
+    if isinstance(pre_mode, str) and pre_mode:
+        session.mode = pre_mode
     if message_ids:
         await repos.delete_session_messages_by_ids(db, session.id, message_ids)
+    accepted = int(restored.get("revision") or 0)
+    await repos.delete_preview_drafts_above(db, session.id, accepted)
     await _adelete_graph_thread(session.id)
     await db.flush()
     await session_event_bus.publish_many(
@@ -652,12 +665,41 @@ async def _persist_after_invoke(
     pre_state: dict[str, Any],
     entry: TurnEntry | None,
     duration_ms: int | None = None,
+    pre_mode: str | None = None,
 ) -> dict[str, Any]:
     if user_msg is not None:
         meta = user_turn_metadata(user_msg.metadata_ or {}, progress_events, duration_ms)
         if meta is not None:
             user_msg.metadata_ = meta
             flag_modified(user_msg, "metadata_")
+
+    original_mode = session.mode
+    staged_preview: dict[str, Any] | None = None
+    draft_values = values.get("draft") if isinstance(values.get("draft"), dict) else None
+    plan_values = values.get("image_plan") if isinstance(values.get("image_plan"), dict) else None
+    if (
+        still_interrupted
+        and parked_node == IMAGE_PARK_NODE
+        and provider_error is None
+        and draft_values
+        and str(draft_values.get("caption") or "").strip()
+        and plan_values
+    ):
+        staged_preview = await _stage_pending_image_draft(
+            db,
+            session,
+            copy=draft_values,
+            image_plan=plan_values,
+            source_signal_ids=list(values.get("source_signal_ids") or []),
+        )
+        if staged_preview:
+            values["draft"] = staged_preview["copy"]
+            values["image_plan"] = staged_preview["image_plan"]
+            values["image_format"] = staged_preview["image_format"]
+            values["image_url"] = staged_preview["image_url"]
+            values["revision"] = staged_preview["revision"]
+            values["approval_token"] = staged_preview["approval_token"]
+            values["mode"] = MODE_PREVIEW
 
     prior_count = len(message_dicts)
     new_messages = (values.get("messages") or [])[prior_count:]
@@ -704,7 +746,7 @@ async def _persist_after_invoke(
         "chosen_persona": values.get("chosen_persona"),
         "image_format": values.get("image_format"),
         "chosen_image_format": values.get("chosen_image_format"),
-        # UI hydrate: interrupt_before angle_gate / executor_image_plan
+        # UI hydrate: interrupt_before angle_gate / executor_image_gen
         "awaiting_image_ok": parked_node == IMAGE_PARK_NODE,
         "awaiting_angle_pick": parked_node == ANGLE_GATE_NODE,
     }
@@ -712,6 +754,8 @@ async def _persist_after_invoke(
         if user_msg is not None:
             next_state["turn_discard"] = {
                 "pre_state": _strip_discard_meta(pre_state),
+                "pre_mode": pre_mode if isinstance(pre_mode, str) and pre_mode else original_mode,
+                "accepted_revision": int((pre_state or {}).get("revision") or 0),
                 "user_message_id": str(user_msg.id),
                 "message_ids": [
                     str(mid) for mid in (entry.message_ids if entry else [user_msg.id])
@@ -769,6 +813,26 @@ async def _persist_after_invoke(
             )
         if values.get("draft"):
             events.append({"type": "draft.copy_updated", "data": values["draft"]})
+        if staged_preview:
+            events.append(
+                {
+                    "type": "draft.image_plan_updated",
+                    "data": staged_preview["image_plan"],
+                }
+            )
+            events.append(
+                {
+                    "type": "preview.updated",
+                    "data": preview_updated_payload(
+                        revision=int(staged_preview["revision"]),
+                        approval_token=str(staged_preview["approval_token"]),
+                        image_url=staged_preview.get("image_url"),
+                        copy=staged_preview["copy"],
+                        platform=staged_preview.get("platform"),
+                        media=staged_preview.get("media") or [],
+                    ),
+                }
+            )
         if values.get("image_plan") and not still_interrupted:
             events.append(
                 {"type": "draft.image_plan_updated", "data": values["image_plan"]}
@@ -953,28 +1017,83 @@ async def _invoke_graph(
     )
 
 
-async def run_session_turn(
+async def revise_while_image_parked(
     db: AsyncSession,
     session: Session,
     *,
     user_content: str,
     source_question_id: str | None = None,
 ) -> dict[str, Any]:
+    """Direction change while awaiting Execute: new script + plan, re-park (ADR 0036).
+
+    Does not ``stopTurn`` and does not ``ainvoke(None)``. The discard anchor
+    stays the last accepted version, not the pending script being replaced.
+    """
+    if session_turn_registry.is_busy(session.id):
+        raise SessionTurnConflict("busy", "Session turn already in progress")
+    state = dict(session.state or {})
+    anchor = state.get("turn_discard") if isinstance(state.get("turn_discard"), dict) else {}
+    accepted = (
+        anchor.get("pre_state") if isinstance(anchor.get("pre_state"), dict) else state
+    )
+    accepted = _strip_discard_meta(accepted)
+    pre_mode = anchor.get("pre_mode") if isinstance(anchor.get("pre_mode"), str) else session.mode
+    await _adelete_graph_thread(session.id)
+    cleared = dict(state)
+    cleared["awaiting_image_ok"] = False
+    session.state = cleared
+    if session.mode != MODE_PREVIEW:
+        session.mode = MODE_PREVIEW
+    return await run_session_turn(
+        db,
+        session,
+        user_content=user_content,
+        source_question_id=source_question_id,
+        discard_pre_state=accepted,
+        pre_mode=pre_mode,
+        skip_park_check=True,
+    )
+
+
+async def run_session_turn(
+    db: AsyncSession,
+    session: Session,
+    *,
+    user_content: str,
+    source_question_id: str | None = None,
+    discard_pre_state: dict[str, Any] | None = None,
+    pre_mode: str | None = None,
+    skip_park_check: bool = False,
+) -> dict[str, Any]:
     """Append user message, invoke graph (never blind-resume), persist side-effects."""
     session_id = session.id
     if session_turn_registry.is_busy(session_id):
         raise SessionTurnConflict("busy", "Session turn already in progress")
-    park_kind = await session_park_kind(session)
-    if park_kind == "angle":
-        # ADR 0028: a typed reply while parked at the angle gate IS the pick.
-        return await choose_angle_turn(db, session, angle_text=user_content)
-    if park_kind is not None:
-        raise SessionTurnConflict(
-            "parked",
-            "Session is awaiting a parked confirmation — resume or stop",
-        )
+    if not skip_park_check:
+        park_kind = await session_park_kind(session)
+        if park_kind == "angle":
+            # ADR 0028: a typed reply while parked at the angle gate IS the pick.
+            return await choose_angle_turn(db, session, angle_text=user_content)
+        if park_kind == "image":
+            # ADR 0036: a typed reply while image-parked is a new script, not a queue.
+            return await revise_while_image_parked(
+                db,
+                session,
+                user_content=user_content,
+                source_question_id=source_question_id,
+            )
+        if park_kind is not None:
+            raise SessionTurnConflict(
+                "parked",
+                "Session is awaiting a parked confirmation — resume or stop",
+            )
 
-    pre_state = _strip_discard_meta(session.state)
+    turn_mode = session.mode
+    pre_state = (
+        _strip_discard_meta(discard_pre_state)
+        if discard_pre_state is not None
+        else _strip_discard_meta(session.state)
+    )
     user_msg = await repos.add_session_message(
         db, session_id=session_id, role="user", content=user_content
     )
@@ -1029,6 +1148,7 @@ async def run_session_turn(
             pre_state=pre_state,
             entry=entry,
             duration_ms=duration_ms,
+            pre_mode=pre_mode or turn_mode,
         )
     except asyncio.CancelledError:
         if entry.mode == "interrupt":
@@ -1183,27 +1303,29 @@ async def resume_image_turn(
     *,
     image_format: str | None = None,
 ) -> dict[str, Any]:
-    """Resume parked graph at interrupt_before executor_image_plan (ADR 0004)."""
+    """Resume parked graph at interrupt_before executor_image_gen (ADR 0004 / 0036).
+
+    Format is already locked on the pending script. A different ``image_format``
+    is a new regret cycle, not a late switch.
+    """
     await _require_parked(session, "image")
-
-    async def apply_format(_messages: list[dict[str, Any]]) -> None:
-        if image_format is None:
-            return
+    if image_format is not None:
         from internal.session.image_format import normalize_image_format
+        from internal.session.nodes import recommended_image_format
 
-        fmt = normalize_image_format(image_format)
-        graph = get_session_graph()
-        await graph.aupdate_state(_session_config(session.id), {"image_format": fmt})
-        st = dict(session.state or {})
-        st["image_format"] = fmt
-        session.state = st
-        await db.flush()
+        requested = normalize_image_format(image_format)
+        locked = recommended_image_format(session.state or {})
+        if requested != locked:
+            raise ValueError(
+                "Image format is locked for this version. "
+                "Change the creative direction to write a new script."
+            )
 
     return await _resume_parked_turn(
         db,
         session,
         kind="image",
-        apply_pick=apply_format,
+        apply_pick=None,
         error_state_extra={"need_image": True},
     )
 
@@ -1357,11 +1479,13 @@ async def stop_session_turn(
         if not message_ids and anchor.get("user_message_id"):
             with contextlib.suppress(ValueError):
                 message_ids.append(uuid.UUID(str(anchor["user_message_id"])))
+        pre_mode = anchor.get("pre_mode") if isinstance(anchor.get("pre_mode"), str) else None
         await _discard_turn_state(
             db,
             session,
             pre_state=pre_state,
             message_ids=message_ids,
+            pre_mode=pre_mode,
         )
         return {
             "status": "cancelled",
@@ -1563,6 +1687,198 @@ def _replace_media_id(
     return [new_id if i == old_id else i for i in media_ids]
 
 
+def _fallback_direction_copy(
+    draft: dict[str, Any], plan: dict[str, Any], note: str
+) -> dict[str, Any]:
+    """Offline script so a direction change is visible without an LLM (ADR 0036)."""
+    base = str(draft.get("caption") or "").strip()
+    fmt = image_format_from_plan(plan, fallback="single")
+    vehicle = "4格漫畫" if fmt == "comic_4panel" else "單圖"
+    detail = (note or str(plan.get("prompt") or "")).strip()
+    line = f"（{vehicle}：{detail[:180]}）"
+    caption = base if line and line in base else f"{base}\n\n{line}".strip()
+    return normalize_draft_copy(
+        {
+            "caption": caption or line or "（修訂草稿）",
+            "hashtags": draft.get("hashtags") or [],
+            "cta": draft.get("cta") or "",
+        }
+    )
+
+
+async def _rewrite_copy_for_direction(
+    db: AsyncSession,
+    session: Session,
+    *,
+    draft: dict[str, Any],
+    plan: dict[str, Any],
+    note: str,
+) -> dict[str, Any]:
+    """New caption that matches the pending image plan. Fallback keeps tests offline."""
+    from internal.llm.router import has_llm_credentials
+
+    if has_llm_credentials():
+        import json
+
+        from internal.session import execute_harness as EH
+
+        payload = {
+            "draft": draft,
+            "user_feedback": note,
+            "reviewer_feedback": "",
+            "voice_pack": (session.state or {}).get("voice_pack") or {},
+            "signals": [],
+            "allowed_signal_ids": [],
+            "image_format": image_format_from_plan(plan, fallback="single"),
+            "image_plan": plan,
+        }
+        async with company_llm_scope(db, session.company_id):
+            parsed = await EH.run_edit_copy_agent(
+                json.dumps(payload, ensure_ascii=False),
+                EH.ExecuteDeps(),
+            )
+        if parsed and str(parsed.caption or "").strip():
+            return normalize_draft_copy(
+                {
+                    "caption": parsed.caption,
+                    "hashtags": parsed.hashtags,
+                    "cta": parsed.cta,
+                }
+            )
+    return _fallback_direction_copy(draft, plan, note)
+
+
+def _apply_pending_image_state(
+    session: Session,
+    staged: dict[str, Any],
+    *,
+    pre_state: dict[str, Any],
+    pre_mode: str,
+) -> None:
+    """Hydrate session.state for a pending Execute card (ADR 0036)."""
+    state = dict(session.state or {})
+    if not isinstance(state.get("turn_discard"), dict):
+        state["turn_discard"] = {
+            "pre_state": _strip_discard_meta(pre_state),
+            "pre_mode": pre_mode,
+            "message_ids": [],
+            "accepted_revision": int(pre_state.get("revision") or 0),
+        }
+    state["draft"] = staged["copy"]
+    state["revision"] = staged["revision"]
+    state["approval_token"] = staged["approval_token"]
+    state["image_plan"] = staged["image_plan"]
+    state["image_format"] = staged["image_format"]
+    state["image_url"] = staged["image_url"]
+    state["need_image"] = True
+    state["awaiting_image_ok"] = True
+    state["pending_confirm"] = False
+    session.state = state
+    session.mode = MODE_PREVIEW
+
+
+async def _stage_pending_image_draft(
+    db: AsyncSession,
+    session: Session,
+    *,
+    copy: dict[str, Any],
+    image_plan: dict[str, Any],
+    source_signal_ids: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Insert caption + plan on a new preview revision and park before image gen.
+
+    Returns None when the latest row already matches (resume re-park).
+    """
+    draft_copy = normalize_draft_copy(copy)
+    if not draft_copy["caption"].strip():
+        return None
+    fmt = image_format_from_plan(
+        image_plan, fallback=str((session.state or {}).get("image_format") or "single")
+    )
+    plan = adapt_plan_to_format(dict(image_plan), fmt)
+    fmt = image_format_from_plan(plan, fallback=fmt)
+
+    existing = await repos.get_latest_preview_draft(db, session.id)
+    if existing is not None:
+        same_copy = normalize_draft_copy(existing.copy) == draft_copy
+        same_plan = dict(existing.image_plan or {}) == dict(plan)
+        if same_copy and same_plan:
+            return None
+
+    state = dict(session.state or {})
+    base_rev = existing.revision if existing else int(state.get("revision") or 0)
+    rev = base_rev + 1
+    token = secrets.token_urlsafe(24)
+    signal_ids = list(
+        source_signal_ids if source_signal_ids is not None else (state.get("source_signal_ids") or [])
+    )
+    if existing and existing.source_signal_ids and not signal_ids:
+        signal_ids = list(existing.source_signal_ids)
+    platform = (existing.platform if existing else None) or DEFAULT_PLATFORM
+
+    old_ids = list(existing.media_ids or []) if existing else []
+    row = await repos.insert_preview_image(
+        db,
+        session_id=session.id,
+        url=None,
+        plan=plan,
+        format=fmt,
+        role="primary",
+        seq=0,
+        status="pending",
+    )
+    media_ids = [row.id, *old_ids[1:]]
+    rows = await repos.get_preview_images_by_ids(db, media_ids)
+    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
+    stored_plan = primary_plan or plan
+
+    await repos.upsert_preview_draft(
+        db,
+        session_id=session.id,
+        revision=rev,
+        copy=draft_copy,
+        image_url=primary_url,
+        image_plan=stored_plan,
+        media_ids=media_ids,
+        source_signal_ids=signal_ids,
+        approval_token=token,
+        platform=platform,
+    )
+
+    graph = get_session_graph()
+    config = _session_config(session.id)
+    msgs = await repos.list_session_messages(db, session.id)
+    message_dicts = [{"role": m.role, "content": m.content} for m in msgs]
+    graph_values = _graph_values(session, message_dicts)
+    graph_values.update(
+        {
+            "draft": draft_copy,
+            "image_plan": stored_plan,
+            "image_format": fmt,
+            "image_url": primary_url,
+            "revision": rev,
+            "approval_token": token,
+            "mode": MODE_PREVIEW,
+            "need_image": True,
+            "reviewer_passed": True,
+            "pending_confirm": False,
+        }
+    )
+    await graph.aupdate_state(config, graph_values, as_node="executor_image_plan")
+
+    return {
+        "revision": rev,
+        "approval_token": token,
+        "copy": draft_copy,
+        "image_url": resolve_stored_url(primary_url),
+        "image_plan": stored_plan,
+        "image_format": fmt,
+        "media": media,
+        "platform": platform,
+        "mode": MODE_PREVIEW,
+    }
+
+
 async def update_session_image_plan(
     db: AsyncSession,
     session: Session,
@@ -1570,9 +1886,11 @@ async def update_session_image_plan(
     image_id: uuid.UUID,
     plan: dict[str, Any],
 ) -> dict[str, Any]:
-    """User edits plan → new image row + new draft (no LLM)."""
+    """Edit plan. A direction/format change stages a new script and parks for Execute."""
     if session.mode != MODE_PREVIEW:
         raise ValueError("Session is not in PREVIEW mode")
+    if session_turn_registry.is_busy(session.id):
+        raise ValueError("Session turn already in progress")
     existing = await repos.get_latest_preview_draft(db, session.id)
     if not existing:
         raise ValueError("No preview draft yet")
@@ -1587,6 +1905,51 @@ async def update_session_image_plan(
     old_fmt = image_format_from_plan(old.plan, fallback=old.format)
     new_plan = adapt_plan_to_format(dict(plan), fmt, previous_format=old_fmt)
     fmt = image_format_from_plan(new_plan, fallback=fmt)
+    if plan_direction_changed(dict(old.plan or {}), new_plan):
+        current_copy = normalize_draft_copy(existing.copy or (session.state or {}).get("draft"))
+        note = (
+            f"創作方向變咗。新圖格式係 {fmt}。"
+            f"畫面：{str(new_plan.get('prompt') or '')[:300]}。"
+            "請改寫 caption、hashtags、cta 去配合呢個畫面同格式。"
+        )
+        copy = await _rewrite_copy_for_direction(
+            db, session, draft=current_copy, plan=new_plan, note=note
+        )
+        pre_state = _strip_discard_meta(session.state)
+        pre_mode = session.mode
+        anchor = (session.state or {}).get("turn_discard")
+        if isinstance(anchor, dict) and isinstance(anchor.get("pre_state"), dict):
+            pre_state = _strip_discard_meta(anchor["pre_state"])
+            if isinstance(anchor.get("pre_mode"), str):
+                pre_mode = anchor["pre_mode"]
+        staged = await _stage_pending_image_draft(
+            db,
+            session,
+            copy=copy,
+            image_plan=new_plan,
+            source_signal_ids=list(existing.source_signal_ids or []),
+        )
+        if staged is None:
+            raise ValueError("Could not stage the new image version")
+        _apply_pending_image_state(session, staged, pre_state=pre_state, pre_mode=pre_mode)
+        events = [
+            {"type": "draft.copy_updated", "data": staged["copy"]},
+            {
+                "type": "preview.updated",
+                "data": preview_updated_payload(
+                    revision=int(staged["revision"]),
+                    approval_token=str(staged["approval_token"]),
+                    image_url=staged.get("image_url"),
+                    copy=staged["copy"],
+                    platform=staged.get("platform"),
+                    media=staged.get("media") or [],
+                ),
+            },
+            {"type": "draft.awaiting_image_ok", "data": {"awaiting": True}},
+        ]
+        await session_event_bus.publish_many(session.id, events)
+        return {**staged, "awaiting_image_ok": True, "events": events}
+
     row = await repos.insert_preview_image(
         db,
         session_id=session.id,
@@ -1616,7 +1979,7 @@ async def regen_session_image(
     *,
     image_id: uuid.UUID,
 ) -> dict[str, Any]:
-    """Regenerate image from current plan → new image row + new draft."""
+    """Re-sample the current locked plan. Refuses a pending direction change."""
     from internal.llm.router import (
         LlmProviderError,
         generate_image,
@@ -1628,6 +1991,10 @@ async def regen_session_image(
 
     if session.mode != MODE_PREVIEW:
         raise ValueError("Session is not in PREVIEW mode")
+    if (session.state or {}).get("awaiting_image_ok"):
+        raise ValueError(
+            "This version is waiting to generate. Execute or discard before resampling."
+        )
     existing = await repos.get_latest_preview_draft(db, session.id)
     if not existing:
         raise ValueError("No preview draft yet")
@@ -1638,11 +2005,10 @@ async def regen_session_image(
     if old is None or old.session_id != session.id:
         raise ValueError("Image not found")
 
+    # Same locked plan only — do not rewrite format or prompt (ADR 0036).
     plan = dict(old.plan or {})
-    old_fmt = image_format_from_plan(old.plan, fallback=old.format)
-    fmt = image_format_from_plan(plan, fallback=old_fmt)
-    plan = adapt_plan_to_format(plan, fmt, previous_format=old_fmt)
-    fmt = image_format_from_plan(plan, fallback=fmt)
+    fmt = image_format_from_plan(plan, fallback=old.format)
+    plan["format"] = fmt
     prompt = compose_generation_prompt(plan)
     if not prompt:
         prompt = f"Clean modern social media image for Hong Kong brand, format={fmt}"

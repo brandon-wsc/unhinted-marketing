@@ -52,6 +52,8 @@ def test_heuristic_intent_agent_without_draft_starts() -> None:
 def test_wants_image_change() -> None:
     assert _wants_image_change("換張圖") is True
     assert _wants_image_change("改 caption") is False
+    assert _wants_image_change("唔要黃色雨傘，改成藍色天空") is True
+    assert _wants_image_change("改成短啲") is False
 
 
 def test_route_after_intent() -> None:
