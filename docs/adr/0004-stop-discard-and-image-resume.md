@@ -25,10 +25,10 @@ While the graph runs, overlapping `POST /messages` and “resume image by typing
 - Turn registry is **single-process** (same class of limit as the in-memory SSE bus); multi-worker stop requires a later shared store.
 - Confirm / publish remains ADR 0003 (Stop never publishes).
 
-## UI note — parked preview is not a ready post
+## UI note — parked preview stays an Instagram frame
 
 Presentation only. Park / resume / Stop / Discard restore are unchanged here.
 
-When the preview pane is open, the session is parked at image OK (`awaiting_image_ok`), and the current revision has no ready primary image, the pane is a **待出圖** board: pending caption, plan summary (format, prompt, panel beats), and the status line 「格式已經鎖死。可以棄置，或者出圖。想轉格式要先寫過一篇稿。」 Apply / 確認出街 stay in the footer and are disabled. The pane does not use the Instagram frame or the grey 「圖片位置」 placeholder. While Execute (`POST /resume-image`) is in flight, the same pane shows a spinner and 「出緊圖…」 and still does not look ready. A parked revise (`POST /messages`, [ADR 0036](./0036-image-direction-new-script.md)) keeps that board without the spinner — the script is being rewritten, not the image. Discard | 出圖 stay on the chat card.
+When the preview pane is open, the session is parked at image OK (`awaiting_image_ok`), and the current revision has no ready primary image, the pane keeps the Instagram preview chrome (avatar, account, preview label, engagement icons). The image slot is an honest wait: parked shows a dashed soft square labelled 「圖未出」; while Execute (`POST /resume-image`) is in flight, that same slot shows a spinner and 「出緊圖…」. The header carries one status name (待出圖 / 出緊圖). The footer leaves out Apply / 確認出街 and shows one line: format stays locked, and Discard | 出圖 live in chat. Caption sits under the frame as read-only pending copy. A collapsed 圖計劃 summary can sit below the frame. A parked revise (`POST /messages`, [ADR 0036](./0036-image-direction-new-script.md)) keeps the waiting slot with no spinner — the script is being rewritten, and the picture is not. Discard | 出圖 stay on the chat card.
 
 A revision that already has a renderable primary image keeps the accepted preview (real image, Apply / 確認出街 usable), including after Discard restores that revision and leaves the pane open ([ADR 0036](./0036-image-direction-new-script.md) §7). The pending revision is already on screen before Execute.
