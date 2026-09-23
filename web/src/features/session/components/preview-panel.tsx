@@ -425,8 +425,8 @@ function ImagePlanSummary({ draft }: { draft: PreviewDraft }) {
         ) : null}
         {plan.beats.length > 0 ? (
           <ol className="list-decimal space-y-0.5 pl-5 text-muted-foreground">
-            {plan.beats.map((beat, index) => (
-              <li key={`${index}-${beat}`}>{beat}</li>
+            {plan.beats.map((beat) => (
+              <li key={beat}>{beat}</li>
             ))}
           </ol>
         ) : null}
