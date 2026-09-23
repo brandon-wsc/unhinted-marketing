@@ -1023,7 +1023,7 @@ export type paths = {
         put?: never;
         /**
          * Resume Image
-         * @description Resume parked interrupt_before executor_image_plan (ADR 0004).
+         * @description Resume parked interrupt_before executor_image_gen (ADR 0004 / 0036).
          */
         post: operations["resume_image_api_sessions__session_id__resume_image_post"];
         delete?: never;
@@ -2594,6 +2594,31 @@ export type components = {
             platform: string;
             /** Mode */
             mode: string;
+            /**
+             * Awaiting Image Ok
+             * @default false
+             */
+            awaiting_image_ok: boolean;
+        };
+        /**
+         * PreviewUpdatedData
+         * @description Payload for SSE / turn event `preview.updated`.
+         */
+        PreviewUpdatedData: {
+            /** Revision */
+            revision: number;
+            /** Approval Token */
+            approval_token: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Media */
+            media: components["schemas"]["PreviewMediaItem"][];
+            copy: components["schemas"]["DraftCopy"];
+            /**
+             * Platform
+             * @default instagram
+             */
+            platform: string;
         };
         /** ProductCreateRequest */
         ProductCreateRequest: {
@@ -2983,7 +3008,7 @@ export type components = {
         };
         /**
          * ResumeImageRequest
-         * @description Optional visual format when continuing past the image interrupt.
+         * @description Optional format echo. Must match the locked plan; a change is a new script (ADR 0036).
          */
         ResumeImageRequest: {
             /** Image Format */
@@ -3389,6 +3414,7 @@ export type components = {
              * @default false
              */
             awaiting_angle_pick: boolean;
+            preview?: components["schemas"]["PreviewUpdatedData"] | null;
         };
         /** StorageConfigOut */
         StorageConfigOut: {

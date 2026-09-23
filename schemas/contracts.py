@@ -135,6 +135,8 @@ class TurnCancelledData(BaseModel):
     awaiting_image_ok: bool = False
     # True when Stop cancelled in-flight choose-angle and re-parked at angle_gate.
     awaiting_angle_pick: bool = False
+    # Surviving preview after a parked discard (ADR 0036). Absent on re-park.
+    preview: PreviewUpdatedData | None = None
 
 
 class ConfirmCompletedData(BaseModel):

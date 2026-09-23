@@ -41,6 +41,7 @@ import {
   parseImageFormat,
   parseMediaItems,
   previewAnchorFromActions,
+  previewDraftFromPayload,
   readComposerDraft,
   sortSessionHistory,
   stashComposerDraft,
@@ -560,6 +561,9 @@ export function useSession(companyId: string | undefined) {
         } else {
           setInterruptAfterMessageId(null);
           // Keep brief until stopTurn hydrates from sessions.state (may still exist).
+          // REST Stop is the source of truth; this paints early when SSE includes it.
+          const restored = previewDraftFromPayload(data.preview);
+          if (restored) setDraft(restored);
           setStreamingText(null);
           setAgentProgress(null);
           // Optimistic prune — stopTurn hydrate is source of truth right after.
@@ -645,9 +649,8 @@ export function useSession(companyId: string | undefined) {
         return;
       }
       if (type === "preview.updated") {
-        setAwaitingImageOk(false);
-        setAwaitingAnglePick(false);
-        setInterruptAfterMessageId(null);
+        // Pending script+plan also emits preview.updated while still parked
+        // (ADR 0036). Execute clears the card via interrupted=false / draft.updated.
         setPreviewAfterMessageId(lastUserMessageId());
         const copy = parseDraftCopy(data.copy);
         const media = parseMediaItems(data.media);
@@ -1241,6 +1244,16 @@ export function useSession(companyId: string | undefined) {
       try {
         const stopped = await apiStopSessionTurn(accessToken, sessionId, mode);
         if (!stillOn(sessionId)) return;
+        // Parked discard returns the last accepted preview. A missing key
+        // (older responses) leaves the in-memory draft alone.
+        if ("preview" in stopped) {
+          if (stopped.preview === null) {
+            setDraft(null);
+          } else {
+            const restored = previewDraftFromPayload(stopped.preview);
+            if (restored) setDraft(restored);
+          }
+        }
         const stillParkedImage = stopped.awaiting_image_ok === true;
         const stillParkedAngle = stopped.awaiting_angle_pick === true;
         // Reload transcript after stop — discard may drop rows, interrupt keeps them.
@@ -1334,11 +1347,11 @@ export function useSession(companyId: string | undefined) {
       if (!text || !accessToken || !companyId || stoppingRef.current) {
         return;
       }
-      if (sendingRef.current || awaitingImageOkRef.current || options?.queueIndex != null) {
+      if (sendingRef.current || options?.queueIndex != null) {
         enqueueQueuedAt(text, options?.queueIndex);
         return;
       }
-      // Image park + Send queues (ADR 0031); angle park is a typed pick (ADR 0028).
+      // Image-park Send is a new script (ADR 0036). Angle park is a typed pick (ADR 0028).
       // A typed reply while angle-parked IS the pick (ADR 0028) — remember it
       // so Retry re-issues the pick; any fresh turn clears the stale one.
       const anglePickText = awaitingAnglePickRef.current ? text : null;
@@ -1558,13 +1571,8 @@ export function useSession(companyId: string | undefined) {
   );
 
   drainQueueRef.current = () => {
-    // Held while parked at either gate — queued text is not a pick (ADR 0016 §5).
-    if (
-      sendingRef.current ||
-      stoppingRef.current ||
-      awaitingImageOkRef.current ||
-      awaitingAnglePickRef.current
-    ) {
+    // Angle park holds the queue (ADR 0016). Image park drains as a direction change (ADR 0036).
+    if (sendingRef.current || stoppingRef.current || awaitingAnglePickRef.current) {
       return;
     }
     const next = queuedRef.current[0];
@@ -1807,7 +1815,10 @@ export function useSession(companyId: string | undefined) {
       setDraftSaving(true);
       try {
         const res = await apiUpdateSessionDraft(accessToken, boundId, copy);
-        return applyMediaMutation(res, boundId);
+        return applyMediaMutation(
+          { ...res, awaiting_image_ok: awaitingImageOkRef.current },
+          boundId,
+        );
       } finally {
         if (stillOn(boundId)) setDraftSaving(false);
       }
@@ -1822,7 +1833,12 @@ export function useSession(companyId: string | undefined) {
       setDraftSaving(true);
       try {
         const res = await apiUpdateImagePlan(accessToken, boundId, imageId, plan);
-        return applyMediaMutation(res, boundId);
+        const next = applyMediaMutation(res, boundId);
+        if (res.awaiting_image_ok && stillOn(boundId)) {
+          awaitingImageOkRef.current = true;
+          setAwaitingImageOk(true);
+        }
+        return next;
       } finally {
         if (stillOn(boundId)) setDraftSaving(false);
       }
@@ -1910,7 +1926,7 @@ export function useSession(companyId: string | undefined) {
           const saved = await apiUpdateSessionDraft(accessToken, boundId, localCopy);
           token = saved.approval_token;
           platform = saved.platform;
-          applyMediaMutation(saved, boundId);
+          applyMediaMutation({ ...saved, awaiting_image_ok: awaitingImageOkRef.current }, boundId);
         }
         if (!token) throw new Error("Missing approval_token");
 

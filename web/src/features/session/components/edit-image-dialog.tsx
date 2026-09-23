@@ -233,22 +233,18 @@ export function EditImageDialog({
 
   async function handleSavePlan() {
     if (!selected || !planDirty || busy) return;
-    await onSavePlan(selected.id, planToPayload(planFields));
+    const saved = await onSavePlan(selected.id, planToPayload(planFields));
+    if (saved) onOpenChange(false);
   }
 
   async function handleGenerate() {
     if (!selected || busy) return;
-    let imageId = selected.id;
-    const seq = selected.seq;
     if (planDirty) {
       const saved = await onSavePlan(selected.id, planToPayload(planFields));
-      if (saved && typeof saved === "object" && "media" in saved) {
-        const media = (saved as PreviewDraft).media ?? [];
-        const match = matchBySeq(media, seq);
-        if (match) imageId = match.id;
-      }
+      if (saved) onOpenChange(false);
+      return;
     }
-    await onRegenImage(imageId);
+    await onRegenImage(selected.id);
   }
 
   async function handleAddImage() {
@@ -303,7 +299,11 @@ export function EditImageDialog({
     void handleUploadFile(file);
   }
 
-  const primaryLabel = hasRenderable ? t("preview.media.regen") : t("preview.media.generate");
+  const primaryLabel = planDirty
+    ? t("preview.media.stageDirection")
+    : hasRenderable
+      ? t("preview.media.regen")
+      : t("preview.media.generate");
 
   const previewPane = (
     <div

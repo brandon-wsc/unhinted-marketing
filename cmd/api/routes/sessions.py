@@ -57,7 +57,7 @@ from internal.tools.publish import (
     PublishPreconditionError,
     publish_social_post,
 )
-from schemas.contracts import DraftCopy, PreviewMediaItem, SessionBriefData
+from schemas.contracts import DraftCopy, PreviewMediaItem, PreviewUpdatedData, SessionBriefData
 from schemas.session import (
     AddSessionImageRequest,
     ChooseAngleRequest,
@@ -434,7 +434,7 @@ async def resume_image(
     db: Annotated[AsyncSession, Depends(get_db)],
     body: Annotated[ResumeImageRequest, Body()] = ResumeImageRequest(),
 ) -> ResumeImageResponse:
-    """Resume parked interrupt_before executor_image_plan (ADR 0004)."""
+    """Resume parked interrupt_before executor_image_gen (ADR 0004 / 0036)."""
     session = await _require_owned_session(db, session_id, user)
     try:
         result = await resume_image_turn(
@@ -446,6 +446,11 @@ async def resume_image(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"reason": exc.reason, "message": exc.detail},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
         ) from exc
     except asyncio.CancelledError:
         await db.rollback()
@@ -530,12 +535,19 @@ async def stop_session(
     session = await _require_owned_session(db, session_id, user)
     result = await stop_session_turn(db, session, mode=body.mode)
     await db.commit()
+    raw_preview = result.get("preview")
+    preview = (
+        PreviewUpdatedData.model_validate(raw_preview)
+        if isinstance(raw_preview, dict)
+        else None
+    )
     return StopSessionResponse(
         status=result["status"],
         interrupted=bool(result.get("interrupted")),
         kept=bool(result.get("kept")),
         awaiting_image_ok=bool(result.get("awaiting_image_ok")),
         awaiting_angle_pick=bool(result.get("awaiting_angle_pick")),
+        preview=preview,
     )
 
 
@@ -638,8 +650,7 @@ async def get_session_messages(
     parked_angle = bool(state.get("awaiting_angle_pick"))
     parked_image = bool(state.get("awaiting_image_ok"))
     pick = angle_pick_payload(state) if parked_angle else None
-    # Image park still needs the locked format so a reload does not default
-    # the late-switch toggle to single (ADR 0030).
+    # Image park returns the locked format so a reload matches this version (ADR 0036).
     locked_format = (
         recommended_image_format(state) if parked_angle or parked_image else None
     )
@@ -775,6 +786,7 @@ def _media_mutation_response(result: dict) -> PreviewMediaMutationResponse:
         media=[PreviewMediaItem.model_validate(m) for m in (result.get("media") or [])],
         platform=str(result["platform"]),
         mode=str(result["mode"]),
+        awaiting_image_ok=bool(result.get("awaiting_image_ok")),
     )
 
 

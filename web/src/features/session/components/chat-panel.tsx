@@ -115,7 +115,6 @@ export function ChatPanel() {
     anglePersonas,
     recommendedPersona,
     recommendedImageFormat,
-    lastImageFormatPick,
     canRetryAnglePick,
     draft,
     confirmReceipt,
@@ -379,9 +378,9 @@ export function ChatPanel() {
     }
   }
 
-  async function onResumeImageGen(format?: "single" | "comic_4panel") {
+  async function onResumeImageGen() {
     try {
-      await resumeImage(format);
+      await resumeImage();
     } catch {
       showError(t("chat.error.sendFailed"));
     }
@@ -544,8 +543,8 @@ export function ChatPanel() {
   const interruptCard = (
     <InterruptCard
       sending={sending || stopping}
-      defaultFormat={lastImageFormatPick}
-      onResume={(format) => void onResumeImageGen(format)}
+      onResume={() => void onResumeImageGen()}
+      onDiscard={() => void onStopTurn()}
     />
   );
 

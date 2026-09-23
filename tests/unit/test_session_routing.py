@@ -52,6 +52,8 @@ def test_heuristic_intent_agent_without_draft_starts() -> None:
 def test_wants_image_change() -> None:
     assert _wants_image_change("換張圖") is True
     assert _wants_image_change("改 caption") is False
+    assert _wants_image_change("唔要黃色雨傘，改成藍色天空") is True
+    assert _wants_image_change("改成短啲") is False
 
 
 def test_route_after_intent() -> None:
@@ -160,6 +162,18 @@ def test_route_after_reviewer_paths() -> None:
     assert (
         route_after_reviewer({"reviewer_passed": True, "need_image": False})
         == "persist_preview"
+    )
+    assert (
+        route_after_reviewer(
+            {"reviewer_passed": True, "need_image": False, "hold_image_park": True}
+        )
+        == "hold_locked_plan"
+    )
+    assert (
+        route_after_reviewer(
+            {"reviewer_passed": True, "need_image": True, "hold_image_park": True}
+        )
+        == "executor_image_plan"
     )
     assert route_after_reviewer({"reviewer_passed": False, "review_attempts": 0}) == "edit_copy"
     assert (

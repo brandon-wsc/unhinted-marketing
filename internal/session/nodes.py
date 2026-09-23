@@ -197,9 +197,38 @@ def _signals_trusted(state: SessionState) -> bool | None:
     return bool(research.get("signals_trusted"))
 
 
+_IMAGE_WORDS = ("圖", "图片", "圖片", "image", "photo", "visual", "封面", "畫面", "背景")
+_DIRECTION_CUES = ("唔要", "不要", "改成", "換成", "改做", "instead of", "change to")
+# Caption-only edits must not force a new image (ADR 0036).
+_COPY_ONLY = (
+    "caption",
+    "文案",
+    "hashtag",
+    "cta",
+    "短",
+    "長",
+    "語氣",
+    "抽水",
+    "tone",
+    "搞笑",
+    "認真",
+)
+
+
 def _wants_image_change(text: str) -> bool:
+    """True when the user is changing the picture, not only the words.
+
+    「唔要黃色雨傘，改成藍色天空」 is a direction change even without 圖.
+    「改成短啲」 stays caption-only.
+    """
     lower = text.lower()
-    return any(k in lower for k in ("圖", "图片", "圖片", "image", "photo", "visual", "封面"))
+    if any(k.lower() in lower for k in _IMAGE_WORDS):
+        return True
+    if image_format_from_text(text):
+        return True
+    if any(k in text or k in lower for k in _DIRECTION_CUES):
+        return not any(k in lower for k in _COPY_ONLY)
+    return False
 
 
 def offered_angles(brief: dict[str, Any] | None) -> list[str]:
@@ -1247,6 +1276,23 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
     return {"image_plan": plan, "image_format": fmt}
 
 
+async def hold_locked_plan(state: SessionState) -> dict[str, Any]:
+    """Caption-only while image-parked: keep the locked plan and re-park.
+
+    ADR 0036: a caption edit does not write a new image plan and does not
+    accept the pending version. The next edge is ``executor_image_gen``, so
+    the graph pauses on the same Discard | Execute card.
+    """
+    plan = state.get("image_plan") if isinstance(state.get("image_plan"), dict) else {}
+    out = {
+        "image_plan": plan,
+        "need_image": False,
+        "hold_image_park": False,
+    }
+    record_node_step("hold_locked_plan", dict(state), out)
+    return out
+
+
 @agent_progress("executor_image_gen")
 async def executor_image_gen(state: SessionState) -> dict[str, Any]:
     """Render via LLM_IMAGE_MODEL (LiteLLM). Wrong/chat-only models must error.
@@ -1391,6 +1437,10 @@ def route_after_reviewer(state: SessionState) -> str:
         return "edit_copy"
     if state.get("need_image", False):
         return "executor_image_plan"
+    # Image-park caption edit stays pending. A direction change took the plan
+    # branch above and writes a new plan instead.
+    if state.get("hold_image_park"):
+        return "hold_locked_plan"
     return "persist_preview"
 
 

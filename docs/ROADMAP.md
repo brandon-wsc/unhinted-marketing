@@ -102,7 +102,7 @@ Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly co
 │  • trend_searcher surfaces relevant HK signals                  │
 │  • brainstormer: can_do[] / cannot_do[] + brief ideas           │
 │  • executor_post: brief → grounded post copy                     │
-│  • User OK → executor_image_plan → executor_image_gen → Preview │
+│  • Plan, then user Execute → executor_image_gen → Preview      │
 │  • UI: `agent.progress` action-record trail (node + model) —    │
 │    do not stream structured Agent JSON as chat markdown; then   │
 │    brief / interrupt cards                                      │
@@ -184,9 +184,11 @@ reviewer:
   │                     → grounding_check → reviewer
   │                     (max_review_retries=2; exceed → END + error SSE)
   ├── pass + need_image (first AGENT draft, or revise that changes image)
-  │                     → interrupt_before executor_image_plan
-  │                     → (user resume via POST /resume-image; Stop discards)
-  │                     → executor_image_plan → executor_image_gen
+  │                     → executor_image_plan
+  │                     → interrupt_before executor_image_gen
+  │                     → (pending script+plan already on the preview row)
+  │                     → (user Execute via POST /resume-image; Discard restores)
+  │                     → executor_image_gen
   │                     → persist_preview (mode=PREVIEW, SSE) → END
   └── pass + copy_only revise
                         → persist_preview (mode=PREVIEW, SSE) → END
@@ -206,9 +208,9 @@ flowchart TD
   angleGate -->|feedback| brainstormer
   executor_post --> grounding_check --> reviewer
   reviewer -->|fail| edit_copy
-  reviewer -->|pass_and_need_image| interruptWait[interrupt_before_image]
+  reviewer -->|pass_and_need_image| executor_image_plan --> interruptWait[interrupt_before_image_gen]
   reviewer -->|pass_copy_only_revise| persistPreview[persist_preview_SSE]
-  interruptWait -->|user_resume| executor_image_plan --> executor_image_gen --> persistPreview
+  interruptWait -->|user_execute| executor_image_gen --> persistPreview
   edit_copy --> grounding_check
   persistPreview --> endPreview[END]
 ```
@@ -224,9 +226,9 @@ flowchart TD
 
 ### Interrupts
 
-- Compile with **`interrupt_before=["angle_gate", "executor_image_plan"]`**. Code that asks "is it parked" must check **which** node is next.
+- Compile with **`interrupt_before=["angle_gate", "executor_image_gen"]`** ([ADR 0036](./adr/0036-image-direction-new-script.md) — plan runs before the park). Code that asks "is it parked" must check **which** node is next.
 - Angle pick ([ADR 0028](./adr/0028-angle-pick-before-draft.md) / [ADR 0030](./adr/0030-image-format-in-bundled-gate.md)): after `brainstormer` when `brief.angles` ≥ 1, checkpoint pauses at `angle_gate`. Resume via `POST /sessions/{id}/choose-angle` or a typed `POST /messages` (the only park where a message resumes). Non-matching text re-briefs. `GET /messages` returns `recommended_image_format` at this park **and** at the image park.
-- Image OK ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md)): after `reviewer` pass → checkpoint pauses before image plan. Resume via `POST /sessions/{id}/resume-image`. `POST /messages` while image-parked returns 409.
+- Image OK ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md) / [ADR 0036](./adr/0036-image-direction-new-script.md)): after the image plan, checkpoint pauses before `executor_image_gen`. Resume via `POST /sessions/{id}/resume-image` (format already locked). `POST /messages` while image-parked revises and re-parks (a direction change writes a new script + plan; a caption-only edit keeps the locked plan).
 - `POST /stop` while parked discards the turn; Stop mid-resume / mid choose-angle re-parks.
 - Copy-only revise that does not need a new image skips the image interrupt and goes to `persist_preview`.
 
@@ -252,7 +254,7 @@ chosen_image_format   # pending format pick; sticky across re-brief; cleared aft
 chosen_angle          # pick locked by angle_gate for executor_post; cleared on that node's output
 angle_feedback        # non-matching pick text → brainstormer re-offer
 awaiting_angle_pick   # bool — mirrored into sessions.state when parked at interrupt_before angle_gate
-awaiting_image_ok     # bool — mirrored into sessions.state when graph is parked at interrupt_before executor_image_plan (UI hydrate)
+awaiting_image_ok     # bool — mirrored into sessions.state when graph is parked at interrupt_before executor_image_gen (UI hydrate)
 ```
 
 ### Nodes
@@ -418,7 +420,7 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 - [x] Migrations: `sessions`, `session_messages`, `preview_drafts`, `tool_receipts`
 - [x] LangGraph graph: CHAT → AGENT → PREVIEW (revise loop) + PostgreSQL checkpointer (`thread_id = session.id`)
 - [x] Session nodes: `route_intent`, `load_context`, `trend_searcher`, `brainstormer`, `angle_gate`, `executor_post`, `executor_image_plan`, `executor_image_gen`, `edit_copy`, `grounding_check`, `reviewer`, `chat`, `ack_confirm` (+ `persist_preview` side-effect; not a node)
-- [x] Graph interrupts: `interrupt_before=["angle_gate", "executor_image_plan"]`; angle pick via `POST /choose-angle` or typed message ([ADR 0028](./adr/0028-angle-pick-before-draft.md)); image resume via `POST /resume-image`; Stop discards ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))
+- [x] Graph interrupts: `interrupt_before=["angle_gate", "executor_image_gen"]` ([ADR 0036](./adr/0036-image-direction-new-script.md)); angle pick via `POST /choose-angle` or typed message ([ADR 0028](./adr/0028-angle-pick-before-draft.md)); image resume via `POST /resume-image`; Stop discards ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))
 - [x] FastAPI: `POST /sessions`, `POST /messages`, `POST /choose-angle`, `POST /resume-image`, `POST /stop`, `GET /events` (SSE)
 - [ ] Image generation worker (`executor_image_gen` dispatches; placeholder/local URL in `preview_drafts` for MVP)
 - [x] `POST /sessions/{id}/confirm` — **traditional handler**, stub platform adapter → writes `tool_receipts` row

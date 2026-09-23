@@ -41,6 +41,9 @@ class SessionState(TypedDict, total=False):
     pending_confirm: bool
     approval_token: str | None
     need_image: bool
+    # Set only for a turn that started while image-parked (ADR 0036).
+    # Caption-only revises re-park with the locked plan; direction changes ignore it.
+    hold_image_park: NotRequired[bool]
     grounding_ok: NotRequired[bool]
     # K1 knowledge packs — identity-only company_context; voice/audience compressed
     company_context: NotRequired[dict[str, Any]]

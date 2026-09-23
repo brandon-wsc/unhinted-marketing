@@ -1008,6 +1008,20 @@ async def upsert_preview_draft(
     return row
 
 
+async def delete_preview_drafts_above(
+    db: AsyncSession, session_id: uuid.UUID, revision: int
+) -> int:
+    """Drop unaccepted pending revisions so Discard restores the last accepted row."""
+    result = await db.execute(
+        delete(PreviewDraft).where(
+            PreviewDraft.session_id == session_id,
+            PreviewDraft.revision > revision,
+        )
+    )
+    await db.flush()
+    return int(result.rowcount or 0)
+
+
 async def get_latest_preview_draft(
     db: AsyncSession, session_id: uuid.UUID
 ) -> PreviewDraft | None:

@@ -16,10 +16,11 @@ from internal.session.state import SessionState
 logger = logging.getLogger(__name__)
 
 # Nodes that pause for human OK (ROADMAP interrupt contract): angle pick
-# (ADR 0028) before drafting, image plan (ADR 0004) before image gen.
-INTERRUPT_BEFORE = ["angle_gate", "executor_image_plan"]
+# (ADR 0028) before drafting; image gen (ADR 0036) after the plan is written.
+# The plan runs first so the pending script+plan can land before Execute.
+INTERRUPT_BEFORE = ["angle_gate", "executor_image_gen"]
 ANGLE_GATE_NODE = "angle_gate"
-IMAGE_PARK_NODE = "executor_image_plan"
+IMAGE_PARK_NODE = "executor_image_gen"
 
 _compiled_graph: Any | None = None
 
@@ -81,6 +82,7 @@ def build_session_graph(*, checkpointer: Any | None = None):
         "executor_image_gen",
         _with_llm_record_context("executor_image_gen", N.executor_image_gen),
     )
+    g.add_node("hold_locked_plan", N.hold_locked_plan)
     g.add_node("persist_preview", N.persist_preview)
     g.add_node("chat", _with_llm_record_context("chat", N.chat))
     g.add_node("ack_confirm", _with_llm_record_context("ack_confirm", N.ack_confirm))
@@ -150,6 +152,7 @@ def build_session_graph(*, checkpointer: Any | None = None):
         {
             "edit_copy": "_reviewer_fail_bump",
             "executor_image_plan": "executor_image_plan",
+            "hold_locked_plan": "hold_locked_plan",
             "persist_preview": "persist_preview",
             "review_exhausted": "review_exhausted",
         },
@@ -158,6 +161,7 @@ def build_session_graph(*, checkpointer: Any | None = None):
     g.add_edge("review_exhausted", END)
 
     g.add_edge("executor_image_plan", "executor_image_gen")
+    g.add_edge("hold_locked_plan", "executor_image_gen")
     g.add_edge("executor_image_gen", "persist_preview")
     g.add_edge("persist_preview", END)
 

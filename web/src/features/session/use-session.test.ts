@@ -635,19 +635,44 @@ describe("useSession", () => {
     expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["a", "b"]);
   });
 
-  it("does not drain the queue while parked at image OK", async () => {
+  it("drains a queued line into a direction change when the image park lands", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({
       session: sessionFixture,
       messages: [],
     });
     let resolveFirst: (value: unknown) => void = () => {};
-    apiPostSessionMessage.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveFirst = resolve;
-        }),
-    );
+    apiPostSessionMessage
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        session: sessionFixture,
+        messages: [
+          {
+            id: "u-b",
+            session_id: "sess-1",
+            role: "user",
+            content: "queued while running",
+            created_at: "2026-01-01T00:00:02Z",
+          },
+        ],
+        interrupted: true,
+        mode: "PREVIEW",
+        revision: 2,
+        pending_confirm: false,
+        approval_token: "tok",
+        events: [
+          { type: "draft.awaiting_image_ok", data: { awaiting: true } },
+          {
+            type: "preview.updated",
+            data: { copy: { caption: "queued while running", hashtags: [], cta: "" } },
+          },
+        ],
+      });
 
     const { result } = renderHook(() => useSession("co-1"));
     await waitFor(() => expect(result.current.restoring).toBe(false));
@@ -681,17 +706,37 @@ describe("useSession", () => {
       });
     });
 
-    await waitFor(() => expect(result.current.awaitingImageOk).toBe(true));
-    expect(apiPostSessionMessage).toHaveBeenCalledTimes(1);
-    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["queued while running"]);
+    await waitFor(() => expect(apiPostSessionMessage).toHaveBeenCalledTimes(2));
+    expect(apiPostSessionMessage.mock.calls[1]?.[2]).toBe("queued while running");
+    expect(result.current.queuedMessages).toEqual([]);
+    expect(result.current.awaitingImageOk).toBe(true);
   });
 
-  it("enqueues Send while parked at image OK without Stop", async () => {
+  it("sends a direction change while parked at image OK without Stop", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({
       session: { ...sessionFixture, mode: "AGENT" },
       messages: [msgA],
       awaiting_image_ok: true,
+    });
+    apiPostSessionMessage.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [
+        msgA,
+        {
+          id: "u-dir",
+          session_id: "sess-1",
+          role: "user",
+          content: "想睇 4格漫畫",
+          created_at: "2026-01-01T00:00:02Z",
+        },
+      ],
+      interrupted: true,
+      mode: "PREVIEW",
+      revision: 2,
+      pending_confirm: false,
+      approval_token: "tok",
+      events: [{ type: "draft.awaiting_image_ok", data: { awaiting: true } }],
     });
 
     const { result } = renderHook(() => useSession("co-1"));
@@ -702,9 +747,10 @@ describe("useSession", () => {
     });
 
     expect(apiStopSessionTurn).not.toHaveBeenCalled();
-    expect(apiPostSessionMessage).not.toHaveBeenCalled();
+    expect(apiPostSessionMessage).toHaveBeenCalledTimes(1);
+    expect(apiPostSessionMessage.mock.calls[0]?.[2]).toBe("想睇 4格漫畫");
     expect(result.current.awaitingImageOk).toBe(true);
-    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["想睇 4格漫畫"]);
+    expect(result.current.queuedMessages).toEqual([]);
   });
 
   it("keeps the queue across Stop and drains after unlock", async () => {
@@ -1362,6 +1408,104 @@ describe("useSession", () => {
     expect(result.current.awaitingImageOk).toBe(false);
     expect(result.current.messages).toEqual([]);
     expect(result.current.composerLocked).toBe(false);
+  });
+
+  it("stopTurn paints the accepted preview when discard rolls back a pending revision", async () => {
+    const user = {
+      id: "u1",
+      session_id: "sess-1",
+      role: "user",
+      content: "改成霓虹",
+      created_at: "2026-01-01T00:00:01Z",
+    };
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages
+      .mockResolvedValueOnce({
+        session: { ...sessionFixture, mode: "PREVIEW" },
+        messages: [user],
+        awaiting_image_ok: true,
+      })
+      .mockResolvedValueOnce({
+        session: { ...sessionFixture, mode: "PREVIEW" },
+        messages: [],
+        awaiting_image_ok: false,
+      });
+    apiPostSessionMessage.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [user],
+      interrupted: true,
+      mode: "PREVIEW",
+      revision: 5,
+      pending_confirm: false,
+      approval_token: "pend",
+      events: [
+        {
+          type: "preview.updated",
+          data: {
+            revision: 5,
+            approval_token: "pend",
+            copy: { caption: "收咗工，霓虹燈一盞一盞咁亮起", hashtags: [], cta: "" },
+            image_url: null,
+            media: [
+              {
+                id: "img-pending",
+                url: null,
+                plan: {},
+                format: "single",
+                role: "primary",
+                seq: 0,
+                status: "pending",
+              },
+            ],
+            platform: "instagram",
+          },
+        },
+        { type: "draft.awaiting_image_ok", data: { awaiting: true } },
+      ],
+    });
+    apiStopSessionTurn.mockResolvedValue({
+      status: "cancelled",
+      interrupted: false,
+      awaiting_image_ok: false,
+      preview: {
+        revision: 4,
+        approval_token: "accepted",
+        copy: { caption: "星期六朝早，藍天、綠樹", hashtags: [], cta: "" },
+        image_url: "https://cdn.example/outdoor.png",
+        media: [
+          {
+            id: "img-accepted",
+            url: "https://cdn.example/outdoor.png",
+            plan: { prompt: "outdoor" },
+            format: "single",
+            role: "primary",
+            seq: 0,
+            status: "ready",
+          },
+        ],
+        platform: "instagram",
+      },
+    });
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    await act(async () => {
+      await result.current.sendMessage("改成霓虹");
+    });
+    expect(result.current.awaitingImageOk).toBe(true);
+    expect(result.current.draft?.revision).toBe(5);
+    expect(result.current.draft?.copy.caption).toContain("霓虹");
+
+    await act(async () => {
+      await result.current.stopTurn();
+    });
+
+    expect(result.current.awaitingImageOk).toBe(false);
+    expect(result.current.draft?.revision).toBe(4);
+    expect(result.current.draft?.copy.caption).toBe("星期六朝早，藍天、綠樹");
+    expect(result.current.draft?.image_url).toBe("https://cdn.example/outdoor.png");
+    expect(result.current.draft?.media[0]?.url).toBe("https://cdn.example/outdoor.png");
   });
 
   it("stopTurn restores BriefCard from hydrated session brief", async () => {
