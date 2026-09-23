@@ -1276,6 +1276,23 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
     return {"image_plan": plan, "image_format": fmt}
 
 
+async def hold_locked_plan(state: SessionState) -> dict[str, Any]:
+    """Caption-only while image-parked: keep the locked plan and re-park.
+
+    ADR 0036: a caption edit does not write a new image plan and does not
+    accept the pending version. The next edge is ``executor_image_gen``, so
+    the graph pauses on the same Discard | Execute card.
+    """
+    plan = state.get("image_plan") if isinstance(state.get("image_plan"), dict) else {}
+    out = {
+        "image_plan": plan,
+        "need_image": False,
+        "hold_image_park": False,
+    }
+    record_node_step("hold_locked_plan", dict(state), out)
+    return out
+
+
 @agent_progress("executor_image_gen")
 async def executor_image_gen(state: SessionState) -> dict[str, Any]:
     """Render via LLM_IMAGE_MODEL (LiteLLM). Wrong/chat-only models must error.
@@ -1420,6 +1437,10 @@ def route_after_reviewer(state: SessionState) -> str:
         return "edit_copy"
     if state.get("need_image", False):
         return "executor_image_plan"
+    # Image-park caption edit stays pending. A direction change took the plan
+    # branch above and writes a new plan instead.
+    if state.get("hold_image_park"):
+        return "hold_locked_plan"
     return "persist_preview"
 
 

@@ -228,7 +228,7 @@ flowchart TD
 
 - Compile with **`interrupt_before=["angle_gate", "executor_image_gen"]`** ([ADR 0036](./adr/0036-image-direction-new-script.md) — plan runs before the park). Code that asks "is it parked" must check **which** node is next.
 - Angle pick ([ADR 0028](./adr/0028-angle-pick-before-draft.md) / [ADR 0030](./adr/0030-image-format-in-bundled-gate.md)): after `brainstormer` when `brief.angles` ≥ 1, checkpoint pauses at `angle_gate`. Resume via `POST /sessions/{id}/choose-angle` or a typed `POST /messages` (the only park where a message resumes). Non-matching text re-briefs. `GET /messages` returns `recommended_image_format` at this park **and** at the image park.
-- Image OK ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md) / [ADR 0036](./adr/0036-image-direction-new-script.md)): after the image plan, checkpoint pauses before `executor_image_gen`. Resume via `POST /sessions/{id}/resume-image` (format already locked). `POST /messages` while image-parked writes a new script + plan and re-parks.
+- Image OK ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md) / [ADR 0036](./adr/0036-image-direction-new-script.md)): after the image plan, checkpoint pauses before `executor_image_gen`. Resume via `POST /sessions/{id}/resume-image` (format already locked). `POST /messages` while image-parked revises and re-parks (a direction change writes a new script + plan; a caption-only edit keeps the locked plan).
 - `POST /stop` while parked discards the turn; Stop mid-resume / mid choose-angle re-parks.
 - Copy-only revise that does not need a new image skips the image interrupt and goes to `persist_preview`.
 

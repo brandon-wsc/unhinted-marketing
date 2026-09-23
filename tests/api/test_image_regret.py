@@ -112,6 +112,73 @@ async def test_chat_direction_change_stages_script_then_execute(
 
 
 @pytest.mark.asyncio
+async def test_chat_caption_only_while_parked_keeps_plan(
+    client, db_session, monkeypatch
+) -> None:
+    """Caption-only Send stays on Discard | Execute and does not rewrite the plan."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: False)
+    monkeypatch.setattr("internal.llm.router.has_llm_credentials", lambda: False)
+    monkeypatch.setattr(N, "reviewer", _passing_reviewer)
+    monkeypatch.setattr(N, "fast_rule_checker", _skip_research)
+    set_session_graph(None)
+
+    data = await register_user(client)
+    headers = auth_header(data["access_token"])
+    user_id = uuid.UUID(data["user"]["id"])
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    session_id = await seed_preview_session(
+        db_session, user_id=user_id, company_id=company_id
+    )
+
+    try:
+        parked = await client.post(
+            f"/api/sessions/{session_id}/messages",
+            headers=headers,
+            json={"content": DIRECTION},
+        )
+        assert parked.status_code == 200, parked.text
+        assert parked.json()["interrupted"] is True
+
+        db_session.expire_all()
+        pending = await repos.get_latest_preview_draft(db_session, session_id)
+        assert pending is not None
+        locked_plan = dict(pending.image_plan or {})
+        locked_revision = pending.revision
+        assert locked_plan
+
+        edited = await client.post(
+            f"/api/sessions/{session_id}/messages",
+            headers=headers,
+            json={"content": "改成短啲"},
+        )
+        assert edited.status_code == 200, edited.text
+        body = edited.json()
+        assert body["interrupted"] is True
+        preview = next(ev for ev in body["events"] if ev["type"] == "preview.updated")
+        assert "改成短啲" in preview["data"]["copy"]["caption"]
+        assert preview["data"]["revision"] > locked_revision
+
+        db_session.expire_all()
+        latest = await repos.get_latest_preview_draft(db_session, session_id)
+        assert latest is not None
+        assert latest.revision > locked_revision
+        assert "改成短啲" in (latest.copy or {}).get("caption", "")
+        assert dict(latest.image_plan or {}) == locked_plan
+        session = await db_session.get(Session, session_id)
+        assert session is not None
+        assert (session.state or {}).get("awaiting_image_ok") is True
+
+        stopped = await client.post(f"/api/sessions/{session_id}/stop", headers=headers)
+        assert stopped.status_code == 200, stopped.text
+        restored = stopped.json()["preview"]
+        assert restored["revision"] == 1
+        assert restored["copy"]["caption"] == "seed"
+        assert "改成短啲" not in restored["copy"]["caption"]
+    finally:
+        set_session_graph(None)
+
+
+@pytest.mark.asyncio
 async def test_chat_direction_discard_restores_accepted_preview(
     client, db_session, monkeypatch
 ) -> None:

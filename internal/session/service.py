@@ -1138,10 +1138,13 @@ async def revise_while_image_parked(
     user_content: str,
     source_question_id: str | None = None,
 ) -> dict[str, Any]:
-    """Direction change while awaiting Execute: new script + plan, re-park (ADR 0036).
+    """Revise while awaiting Execute, then re-park (ADR 0036).
 
-    Does not ``stopTurn`` and does not ``ainvoke(None)``. The discard anchor
-    stays the last accepted version, not the pending script being replaced.
+    A direction change writes a new script and image plan. A caption-only
+    edit updates the pending caption and keeps the locked plan. Neither
+    accepts the version. Does not ``stopTurn`` and does not ``ainvoke(None)``.
+    The discard anchor stays the last accepted version, not the pending
+    script being replaced.
     """
     if session_turn_registry.is_busy(session.id):
         raise SessionTurnConflict("busy", "Session turn already in progress")
@@ -1166,6 +1169,7 @@ async def revise_while_image_parked(
         discard_pre_state=accepted,
         pre_mode=pre_mode,
         skip_park_check=True,
+        hold_image_park=True,
     )
 
 
@@ -1178,6 +1182,7 @@ async def run_session_turn(
     discard_pre_state: dict[str, Any] | None = None,
     pre_mode: str | None = None,
     skip_park_check: bool = False,
+    hold_image_park: bool = False,
 ) -> dict[str, Any]:
     """Append user message, invoke graph (never blind-resume), persist side-effects."""
     session_id = session.id
@@ -1215,6 +1220,9 @@ async def run_session_turn(
     existing = await repos.list_session_messages(db, session_id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
     graph_input = _graph_values(session, message_dicts)
+    # Always overwrite. A previous parked turn can leave the flag on the
+    # checkpoint; a normal revise must be allowed to accept the caption.
+    graph_input["hold_image_park"] = hold_image_park
     if source_question_id:
         item = await repos.get_question_item(db, session.company_id, source_question_id)
         refs = [str(sid) for sid in (item or {}).get("source_signal_ids") or [] if sid]

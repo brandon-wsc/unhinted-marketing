@@ -12,7 +12,7 @@ Angle park is different: a typed send *is* the pick ([ADR 0028](./0028-angle-pic
 
 ## Decision
 
-1. **Image park + explicit Send enqueues** ~~like an in-flight send (ADR 0016 §1). Do **not** `stopTurn`. The parked draft, Generate-image CTA, and `awaiting_image_ok` stay until `POST /resume-image` or Stop.~~ **Superseded by [ADR 0036](./0036-image-direction-new-script.md):** Send while image-parked is a direction-change turn (new script + plan, re-park). Do not `stopTurn` and do not blind-resume image gen.
+1. **Image park + explicit Send enqueues** ~~like an in-flight send (ADR 0016 §1). Do **not** `stopTurn`. The parked draft, Generate-image CTA, and `awaiting_image_ok` stay until `POST /resume-image` or Stop.~~ **Superseded by [ADR 0036](./0036-image-direction-new-script.md):** Send while image-parked revises and re-parks (a direction change writes a new script + plan; a caption-only edit keeps the locked plan). Do not `stopTurn` and do not blind-resume image gen.
 2. **Drain still holds** ~~while parked (ADR 0016 §5 unchanged). Queued rows wait for unpark; they are never a pick and never a blind image resume.~~ **Image-park hold superseded by [ADR 0036](./0036-image-direction-new-script.md):** a queued line drains as a direction-change turn. The angle park still holds.
 3. **Angle park + explicit Send remains a typed pick** (ADR 0028 §3). Do not enqueue at `awaiting_angle_pick`.
 4. **Image resume remains `POST /resume-image` only** ([ADR 0004](./0004-stop-discard-and-image-resume.md) §4). ~~Backend `POST /messages` while image-parked still 409.~~ **Superseded by [ADR 0036](./0036-image-direction-new-script.md):** that Send is a new script, not 409 and not `ainvoke(None)`.

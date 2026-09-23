@@ -163,6 +163,18 @@ def test_route_after_reviewer_paths() -> None:
         route_after_reviewer({"reviewer_passed": True, "need_image": False})
         == "persist_preview"
     )
+    assert (
+        route_after_reviewer(
+            {"reviewer_passed": True, "need_image": False, "hold_image_park": True}
+        )
+        == "hold_locked_plan"
+    )
+    assert (
+        route_after_reviewer(
+            {"reviewer_passed": True, "need_image": True, "hold_image_park": True}
+        )
+        == "executor_image_plan"
+    )
     assert route_after_reviewer({"reviewer_passed": False, "review_attempts": 0}) == "edit_copy"
     assert (
         route_after_reviewer(

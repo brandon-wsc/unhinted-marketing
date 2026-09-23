@@ -82,6 +82,7 @@ def build_session_graph(*, checkpointer: Any | None = None):
         "executor_image_gen",
         _with_llm_record_context("executor_image_gen", N.executor_image_gen),
     )
+    g.add_node("hold_locked_plan", N.hold_locked_plan)
     g.add_node("persist_preview", N.persist_preview)
     g.add_node("chat", _with_llm_record_context("chat", N.chat))
     g.add_node("ack_confirm", _with_llm_record_context("ack_confirm", N.ack_confirm))
@@ -151,6 +152,7 @@ def build_session_graph(*, checkpointer: Any | None = None):
         {
             "edit_copy": "_reviewer_fail_bump",
             "executor_image_plan": "executor_image_plan",
+            "hold_locked_plan": "hold_locked_plan",
             "persist_preview": "persist_preview",
             "review_exhausted": "review_exhausted",
         },
@@ -159,6 +161,7 @@ def build_session_graph(*, checkpointer: Any | None = None):
     g.add_edge("review_exhausted", END)
 
     g.add_edge("executor_image_plan", "executor_image_gen")
+    g.add_edge("hold_locked_plan", "executor_image_gen")
     g.add_edge("executor_image_gen", "persist_preview")
     g.add_edge("persist_preview", END)
 
