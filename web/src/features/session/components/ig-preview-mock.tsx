@@ -58,8 +58,13 @@ export function IgPreviewMock({
     return parts.filter(Boolean).join("\n\n");
   }, [copy]);
 
-  const collapsed = captionBody.length > 120 && !expanded;
-  const shown = collapsed ? `${captionBody.slice(0, 120).trimEnd()}…` : captionBody;
+  const besideAccount = useMemo(
+    () => captionBesideAccount(captionBody, accountName),
+    [captionBody, accountName],
+  );
+  const collapsed = besideAccount.length > 120 && !expanded;
+  const shown = collapsed ? `${besideAccount.slice(0, 120).trimEnd()}…` : besideAccount;
+  const captionEmpty = captionBody.trim().length === 0;
   const waiting = imageSlot === "pending" || imageSlot === "generating";
   const multi = !waiting && urls.length > 1;
   const imageEditable = !waiting && typeof onEditImage === "function";
@@ -185,8 +190,11 @@ export function IgPreviewMock({
                 className="-mx-1 w-[calc(100%+0.5rem)] rounded-md px-1 py-0.5 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={t("preview.copy.edit")}
               >
-                <span className="font-semibold">{accountName}</span>{" "}
-                <span className="whitespace-pre-wrap">{shown || t("preview.copy.empty")}</span>
+                <CaptionLine
+                  accountName={accountName}
+                  body={shown}
+                  emptyLabel={captionEmpty ? t("preview.copy.empty") : undefined}
+                />
               </button>
               {collapsed && (
                 <button
@@ -200,8 +208,7 @@ export function IgPreviewMock({
             </div>
           ) : (
             <p className="text-sm leading-relaxed">
-              <span className="font-semibold">{accountName}</span>{" "}
-              <span className="whitespace-pre-wrap">{shown}</span>
+              <CaptionLine accountName={accountName} body={shown} />
               {collapsed && (
                 <button
                   type="button"
@@ -233,6 +240,43 @@ export function toEditableCopy(draft: PreviewDraft | null): DraftCopy {
   };
 }
 
+/**
+ * IG puts the account in bold, then the caption. If the copy already leads
+ * with that same display name, peel it off so it is not repeated in plain text.
+ */
+export function captionBesideAccount(body: string, accountName: string): string {
+  const name = accountName.trim();
+  const text = body.trimStart();
+  if (!name || text.length < name.length) return text;
+  if (text.slice(0, name.length).toLocaleLowerCase() !== name.toLocaleLowerCase()) return text;
+  const boundary = text[name.length];
+  if (boundary !== undefined && !/[\s:：,，.。!！?？]/u.test(boundary)) return text;
+  return text.slice(name.length).replace(/^[\s:：,，.。]+/u, "");
+}
+
+function CaptionLine({
+  accountName,
+  body,
+  emptyLabel,
+}: {
+  accountName: string;
+  body: string;
+  emptyLabel?: string;
+}) {
+  const text = body || emptyLabel || "";
+  return (
+    <>
+      <span className="font-bold">{accountName}</span>
+      {text ? (
+        <>
+          {" "}
+          <span className="whitespace-pre-wrap">{text}</span>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 function WaitingImageSlot({ mode }: { mode: IgImageSlot }) {
   const { t } = useTranslation();
   const generating = mode === "generating";
@@ -240,10 +284,10 @@ function WaitingImageSlot({ mode }: { mode: IgImageSlot }) {
     <div
       data-preview-state={mode}
       aria-busy={generating || undefined}
-      className="absolute inset-3 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-secondary px-6 text-center"
+      className="absolute inset-3 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-foreground/40 bg-card px-6 text-center text-foreground"
     >
-      {generating ? <Spinner className="size-5 text-muted-foreground" /> : null}
-      <p className="text-sm font-medium text-foreground">
+      {generating ? <Spinner className="size-5 text-foreground" /> : null}
+      <p className="text-sm font-semibold text-foreground">
         {generating ? t("preview.awaiting.slotGenerating") : t("preview.awaiting.slotEmpty")}
       </p>
     </div>
@@ -306,7 +350,7 @@ function ShareIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M4 12v6.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V12M12 3v12M8 7l4-4 4 4"
+        d="M21.4 3.6 3.2 10.4l7.2 2.9 2.9 7.2 8.1-16.9ZM21.4 3.6 10.4 13.3"
         stroke="currentColor"
         strokeWidth="1.6"
         strokeLinecap="round"

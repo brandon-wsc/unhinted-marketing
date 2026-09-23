@@ -328,7 +328,13 @@ export function PreviewPanel({
           </div>
         )}
         {!showReceipt && confirmError !== "social_account_not_connected" && (
-          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{hint}</p>
+          <p
+            className={`text-[11px] leading-relaxed text-muted-foreground${
+              actionsLocked ? "" : " mt-2"
+            }`}
+          >
+            {hint}
+          </p>
         )}
       </div>
 

@@ -307,7 +307,7 @@
       "title": "待出圖",
       "slotEmpty": "圖未出",
       "slotGenerating": "出緊圖…",
-      "status": "格式已經鎖死。可以棄置，或者出圖。想轉格式要先寫過一篇稿。",
+      "status": "棄置｜出圖喺對話。",
       "plan": "圖計劃",
       "formatSingle": "單圖",
       "formatComic": "四格漫畫",

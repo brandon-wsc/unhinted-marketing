@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { captionBesideAccount } from "@/features/session/components/ig-preview-mock";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import type { ConfirmSessionResponse, PreviewDraft } from "@/features/session/types";
 
@@ -191,8 +192,13 @@ describe("PreviewPanel receipts", () => {
     expect(screen.queryByRole("button", { name: "preview.copy.edit" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "preview.media.edit" })).not.toBeInTheDocument();
     expect(screen.getAllByText("preview.awaiting.status")).toHaveLength(1);
+    expect(screen.queryByText("chat.agent.interrupt.subtitle")).not.toBeInTheDocument();
     expect(screen.queryByText("preview.gate.imageRequired")).not.toBeInTheDocument();
     expect(screen.queryByText("preview.awaiting.badge")).not.toBeInTheDocument();
+    expect(slot).toHaveClass("bg-card", "text-foreground", "border-dashed", "border-foreground/40");
+    expect(slot).not.toHaveClass("bg-secondary");
+    expect(slot?.querySelector("p")).toHaveClass("text-foreground");
+    expect(slot?.querySelector("p")).not.toHaveClass("text-muted-foreground");
   });
 
   it("shows the spinner inside the IG image slot only while generating", () => {
@@ -204,9 +210,11 @@ describe("PreviewPanel receipts", () => {
     const slot = document.querySelector("[data-preview-state='generating']");
     expect(slot).toBeTruthy();
     expect(slot).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("status", { name: "Loading" }).closest("[data-preview-state]")).toBe(
-      slot,
-    );
+    const spinner = screen.getByRole("status", { name: "Loading" });
+    expect(spinner.closest("[data-preview-state]")).toBe(slot);
+    expect(spinner).toHaveClass("text-foreground");
+    expect(spinner).not.toHaveClass("text-muted-foreground");
+    expect(slot).toHaveClass("bg-card", "text-foreground", "border-dashed");
     expect(screen.getAllByText("preview.awaiting.slotGenerating")).toHaveLength(1);
     expect(screen.getAllByText("preview.awaiting.generatingTitle")).toHaveLength(1);
     expect(screen.getByText("preview.mock.sponsored")).toBeInTheDocument();
@@ -240,6 +248,41 @@ describe("PreviewPanel receipts", () => {
     expect(screen.getByText("preview.gate.imageRequired")).toBeInTheDocument();
     expect(screen.queryByText("preview.awaiting.slotEmpty")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "preview.confirm" })).toBeDisabled();
+  });
+
+  it("keeps the locked footer as a short chat pointer, not the lock essay", async () => {
+    const en = (await import("@/i18n/locales/en.json")).default;
+    const zh = (await import("@/i18n/locales/zh-HK.json")).default;
+    expect(zh.preview.awaiting.status).not.toBe(zh.chat.agent.interrupt.subtitle);
+    expect(en.preview.awaiting.status).not.toBe(en.chat.agent.interrupt.subtitle);
+    expect(zh.preview.awaiting.status.length).toBeLessThan(
+      zh.chat.agent.interrupt.subtitle.length / 2,
+    );
+    expect(en.preview.awaiting.status.length).toBeLessThan(en.chat.agent.interrupt.subtitle.length);
+    expect(zh.preview.awaiting.status).toMatch(/棄置/);
+    expect(zh.preview.awaiting.status).toMatch(/出圖/);
+    expect(en.preview.awaiting.status.toLowerCase()).toMatch(/chat/);
+  });
+
+  it("bolds the account name and does not repeat a leading handle in the caption", () => {
+    expect(captionBesideAccount("unhinted 清晨六點", "unhinted")).toBe("清晨六點");
+    expect(captionBesideAccount("Unhinted：清晨", "unhinted")).toBe("清晨");
+    expect(captionBesideAccount("清晨六點", "unhinted")).toBe("清晨六點");
+    expect(captionBesideAccount("unhintedcoffee 呀", "unhinted")).toBe("unhintedcoffee 呀");
+
+    renderPanel({
+      draft: draft({
+        copy: { caption: "unhinted 清晨六點，海邊未有人", hashtags: [], cta: "" },
+      }),
+    });
+    const names = screen.getAllByText("unhinted");
+    expect(names).toHaveLength(2);
+    const captionLead = names.find((el) => el.tagName === "SPAN");
+    expect(captionLead).toHaveClass("font-bold");
+    const body = screen.getByText(/清晨六點，海邊未有人/);
+    expect(body.tagName).toBe("SPAN");
+    expect(body).toHaveClass("whitespace-pre-wrap");
+    expect(body.textContent).not.toMatch(/unhinted/i);
   });
 
   it("links to Instagram settings when the account is not connected", () => {
