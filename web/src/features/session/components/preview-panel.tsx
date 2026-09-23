@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { IconButton } from "@/components/icon-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import { apiPromoteVoiceExemplar } from "@/features/company-settings/api";
@@ -17,7 +18,14 @@ import {
   toEditableCopy,
 } from "@/features/session/components/ig-preview-mock";
 import { isConfirmSuccessStatus } from "@/features/session/session-helpers";
-import type { ConfirmSessionResponse, DraftCopy, PreviewDraft } from "@/features/session/types";
+import type {
+  ConfirmSessionResponse,
+  DraftCopy,
+  PreviewDraft,
+  PreviewMediaItem,
+} from "@/features/session/types";
+
+type PreviewPhase = "accepted" | "pending" | "generating";
 
 type Props = {
   draft: PreviewDraft;
@@ -41,6 +49,13 @@ type Props = {
   /** When true, show back affordance (paged shell); split shell hides it. */
   paged?: boolean;
   onBack?: () => void;
+  /**
+   * Session is parked at image OK (`awaiting_image_ok`). With no ready primary
+   * image, the pane is a 待出圖 board instead of an Instagram frame.
+   */
+  awaitingImage?: boolean;
+  /** Execute / resume-image is in flight. Spinner; still not a ready post. */
+  imageGenerating?: boolean;
 };
 
 export function PreviewPanel({
@@ -61,6 +76,8 @@ export function PreviewPanel({
   onUploadImage,
   paged = false,
   onBack,
+  awaitingImage = false,
+  imageGenerating = false,
 }: Props) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
@@ -110,14 +127,21 @@ export function PreviewPanel({
   const showFailed = failedReceipt && !confirmed;
   const showPromote =
     canPromoteExemplar && !!companyId && showReceipt && local.caption.trim().length > 0;
+  const phase: PreviewPhase =
+    !showReceipt && !showFailed && awaitingImage && !primaryImageReady(draft)
+      ? imageGenerating
+        ? "generating"
+        : "pending"
+      : "accepted";
+  const actionsLocked = phase !== "accepted";
 
   async function handleApply() {
-    if (!dirty || busy) return;
+    if (actionsLocked || !dirty || busy) return;
     await onApply(local);
   }
 
   async function handleConfirm() {
-    if (busy) return;
+    if (actionsLocked || busy) return;
     if (showFailed || canConfirm) await onConfirm(local);
   }
 
@@ -143,11 +167,22 @@ export function PreviewPanel({
     }
   }
 
-  const hint = !hasImage
-    ? t("preview.gate.imageRequired")
-    : confirmError === "social_account_not_connected"
-      ? t("preview.gate.notConnected")
-      : t("preview.confirmHint");
+  const hint =
+    phase === "generating"
+      ? t("preview.awaiting.generating")
+      : phase === "pending"
+        ? t("preview.awaiting.status")
+        : !hasImage
+          ? t("preview.gate.imageRequired")
+          : confirmError === "social_account_not_connected"
+            ? t("preview.gate.notConnected")
+            : t("preview.confirmHint");
+  const title =
+    phase === "generating"
+      ? t("preview.awaiting.generatingTitle")
+      : phase === "pending"
+        ? t("preview.awaiting.title")
+        : t("preview.title");
 
   return (
     <aside className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -169,7 +204,7 @@ export function PreviewPanel({
             </Tooltip>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold">{t("preview.title")}</p>
+            <p className="text-sm font-semibold">{title}</p>
             <p className="text-xs text-muted-foreground">
               {t("preview.revision", { n: draft.revision })} · {draft.platform}
             </p>
@@ -181,7 +216,17 @@ export function PreviewPanel({
               {t("preview.receipt.publishedBadge")}
             </span>
           )}
-          {dirty && !confirmed && (
+          {phase === "pending" && (
+            <span className="rounded-md border border-border bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
+              {t("preview.awaiting.badge")}
+            </span>
+          )}
+          {phase === "generating" && (
+            <span className="rounded-md border border-border bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
+              {t("preview.awaiting.generatingBadge")}
+            </span>
+          )}
+          {dirty && !confirmed && phase === "accepted" && (
             <span className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
               {t("preview.dirty")}
             </span>
@@ -191,12 +236,16 @@ export function PreviewPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-5 px-4 py-5">
-          <IgPreviewMock
-            copy={local}
-            imageUrls={previewUrls}
-            onEditImage={confirmed ? undefined : () => setEditImageOpen(true)}
-            onEditCopy={confirmed ? undefined : () => setEditCopyOpen(true)}
-          />
+          {phase === "accepted" ? (
+            <IgPreviewMock
+              copy={local}
+              imageUrls={previewUrls}
+              onEditImage={confirmed ? undefined : () => setEditImageOpen(true)}
+              onEditCopy={confirmed ? undefined : () => setEditCopyOpen(true)}
+            />
+          ) : (
+            <AwaitingImageBoard draft={draft} generating={phase === "generating"} />
+          )}
         </div>
       </div>
 
@@ -273,14 +322,15 @@ export function PreviewPanel({
               <Button
                 type="button"
                 variant="ghost"
-                disabled={!dirty || busy}
+                disabled={actionsLocked || !dirty || busy}
                 onClick={() => void handleApply()}
               >
                 {draftSaving ? t("preview.applySaving") : t("preview.apply")}
               </Button>
               <Button
                 type="button"
-                disabled={!canConfirm || busy}
+                variant={actionsLocked ? "outline" : "default"}
+                disabled={actionsLocked || !canConfirm || busy}
                 onClick={() => void handleConfirm()}
               >
                 {confirming ? t("preview.confirmWorking") : t("preview.confirm")}
@@ -316,6 +366,121 @@ export function PreviewPanel({
         </>
       )}
     </aside>
+  );
+}
+
+function sortedMedia(draft: PreviewDraft): PreviewMediaItem[] {
+  return [...(draft.media ?? [])].sort((a, b) => a.seq - b.seq);
+}
+
+function primaryMediaItem(draft: PreviewDraft): PreviewMediaItem | null {
+  const media = sortedMedia(draft);
+  if (media.length === 0) return null;
+  return media.find((item) => item.role === "primary") ?? media[0];
+}
+
+/** A parked primary (`status: pending` or no renderable url) is not a ready post. */
+function primaryImageReady(draft: PreviewDraft): boolean {
+  const primary = primaryMediaItem(draft);
+  if (primary) {
+    if (primary.status === "pending") return false;
+    return isRenderableImageUrl(primary.url);
+  }
+  return isRenderableImageUrl(draft.image_url);
+}
+
+function captionSummary(copy: DraftCopy): string {
+  const parts = [copy.caption.trim()];
+  if (copy.cta.trim()) parts.push(copy.cta.trim());
+  if (copy.hashtags.length) parts.push(copy.hashtags.join(" "));
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function planSummary(draft: PreviewDraft): {
+  format: "single" | "comic_4panel" | null;
+  prompt: string;
+  beats: string[];
+} {
+  const primary = primaryMediaItem(draft);
+  const plan = primary?.plan ?? {};
+  const fromPlan = typeof plan.format === "string" ? plan.format : "";
+  const raw = primary?.format || fromPlan;
+  const format = raw === "comic_4panel" || raw === "single" ? raw : null;
+  const prompt = typeof plan.prompt === "string" ? plan.prompt.trim() : "";
+  const beats: string[] = [];
+  if (Array.isArray(plan.panels)) {
+    for (const panel of plan.panels) {
+      if (panel && typeof panel === "object" && "beat" in panel) {
+        const beat = String((panel as { beat?: unknown }).beat ?? "").trim();
+        if (beat) beats.push(beat);
+      }
+    }
+  }
+  return { format, prompt, beats };
+}
+
+function AwaitingImageBoard({ draft, generating }: { draft: PreviewDraft; generating: boolean }) {
+  const { t } = useTranslation();
+  const plan = planSummary(draft);
+  const caption = captionSummary(draft.copy);
+  const formatLabel =
+    plan.format === "comic_4panel"
+      ? t("preview.awaiting.formatComic")
+      : plan.format === "single"
+        ? t("preview.awaiting.formatSingle")
+        : null;
+  const hasPlan = Boolean(formatLabel || plan.prompt || plan.beats.length);
+
+  return (
+    <section
+      data-preview-state={generating ? "generating" : "pending"}
+      aria-busy={generating || undefined}
+      className="mx-auto flex w-full max-w-[340px] flex-col gap-3 rounded-xl border border-border bg-secondary p-4"
+    >
+      {generating ? (
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <Spinner className="size-4" />
+          <p>{t("preview.awaiting.generating")}</p>
+        </div>
+      ) : (
+        <div>
+          <p className="text-sm font-medium text-foreground">{t("preview.awaiting.lead")}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            {t("preview.awaiting.status")}
+          </p>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+        <p className="text-xs font-medium text-muted-foreground">{t("preview.awaiting.caption")}</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">
+          {caption || t("preview.copy.empty")}
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+        <p className="text-xs font-medium text-muted-foreground">{t("preview.awaiting.plan")}</p>
+        {hasPlan ? (
+          <div className="mt-1 space-y-1.5 text-sm leading-relaxed">
+            {formatLabel ? <p>{formatLabel}</p> : null}
+            {plan.prompt ? (
+              <p className="line-clamp-6 whitespace-pre-wrap text-muted-foreground">
+                {plan.prompt}
+              </p>
+            ) : null}
+            {plan.beats.length > 0 ? (
+              <ol className="list-decimal space-y-0.5 pl-5 text-muted-foreground">
+                {plan.beats.map((beat) => (
+                  <li key={beat}>{beat}</li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-1 text-sm text-muted-foreground">{t("preview.awaiting.noPlan")}</p>
+        )}
+      </div>
+    </section>
   );
 }
 
