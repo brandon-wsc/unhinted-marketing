@@ -302,6 +302,20 @@
       "placeholder": "Image placeholder",
       "more": "more"
     },
+    "awaiting": {
+      "title": "Awaiting image",
+      "badge": "Awaiting image",
+      "lead": "Image not generated yet",
+      "status": "Format is locked. Discard, or generate. Changing the format means writing another draft first.",
+      "caption": "Caption",
+      "plan": "Image plan",
+      "noPlan": "No plan summary yet.",
+      "formatSingle": "Single image",
+      "formatComic": "4-panel comic",
+      "generatingTitle": "Generating",
+      "generatingBadge": "Generating…",
+      "generating": "Generating the image… This is not a ready post yet."
+    },
     "error": {
       "saveFailed": "Failed to save the draft. Please try again.",
       "confirmFailed": "Failed to confirm. Please try again.",
