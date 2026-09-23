@@ -57,6 +57,8 @@ function renderPanel(opts: {
   confirmed?: boolean;
   confirmReceipt?: ConfirmSessionResponse | null;
   confirmError?: string | null;
+  awaitingImage?: boolean;
+  imageGenerating?: boolean;
 }) {
   return render(
     <MemoryRouter>
@@ -68,6 +70,8 @@ function renderPanel(opts: {
           draftSaving={false}
           confirming={false}
           confirmError={opts.confirmError ?? null}
+          awaitingImage={opts.awaitingImage}
+          imageGenerating={opts.imageGenerating}
           onApply={noop}
           onConfirm={noop}
           onSavePlan={noop}
@@ -148,6 +152,79 @@ describe("PreviewPanel receipts", () => {
     });
     expect(screen.getByText("preview.confirmDone")).toBeInTheDocument();
     expect(screen.getByText("preview.confirmReceipt")).toBeInTheDocument();
+  });
+
+  it("shows a 待出圖 board instead of the IG frame when image-parked without a ready image", () => {
+    renderPanel({
+      draft: draft({
+        image_url: null,
+        copy: { caption: "手沖未出街", hashtags: ["#hkcoffee"], cta: "去試" },
+        media: [
+          {
+            id: "pending-1",
+            url: null,
+            plan: {
+              format: "single",
+              prompt: "Harbour pour-over, morning light",
+              panels: [],
+            },
+            format: "single",
+            role: "primary",
+            seq: 0,
+            status: "pending",
+          },
+        ],
+      }),
+      awaitingImage: true,
+    });
+    expect(screen.getByText("preview.awaiting.title")).toBeInTheDocument();
+    expect(screen.getByText("preview.awaiting.lead")).toBeInTheDocument();
+    expect(screen.getAllByText("preview.awaiting.status").length).toBeGreaterThan(0);
+    expect(document.querySelector("[data-preview-state='pending']")).toBeTruthy();
+    expect(screen.getByText(/手沖未出街/)).toBeInTheDocument();
+    expect(screen.getByText("Harbour pour-over, morning light")).toBeInTheDocument();
+    expect(screen.getByText("preview.awaiting.formatSingle")).toBeInTheDocument();
+    expect(screen.queryByText("ig-mock")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.mock.placeholder")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "preview.apply" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "preview.confirm" })).toBeDisabled();
+    expect(screen.queryByText("preview.gate.imageRequired")).not.toBeInTheDocument();
+  });
+
+  it("shows a spinner board while the parked image is generating", () => {
+    renderPanel({
+      draft: draft({ image_url: null, media: [] }),
+      awaitingImage: true,
+      imageGenerating: true,
+    });
+    const board = screen.getByRole("status", { name: "Loading" }).closest("section");
+    expect(board).toHaveAttribute("data-preview-state", "generating");
+    expect(screen.getAllByText("preview.awaiting.generating").length).toBeGreaterThan(0);
+    expect(screen.getByText("preview.awaiting.generatingTitle")).toBeInTheDocument();
+    expect(screen.queryByText("ig-mock")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.lead")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "preview.confirm" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "preview.apply" })).toBeDisabled();
+  });
+
+  it("keeps the accepted IG preview when a parked session still has a ready image", () => {
+    renderPanel({
+      draft: draft(),
+      awaitingImage: true,
+    });
+    expect(screen.getByText("ig-mock")).toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.lead")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "preview.confirm" })).toBeEnabled();
+  });
+
+  it("keeps the copy-only IG gate when the session is not image-parked", () => {
+    renderPanel({
+      draft: draft({ image_url: null, media: [] }),
+      awaitingImage: false,
+    });
+    expect(screen.getByText("ig-mock")).toBeInTheDocument();
+    expect(screen.getByText("preview.gate.imageRequired")).toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.lead")).not.toBeInTheDocument();
   });
 
   it("links to Instagram settings when the account is not connected", () => {

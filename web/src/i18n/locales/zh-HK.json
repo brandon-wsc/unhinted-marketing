@@ -303,6 +303,20 @@
       "placeholder": "圖片位置",
       "more": "更多"
     },
+    "awaiting": {
+      "title": "待出圖",
+      "badge": "待出圖",
+      "lead": "圖未出",
+      "status": "格式已經鎖死。可以棄置，或者出圖。想轉格式要先寫過一篇稿。",
+      "caption": "文案",
+      "plan": "圖計劃",
+      "noPlan": "圖計劃未有摘要。",
+      "formatSingle": "單圖",
+      "formatComic": "四格漫畫",
+      "generatingTitle": "出緊圖",
+      "generatingBadge": "出緊圖…",
+      "generating": "出緊圖…未算得預覽。圖出咗先會見到帖文。"
+    },
     "error": {
       "saveFailed": "草稿儲存唔到喎，再試一次。",
       "confirmFailed": "確認唔到喎，再試一次。",
