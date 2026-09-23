@@ -100,6 +100,7 @@ export function ChatPanel() {
     messages,
     mode,
     sending,
+    imageGenerating,
     stopping,
     queueFull,
     queuedMessages,
@@ -856,7 +857,7 @@ export function ChatPanel() {
         paged={!isSplit}
         onBack={goToChat}
         awaitingImage={awaitingImageOk}
-        imageGenerating={awaitingImageOk && sending}
+        imageGenerating={imageGenerating}
       />
     ) : null;
 
