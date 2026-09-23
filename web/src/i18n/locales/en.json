@@ -305,17 +305,13 @@
     },
     "awaiting": {
       "title": "Awaiting image",
-      "badge": "Awaiting image",
-      "lead": "Image not generated yet",
-      "status": "Format is locked. Discard, or generate. Changing the format means writing another draft first.",
-      "caption": "Caption",
+      "slotEmpty": "No image yet",
+      "slotGenerating": "Generating…",
+      "status": "Format is locked. Discard or generate from chat. Changing the format means writing another draft first.",
       "plan": "Image plan",
-      "noPlan": "No plan summary yet.",
       "formatSingle": "Single image",
       "formatComic": "4-panel comic",
-      "generatingTitle": "Generating",
-      "generatingBadge": "Generating…",
-      "generating": "Generating the image… This is not a ready post yet."
+      "generatingTitle": "Generating"
     },
     "error": {
       "saveFailed": "Failed to save the draft. Please try again.",

@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Spinner } from "@/components/ui/spinner";
 import type { DraftCopy, PreviewDraft } from "@/features/session/types";
+
+/** Parked image wait inside the IG frame. Absent on an accepted preview. */
+export type IgImageSlot = "pending" | "generating";
 
 type Props = {
   copy: DraftCopy;
@@ -11,6 +15,11 @@ type Props = {
   onEditImage?: () => void;
   /** When set, caption area is clickable — opens copy editor. */
   onEditCopy?: () => void;
+  /**
+   * Honest wait in the image square. `pending` is a dashed empty slot;
+   * `generating` is that same slot with a spinner.
+   */
+  imageSlot?: IgImageSlot;
 };
 
 export function isRenderableImageUrl(url: string | null | undefined): url is string {
@@ -30,6 +39,7 @@ export function IgPreviewMock({
   accountName = "unhinted",
   onEditImage,
   onEditCopy,
+  imageSlot,
 }: Props) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -50,8 +60,9 @@ export function IgPreviewMock({
 
   const collapsed = captionBody.length > 120 && !expanded;
   const shown = collapsed ? `${captionBody.slice(0, 120).trimEnd()}…` : captionBody;
-  const multi = urls.length > 1;
-  const imageEditable = typeof onEditImage === "function";
+  const waiting = imageSlot === "pending" || imageSlot === "generating";
+  const multi = !waiting && urls.length > 1;
+  const imageEditable = !waiting && typeof onEditImage === "function";
   const copyEditable = typeof onEditCopy === "function";
 
   return (
@@ -76,7 +87,9 @@ export function IgPreviewMock({
               : ""
           }`}
         >
-          {urls.length > 0 ? (
+          {imageSlot ? (
+            <WaitingImageSlot mode={imageSlot} />
+          ) : urls.length > 0 ? (
             <div className="absolute inset-0 overflow-hidden">
               <div
                 className="flex h-full transition-transform duration-300 ease-out"
@@ -218,6 +231,23 @@ export function toEditableCopy(draft: PreviewDraft | null): DraftCopy {
     hashtags: draft?.copy.hashtags ?? [],
     cta: draft?.copy.cta ?? "",
   };
+}
+
+function WaitingImageSlot({ mode }: { mode: IgImageSlot }) {
+  const { t } = useTranslation();
+  const generating = mode === "generating";
+  return (
+    <div
+      data-preview-state={mode}
+      aria-busy={generating || undefined}
+      className="absolute inset-3 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-secondary px-6 text-center"
+    >
+      {generating ? <Spinner className="size-5 text-muted-foreground" /> : null}
+      <p className="text-sm font-medium text-foreground">
+        {generating ? t("preview.awaiting.slotGenerating") : t("preview.awaiting.slotEmpty")}
+      </p>
+    </div>
+  );
 }
 
 function ChevronLeftIcon() {

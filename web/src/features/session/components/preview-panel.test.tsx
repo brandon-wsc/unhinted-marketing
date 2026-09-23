@@ -19,14 +19,6 @@ vi.mock("@/features/session/components/edit-copy-dialog", () => ({
 vi.mock("@/features/session/components/edit-image-dialog", () => ({
   EditImageDialog: () => null,
 }));
-vi.mock("@/features/session/components/ig-preview-mock", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/features/session/components/ig-preview-mock")>();
-  return {
-    ...actual,
-    IgPreviewMock: () => <div>ig-mock</div>,
-  };
-});
 
 const noop = async () => undefined;
 
@@ -154,7 +146,7 @@ describe("PreviewPanel receipts", () => {
     expect(screen.getByText("preview.confirmReceipt")).toBeInTheDocument();
   });
 
-  it("shows a 待出圖 board instead of the IG frame when image-parked without a ready image", () => {
+  it("keeps the IG shell with a waiting image slot when image-parked", () => {
     renderPanel({
       draft: draft({
         image_url: null,
@@ -166,7 +158,7 @@ describe("PreviewPanel receipts", () => {
             plan: {
               format: "single",
               prompt: "Harbour pour-over, morning light",
-              panels: [],
+              panels: [{ beat: "kettle" }],
             },
             format: "single",
             role: "primary",
@@ -177,34 +169,53 @@ describe("PreviewPanel receipts", () => {
       }),
       awaitingImage: true,
     });
-    expect(screen.getByText("preview.awaiting.title")).toBeInTheDocument();
-    expect(screen.getByText("preview.awaiting.lead")).toBeInTheDocument();
-    expect(screen.getAllByText("preview.awaiting.status").length).toBeGreaterThan(0);
-    expect(document.querySelector("[data-preview-state='pending']")).toBeTruthy();
+    expect(screen.getAllByText("preview.awaiting.title")).toHaveLength(1);
+    expect(screen.getByText("preview.mock.sponsored")).toBeInTheDocument();
+    expect(screen.getAllByText("unhinted").length).toBeGreaterThan(0);
+    const slot = document.querySelector("[data-preview-state='pending']");
+    expect(slot).toBeTruthy();
+    expect(slot).toHaveTextContent("preview.awaiting.slotEmpty");
+    expect(screen.getAllByText("preview.awaiting.slotEmpty")).toHaveLength(1);
+    expect(screen.queryByRole("status", { name: "Loading" })).not.toBeInTheDocument();
     expect(screen.getByText(/手沖未出街/)).toBeInTheDocument();
-    expect(screen.getByText("Harbour pour-over, morning light")).toBeInTheDocument();
-    expect(screen.getByText("preview.awaiting.formatSingle")).toBeInTheDocument();
-    expect(screen.queryByText("ig-mock")).not.toBeInTheDocument();
+    expect(screen.getByText(/#hkcoffee/)).toBeInTheDocument();
+    const plan = screen.getByText("preview.awaiting.plan").closest("details");
+    expect(plan).toBeTruthy();
+    expect(plan).not.toHaveAttribute("open");
+    expect(plan).toHaveTextContent("Harbour pour-over, morning light");
+    expect(plan).toHaveTextContent("kettle");
+    expect(plan).toHaveTextContent("preview.awaiting.formatSingle");
     expect(screen.queryByText("preview.mock.placeholder")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "preview.apply" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "preview.confirm" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "preview.apply" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview.confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview.copy.edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview.media.edit" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("preview.awaiting.status")).toHaveLength(1);
     expect(screen.queryByText("preview.gate.imageRequired")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.badge")).not.toBeInTheDocument();
   });
 
-  it("shows a spinner board while the parked image is generating", () => {
+  it("shows the spinner inside the IG image slot only while generating", () => {
     renderPanel({
       draft: draft({ image_url: null, media: [] }),
       awaitingImage: true,
       imageGenerating: true,
     });
-    const board = screen.getByRole("status", { name: "Loading" }).closest("section");
-    expect(board).toHaveAttribute("data-preview-state", "generating");
-    expect(screen.getAllByText("preview.awaiting.generating").length).toBeGreaterThan(0);
-    expect(screen.getByText("preview.awaiting.generatingTitle")).toBeInTheDocument();
-    expect(screen.queryByText("ig-mock")).not.toBeInTheDocument();
-    expect(screen.queryByText("preview.awaiting.lead")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "preview.confirm" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "preview.apply" })).toBeDisabled();
+    const slot = document.querySelector("[data-preview-state='generating']");
+    expect(slot).toBeTruthy();
+    expect(slot).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status", { name: "Loading" }).closest("[data-preview-state]")).toBe(
+      slot,
+    );
+    expect(screen.getAllByText("preview.awaiting.slotGenerating")).toHaveLength(1);
+    expect(screen.getAllByText("preview.awaiting.generatingTitle")).toHaveLength(1);
+    expect(screen.getByText("preview.mock.sponsored")).toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.slotEmpty")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.mock.placeholder")).not.toBeInTheDocument();
+    expect(screen.getAllByText("preview.awaiting.status")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "preview.confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview.apply" })).not.toBeInTheDocument();
   });
 
   it("keeps the accepted IG preview when a parked session still has a ready image", () => {
@@ -212,9 +223,11 @@ describe("PreviewPanel receipts", () => {
       draft: draft(),
       awaitingImage: true,
     });
-    expect(screen.getByText("ig-mock")).toBeInTheDocument();
-    expect(screen.queryByText("preview.awaiting.lead")).not.toBeInTheDocument();
+    expect(screen.getByText("preview.mock.sponsored")).toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.slotEmpty")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.title")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "preview.confirm" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "preview.apply" })).toBeInTheDocument();
   });
 
   it("keeps the copy-only IG gate when the session is not image-parked", () => {
@@ -222,9 +235,11 @@ describe("PreviewPanel receipts", () => {
       draft: draft({ image_url: null, media: [] }),
       awaitingImage: false,
     });
-    expect(screen.getByText("ig-mock")).toBeInTheDocument();
+    expect(screen.getByText("preview.mock.sponsored")).toBeInTheDocument();
+    expect(screen.getByText("preview.mock.placeholder")).toBeInTheDocument();
     expect(screen.getByText("preview.gate.imageRequired")).toBeInTheDocument();
-    expect(screen.queryByText("preview.awaiting.lead")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.slotEmpty")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "preview.confirm" })).toBeDisabled();
   });
 
   it("links to Instagram settings when the account is not connected", () => {
