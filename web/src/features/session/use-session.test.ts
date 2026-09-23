@@ -1153,12 +1153,14 @@ describe("useSession", () => {
       void result.current.resumeImage("comic_4panel");
     });
     await waitFor(() => expect(result.current.sending).toBe(true));
+    expect(result.current.imageGenerating).toBe(true);
 
     await act(async () => {
       await result.current.stopTurn();
     });
 
     expect(result.current.awaitingImageOk).toBe(true);
+    expect(result.current.imageGenerating).toBe(false);
     expect(result.current.lastImageFormatPick).toBe("comic_4panel");
   });
 
@@ -1244,8 +1246,73 @@ describe("useSession", () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(result.current.awaitingImageOk).toBe(false);
+    expect(result.current.imageGenerating).toBe(false);
     expect(result.current.mode).toBe("PREVIEW");
     expect(result.current.previewAfterMessageId).toBe("u1");
+  });
+
+  it("parked revise sets sending without the image-generating spinner", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [
+        {
+          id: "u1",
+          session_id: "sess-1",
+          role: "user",
+          content: "make a post",
+          created_at: "2026-01-01T00:00:01Z",
+        },
+      ],
+      awaiting_image_ok: true,
+    });
+    let resolveSend: (value: unknown) => void = () => {};
+    apiPostSessionMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.awaitingImageOk).toBe(true));
+
+    await act(async () => {
+      void result.current.sendMessage("短啲");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+    expect(result.current.imageGenerating).toBe(false);
+
+    await act(async () => {
+      resolveSend({
+        session: { ...sessionFixture, mode: "PREVIEW" },
+        messages: [
+          {
+            id: "u1",
+            session_id: "sess-1",
+            role: "user",
+            content: "make a post",
+            created_at: "2026-01-01T00:00:01Z",
+          },
+          {
+            id: "u2",
+            session_id: "sess-1",
+            role: "user",
+            content: "短啲",
+            created_at: "2026-01-01T00:00:02Z",
+          },
+        ],
+        interrupted: true,
+        mode: "PREVIEW",
+        revision: 2,
+        pending_confirm: false,
+        approval_token: "pend",
+        events: [{ type: "draft.awaiting_image_ok", data: { awaiting: true } }],
+      });
+    });
+    await waitFor(() => expect(result.current.sending).toBe(false));
+    expect(result.current.imageGenerating).toBe(false);
+    expect(result.current.awaitingImageOk).toBe(true);
   });
 
   it("keeps previewAfterMessageId on the preview turn after a later send", async () => {

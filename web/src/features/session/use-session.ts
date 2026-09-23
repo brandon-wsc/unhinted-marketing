@@ -105,6 +105,9 @@ export function useSession(companyId: string | undefined) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState<string>("CHAT");
   const [sending, setSending] = useState(false);
+  // True only while POST /resume-image is in flight for the session on screen.
+  // Parked revise (POST /messages) sets `sending` without this flag.
+  const [imageGenerating, setImageGenerating] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
   // Bumped to force the SSE effect to tear down + resubscribe the same session.
@@ -164,6 +167,8 @@ export function useSession(companyId: string | undefined) {
   // Current session id for apply-gating (set synchronously on navigate, before paint).
   const sessionIdRef = useRef<string | null>(null);
   const inFlightBySessionRef = useRef(new Map<string, AbortController>());
+  // Execute (resume-image) abort, keyed by session. Not set for a parked revise.
+  const imageGenAbortRef = useRef(new Map<string, AbortController>());
   const turnEpochBySessionRef = useRef(new Map<string, number>());
   const composerDraftsRef = useRef(new Map<string, ComposerDraft>());
   const liveChatBySessionRef = useRef(new Map<string, LiveChatSnapshot>());
@@ -334,6 +339,7 @@ export function useSession(companyId: string | undefined) {
     const inflight = !!(id && inFlightBySessionRef.current.has(id));
     sendingRef.current = inflight;
     setSending(inflight);
+    setImageGenerating(!!(id && imageGenAbortRef.current.has(id)));
   }, []);
 
   const bumpEpoch = useCallback((id: string) => {
@@ -370,6 +376,7 @@ export function useSession(companyId: string | undefined) {
     liveChatBySessionRef.current.delete(id);
     inFlightBySessionRef.current.get(id)?.abort();
     inFlightBySessionRef.current.delete(id);
+    imageGenAbortRef.current.delete(id);
     turnEpochBySessionRef.current.delete(id);
   }, []);
 
@@ -1306,8 +1313,10 @@ export function useSession(companyId: string | undefined) {
         finishRunningActions();
         void refreshHistory();
       } finally {
+        imageGenAbortRef.current.delete(sessionId);
         dropInFlight(sessionId);
         if (stillOn(sessionId)) {
+          setImageGenerating(false);
           stoppingRef.current = false;
           setStopping(false);
           drainQueueRef.current();
@@ -1751,6 +1760,8 @@ export function useSession(companyId: string | undefined) {
       suppressLiveTurnEventsRef.current = false;
       const abort = new AbortController();
       registerInFlight(boundId, abort);
+      imageGenAbortRef.current.set(boundId, abort);
+      syncSendingForCurrent();
       setLlmError(null);
       bumpHistoryRecency(boundId);
       try {
@@ -1772,7 +1783,11 @@ export function useSession(companyId: string | undefined) {
         if (!stillOn(boundId)) return;
         throw err;
       } finally {
+        if (imageGenAbortRef.current.get(boundId) === abort) {
+          imageGenAbortRef.current.delete(boundId);
+        }
         dropInFlight(boundId);
+        syncSendingForCurrent();
         if (stillOn(boundId)) drainQueueRef.current();
       }
     },
@@ -1787,6 +1802,7 @@ export function useSession(companyId: string | undefined) {
       registerInFlight,
       dropInFlight,
       bumpHistoryRecency,
+      syncSendingForCurrent,
     ],
   );
 
@@ -1958,6 +1974,7 @@ export function useSession(companyId: string | undefined) {
     messages,
     mode,
     sending,
+    imageGenerating,
     stopping,
     composerLocked: stopping,
     queueFull: queuedMessages.length >= MAX_QUEUED_SESSION_MESSAGES,
