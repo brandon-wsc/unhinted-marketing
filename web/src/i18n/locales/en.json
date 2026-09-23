@@ -307,7 +307,7 @@
       "title": "Awaiting image",
       "slotEmpty": "No image yet",
       "slotGenerating": "Generating…",
-      "status": "Format is locked. Discard or generate from chat. Changing the format means writing another draft first.",
+      "status": "Discard and generate from the chat.",
       "plan": "Image plan",
       "formatSingle": "Single image",
       "formatComic": "4-panel comic",
