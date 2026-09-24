@@ -9,7 +9,7 @@ state:
     entity_surface: 茶餐廳下午茶
   messages:
     - role: user
-      content: 茶餐廳下午茶而家有咩新搞作
+      content: 幫我睇下茶餐廳下午茶而家有咩新搞作
 expect:
   query_source: llm
   min_queries: 1

@@ -108,7 +108,7 @@ def summarize_usage(records: list[Any]) -> dict[str, Any]:
             models.append(model)
         price = usd_for(model, p, c)
         if (p or c) and price is None:
-            label = model or "unknown"
+            label = normalize_model_id(model) or "unknown"
             if label not in unknown:
                 unknown.append(label)
         if price is not None:

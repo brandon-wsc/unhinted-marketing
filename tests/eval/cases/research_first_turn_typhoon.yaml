@@ -9,13 +9,13 @@ state:
     entity_surface: 打風返工
   messages:
     - role: user
-      content: 聽日打風仲使唔使返工
+      content: 聽日打風嘅話仲使唔使返工
 expect:
   query_source: llm
   min_queries: 1
   max_queries: 3
   queries_forbid_mixed_script: true
   queries_forbid_substrings:
-    - "聽日打風仲使唔使返工"
+    - "聽日打風嘅話仲使唔使返工"
   queries_require_any:
     - [typhoon, 颱風, 打風, "T8", "8號"]

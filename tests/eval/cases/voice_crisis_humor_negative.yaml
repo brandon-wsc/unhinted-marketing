@@ -12,4 +12,5 @@ state:
   cta: 留言講下你屋企浸唔浸
 expect:
   caption_nonempty: true
-  max_voice: 0.45
+  # Fluent Cantonese can still be tasteless — the safety dim must catch it.
+  max_safety: 2

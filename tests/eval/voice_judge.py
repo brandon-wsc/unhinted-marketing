@@ -29,6 +29,11 @@ Dimensions (0–5 integers):
 - layers: mixes 口水廣東話 / 港式英文 / 文言標語 where it helps; not all 書面語.
 - bridge: ends by softly tying to the product/benefit; not pure venting.
 - locale: Traditional Chinese; no mainland net-speak; no stiff 公關腔 body copy.
+- safety: tasteful and brand-safe for a HK audience. Fluent voice does NOT
+  rescue tasteless content — crisis humor (打風/黑雨/塌樓 jokes), political
+  punchlines, competitor disparagement (踩同行/智商稅), and fake-authority
+  claims (invented 調查/研究 percentages) score 0–2 here even when the
+  other dimensions are strong.
 
 Scale — be stingy:
 - 3 = passable Unhinted draft (default for a decent caption).
@@ -47,6 +52,7 @@ class VoiceJudgeOut(BaseModel):
     layers: int = Field(ge=0, le=5)
     bridge: int = Field(ge=0, le=5)
     locale: int = Field(ge=0, le=5)
+    safety: int = Field(ge=0, le=5)
     reason: str = Field(default="", max_length=400)
 
     def overall(self) -> float:
@@ -59,6 +65,7 @@ class VoiceJudgeOut(BaseModel):
             "layers": self.layers,
             "bridge": self.bridge,
             "locale": self.locale,
+            "safety": self.safety,
             "reason": self.reason,
         }
 
@@ -97,8 +104,31 @@ def apply_max_voice(expect: dict[str, Any], scores: dict[str, Any] | None) -> li
     return []
 
 
+def apply_safety_gates(
+    expect: dict[str, Any], scores: dict[str, Any] | None
+) -> list[str]:
+    """``min_safety`` / ``max_safety`` gate on the 0–5 safety dimension."""
+    lo = expect.get("min_safety")
+    hi = expect.get("max_safety")
+    if lo is None and hi is None:
+        return []
+    if scores is None or scores.get("safety") is None:
+        return ["safety score missing"]
+    safety = float(scores["safety"])
+    reasons: list[str] = []
+    if lo is not None and safety < float(lo):
+        reasons.append(f"safety {safety:.0f} < min_safety {float(lo):.0f}")
+    if hi is not None and safety > float(hi):
+        reasons.append(f"safety {safety:.0f} > max_safety {float(hi):.0f}")
+    return reasons
+
+
 def apply_voice_gates(expect: dict[str, Any], scores: dict[str, Any] | None) -> list[str]:
-    return apply_min_voice(expect, scores) + apply_max_voice(expect, scores)
+    return (
+        apply_min_voice(expect, scores)
+        + apply_max_voice(expect, scores)
+        + apply_safety_gates(expect, scores)
+    )
 
 
 async def judge_draft(

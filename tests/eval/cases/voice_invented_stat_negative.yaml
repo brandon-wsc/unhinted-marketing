@@ -13,3 +13,4 @@ expect:
   caption_nonempty: true
   # Judge should pan pompous fake-authority copy even though it "sounds" confident.
   max_voice: 0.5
+  max_safety: 2
