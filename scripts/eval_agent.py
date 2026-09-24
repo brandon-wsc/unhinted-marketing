@@ -26,6 +26,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -176,6 +177,33 @@ async def _run_executor_post(state: dict[str, Any]) -> dict[str, Any]:
     return {"parsed": parsed.model_dump() if parsed else None}
 
 
+async def _run_grounding_check(case: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    """grounding_check is DB-backed but deterministic — stub the repo reads.
+
+    Case-level ``db_signal_ids`` lists what Postgres "contains"; the node then
+    sees those ids via patched ``list_top_signals`` / ``get_signals_by_ids``.
+    """
+    known = {str(sid) for sid in (case.get("db_signal_ids") or [])}
+    rows = [
+        SimpleNamespace(signal_id=sid, source="cassette", region="HK")
+        for sid in sorted(known)
+    ]
+
+    async def fake_list(*_args: Any, **_kwargs: Any) -> list[Any]:
+        return rows
+
+    async def fake_get(_db: Any, ids: list[str]) -> list[Any]:
+        wanted = {str(sid) for sid in ids}
+        return [r for r in rows if r.signal_id in wanted]
+
+    with (
+        patch.object(N, "list_top_signals", fake_list),
+        patch.object(N, "get_signals_by_ids", fake_get),
+    ):
+        out = await N.grounding_check(state)
+    return dict(out)
+
+
 async def _run_case(case: dict[str, Any]) -> dict[str, Any]:
     node = case.get("node")
     state = dict(case.get("state") or {})
@@ -185,6 +213,8 @@ async def _run_case(case: dict[str, Any]) -> dict[str, Any]:
         return await _run_route_intent(state)
     if node == "executor_post":
         return await _run_executor_post(state)
+    if node == "grounding_check":
+        return await _run_grounding_check(case, state)
     if node == "voice_fixture":
         return {
             "parsed": {
@@ -227,6 +257,12 @@ def _summarize_output(node: str, output: dict[str, Any]) -> dict[str, Any]:
             "caption": caption[:500],
             "hashtags": parsed.get("hashtags"),
             "cta": parsed.get("cta"),
+        }
+    if node == "grounding_check":
+        return {
+            "grounding_ok": output.get("grounding_ok"),
+            "source_signal_ids": output.get("source_signal_ids"),
+            "reviewer_feedback": output.get("reviewer_feedback"),
         }
     return output
 

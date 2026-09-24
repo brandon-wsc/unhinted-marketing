@@ -87,6 +87,12 @@ def grade_intent(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
     return reasons
 
 
+def _draft_blob(parsed: dict[str, Any]) -> str:
+    parts = [str(parsed.get("caption") or ""), str(parsed.get("cta") or "")]
+    parts.extend(str(tag) for tag in (parsed.get("hashtags") or []))
+    return "\n".join(parts)
+
+
 def grade_draft(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     parsed = output.get("parsed")
@@ -96,7 +102,7 @@ def grade_draft(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
     caption = str(parsed.get("caption") or "")
     if expect.get("caption_nonempty") and not caption.strip():
         reasons.append("empty caption")
-    blob = caption
+    blob = _draft_blob(parsed)
     if expect.get("forbid_simplified"):
         hits = sorted({ch for ch in blob if ch in SIMPLIFIED_CHARS})
         if hits:
@@ -106,6 +112,32 @@ def grade_draft(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
         for token in MAINLAND_SLANG:
             if token.lower() in lower or token in blob:
                 reasons.append(f"mainland slang {token!r}")
+    lower_blob = blob.lower()
+    for needle in expect.get("forbid_substrings") or []:
+        if str(needle).lower() in lower_blob:
+            reasons.append(f"forbidden substring {needle!r} in draft")
+    for pattern in expect.get("forbid_regex") or []:
+        match = re.search(str(pattern), blob)
+        if match:
+            reasons.append(f"forbidden pattern {pattern!r} matched {match.group(0)!r}")
+    return reasons
+
+
+def grade_grounding(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
+    """Deterministic grounding_check outcome — citations, claims, feedback."""
+    reasons: list[str] = []
+    want_ok = expect.get("grounding_ok")
+    if want_ok is not None and output.get("grounding_ok") != want_ok:
+        reasons.append(f"grounding_ok={output.get('grounding_ok')!r} want {want_ok!r}")
+    feedback = str(output.get("reviewer_feedback") or "")
+    for needle in expect.get("feedback_contains") or []:
+        if str(needle) not in feedback:
+            reasons.append(f"feedback misses {needle!r}: {feedback!r}")
+    kept_want = expect.get("kept_signal_ids")
+    if kept_want is not None:
+        kept = sorted(str(s) for s in (output.get("source_signal_ids") or []))
+        if kept != sorted(str(s) for s in kept_want):
+            reasons.append(f"kept ids {kept} want {sorted(kept_want)}")
     return reasons
 
 
@@ -118,4 +150,6 @@ def grade_case(case: dict[str, Any], output: dict[str, Any]) -> list[str]:
         return grade_intent(output, expect)
     if node in ("executor_post", "voice_fixture"):
         return grade_draft(output, expect)
+    if node == "grounding_check":
+        return grade_grounding(output, expect)
     return [f"unknown node {node!r}"]

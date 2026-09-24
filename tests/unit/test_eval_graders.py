@@ -6,7 +6,13 @@ from pathlib import Path
 
 import yaml
 
-from tests.eval.graders import grade_case, grade_draft, grade_intent, grade_query_generator
+from tests.eval.graders import (
+    grade_case,
+    grade_draft,
+    grade_grounding,
+    grade_intent,
+    grade_query_generator,
+)
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "eval" / "cases"
 
@@ -26,6 +32,7 @@ def test_eval_cases_yaml_shape() -> None:
             "route_intent",
             "executor_post",
             "voice_fixture",
+            "grounding_check",
         }
         assert data.get("suites")
         assert data.get("state")
@@ -208,4 +215,72 @@ def test_grade_case_dispatches() -> None:
         "search_query": "Hong Kong overtime",
     }
     assert grade_case(case, output) == []
+    grounding = {"node": "grounding_check", "expect": {"grounding_ok": True}}
+    assert grade_case(grounding, {"grounding_ok": True}) == []
     assert grade_case({"node": "nope"}, {})[0].startswith("unknown node")
+
+
+def test_draft_forbid_substrings_and_regex() -> None:
+    output = {
+        "parsed": {
+            "caption": "97% 香港人都話好",
+            "cta": "了解更多",
+            "hashtags": ["#HongKong"],
+        }
+    }
+    reasons = grade_draft(
+        output,
+        {
+            "caption_nonempty": True,
+            "forbid_substrings": ["全港第一"],
+            "forbid_regex": [r"\d+(\.\d+)?\s*%"],
+        },
+    )
+    assert not any("全港第一" in r for r in reasons)
+    assert any("forbidden pattern" in r and "97%" in r for r in reasons)
+    reasons2 = grade_draft(output, {"forbid_substrings": ["97%"]})
+    assert any("forbidden substring" in r for r in reasons2)
+
+
+def test_grounding_ok_and_kept_ids() -> None:
+    output = {
+        "grounding_ok": False,
+        "source_signal_ids": ["cassette:ot"],
+        "reviewer_feedback": "Missing or invalid source_signal_ids: ['cassette:nope']",
+    }
+    expect = {
+        "grounding_ok": False,
+        "feedback_contains": ["Missing or invalid"],
+        "kept_signal_ids": ["cassette:ot"],
+    }
+    assert grade_grounding(output, expect) == []
+
+
+def test_grounding_flags_wrong_ok_and_feedback() -> None:
+    output = {"grounding_ok": True, "source_signal_ids": ["a"], "reviewer_feedback": ""}
+    reasons = grade_grounding(
+        output, {"grounding_ok": False, "feedback_contains": ["Missing"]}
+    )
+    assert any("grounding_ok" in r for r in reasons)
+    assert any("feedback misses" in r for r in reasons)
+
+
+def test_grounding_kept_ids_mismatch() -> None:
+    output = {"grounding_ok": False, "source_signal_ids": ["a"], "reviewer_feedback": "x"}
+    reasons = grade_grounding(output, {"kept_signal_ids": ["a", "b"]})
+    assert any("kept ids" in r for r in reasons)
+
+
+def test_grounding_product_claim_feedback() -> None:
+    output = {
+        "grounding_ok": False,
+        "source_signal_ids": ["a"],
+        "reviewer_feedback": "Caption has numbers not in primary product row: ['97']",
+    }
+    assert (
+        grade_grounding(
+            output,
+            {"grounding_ok": False, "feedback_contains": ["not in primary product row"]},
+        )
+        == []
+    )
