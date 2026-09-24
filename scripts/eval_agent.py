@@ -7,8 +7,10 @@ Usage (repo root, after `pip install -e ".[dev]"` and OPENAI_API_KEY in .env):
     python -m scripts.eval_agent
     python -m scripts.eval_agent --suite smoke
     python -m scripts.eval_agent --suite research
+    python -m scripts.eval_agent --suite regression
     python -m scripts.eval_agent --suite all
     python -m scripts.eval_agent --skip-judge   # no VOICE LLM call
+    python -m scripts.eval_agent --suite all --out reports/eval/baseline.json
 """
 
 from __future__ import annotations
@@ -16,8 +18,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 import sys
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -29,6 +33,8 @@ import yaml
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.config import settings
+from internal.llm import recorder
+from internal.llm.pricing import summarize_usage
 from internal.llm.router import LlmProviderError, has_llm_credentials
 from internal.session import execute_harness as EH
 from internal.session import ingest as ingest_mod
@@ -42,7 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CASES_DIR = REPO_ROOT / "tests" / "eval" / "cases"
 DEFAULT_CASSETTE = REPO_ROOT / "tests" / "eval" / "cassettes" / "signals.json"
 REPORT_DIR = REPO_ROOT / "reports" / "eval"
-SUITES = ("smoke", "research", "all")
+SUITES = ("smoke", "research", "regression", "all")
 
 
 def _silence_recording() -> None:
@@ -225,30 +231,68 @@ def _summarize_output(node: str, output: dict[str, Any]) -> dict[str, Any]:
     return output
 
 
-def _write_reports(report: dict[str, Any]) -> tuple[Path, Path]:
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    json_path = REPORT_DIR / "latest.json"
-    md_path = REPORT_DIR / "latest.md"
+def _percentile(values: list[int], q: float) -> int | None:
+    """Nearest-rank percentile; None on empty input."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    idx = max(0, min(len(ordered) - 1, math.ceil(q * len(ordered)) - 1))
+    return ordered[idx]
+
+
+def _usd_cell(row: dict[str, Any]) -> str:
+    usd = row.get("usd")
+    return f"${usd:.4f}" if isinstance(usd, (int, float)) else "—"
+
+
+def _tok_cell(row: dict[str, Any]) -> str:
+    total = (row.get("usage") or {}).get("total_tokens")
+    return str(total) if total is not None else "—"
+
+
+def _ms_cell(row: dict[str, Any]) -> str:
+    ms = row.get("latency_ms")
+    return str(ms) if ms is not None else "—"
+
+
+def _write_reports(report: dict[str, Any], out_json: Path) -> tuple[Path, Path]:
+    out_json.parent.mkdir(parents=True, exist_ok=True)
+    json_path = out_json
+    md_path = out_json.with_suffix(".md")
     json_path.write_text(
         json.dumps(report, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    total_usd = report.get("total_usd")
+    usd_text = f"${total_usd:.4f}" if isinstance(total_usd, (int, float)) else "—"
+    unknown = report.get("usd_unknown_models") or []
+    if unknown:
+        usd_text += f" (unpriced: {', '.join(unknown)})"
     lines = [
         f"# Agent eval — `{report['suite']}`",
         "",
         f"- when: {report['when']}",
         f"- ok: **{report['ok']}**",
-        f"- cases: {report['passed']}/{report['total']} passed",
+        f"- cases: {report['passed']}/{report['total']} passed"
+        f" (pass_rate {report.get('pass_rate')})",
         f"- mean_voice: {report['mean_voice'] if report.get('mean_voice') is not None else '—'}",
+        f"- latency_ms p50/p95: {report.get('p50_ms') or '—'} / {report.get('p95_ms') or '—'}",
+        f"- tokens: {report.get('total_tokens') or '—'} total"
+        f" ({report.get('total_prompt_tokens') or 0} in"
+        f" / {report.get('total_completion_tokens') or 0} out)",
+        f"- usd: {usd_text}",
         "",
-        "| id | node | pass | voice | reason |",
-        "|---|---|---|---|---|",
+        "| id | node | pass | voice | ms | tok | usd | reason |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for row in report["cases"]:
         reason = "; ".join(row["reasons"]) if row["reasons"] else ""
         mark = "yes" if row["passed"] else "no"
         voice = _voice_cell(row)
-        lines.append(f"| `{row['id']}` | {row['node']} | {mark} | {voice} | {reason} |")
+        lines.append(
+            f"| `{row['id']}` | {row['node']} | {mark} | {voice}"
+            f" | {_ms_cell(row)} | {_tok_cell(row)} | {_usd_cell(row)} | {reason} |"
+        )
         if row.get("output") or row.get("scores"):
             lines.append("")
             lines.append(f"### `{row['id']}`")
@@ -278,12 +322,18 @@ def _voice_cell(row: dict[str, Any]) -> str:
 
 
 def _print_table(rows: list[dict[str, Any]]) -> None:
-    print(f"{'id':<32} {'node':<18} {'pass':<6} {'voice':<7} reason")
-    print("-" * 96)
+    print(
+        f"{'id':<32} {'node':<18} {'pass':<6} {'voice':<7}"
+        f" {'ms':>7} {'tok':>7} {'usd':>8} reason"
+    )
+    print("-" * 110)
     for row in rows:
         reason = "; ".join(row["reasons"]) if row["reasons"] else ""
         mark = "ok" if row["passed"] else "FAIL"
-        print(f"{row['id']:<32} {row['node']:<18} {mark:<6} {_voice_cell(row):<7} {reason}")
+        print(
+            f"{row['id']:<32} {row['node']:<18} {mark:<6} {_voice_cell(row):<7}"
+            f" {_ms_cell(row):>7} {_tok_cell(row):>7} {_usd_cell(row):>8} {reason}"
+        )
 
 
 async def _eval_suite(
@@ -305,34 +355,42 @@ async def _eval_suite(
             cid = str(case.get("id") or "unnamed")
             node = str(case.get("node") or "")
             scores: dict[str, Any] = {}
-            try:
-                output = await _run_case(case)
-                reasons = grade_case(case, output)
-                if _should_judge(node, output, skip_judge=skip_judge):
-                    parsed = output.get("parsed") or {}
-                    brief_raw = (case.get("state") or {}).get("brief") or ""
-                    brief = (
-                        json.dumps(brief_raw, ensure_ascii=False)
-                        if isinstance(brief_raw, dict)
-                        else str(brief_raw)
-                    )
-                    judged = await judge_draft(
-                        caption=_draft_caption(output),
-                        hashtags=list(parsed.get("hashtags") or []),
-                        cta=str(parsed.get("cta") or ""),
-                        brief=brief,
-                    )
-                    if judged is None:
-                        reasons.append("voice judge parse missed")
-                    else:
-                        scores = judged.scores_payload()
-                        reasons.extend(apply_voice_gates(case.get("expect") or {}, scores))
-            except LlmProviderError as exc:
-                output = {}
-                reasons = [f"provider: {exc}"]
-            except Exception as exc:  # noqa: BLE001 — per-case isolation
-                output = {}
-                reasons = [f"{type(exc).__name__}: {exc}"]
+            start = time.monotonic()
+            # call_context buffers each track() record in memory; submit()
+            # stays a no-op because recording is silenced above.
+            with recorder.call_context(caller="eval_agent", node=node) as ctx:
+                try:
+                    output = await _run_case(case)
+                    reasons = grade_case(case, output)
+                    if _should_judge(node, output, skip_judge=skip_judge):
+                        parsed = output.get("parsed") or {}
+                        brief_raw = (case.get("state") or {}).get("brief") or ""
+                        brief = (
+                            json.dumps(brief_raw, ensure_ascii=False)
+                            if isinstance(brief_raw, dict)
+                            else str(brief_raw)
+                        )
+                        judged = await judge_draft(
+                            caption=_draft_caption(output),
+                            hashtags=list(parsed.get("hashtags") or []),
+                            cta=str(parsed.get("cta") or ""),
+                            brief=brief,
+                        )
+                        if judged is None:
+                            reasons.append("voice judge parse missed")
+                        else:
+                            scores = judged.scores_payload()
+                            reasons.extend(
+                                apply_voice_gates(case.get("expect") or {}, scores)
+                            )
+                except LlmProviderError as exc:
+                    output = {}
+                    reasons = [f"provider: {exc}"]
+                except Exception as exc:  # noqa: BLE001 — per-case isolation
+                    output = {}
+                    reasons = [f"{type(exc).__name__}: {exc}"]
+            wall_ms = int((time.monotonic() - start) * 1000)
+            usage = summarize_usage(list(ctx.records))
             rows.append(
                 {
                     "id": cid,
@@ -341,6 +399,17 @@ async def _eval_suite(
                     "passed": not reasons,
                     "reasons": reasons,
                     "scores": scores,
+                    "latency_ms": wall_ms,
+                    "usage": {
+                        "calls": usage["calls"],
+                        "llm_ms": usage["latency_ms"],
+                        "prompt_tokens": usage["prompt_tokens"],
+                        "completion_tokens": usage["completion_tokens"],
+                        "total_tokens": usage["total_tokens"],
+                        "models": usage["models"],
+                        "unknown_models": usage["unknown_models"],
+                    },
+                    "usd": usage["usd"],
                     "output": _summarize_output(node, output),
                 }
             )
@@ -352,13 +421,40 @@ async def _eval_suite(
         if (r.get("scores") or {}).get("overall") is not None
     ]
     mean_voice = round(sum(voice_vals) / len(voice_vals), 3) if voice_vals else None
+    latencies = [int(r["latency_ms"]) for r in rows if r.get("latency_ms") is not None]
+    unknown_models = sorted(
+        {
+            model
+            for r in rows
+            for model in ((r.get("usage") or {}).get("unknown_models") or [])
+        }
+    )
+    usd_vals = [float(r["usd"]) for r in rows if r.get("usd") is not None]
+    total_usd = round(sum(usd_vals), 6) if usd_vals and not unknown_models else None
     return {
         "suite": suite,
         "when": datetime.now(UTC).isoformat(),
         "ok": passed == len(rows),
         "passed": passed,
         "total": len(rows),
+        "pass_rate": round(passed / len(rows), 3) if rows else None,
         "mean_voice": mean_voice,
+        "p50_ms": _percentile(latencies, 0.5),
+        "p95_ms": _percentile(latencies, 0.95),
+        "total_prompt_tokens": sum(
+            int((r.get("usage") or {}).get("prompt_tokens") or 0) for r in rows
+        )
+        or None,
+        "total_completion_tokens": sum(
+            int((r.get("usage") or {}).get("completion_tokens") or 0) for r in rows
+        )
+        or None,
+        "total_tokens": sum(
+            int((r.get("usage") or {}).get("total_tokens") or 0) for r in rows
+        )
+        or None,
+        "total_usd": total_usd,
+        "usd_unknown_models": unknown_models,
         "cases": rows,
     }
 
@@ -373,6 +469,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--cases-dir", type=Path, default=DEFAULT_CASES_DIR)
     parser.add_argument("--cassette", type=Path, default=DEFAULT_CASSETTE)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=REPORT_DIR / "latest.json",
+        help="JSON report path; the markdown summary lands at the same path"
+        " with a .md suffix (default: reports/eval/latest.json)",
+    )
     parser.add_argument(
         "--skip-judge",
         action="store_true",
@@ -397,12 +500,19 @@ def main(argv: list[str] | None = None) -> int:
             skip_judge=args.skip_judge,
         )
     )
-    json_path, md_path = _write_reports(report)
+    json_path, md_path = _write_reports(report, args.out)
     _print_table(report["cases"])
     print()
-    print(f"wrote {md_path.relative_to(REPO_ROOT)}")
-    print(f"wrote {json_path.relative_to(REPO_ROOT)}")
+    print(f"wrote {_rel(md_path)}")
+    print(f"wrote {_rel(json_path)}")
     return 0 if report["ok"] else 1
+
+
+def _rel(path: Path) -> Path | str:
+    try:
+        return path.resolve().relative_to(REPO_ROOT)
+    except ValueError:
+        return path
 
 
 if __name__ == "__main__":

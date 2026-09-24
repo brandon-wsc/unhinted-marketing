@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic_ai.models.test import TestModel
 
+from internal.config import settings
 from tests.eval.voice_judge import (
     VoiceJudgeOut,
     judge_draft,
@@ -13,8 +14,10 @@ from tests.eval.voice_judge import (
 
 
 @pytest.fixture(autouse=True)
-def _clear_voice_judge_override() -> None:
+def _clear_voice_judge_override(monkeypatch: pytest.MonkeyPatch) -> None:
     set_voice_judge_model_override(None)
+    # judge_draft now runs under recorder.track — keep unit tests off the DB.
+    monkeypatch.setattr(settings, "llm_record_enabled", False)
     yield
     set_voice_judge_model_override(None)
 

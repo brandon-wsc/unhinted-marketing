@@ -11,6 +11,7 @@ from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 from pydantic_ai.models import Model
 
+from internal.llm.recorder import track
 from internal.llm.router import LlmProviderError, ModelTier
 from internal.session import harness as H
 
@@ -125,13 +126,25 @@ async def judge_draft(
         ensure_ascii=False,
     )
     try:
-        result = await agent.run(user)
-        output = result.output
-        if isinstance(output, VoiceJudgeOut):
-            return output
-        if isinstance(output, dict):
-            return VoiceJudgeOut.model_validate(output)
-        return None
+        with track(
+            kind="chat_json",
+            tier=ModelTier.CHEAP,
+            model=H._model_label(model),
+            system=VOICE_JUDGE_SYSTEM,
+            user=user,
+        ) as rec:
+            result = await agent.run(user)
+            usage = getattr(result, "usage", None)
+            rec.set_usage(usage() if callable(usage) else usage)
+            output = result.output
+            if isinstance(output, VoiceJudgeOut):
+                parsed = output
+            elif isinstance(output, dict):
+                parsed = VoiceJudgeOut.model_validate(output)
+            else:
+                return None
+            rec.response_text = parsed.model_dump_json()
+            return parsed
     except LlmProviderError:
         raise
     except (ModelHTTPError, ModelAPIError) as exc:
