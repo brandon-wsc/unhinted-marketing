@@ -303,6 +303,16 @@
       "placeholder": "Image placeholder",
       "more": "more"
     },
+    "awaiting": {
+      "title": "Awaiting image",
+      "slotEmpty": "No image yet",
+      "slotGenerating": "Generating…",
+      "status": "Discard and generate from the chat.",
+      "plan": "Image plan",
+      "formatSingle": "Single image",
+      "formatComic": "4-panel comic",
+      "generatingTitle": "Generating"
+    },
     "error": {
       "saveFailed": "Failed to save the draft. Please try again.",
       "confirmFailed": "Failed to confirm. Please try again.",

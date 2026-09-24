@@ -100,6 +100,7 @@ export function ChatPanel() {
     messages,
     mode,
     sending,
+    imageGenerating,
     stopping,
     queueFull,
     queuedMessages,
@@ -835,27 +836,30 @@ export function ChatPanel() {
     </div>
   );
 
-  const previewPane = previewMode ? (
-    <PreviewPanel
-      draft={draft}
-      confirmed={confirmed}
-      confirmReceipt={confirmReceipt}
-      draftSaving={draftSaving}
-      confirming={confirming}
-      confirmError={confirmError}
-      companyId={companyId}
-      canPromoteExemplar={canPromoteExemplar}
-      onApply={onApplyDraft}
-      onConfirm={onConfirmDraft}
-      onSavePlan={onSavePlan}
-      onRegenImage={onRegenImage}
-      onAddImage={onAddImage}
-      onRemoveImage={onRemoveImage}
-      onUploadImage={onUploadImage}
-      paged={!isSplit}
-      onBack={goToChat}
-    />
-  ) : null;
+  const previewPane =
+    draft && previewMode ? (
+      <PreviewPanel
+        draft={draft}
+        confirmed={confirmed}
+        confirmReceipt={confirmReceipt}
+        draftSaving={draftSaving}
+        confirming={confirming}
+        confirmError={confirmError}
+        companyId={companyId}
+        canPromoteExemplar={canPromoteExemplar}
+        onApply={onApplyDraft}
+        onConfirm={onConfirmDraft}
+        onSavePlan={onSavePlan}
+        onRegenImage={onRegenImage}
+        onAddImage={onAddImage}
+        onRemoveImage={onRemoveImage}
+        onUploadImage={onUploadImage}
+        paged={!isSplit}
+        onBack={goToChat}
+        awaitingImage={awaitingImageOk}
+        imageGenerating={imageGenerating}
+      />
+    ) : null;
 
   return (
     <SessionShell

@@ -24,3 +24,11 @@ While the graph runs, overlapping `POST /messages` and “resume image by typing
 - Mid-node cancel: streaming + `aclose` improves odds of stopping further tokens; **already-generated tokens / image jobs may still bill**. No partial resume of discarded turns.
 - Turn registry is **single-process** (same class of limit as the in-memory SSE bus); multi-worker stop requires a later shared store.
 - Confirm / publish remains ADR 0003 (Stop never publishes).
+
+## UI note — parked preview stays an Instagram frame
+
+Presentation only. Park / resume / Stop / Discard restore are unchanged here.
+
+When the preview pane is open, the session is parked at image OK (`awaiting_image_ok`), and the current revision has no ready primary image, the pane keeps the Instagram preview chrome (avatar, account, preview label, engagement icons). The image slot is an honest wait: parked shows a dashed soft square labelled 「圖未出」; while Execute (`POST /resume-image`) is in flight, that same slot shows a spinner and 「出緊圖…」. The header carries one status name (待出圖 / 出緊圖). The footer leaves out Apply / 確認出街 and shows one line pointing at Discard | 出圖 in chat. Format lock stays on the chat card; the preview does not repeat it. Caption sits under the frame as read-only pending copy. A collapsed 圖計劃 summary can sit below the frame. A parked revise (`POST /messages`, [ADR 0036](./0036-image-direction-new-script.md)) keeps the waiting slot with no spinner — the script is being rewritten, and the picture is not. Discard | 出圖 stay on the chat card.
+
+A revision that already has a renderable primary image keeps the accepted preview (real image, Apply / 確認出街 usable), including after Discard restores that revision and leaves the pane open ([ADR 0036](./0036-image-direction-new-script.md) §7). The pending revision is already on screen before Execute.

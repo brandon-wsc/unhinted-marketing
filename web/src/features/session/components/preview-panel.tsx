@@ -17,7 +17,14 @@ import {
   toEditableCopy,
 } from "@/features/session/components/ig-preview-mock";
 import { isConfirmSuccessStatus } from "@/features/session/session-helpers";
-import type { ConfirmSessionResponse, DraftCopy, PreviewDraft } from "@/features/session/types";
+import type {
+  ConfirmSessionResponse,
+  DraftCopy,
+  PreviewDraft,
+  PreviewMediaItem,
+} from "@/features/session/types";
+
+type PreviewPhase = "accepted" | "pending" | "generating";
 
 type Props = {
   draft: PreviewDraft;
@@ -41,6 +48,13 @@ type Props = {
   /** When true, show back affordance (paged shell); split shell hides it. */
   paged?: boolean;
   onBack?: () => void;
+  /**
+   * Session is parked at image OK (`awaiting_image_ok`). With no ready primary
+   * image, the Instagram frame stays and the image slot waits (待出圖).
+   */
+  awaitingImage?: boolean;
+  /** Execute / resume-image is in flight. Spinner inside the same image slot. */
+  imageGenerating?: boolean;
 };
 
 export function PreviewPanel({
@@ -61,6 +75,8 @@ export function PreviewPanel({
   onUploadImage,
   paged = false,
   onBack,
+  awaitingImage = false,
+  imageGenerating = false,
 }: Props) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
@@ -110,14 +126,21 @@ export function PreviewPanel({
   const showFailed = failedReceipt && !confirmed;
   const showPromote =
     canPromoteExemplar && !!companyId && showReceipt && local.caption.trim().length > 0;
+  const phase: PreviewPhase =
+    !showReceipt && !showFailed && awaitingImage && !primaryImageReady(draft)
+      ? imageGenerating
+        ? "generating"
+        : "pending"
+      : "accepted";
+  const actionsLocked = phase !== "accepted";
 
   async function handleApply() {
-    if (!dirty || busy) return;
+    if (actionsLocked || !dirty || busy) return;
     await onApply(local);
   }
 
   async function handleConfirm() {
-    if (busy) return;
+    if (actionsLocked || busy) return;
     if (showFailed || canConfirm) await onConfirm(local);
   }
 
@@ -143,11 +166,19 @@ export function PreviewPanel({
     }
   }
 
-  const hint = !hasImage
-    ? t("preview.gate.imageRequired")
-    : confirmError === "social_account_not_connected"
-      ? t("preview.gate.notConnected")
-      : t("preview.confirmHint");
+  const hint = actionsLocked
+    ? t("preview.awaiting.status")
+    : !hasImage
+      ? t("preview.gate.imageRequired")
+      : confirmError === "social_account_not_connected"
+        ? t("preview.gate.notConnected")
+        : t("preview.confirmHint");
+  const title =
+    phase === "generating"
+      ? t("preview.awaiting.generatingTitle")
+      : phase === "pending"
+        ? t("preview.awaiting.title")
+        : t("preview.title");
 
   return (
     <aside className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -169,7 +200,7 @@ export function PreviewPanel({
             </Tooltip>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold">{t("preview.title")}</p>
+            <p className="text-sm font-semibold">{title}</p>
             <p className="text-xs text-muted-foreground">
               {t("preview.revision", { n: draft.revision })} · {draft.platform}
             </p>
@@ -181,7 +212,7 @@ export function PreviewPanel({
               {t("preview.receipt.publishedBadge")}
             </span>
           )}
-          {dirty && !confirmed && (
+          {dirty && !confirmed && phase === "accepted" && (
             <span className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
               {t("preview.dirty")}
             </span>
@@ -193,10 +224,16 @@ export function PreviewPanel({
         <div className="flex flex-col gap-5 px-4 py-5">
           <IgPreviewMock
             copy={local}
-            imageUrls={previewUrls}
-            onEditImage={confirmed ? undefined : () => setEditImageOpen(true)}
-            onEditCopy={confirmed ? undefined : () => setEditCopyOpen(true)}
+            imageUrls={phase === "accepted" ? previewUrls : []}
+            imageSlot={phase === "accepted" ? undefined : phase}
+            onEditImage={
+              phase === "accepted" && !confirmed ? () => setEditImageOpen(true) : undefined
+            }
+            onEditCopy={
+              phase === "accepted" && !confirmed ? () => setEditCopyOpen(true) : undefined
+            }
           />
+          {phase !== "accepted" && <ImagePlanSummary draft={draft} />}
         </div>
       </div>
 
@@ -254,7 +291,7 @@ export function PreviewPanel({
               </Button>
             </div>
           </div>
-        ) : (
+        ) : actionsLocked && confirmError !== "social_account_not_connected" ? null : (
           <div className="space-y-2">
             {confirmError === "social_account_not_connected" && (
               <Alert variant="destructive" className="border-destructive/30 bg-destructive-soft">
@@ -269,27 +306,35 @@ export function PreviewPanel({
                 </AlertDescription>
               </Alert>
             )}
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={!dirty || busy}
-                onClick={() => void handleApply()}
-              >
-                {draftSaving ? t("preview.applySaving") : t("preview.apply")}
-              </Button>
-              <Button
-                type="button"
-                disabled={!canConfirm || busy}
-                onClick={() => void handleConfirm()}
-              >
-                {confirming ? t("preview.confirmWorking") : t("preview.confirm")}
-              </Button>
-            </div>
+            {!actionsLocked && (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={!dirty || busy}
+                  onClick={() => void handleApply()}
+                >
+                  {draftSaving ? t("preview.applySaving") : t("preview.apply")}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!canConfirm || busy}
+                  onClick={() => void handleConfirm()}
+                >
+                  {confirming ? t("preview.confirmWorking") : t("preview.confirm")}
+                </Button>
+              </div>
+            )}
           </div>
         )}
         {!showReceipt && confirmError !== "social_account_not_connected" && (
-          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{hint}</p>
+          <p
+            className={`text-[11px] leading-relaxed text-muted-foreground${
+              actionsLocked ? "" : " mt-2"
+            }`}
+          >
+            {hint}
+          </p>
         )}
       </div>
 
@@ -316,6 +361,83 @@ export function PreviewPanel({
         </>
       )}
     </aside>
+  );
+}
+
+function sortedMedia(draft: PreviewDraft): PreviewMediaItem[] {
+  return [...(draft.media ?? [])].sort((a, b) => a.seq - b.seq);
+}
+
+function primaryMediaItem(draft: PreviewDraft): PreviewMediaItem | null {
+  const media = sortedMedia(draft);
+  if (media.length === 0) return null;
+  return media.find((item) => item.role === "primary") ?? media[0];
+}
+
+/** A parked primary (`status: pending` or no renderable url) is not a ready post. */
+function primaryImageReady(draft: PreviewDraft): boolean {
+  const primary = primaryMediaItem(draft);
+  if (primary) {
+    if (primary.status === "pending") return false;
+    return isRenderableImageUrl(primary.url);
+  }
+  return isRenderableImageUrl(draft.image_url);
+}
+
+function planSummary(draft: PreviewDraft): {
+  format: "single" | "comic_4panel" | null;
+  prompt: string;
+  beats: string[];
+} {
+  const primary = primaryMediaItem(draft);
+  const plan = primary?.plan ?? {};
+  const fromPlan = typeof plan.format === "string" ? plan.format : "";
+  const raw = primary?.format || fromPlan;
+  const format = raw === "comic_4panel" || raw === "single" ? raw : null;
+  const prompt = typeof plan.prompt === "string" ? plan.prompt.trim() : "";
+  const beats: string[] = [];
+  if (Array.isArray(plan.panels)) {
+    for (const panel of plan.panels) {
+      if (panel && typeof panel === "object" && "beat" in panel) {
+        const beat = String((panel as { beat?: unknown }).beat ?? "").trim();
+        if (beat) beats.push(beat);
+      }
+    }
+  }
+  return { format, prompt, beats };
+}
+
+function ImagePlanSummary({ draft }: { draft: PreviewDraft }) {
+  const { t } = useTranslation();
+  const plan = planSummary(draft);
+  const formatLabel =
+    plan.format === "comic_4panel"
+      ? t("preview.awaiting.formatComic")
+      : plan.format === "single"
+        ? t("preview.awaiting.formatSingle")
+        : null;
+  const hasPlan = Boolean(formatLabel || plan.prompt || plan.beats.length);
+  if (!hasPlan) return null;
+
+  return (
+    <details className="mx-auto w-full max-w-[340px] rounded-lg border border-border bg-card px-3 py-2.5 text-sm">
+      <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">
+        {t("preview.awaiting.plan")}
+      </summary>
+      <div className="mt-2 space-y-1.5 leading-relaxed">
+        {formatLabel ? <p>{formatLabel}</p> : null}
+        {plan.prompt ? (
+          <p className="whitespace-pre-wrap text-muted-foreground">{plan.prompt}</p>
+        ) : null}
+        {plan.beats.length > 0 ? (
+          <ol className="list-decimal space-y-0.5 pl-5 text-muted-foreground">
+            {plan.beats.map((beat) => (
+              <li key={beat}>{beat}</li>
+            ))}
+          </ol>
+        ) : null}
+      </div>
+    </details>
   );
 }
 

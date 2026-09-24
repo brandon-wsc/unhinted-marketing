@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { captionBesideAccount } from "@/features/session/components/ig-preview-mock";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import type { ConfirmSessionResponse, PreviewDraft } from "@/features/session/types";
 
@@ -19,14 +20,6 @@ vi.mock("@/features/session/components/edit-copy-dialog", () => ({
 vi.mock("@/features/session/components/edit-image-dialog", () => ({
   EditImageDialog: () => null,
 }));
-vi.mock("@/features/session/components/ig-preview-mock", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/features/session/components/ig-preview-mock")>();
-  return {
-    ...actual,
-    IgPreviewMock: () => <div>ig-mock</div>,
-  };
-});
 
 const noop = async () => undefined;
 
@@ -57,6 +50,8 @@ function renderPanel(opts: {
   confirmed?: boolean;
   confirmReceipt?: ConfirmSessionResponse | null;
   confirmError?: string | null;
+  awaitingImage?: boolean;
+  imageGenerating?: boolean;
 }) {
   return render(
     <MemoryRouter>
@@ -68,6 +63,8 @@ function renderPanel(opts: {
           draftSaving={false}
           confirming={false}
           confirmError={opts.confirmError ?? null}
+          awaitingImage={opts.awaitingImage}
+          imageGenerating={opts.imageGenerating}
           onApply={noop}
           onConfirm={noop}
           onSavePlan={noop}
@@ -148,6 +145,148 @@ describe("PreviewPanel receipts", () => {
     });
     expect(screen.getByText("preview.confirmDone")).toBeInTheDocument();
     expect(screen.getByText("preview.confirmReceipt")).toBeInTheDocument();
+  });
+
+  it("keeps the IG shell with a waiting image slot when image-parked", () => {
+    renderPanel({
+      draft: draft({
+        image_url: null,
+        copy: { caption: "手沖未出街", hashtags: ["#hkcoffee"], cta: "去試" },
+        media: [
+          {
+            id: "pending-1",
+            url: null,
+            plan: {
+              format: "single",
+              prompt: "Harbour pour-over, morning light",
+              panels: [{ beat: "kettle" }],
+            },
+            format: "single",
+            role: "primary",
+            seq: 0,
+            status: "pending",
+          },
+        ],
+      }),
+      awaitingImage: true,
+    });
+    expect(screen.getAllByText("preview.awaiting.title")).toHaveLength(1);
+    expect(screen.getByText("preview.mock.sponsored")).toBeInTheDocument();
+    expect(screen.getAllByText("unhinted").length).toBeGreaterThan(0);
+    const slot = document.querySelector("[data-preview-state='pending']");
+    expect(slot).toBeTruthy();
+    expect(slot).toHaveTextContent("preview.awaiting.slotEmpty");
+    expect(screen.getAllByText("preview.awaiting.slotEmpty")).toHaveLength(1);
+    expect(screen.queryByRole("status", { name: "Loading" })).not.toBeInTheDocument();
+    expect(screen.getByText(/手沖未出街/)).toBeInTheDocument();
+    expect(screen.getByText(/#hkcoffee/)).toBeInTheDocument();
+    const plan = screen.getByText("preview.awaiting.plan").closest("details");
+    expect(plan).toBeTruthy();
+    expect(plan).not.toHaveAttribute("open");
+    expect(plan).toHaveTextContent("Harbour pour-over, morning light");
+    expect(plan).toHaveTextContent("kettle");
+    expect(plan).toHaveTextContent("preview.awaiting.formatSingle");
+    expect(screen.queryByText("preview.mock.placeholder")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview.apply" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview.confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview.copy.edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview.media.edit" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("preview.awaiting.status")).toHaveLength(1);
+    expect(screen.queryByText("chat.agent.interrupt.subtitle")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.gate.imageRequired")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.badge")).not.toBeInTheDocument();
+    expect(slot).toHaveClass("bg-card", "text-foreground", "border-dashed", "border-foreground/40");
+    expect(slot).not.toHaveClass("bg-secondary");
+    expect(slot?.querySelector("p")).toHaveClass("text-foreground");
+    expect(slot?.querySelector("p")).not.toHaveClass("text-muted-foreground");
+  });
+
+  it("shows the spinner inside the IG image slot only while generating", () => {
+    renderPanel({
+      draft: draft({ image_url: null, media: [] }),
+      awaitingImage: true,
+      imageGenerating: true,
+    });
+    const slot = document.querySelector("[data-preview-state='generating']");
+    expect(slot).toBeTruthy();
+    expect(slot).toHaveAttribute("aria-busy", "true");
+    const spinner = screen.getByRole("status", { name: "Loading" });
+    expect(spinner.closest("[data-preview-state]")).toBe(slot);
+    expect(spinner).toHaveClass("text-foreground");
+    expect(spinner).not.toHaveClass("text-muted-foreground");
+    expect(slot).toHaveClass("bg-card", "text-foreground", "border-dashed");
+    expect(screen.getAllByText("preview.awaiting.slotGenerating")).toHaveLength(1);
+    expect(screen.getAllByText("preview.awaiting.generatingTitle")).toHaveLength(1);
+    expect(screen.getByText("preview.mock.sponsored")).toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.slotEmpty")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.mock.placeholder")).not.toBeInTheDocument();
+    expect(screen.getAllByText("preview.awaiting.status")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "preview.confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview.apply" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the accepted IG preview when a parked session still has a ready image", () => {
+    renderPanel({
+      draft: draft(),
+      awaitingImage: true,
+    });
+    expect(screen.getByText("preview.mock.sponsored")).toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.slotEmpty")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.title")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "preview.confirm" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "preview.apply" })).toBeInTheDocument();
+  });
+
+  it("keeps the copy-only IG gate when the session is not image-parked", () => {
+    renderPanel({
+      draft: draft({ image_url: null, media: [] }),
+      awaitingImage: false,
+    });
+    expect(screen.getByText("preview.mock.sponsored")).toBeInTheDocument();
+    expect(screen.getByText("preview.mock.placeholder")).toBeInTheDocument();
+    expect(screen.getByText("preview.gate.imageRequired")).toBeInTheDocument();
+    expect(screen.queryByText("preview.awaiting.slotEmpty")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "preview.confirm" })).toBeDisabled();
+  });
+
+  it("keeps the locked footer as a short chat pointer, not the lock essay", async () => {
+    const en = (await import("@/i18n/locales/en.json")).default;
+    const zh = (await import("@/i18n/locales/zh-HK.json")).default;
+    expect(zh.preview.awaiting.status).not.toBe(zh.chat.agent.interrupt.subtitle);
+    expect(en.preview.awaiting.status).not.toBe(en.chat.agent.interrupt.subtitle);
+    expect(zh.preview.awaiting.status.length).toBeLessThan(
+      zh.chat.agent.interrupt.subtitle.length / 2,
+    );
+    expect(en.preview.awaiting.status.length).toBeLessThan(en.chat.agent.interrupt.subtitle.length);
+    expect(zh.preview.awaiting.status).toMatch(/棄置/);
+    expect(zh.preview.awaiting.status).toMatch(/出圖/);
+    expect(zh.preview.awaiting.status).not.toMatch(/格式/);
+    expect(zh.chat.agent.interrupt.subtitle).toMatch(/格式/);
+    expect(en.preview.awaiting.status.toLowerCase()).toMatch(/chat/);
+    expect(en.preview.awaiting.status.toLowerCase()).not.toMatch(/format/);
+    expect(en.chat.agent.interrupt.subtitle.toLowerCase()).toMatch(/format/);
+  });
+
+  it("bolds the account name and does not repeat a leading handle in the caption", () => {
+    expect(captionBesideAccount("unhinted 清晨六點", "unhinted")).toBe("清晨六點");
+    expect(captionBesideAccount("Unhinted：清晨", "unhinted")).toBe("清晨");
+    expect(captionBesideAccount("清晨六點", "unhinted")).toBe("清晨六點");
+    expect(captionBesideAccount("unhintedcoffee 呀", "unhinted")).toBe("unhintedcoffee 呀");
+
+    renderPanel({
+      draft: draft({
+        copy: { caption: "unhinted 清晨六點，海邊未有人", hashtags: [], cta: "" },
+      }),
+    });
+    const names = screen.getAllByText("unhinted");
+    expect(names).toHaveLength(2);
+    const captionLead = names.find((el) => el.tagName === "SPAN");
+    expect(captionLead).toHaveClass("font-bold");
+    const body = screen.getByText(/清晨六點，海邊未有人/);
+    expect(body.tagName).toBe("SPAN");
+    expect(body).toHaveClass("whitespace-pre-wrap");
+    expect(body.textContent).not.toMatch(/unhinted/i);
   });
 
   it("links to Instagram settings when the account is not connected", () => {

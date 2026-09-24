@@ -303,6 +303,16 @@
       "placeholder": "圖片位置",
       "more": "更多"
     },
+    "awaiting": {
+      "title": "待出圖",
+      "slotEmpty": "圖未出",
+      "slotGenerating": "出緊圖…",
+      "status": "棄置｜出圖喺對話。",
+      "plan": "圖計劃",
+      "formatSingle": "單圖",
+      "formatComic": "四格漫畫",
+      "generatingTitle": "出緊圖"
+    },
     "error": {
       "saveFailed": "草稿儲存唔到喎，再試一次。",
       "confirmFailed": "確認唔到喎，再試一次。",
