@@ -261,7 +261,11 @@ describe("PreviewPanel receipts", () => {
     expect(en.preview.awaiting.status.length).toBeLessThan(en.chat.agent.interrupt.subtitle.length);
     expect(zh.preview.awaiting.status).toMatch(/棄置/);
     expect(zh.preview.awaiting.status).toMatch(/出圖/);
+    expect(zh.preview.awaiting.status).not.toMatch(/格式/);
+    expect(zh.chat.agent.interrupt.subtitle).toMatch(/格式/);
     expect(en.preview.awaiting.status.toLowerCase()).toMatch(/chat/);
+    expect(en.preview.awaiting.status.toLowerCase()).not.toMatch(/format/);
+    expect(en.chat.agent.interrupt.subtitle.toLowerCase()).toMatch(/format/);
   });
 
   it("bolds the account name and does not repeat a leading handle in the caption", () => {
