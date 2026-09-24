@@ -76,10 +76,11 @@ Success criteria after a prompt change: fewer parse/fallback flags, stabler turn
 4. Freeze a representative case as YAML under [`tests/eval/cases/`](../tests/eval/cases/) (`id`, `suites`, `node`, `state`, `expect`) and re-run:
 
    ```bash
-   python -m scripts.eval_agent --suite research   # or smoke / all
+   python -m scripts.eval_agent --suite regression   # or smoke / research / all
+   python -m scripts.eval_diff                      # vs committed baseline.json
    ```
 
-   Compare `reports/eval/latest.md` (gitignored). Admin Trace still helps on live sessions; the CLI is the repeatable pack. If a frozen case goes red, **fix the node** (or accept a real regression) — do not loosen `expect` or rewrite the prompt example just to go green. Follow-up research cases use `queries_require_any` (set coverage), not a Latin-only / no-kana rule.
+   Each case row carries wall `latency_ms`, tokens, and rough `usd`; the suite summary shows pass rate, `mean_voice`, p50/p95, totals. Compare `reports/eval/latest.md` (gitignored) or `eval_diff` against `reports/eval/baseline.json` (committed). Red diff = **fix the node** (or accept a real regression and refresh the anchor via `--out reports/eval/baseline.json` / `eval_diff --accept`) — do not loosen `expect` or rewrite the prompt example just to go green. Follow-up research cases use `queries_require_any` (set coverage), not a Latin-only / no-kana rule. Admin Trace still helps on live sessions; `python -m scripts.eval_cost_from_records` gives p50/p95 + rough $ across prod `llm_call_records`.
 5. Re-run similar sessions; compare in admin:
    - `parse_ok` / `fallback_used` rate
    - turn path length / flapping

@@ -308,7 +308,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | README | ✅ | Project intro; setup in GETTING_STARTED |
 | `docker-compose.yml` | ✅ | Dev only — local `db` (pgvector) + adminer. Media is on-disk `MEDIA_ROOT` ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)); no object-storage sidecar. Deployment packages live in [`deploy/`](../deploy/) ([ADR 0027](./adr/0027-docker-deploy-packages.md)) |
 | Auth rate limiting | ✅ | In-memory sliding window on register/login/refresh (`AUTH_RATE_LIMIT_*`); Redis later |
-| Automated tests | ✅ Backend + FE Tier 1/2 + CI + on-demand live eval | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && pnpm test` (Vitest + RTL — lib utils + `session-helpers` / `session-layout` / `useSession` + PasswordBox / UserMenuDropdown). Live LLM: `python -m scripts.eval_agent` (not CI). Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
+| Automated tests | ✅ Backend + FE Tier 1/2 + CI + on-demand live eval | BE: `tests/unit` + `tests/api` (`TEST_DATABASE_URL`). FE: `cd web && pnpm test` (Vitest + RTL — lib utils + `session-helpers` / `session-layout` / `useSession` + PasswordBox / UserMenuDropdown). Live LLM: `python -m scripts.eval_agent` (not CI) — per-case latency/tokens/usd, committed `reports/eval/baseline.json` + `scripts.eval_diff` regression check, ~30-case pack incl. grounding + safety fixtures; prod cost surface `scripts.eval_cost_from_records`. Policy [TESTING.md](./TESTING.md). CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
 ### Phase 1 — Data & Autopilot Backend · **100%**
 

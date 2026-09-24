@@ -68,6 +68,9 @@ pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
  --cov=internal.session.execute_harness --cov=internal.session.ingest --cov-fail-under=70
 python -m scripts.export_contracts   # OpenAPI + JSON Schema under docs/
 python -m scripts.eval_agent         # on-demand live LLM eval (needs OPENAI_API_KEY; not CI)
+python -m scripts.eval_agent --suite regression   # bigger pack; --out reports/eval/baseline.json refreshes anchor
+python -m scripts.eval_diff          # baseline vs latest — exits 1 on regression
+python -m scripts.eval_cost_from_records  # prod llm_call_records p50/p95 + rough $
 cd scripts/typescript_gen && npm install && npm run generate  # session TS mirrors
 cd web && pnpm run lint && pnpm test && pnpm run build
 cd relay && npm ci && npm run types && npm test   # Cloudflare OAuth relay worker
