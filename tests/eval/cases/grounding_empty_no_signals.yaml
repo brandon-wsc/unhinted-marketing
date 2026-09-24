@@ -1,0 +1,13 @@
+id: grounding_empty_no_signals
+suites: [regression]
+node: grounding_check
+db_signal_ids: []
+state:
+  mode: AGENT
+  draft:
+    caption: 星期五 OT 完飲罐嘢先走。
+  source_signal_ids: []
+expect:
+  grounding_ok: true
+  feedback_contains:
+    - template-only

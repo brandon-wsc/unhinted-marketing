@@ -1,0 +1,18 @@
+id: grounding_invalid_id
+suites: [smoke, regression]
+node: grounding_check
+db_signal_ids:
+  - cassette:ot
+state:
+  mode: AGENT
+  draft:
+    caption: 星期五 OT 完飲罐嘢先走。
+  source_signal_ids:
+    - cassette:ot
+    - cassette:ghost
+expect:
+  grounding_ok: false
+  feedback_contains:
+    - Missing or invalid
+  kept_signal_ids:
+    - cassette:ot

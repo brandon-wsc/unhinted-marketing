@@ -1,0 +1,26 @@
+id: draft_cha_chaan_teng
+suites: [regression]
+node: executor_post
+state:
+  mode: AGENT
+  research_rule_pass: false
+  company_context:
+    name: Test Co
+  brief:
+    summary: 茶餐廳下午茶時段嘅港式情懷，soft sell，貼地唔好公關腔。
+  source_signal_ids:
+    - cassette:cct
+  ranked_signals:
+    - signal_id: cassette:cct
+      source: tavily
+      title: Hong Kong cha chaan teng afternoon tea sets
+      excerpt: HK workers share favourite 3:15 tea-break spots and toast sets.
+      metrics: {}
+  messages:
+    - role: user
+      content: 幫我寫一則茶餐廳下午茶 IG caption
+expect:
+  caption_nonempty: true
+  forbid_simplified: true
+  forbid_mainland_slang: true
+  min_voice: 0.5

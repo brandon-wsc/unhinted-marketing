@@ -1,0 +1,15 @@
+id: voice_corporate_en_negative
+suites: [regression]
+node: voice_fixture
+state:
+  caption: |
+    We are thrilled to announce our brand-new energy drink range,
+    crafted with passion and excellence for our valued customers.
+    Stay tuned for more exciting updates. #blessed #synergy
+  hashtags:
+    - "#brand"
+    - "#excellence"
+  cta: Learn more on our website
+expect:
+  caption_nonempty: true
+  max_voice: 0.5

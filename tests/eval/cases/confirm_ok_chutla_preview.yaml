@@ -1,0 +1,14 @@
+id: confirm_ok_chutla_preview
+suites: [regression]
+node: route_intent
+state:
+  mode: PREVIEW
+  research_rule_pass: false
+  draft:
+    caption: 星期五 OT 完飲罐嘢先走。
+  messages:
+    - role: user
+      content: OK 出啦
+expect:
+  parse_ok: true
+  intent: confirm_intent
