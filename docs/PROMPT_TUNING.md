@@ -11,7 +11,7 @@ How to use the admin LLM records, node steps, and Session Trace to fine-tune gra
 
 | Tab | Answers |
 |-----|---------|
-| **LLM calls** | What did the model *see* and *return*? (`system_prompt`, `user_prompt`, `response_text`, tokens, latency, `parse_ok`, `fallback_used`) |
+| **LLM calls** | What did the model *see* and *return*? (`system_prompt`, `user_prompt`, `response_text`, tokens + `cached_tokens`, latency + `ttft_ms`, est. `usd`, `parse_ok`, `fallback_used`) |
 | **Node steps** | Which graph nodes ran in a turn, in what order? (`seq`, `mode_in`/`mode_out`, `intent_out`, capped `output`) |
 | **Research** | ADR 0009 gate + ingest: `semantic_route`, `search_queries`, Tavily∪PG `research_signals` (per turn) |
 | **Session Trace** | What did the *user* experience? Messages, draft revisions, signal grounding, turns grouped by `turn_id` |
@@ -42,7 +42,7 @@ In **LLM calls**, filter for:
 - **Fallback only**
 - or scan for `parse_ok = false` in the flags column
 
-Open a row → note `node` (e.g. `reviewer`, `route_intent`). Use **View steps for this turn** to open **Node steps** filtered by that `turn_id`.
+Open a row → detail card opens inline (wide) or as a sheet (narrow). Note `node` (e.g. `reviewer`, `route_intent`). Use **View steps for this turn** to open **Node steps** filtered by that `turn_id`.
 
 Ask: was this a **bad prompt**, or did an **earlier node** feed bad state? Check previous `seq` outputs (`output_keys`, mode/intent transitions).
 
