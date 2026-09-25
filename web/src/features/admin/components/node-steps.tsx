@@ -227,9 +227,12 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
     return () => clearTimeout(handle);
   }, [nodeInput, sessionInput, turnInput]);
 
-  useEffect(() => {
+  // Reset to the first page whenever the applied filters change.
+  const [appliedFilters, setAppliedFilters] = useState(filters);
+  if (appliedFilters !== filters) {
+    setAppliedFilters(filters);
     setOffset(0);
-  }, [filters]);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
