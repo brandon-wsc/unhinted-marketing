@@ -1,13 +1,103 @@
 import { X } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { IconButton } from "@/components/icon-button";
 import { Button } from "@/components/ui/button";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
+import { useContainerWidth } from "@/hooks/use-container-width";
 
 /** Content-based split breakpoint for admin record pages (Penpot System master-detail). */
 export const ADMIN_SPLIT_MIN_WIDTH = 1100;
+
+/** Pane floors for the resizable record split; list starts at `defaultListSize` px. */
+const ADMIN_SPLIT = { listMin: 320, detailMin: 340 } as const;
+const SPLIT_HIT_TARGET = { coarse: 7, fine: 7 } as const;
+
+function splitRatioKey(key: string): string {
+  return `unhinted.adminSplit.${key}`;
+}
+
+function readSplitRatio(key: string): number | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(splitRatioKey(key));
+    const ratio = raw == null ? Number.NaN : Number(raw);
+    return Number.isFinite(ratio) && ratio > 0 && ratio < 1 ? ratio : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persistent resizable master-detail split for wide admin containers.
+ * Both panes stay mounted (empty detail renders a placeholder) so picking
+ * a row never reflows the list; the divider drag ratio persists per key.
+ */
+export function DetailSplit({
+  list,
+  detail,
+  storageKey,
+  defaultListSize,
+}: {
+  list: ReactNode;
+  /** Detail card content; `null` renders an empty-selection placeholder. */
+  detail: ReactNode | null;
+  /** localStorage key suffix for the persisted list/detail width ratio. */
+  storageKey: string;
+  /** Resting list width in px before the user drags the divider. */
+  defaultListSize: number;
+}) {
+  const { t } = useTranslation();
+  const { ref, width } = useContainerWidth();
+  const [ratio, setRatio] = useState<number | null>(() => readSplitRatio(storageKey));
+  const listPx = Math.min(
+    Math.max(ratio == null ? defaultListSize : width * ratio, ADMIN_SPLIT.listMin),
+    Math.max(ADMIN_SPLIT.listMin, width - ADMIN_SPLIT.detailMin),
+  );
+
+  return (
+    <div ref={ref}>
+      <ResizablePanelGroup
+        id={`admin-split-${storageKey}`}
+        orientation="horizontal"
+        resizeTargetMinimumSize={SPLIT_HIT_TARGET}
+        onLayoutChanged={(layout, meta) => {
+          if (!meta.isUserInteraction) return;
+          const listSize = layout["admin-list"] ?? 0;
+          const detailSize = layout["admin-detail"] ?? 0;
+          const sum = listSize + detailSize;
+          if (sum <= 0) return;
+          const next = listSize / sum;
+          setRatio(next);
+          try {
+            localStorage.setItem(splitRatioKey(storageKey), String(next));
+          } catch {}
+        }}
+      >
+        <ResizablePanel
+          id="admin-list"
+          minSize={ADMIN_SPLIT.listMin}
+          defaultSize={listPx}
+          className="min-w-0"
+        >
+          <div className="pr-3">{list}</div>
+        </ResizablePanel>
+        <ResizableHandle withHandle aria-label={t("admin.detail.resize")} />
+        <ResizablePanel id="admin-detail" minSize={ADMIN_SPLIT.detailMin} className="min-w-0">
+          <div className="pl-3">
+            {detail ?? (
+              <section className="rounded-xl border border-dashed border-border p-5">
+                <p className="text-sm text-muted-foreground">{t("admin.detail.selectRow")}</p>
+              </section>
+            )}
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
+  );
+}
 
 export function formatTime(iso: string): string {
   return new Date(iso).toLocaleString("zh-HK", { hour12: false });
@@ -98,7 +188,7 @@ export function DetailSheetShell({
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+      <SheetContent side="right" className="w-[92vw] overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
           {actions}

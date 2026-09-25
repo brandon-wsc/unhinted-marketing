@@ -831,6 +831,8 @@
     "detail": {
       "title": "呼叫詳情",
       "close": "關閉",
+      "selectRow": "揀一行睇詳情",
+      "resize": "調列表同詳情闊度",
       "session": "Session",
       "user": "User",
       "temperature": "Temperature",

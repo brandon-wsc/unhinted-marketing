@@ -22,6 +22,7 @@ import {
   ADMIN_SPLIT_MIN_WIDTH,
   DetailSheetShell,
   DetailShell,
+  DetailSplit,
   formatTime,
   Meta,
   shortId,
@@ -316,27 +317,31 @@ export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
       ) : null}
 
       {data ? (
-        split && selected ? (
-          <div className="flex items-start gap-6">
-            <div className="w-[480px] shrink-0">
+        split ? (
+          <DetailSplit
+            storageKey="research"
+            defaultListSize={480}
+            list={
               <TurnsTable
                 turns={data.turns}
                 loading={loading}
-                selectedId={selected.turn_id}
+                selectedId={selected?.turn_id ?? null}
                 onSelect={selectTurn}
               />
-            </div>
-            <div className="min-w-0 flex-1">
-              <DetailShell
-                title={t("admin.research.turnDetail")}
-                loading={false}
-                onClose={() => setSelected(null)}
-                actions={detailActions}
-              >
-                <TurnDetailContent turn={selected} />
-              </DetailShell>
-            </div>
-          </div>
+            }
+            detail={
+              selected ? (
+                <DetailShell
+                  title={t("admin.research.turnDetail")}
+                  loading={false}
+                  onClose={() => setSelected(null)}
+                  actions={detailActions}
+                >
+                  <TurnDetailContent turn={selected} />
+                </DetailShell>
+              ) : null
+            }
+          />
         ) : (
           <TurnsTable
             turns={data.turns}

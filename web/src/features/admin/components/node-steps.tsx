@@ -27,6 +27,7 @@ import {
   DetailPager,
   DetailSheetShell,
   DetailShell,
+  DetailSplit,
   formatTime,
   Meta,
   shortId,
@@ -104,19 +105,16 @@ function StepDetailContent({
 
 function StepTable({
   items,
-  condensed,
   loading,
   selectedId,
   onSelect,
 }: {
   items: NodeStepSummary[];
-  condensed: boolean;
   loading: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation();
-  const cols = condensed ? 5 : 7;
   return (
     <div className="relative min-h-[18rem] overflow-hidden rounded-xl border border-border bg-card">
       {loading && (
@@ -124,7 +122,7 @@ function StepTable({
           <Spinner className="size-6 text-primary" />
         </div>
       )}
-      <Table className={condensed ? undefined : "min-w-[48rem]"}>
+      <Table>
         <TableHeader>
           <TableRow>
             <TableHead>{t("admin.table.time")}</TableHead>
@@ -132,18 +130,12 @@ function StepTable({
             <TableHead>{t("admin.table.node")}</TableHead>
             <TableHead>{t("admin.table.mode")}</TableHead>
             <TableHead>{t("admin.table.intent")}</TableHead>
-            {!condensed && (
-              <>
-                <TableHead>{t("admin.table.turnId")}</TableHead>
-                <TableHead>{t("admin.table.outputKeys")}</TableHead>
-              </>
-            )}
           </TableRow>
         </TableHeader>
         <TableBody>
           {!loading && items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={cols} className="py-8 text-center text-muted-foreground">
+              <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                 {t("admin.nodeStepsEmpty")}
               </TableCell>
             </TableRow>
@@ -166,16 +158,6 @@ function StepTable({
               <TableCell className="text-xs text-muted-foreground">
                 {row.intent_out ?? "—"}
               </TableCell>
-              {!condensed && (
-                <>
-                  <TableCell className="max-w-[10rem] truncate font-mono text-[10px] text-muted-foreground">
-                    {row.turn_id}
-                  </TableCell>
-                  <TableCell className="max-w-[12rem] truncate text-xs text-muted-foreground">
-                    {(row.output_keys as string[]).join(", ") || "—"}
-                  </TableCell>
-                </>
-              )}
             </TableRow>
           ))}
         </TableBody>
@@ -277,8 +259,6 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
     setSelectedId((cur) => (cur === id ? null : id));
   }, []);
 
-  const condensed = !split || selectedId !== null;
-
   return (
     <div ref={ref}>
       <div className="mb-3 flex flex-wrap items-end gap-2">
@@ -340,43 +320,42 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
         </p>
       )}
 
-      {split && selectedId ? (
-        <div className="flex items-start gap-6">
-          <div className="w-[460px] shrink-0">
-            <StepTable
-              items={items}
-              condensed
-              loading={loading}
-              selectedId={selectedId}
-              onSelect={selectRow}
-            />
-            <DetailPager
-              offset={offset}
-              count={items.length}
-              pageSize={NODE_STEP_PAGE_SIZE}
-              loading={loading}
-              onOffset={setOffset}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <DetailShell
-              title={t("admin.nodeStepDetail.title")}
-              loading={detailLoading}
-              onClose={() => setSelectedId(null)}
-            >
-              {detail && <StepDetailContent detail={detail} onOpenSession={onOpenSession} />}
-            </DetailShell>
-          </div>
-        </div>
+      {split ? (
+        <DetailSplit
+          storageKey="node-steps"
+          defaultListSize={460}
+          list={
+            <>
+              <StepTable
+                items={items}
+                loading={loading}
+                selectedId={selectedId}
+                onSelect={selectRow}
+              />
+              <DetailPager
+                offset={offset}
+                count={items.length}
+                pageSize={NODE_STEP_PAGE_SIZE}
+                loading={loading}
+                onOffset={setOffset}
+              />
+            </>
+          }
+          detail={
+            selectedId ? (
+              <DetailShell
+                title={t("admin.nodeStepDetail.title")}
+                loading={detailLoading}
+                onClose={() => setSelectedId(null)}
+              >
+                {detail && <StepDetailContent detail={detail} onOpenSession={onOpenSession} />}
+              </DetailShell>
+            ) : null
+          }
+        />
       ) : (
         <>
-          <StepTable
-            items={items}
-            condensed={condensed}
-            loading={loading}
-            selectedId={selectedId}
-            onSelect={selectRow}
-          />
+          <StepTable items={items} loading={loading} selectedId={selectedId} onSelect={selectRow} />
           <DetailPager
             offset={offset}
             count={items.length}

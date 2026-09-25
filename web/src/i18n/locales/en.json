@@ -831,6 +831,8 @@
     "detail": {
       "title": "Call detail",
       "close": "Close",
+      "selectRow": "Select a row to see its details",
+      "resize": "Resize list and detail",
       "session": "Session",
       "user": "User",
       "temperature": "Temperature",
