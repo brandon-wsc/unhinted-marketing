@@ -118,6 +118,11 @@ Prefer domain names over roadmap phases for `scope`: `auth`, `signals`, `session
 
 `type/slug` — the prefix mirrors the commit type: `feat/…`, `fix/…`, `refactor/…`, `docs/…`, `chore/…`, `test/…`, `ci/…`, `perf/…` (`backup/…` as an escape hatch). Slug is lowercase, hyphen-separated, e.g. `fix/executor-post-voice`. No other prefixes — CI rejects PRs whose head branch does not match.
 
+## Feature work
+
+- **New feature / fix → fresh branch off latest `main`.** Never commit on `main`; never reuse a merged or unrelated branch — one branch + PR per change.
+- **New feature → ADR.** A feature that adds or changes a product contract, routing/behavior rule, or architectural decision gets `docs/adr/NNNN-<slug>.md` (next number) before or with the code — supersede the old ADR rather than rewriting it. Pure bug fixes, docs-only, and chore/tooling changes do not need one.
+
 ## Alembic migrations
 
 Use Alembic defaults. Do **not** invent sequential IDs (`001_auth`, `002_phase1`).
