@@ -130,7 +130,7 @@ pnpm run test:coverage # vitest run --coverage (path-tiered thresholds)
 pnpm run build
 ```
 
-On-demand live LLM eval (not CI). Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Writes `reports/eval/latest.md` + `latest.json` (gitignored); `reports/eval/baseline.json` is the committed diff anchor. Each case row carries `latency_ms` (wall), token counts, and rough `usd` from `internal/llm/pricing.py` — unknown model ids report `usd: null`, never invented prices. `--skip-judge` skips the VOICE LLM call but still reports wall ms.
+On-demand live LLM eval (not CI). Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` — unless every selected case is deterministic (`grounding_check` always; `voice_fixture` under `--skip-judge`), in which case the run proceeds keyless. Writes `reports/eval/latest.md` + `latest.json` (gitignored); `reports/eval/baseline.json` is the committed diff anchor. Each case row carries `latency_ms` (wall), token counts, `usage.status_counts`, `usage.ttft_ms` (per-call, streaming paths only), `usage.cached_tokens`, and rough `usd` from `internal/llm/pricing.py` — unknown model ids report `usd: null`, never invented prices. The suite summary adds `elapsed_ms`, `models_used` (normalized catalog ids), `status_counts`, `p50/p95_ttft_ms`, `total_cached_tokens` + `cache_hit_rate`. `--skip-judge` skips the VOICE LLM call but still reports wall ms.
 
 Draft cases get a cheap-model VOICE judge (`scene` / `layers` / `bridge` / `locale` → `overall` 0–1, plus a 0–5 `safety` dim gated by `expect.min_safety` / `max_safety`); YAML `expect.min_voice` / `max_voice` can fail a case (PR-tone fixture is `voice_pr_tone_negative`). Fluent-but-tasteless copy (crisis humor, politics, disparagement, fake-authority stats) stays in-voice — gate it with `max_safety`, not `max_voice`. `voice_fixture` negative cases are **canaries**: frozen bad copy passes only when the judge correctly pans it.
 
@@ -148,7 +148,9 @@ python -m scripts.eval_agent --skip-judge
 
 **Baseline loop:** `python -m scripts.eval_diff` compares committed `reports/eval/baseline.json` vs `latest.json` — case flips, `mean_voice`, `p95_ms`, `total_tokens`, `total_usd`. Defaults (flags override): any pass→fail case fails; `mean_voice` drop >0.05; `p95_ms` >1.5x and >+500ms; `total_tokens` >1.5x. Exit 1 = regression → **fix the node, do not loosen `expect`**. Regenerate the anchor after an accepted change: `python -m scripts.eval_agent --suite all --out reports/eval/baseline.json` (or `--accept` in `eval_diff`).
 
-**Prod cost surface:** `python -m scripts.eval_cost_from_records [--days N] [--node …]` prints p50/p95 latency, token sums, and rough USD from `llm_call_records` — same price table, `usd —` for unpriced models.
+**Model guard:** when `models_used` differs between baseline and latest, `eval_diff` prints a `MODEL CHANGED` banner and downgrades metric regressions (voice/p95/tokens) to warnings — cross-model deltas are informational. Case flips still fail. Pass `--strict-models` to keep metric thresholds enforced across a model change. Reports predating `models_used` skip the guard with a note.
+
+**Prod cost surface:** `python -m scripts.eval_cost_from_records [--days N] [--node …]` prints p50/p95 latency + TTFT, token sums, prompt-cache hit rate, and rough USD from `llm_call_records` — same price table, `usd —` for unpriced models.
 
 **Product HITL is not eval:** Confirm + `approval_token`, image park + resume-image, and Approvals (K6) are guardrails exercised by `tests/api` — they are deliberately absent from this pack.
 
