@@ -1,0 +1,22 @@
+id: research_first_turn_iphone
+suites: [research, regression]
+node: query_generator
+state:
+  mode: CHAT
+  research_rule_pass: true
+  research:
+    need_facts: true
+    entity_surface: iPhone 炒價
+  messages:
+    - role: user
+      content: 新iPhone嘅炒價仲高唔高
+expect:
+  query_source: llm
+  min_queries: 1
+  max_queries: 3
+  queries_forbid_mixed_script: true
+  queries_forbid_substrings:
+    - "iPhone 炒價"
+  queries_require_any:
+    - [iPhone]
+    - [price, resale, scalper, 炒價]

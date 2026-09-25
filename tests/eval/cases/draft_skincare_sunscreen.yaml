@@ -1,0 +1,26 @@
+id: draft_skincare_sunscreen
+suites: [regression]
+node: executor_post
+state:
+  mode: AGENT
+  research_rule_pass: false
+  company_context:
+    name: Test Co
+  brief:
+    summary: 香港夏天出街曬到溶，防曬 soft sell，唔好寫到似賣廣告。
+  source_signal_ids:
+    - cassette:sun
+  ranked_signals:
+    - signal_id: cassette:sun
+      source: tavily
+      title: Hong Kong summer UV index and sunscreen habits
+      excerpt: HKers compare sunscreen textures before beach weekends.
+      metrics: {}
+  messages:
+    - role: user
+      content: 幫我寫一則防曬 IG caption
+expect:
+  caption_nonempty: true
+  forbid_simplified: true
+  forbid_mainland_slang: true
+  min_voice: 0.5

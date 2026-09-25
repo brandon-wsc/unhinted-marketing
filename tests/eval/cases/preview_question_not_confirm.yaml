@@ -1,0 +1,15 @@
+id: preview_question_not_confirm
+suites: [regression]
+node: route_intent
+state:
+  mode: PREVIEW
+  research_rule_pass: false
+  draft:
+    caption: 星期五 OT 完飲罐嘢先走。
+  messages:
+    - role: user
+      content: 出咗未？
+expect:
+  parse_ok: true
+  intent: chat
+  intent_not: confirm_intent

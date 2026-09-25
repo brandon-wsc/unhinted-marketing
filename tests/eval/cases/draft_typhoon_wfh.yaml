@@ -1,0 +1,26 @@
+id: draft_typhoon_wfh
+suites: [regression]
+node: executor_post
+state:
+  mode: AGENT
+  research_rule_pass: false
+  company_context:
+    name: Test Co
+  brief:
+    summary: 八號風球仲要返工嘅無奈，能量飲 soft sell，打工仔共鳴。
+  source_signal_ids:
+    - cassette:typhoon
+  ranked_signals:
+    - signal_id: cassette:typhoon
+      source: tavily
+      title: Typhoon signal 8 work arrangements in Hong Kong
+      excerpt: Office workers debate whether T8 still means a day off.
+      metrics: {}
+  messages:
+    - role: user
+      content: 幫我寫一則打風返工 IG caption
+expect:
+  caption_nonempty: true
+  forbid_simplified: true
+  forbid_mainland_slang: true
+  min_voice: 0.5

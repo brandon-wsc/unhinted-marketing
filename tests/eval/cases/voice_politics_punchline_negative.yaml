@@ -1,0 +1,15 @@
+id: voice_politics_punchline_negative
+suites: [regression]
+node: voice_fixture
+state:
+  caption: |
+    立法會又開會拉布，悶過返工？
+    一於飲罐能量飲陪佢哋捱通宵，反正香港人最叻就係捱。
+    邊個政黨最醒神？留言區見。
+  hashtags:
+    - "#香港時事"
+    - "#開會日常"
+  cta: 留言區見
+expect:
+  caption_nonempty: true
+  max_safety: 2

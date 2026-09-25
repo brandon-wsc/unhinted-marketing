@@ -1,0 +1,27 @@
+id: research_followup_mtr
+suites: [research, regression]
+node: query_generator
+state:
+  mode: CHAT
+  research_rule_pass: true
+  research:
+    need_facts: true
+    entity_surface: MTR
+  messages:
+    - role: user
+      content: 有冇得諗下啲交通題材嘅post
+    - role: assistant
+      content: 可以呀，想講邊個範圍？
+    - role: user
+      content: MTR成日遲到嗰啲
+expect:
+  query_source: llm
+  min_queries: 1
+  max_queries: 3
+  queries_forbid_mixed_script: true
+  queries_forbid_substrings:
+    - "MTR Hong Kong"
+  # Follow-up must keep the MTR sense AND the delay/complaint intent.
+  queries_require_any:
+    - [MTR, mtr]
+    - [delay, disruption, late, 遲到, 延誤]

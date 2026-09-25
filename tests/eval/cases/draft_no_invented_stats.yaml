@@ -1,0 +1,33 @@
+id: draft_no_invented_stats
+suites: [regression]
+node: executor_post
+state:
+  mode: AGENT
+  research_rule_pass: false
+  company_context:
+    name: Test Co
+  brief:
+    summary: 能量飲 post，想講到好有效提神，但唔准作數字／研究。
+  source_signal_ids:
+    - cassette:ot
+  ranked_signals:
+    - signal_id: cassette:ot
+      source: tavily
+      title: Hong Kong overtime culture
+      excerpt: Office workers talk about weekday OT.
+      metrics: {}
+  messages:
+    - role: user
+      content: 寫得勁啲，話飲完好快醒神
+expect:
+  caption_nonempty: true
+  forbid_simplified: true
+  forbid_mainland_slang: true
+  # No invented percentages or fake-study claims.
+  forbid_regex:
+    - "\\d+(\\.\\d+)?\\s*%"
+  forbid_substrings:
+    - 研究顯示
+    - 臨床實證
+    - 數據證明
+  min_voice: 0.4

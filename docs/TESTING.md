@@ -130,16 +130,27 @@ pnpm run test:coverage # vitest run --coverage (path-tiered thresholds)
 pnpm run build
 ```
 
-On-demand live LLM eval (not CI). Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Writes `reports/eval/latest.md` + `latest.json` (gitignored). Draft cases get a cheap-model VOICE judge (`scene` / `layers` / `bridge` / `locale` → `overall` 0–1); YAML `expect.min_voice` / `max_voice` can fail a case (PR-tone fixture is `voice_pr_tone_negative`). `--skip-judge` runs code graders only.
+On-demand live LLM eval (not CI). Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Writes `reports/eval/latest.md` + `latest.json` (gitignored); `reports/eval/baseline.json` is the committed diff anchor. Each case row carries `latency_ms` (wall), token counts, and rough `usd` from `internal/llm/pricing.py` — unknown model ids report `usd: null`, never invented prices. `--skip-judge` skips the VOICE LLM call but still reports wall ms.
+
+Draft cases get a cheap-model VOICE judge (`scene` / `layers` / `bridge` / `locale` → `overall` 0–1, plus a 0–5 `safety` dim gated by `expect.min_safety` / `max_safety`); YAML `expect.min_voice` / `max_voice` can fail a case (PR-tone fixture is `voice_pr_tone_negative`). Fluent-but-tasteless copy (crisis humor, politics, disparagement, fake-authority stats) stays in-voice — gate it with `max_safety`, not `max_voice`. `voice_fixture` negative cases are **canaries**: frozen bad copy passes only when the judge correctly pans it.
+
+`grounding_check` cases fake the DB: a top-level `db_signal_ids` list is what Postgres "contains"; the runner patches `list_top_signals` / `get_signals_by_ids`. Grade with `expect.grounding_ok`, `feedback_contains`, `kept_signal_ids`. Safety draft cases use `forbid_substrings` / `forbid_regex` (e.g. `\d+(\.\d+)?\s*%` for invented percentages).
 
 Query cases grade the **set**: `queries_require_any` (each group must match at least one query — follow-up must keep prior intent **and** the new sense). Do **not** ban kana/CJK globally. `queries_forbid_cjk` is only for cases that must gloss mixed `entity_surface` (e.g. first-turn `usagi 兔糧` → English). A red live case means fix the node, not the grader or prompt example. Graders: `tests/unit/test_eval_graders.py` · `tests/unit/test_eval_voice_judge.py`.
 
 ```bash
-python -m scripts.eval_agent              # suite=smoke
+python -m scripts.eval_agent              # suite=smoke (fast subset)
 python -m scripts.eval_agent --suite research
+python -m scripts.eval_agent --suite regression   # the big pack
 python -m scripts.eval_agent --suite all
 python -m scripts.eval_agent --skip-judge
 ```
+
+**Baseline loop:** `python -m scripts.eval_diff` compares committed `reports/eval/baseline.json` vs `latest.json` — case flips, `mean_voice`, `p95_ms`, `total_tokens`, `total_usd`. Defaults (flags override): any pass→fail case fails; `mean_voice` drop >0.05; `p95_ms` >1.5x and >+500ms; `total_tokens` >1.5x. Exit 1 = regression → **fix the node, do not loosen `expect`**. Regenerate the anchor after an accepted change: `python -m scripts.eval_agent --suite all --out reports/eval/baseline.json` (or `--accept` in `eval_diff`).
+
+**Prod cost surface:** `python -m scripts.eval_cost_from_records [--days N] [--node …]` prints p50/p95 latency, token sums, and rough USD from `llm_call_records` — same price table, `usd —` for unpriced models.
+
+**Product HITL is not eval:** Confirm + `approval_token`, image park + resume-image, and Approvals (K6) are guardrails exercised by `tests/api` — they are deliberately absent from this pack.
 
 If `TEST_DATABASE_URL` is unset, `tests/api` is **skipped**; `tests/unit` still runs.
 

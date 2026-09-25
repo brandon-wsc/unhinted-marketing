@@ -1,0 +1,21 @@
+id: research_first_turn_typhoon
+suites: [research, regression]
+node: query_generator
+state:
+  mode: CHAT
+  research_rule_pass: true
+  research:
+    need_facts: true
+    entity_surface: 打風返工
+  messages:
+    - role: user
+      content: 聽日打風嘅話仲使唔使返工
+expect:
+  query_source: llm
+  min_queries: 1
+  max_queries: 3
+  queries_forbid_mixed_script: true
+  queries_forbid_substrings:
+    - "聽日打風嘅話仲使唔使返工"
+  queries_require_any:
+    - [typhoon, 颱風, 打風, "T8", "8號"]

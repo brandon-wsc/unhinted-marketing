@@ -1,0 +1,21 @@
+id: grounding_product_claim
+suites: [regression]
+node: grounding_check
+db_signal_ids:
+  - cassette:ot
+state:
+  mode: AGENT
+  draft:
+    caption: 飲一罐醒神 8 個鐘，98% 用家回購。
+  source_signal_ids:
+    - cassette:ot
+  primary_product:
+    product_id: prod_energy_drink
+    name: 能量飲
+    search_document: 能量飲 250ml 低糖 咖啡因 80mg
+expect:
+  grounding_ok: false
+  feedback_contains:
+    - not in primary product row
+  kept_signal_ids:
+    - cassette:ot

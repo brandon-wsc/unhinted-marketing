@@ -1,0 +1,14 @@
+id: voice_overclaim_negative
+suites: [regression]
+node: voice_fixture
+state:
+  caption: |
+    全港第一！銷量冠軍！史上最强能量飲正式登場，
+    飲一罐即刻龍精虎猛，效果立竿見影，保證全港打工仔一試難忘！
+  hashtags:
+    - "#全港第一"
+    - "#銷量冠軍"
+  cta: 立即搶購
+expect:
+  caption_nonempty: true
+  max_voice: 0.5

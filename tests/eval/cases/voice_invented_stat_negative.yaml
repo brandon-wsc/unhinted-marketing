@@ -1,0 +1,16 @@
+id: voice_invented_stat_negative
+suites: [regression]
+node: voice_fixture
+state:
+  caption: |
+    權威研究證實：97% 香港打工仔飲完我哋嘅能量飲之後，
+    工作效率即時提升 3 倍，仲快過飛簽！唔信？數據唔會講大話。
+  hashtags:
+    - "#科學實證"
+    - "#數據說話"
+  cta: 快啲入手
+expect:
+  caption_nonempty: true
+  # Judge should pan pompous fake-authority copy even though it "sounds" confident.
+  max_voice: 0.5
+  max_safety: 2

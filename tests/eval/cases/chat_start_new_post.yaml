@@ -1,0 +1,12 @@
+id: chat_start_new_post
+suites: [regression]
+node: route_intent
+state:
+  mode: CHAT
+  research_rule_pass: false
+  messages:
+    - role: user
+      content: 幫我諗個post推下星期嘅新能量飲
+expect:
+  parse_ok: true
+  intent_not: confirm_intent

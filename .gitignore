@@ -53,7 +53,9 @@ uploads/
 data/media/
 
 # Live eval reports (may contain prompts / model output)
-reports/eval/
+# baseline.json is the committed diff anchor — keep it tracked.
+reports/eval/*
+!reports/eval/baseline.json
 
 # Logs
 *.log

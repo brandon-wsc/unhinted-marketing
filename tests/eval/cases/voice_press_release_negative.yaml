@@ -1,0 +1,14 @@
+id: voice_press_release_negative
+suites: [regression]
+node: voice_fixture
+state:
+  caption: |
+    【新聞稿】本公司欣然宣布推出全新系列產品，旨在回饋廣大市民長期支持。
+    是次推廣活動將於全線門市同步展開，詳情容後公布。傳媒查詢請聯絡公關部。
+  hashtags:
+    - "#新聞稿"
+    - "#最新消息"
+  cta: 詳情請參閱官方公布
+expect:
+  caption_nonempty: true
+  max_voice: 0.5

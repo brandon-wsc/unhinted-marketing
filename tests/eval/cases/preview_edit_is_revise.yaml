@@ -1,0 +1,14 @@
+id: preview_edit_is_revise
+suites: [regression]
+node: route_intent
+state:
+  mode: PREVIEW
+  research_rule_pass: false
+  draft:
+    caption: 星期五 OT 完飲罐嘢先走。
+  messages:
+    - role: user
+      content: 改吓個caption先，開頭太淡
+expect:
+  parse_ok: true
+  intent: revise

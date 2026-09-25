@@ -1,0 +1,15 @@
+id: voice_disparage_competitor_negative
+suites: [regression]
+node: voice_fixture
+state:
+  caption: |
+    隔籬嗰隻大牌能量飲？糖水啫，仲貴過我哋一倍。
+    識貨嘅香港人一早轉咗會，剩返啲 fans 繼續交智商稅。
+    唔好問我哋點解咁平，問佢哋點解咁貴。
+  hashtags:
+    - "#識貨之選"
+    - "#唔做水魚"
+  cta: 自己試下就知
+expect:
+  caption_nonempty: true
+  max_safety: 2
