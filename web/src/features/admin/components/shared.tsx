@@ -11,12 +11,12 @@ import { useContainerWidth } from "@/hooks/use-container-width";
 /** Content-based split breakpoint for admin record pages (Penpot System master-detail). */
 export const ADMIN_SPLIT_MIN_WIDTH = 1100;
 
-/** Pane floors for the resizable record split; list starts at `defaultListSize` px. */
-const ADMIN_SPLIT = { listMin: 320, detailMin: 340 } as const;
+/** Pane floors for the resizable record split; detail opens at ≤300px. */
+const ADMIN_SPLIT = { listMin: 320, detailMin: 260, detailDefaultMax: 300 } as const;
 const SPLIT_HIT_TARGET = { coarse: 7, fine: 7 } as const;
 
 function splitRatioKey(key: string): string {
-  return `unhinted.adminSplit.${key}`;
+  return `unhinted.adminDetailSplit.${key}`;
 }
 
 function readSplitRatio(key: string): number | null {
@@ -31,30 +31,31 @@ function readSplitRatio(key: string): number | null {
 }
 
 /**
- * Persistent resizable master-detail split for wide admin containers.
- * Both panes stay mounted (empty detail renders a placeholder) so picking
- * a row never reflows the list; the divider drag ratio persists per key.
+ * Resizable master-detail split for wide admin containers. The detail
+ * pane mounts only on row selection at min(300px, ⅓ container) and the
+ * 1px seam between the panes doubles as the drag bar; the dragged ratio
+ * persists per `storageKey`.
  */
 export function DetailSplit({
   list,
   detail,
   storageKey,
-  defaultListSize,
 }: {
   list: ReactNode;
-  /** Detail card content; `null` renders an empty-selection placeholder. */
+  /** Detail card content; `null` leaves the list at full width. */
   detail: ReactNode | null;
-  /** localStorage key suffix for the persisted list/detail width ratio. */
+  /** localStorage key suffix for the persisted detail width ratio. */
   storageKey: string;
-  /** Resting list width in px before the user drags the divider. */
-  defaultListSize: number;
 }) {
   const { t } = useTranslation();
   const { ref, width } = useContainerWidth();
   const [ratio, setRatio] = useState<number | null>(() => readSplitRatio(storageKey));
-  const listPx = Math.min(
-    Math.max(ratio == null ? defaultListSize : width * ratio, ADMIN_SPLIT.listMin),
-    Math.max(ADMIN_SPLIT.listMin, width - ADMIN_SPLIT.detailMin),
+  const detailPx = Math.min(
+    Math.max(
+      ratio == null ? Math.min(ADMIN_SPLIT.detailDefaultMax, width / 3) : width * ratio,
+      ADMIN_SPLIT.detailMin,
+    ),
+    Math.max(ADMIN_SPLIT.detailMin, width - ADMIN_SPLIT.listMin),
   );
 
   return (
@@ -69,31 +70,29 @@ export function DetailSplit({
           const detailSize = layout["admin-detail"] ?? 0;
           const sum = listSize + detailSize;
           if (sum <= 0) return;
-          const next = listSize / sum;
+          const next = detailSize / sum;
           setRatio(next);
           try {
             localStorage.setItem(splitRatioKey(storageKey), String(next));
           } catch {}
         }}
       >
-        <ResizablePanel
-          id="admin-list"
-          minSize={ADMIN_SPLIT.listMin}
-          defaultSize={listPx}
-          className="min-w-0"
-        >
-          <div className="pr-3">{list}</div>
+        <ResizablePanel id="admin-list" minSize={ADMIN_SPLIT.listMin} className="min-w-0">
+          <div className={detail ? "pr-3" : undefined}>{list}</div>
         </ResizablePanel>
-        <ResizableHandle withHandle aria-label={t("admin.detail.resize")} />
-        <ResizablePanel id="admin-detail" minSize={ADMIN_SPLIT.detailMin} className="min-w-0">
-          <div className="pl-3">
-            {detail ?? (
-              <section className="rounded-xl border border-dashed border-border p-5">
-                <p className="text-sm text-muted-foreground">{t("admin.detail.selectRow")}</p>
-              </section>
-            )}
-          </div>
-        </ResizablePanel>
+        {detail ? (
+          <>
+            <ResizableHandle aria-label={t("admin.detail.resize")} />
+            <ResizablePanel
+              id="admin-detail"
+              minSize={ADMIN_SPLIT.detailMin}
+              defaultSize={detailPx}
+              className="min-w-0"
+            >
+              {detail}
+            </ResizablePanel>
+          </>
+        ) : null}
       </ResizablePanelGroup>
     </div>
   );

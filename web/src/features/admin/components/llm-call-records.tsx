@@ -503,7 +503,6 @@ export function LlmCallRecords({
       {split ? (
         <DetailSplit
           storageKey="llm-calls"
-          defaultListSize={420}
           list={
             <>
               <CallTable

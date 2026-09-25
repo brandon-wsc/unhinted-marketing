@@ -236,7 +236,10 @@ export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
     try {
       const next = await apiAdminGetSessionResearch(accessToken, id);
       setData(next);
-      setSelected(next.turns[0] ?? null);
+      // Re-resolve a kept selection after refresh; never auto-select.
+      setSelected((cur) =>
+        cur ? (next.turns.find((t) => t.turn_id === cur.turn_id) ?? null) : null,
+      );
     } catch (err) {
       setData(null);
       setSelected(null);
@@ -320,7 +323,6 @@ export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
         split ? (
           <DetailSplit
             storageKey="research"
-            defaultListSize={480}
             list={
               <TurnsTable
                 turns={data.turns}

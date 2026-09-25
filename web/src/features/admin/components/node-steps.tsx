@@ -323,7 +323,6 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
       {split ? (
         <DetailSplit
           storageKey="node-steps"
-          defaultListSize={460}
           list={
             <>
               <StepTable
