@@ -1,7 +1,6 @@
-import { RefreshCw, X } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { IconButton } from "@/components/icon-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
@@ -31,15 +29,20 @@ import {
   type LlmCallRecordDetail,
   type LlmCallRecordSummary,
 } from "@/features/admin/api";
+import {
+  ADMIN_SPLIT_MIN_WIDTH,
+  DetailBlock,
+  DetailPager,
+  DetailSheetShell,
+  DetailShell,
+  formatTime,
+  Meta,
+  shortId,
+} from "@/features/admin/components/shared";
 import { useContainerWidth } from "@/hooks/use-container-width";
 
 const STATUS_OPTIONS = ["ok", "empty_response", "provider_error", "cancelled", "error"];
-const SPLIT_MIN_WIDTH = 1100;
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-HK", { hour12: false });
-}
-
+const SPLIT_MIN_WIDTH = ADMIN_SPLIT_MIN_WIDTH;
 function formatLatency(ms: number | null): string {
   if (ms == null) return "—";
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`;
@@ -48,10 +51,6 @@ function formatLatency(ms: number | null): string {
 function formatUsd(usd: number | null): string {
   if (usd == null) return "—";
   return `$${usd.toFixed(4)}`;
-}
-
-function shortId(id: string): string {
-  return id.length > 10 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -83,27 +82,6 @@ function Flags({ row }: { row: LlmCallRecordSummary }) {
         </Badge>
       )}
     </span>
-  );
-}
-
-function Meta({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 text-[13px] font-medium text-foreground">{children}</dd>
-    </div>
-  );
-}
-
-function DetailBlock({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null;
-  return (
-    <div>
-      <p className="mb-1 text-xs font-medium text-muted-foreground">{label}</p>
-      <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg bg-secondary p-3 text-xs text-foreground">
-        {value}
-      </pre>
-    </div>
   );
 }
 
@@ -247,24 +225,8 @@ function DetailCard({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="rounded-xl border border-border bg-card p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">{t("admin.detail.title")}</h3>
-        <IconButton
-          size="icon"
-          className="size-7"
-          onClick={onClose}
-          aria-label={t("admin.detail.close")}
-        >
-          <X className="size-4" />
-        </IconButton>
-      </div>
-      {loading && (
-        <div className="flex justify-center py-10">
-          <Spinner className="size-5 text-muted-foreground" />
-        </div>
-      )}
-      {detail && !loading && (
+    <DetailShell title={t("admin.detail.title")} loading={loading} onClose={onClose}>
+      {detail && (
         <DetailContent
           detail={detail}
           onOpenTurn={onOpenTurn}
@@ -272,7 +234,7 @@ function DetailCard({
           onOpenResearch={onOpenResearch}
         />
       )}
-    </section>
+    </DetailShell>
   );
 }
 
@@ -295,28 +257,21 @@ function DetailSheet({
 }) {
   const { t } = useTranslation();
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>{t("admin.detail.title")}</SheetTitle>
-        </SheetHeader>
-        {loading && (
-          <div className="flex justify-center py-10">
-            <Spinner className="size-5 text-muted-foreground" />
-          </div>
-        )}
-        {detail && !loading && (
-          <div className="mt-4">
-            <DetailContent
-              detail={detail}
-              onOpenTurn={onOpenTurn}
-              onOpenSession={onOpenSession}
-              onOpenResearch={onOpenResearch}
-            />
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
+    <DetailSheetShell
+      title={t("admin.detail.title")}
+      loading={loading}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      {detail && (
+        <DetailContent
+          detail={detail}
+          onOpenTurn={onOpenTurn}
+          onOpenSession={onOpenSession}
+          onOpenResearch={onOpenResearch}
+        />
+      )}
+    </DetailSheetShell>
   );
 }
 
@@ -408,47 +363,6 @@ function CallTable({
           ))}
         </TableBody>
       </Table>
-    </div>
-  );
-}
-
-function Pager({
-  offset,
-  count,
-  loading,
-  onOffset,
-}: {
-  offset: number;
-  count: number;
-  loading: boolean;
-  onOffset: (offset: number) => void;
-}) {
-  const { t } = useTranslation();
-  const from = count > 0 ? offset + 1 : 0;
-  const to = offset + count;
-  return (
-    <div className="mt-3 flex items-center justify-between">
-      <p className="text-xs text-muted-foreground">{t("admin.pagination.showing", { from, to })}</p>
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={offset === 0 || loading}
-          onClick={() => onOffset(Math.max(0, offset - LLM_CALL_PAGE_SIZE))}
-        >
-          {t("admin.pagination.prev")}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={count < LLM_CALL_PAGE_SIZE || loading}
-          onClick={() => onOffset(offset + LLM_CALL_PAGE_SIZE)}
-        >
-          {t("admin.pagination.next")}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -625,7 +539,13 @@ export function LlmCallRecords({
               selectedId={selectedId}
               onSelect={selectRow}
             />
-            <Pager offset={offset} count={items.length} loading={loading} onOffset={setOffset} />
+            <DetailPager
+              offset={offset}
+              count={items.length}
+              pageSize={LLM_CALL_PAGE_SIZE}
+              loading={loading}
+              onOffset={setOffset}
+            />
           </div>
           <div className="min-w-0 flex-1">
             <DetailCard
@@ -647,7 +567,13 @@ export function LlmCallRecords({
             selectedId={selectedId}
             onSelect={selectRow}
           />
-          <Pager offset={offset} count={items.length} loading={loading} onOffset={setOffset} />
+          <DetailPager
+            offset={offset}
+            count={items.length}
+            pageSize={LLM_CALL_PAGE_SIZE}
+            loading={loading}
+            onOffset={setOffset}
+          />
         </>
       )}
 

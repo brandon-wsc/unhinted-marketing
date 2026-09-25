@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
@@ -22,9 +21,167 @@ import {
   type NodeStepFilters,
   type NodeStepSummary,
 } from "@/features/admin/api";
+import {
+  ADMIN_SPLIT_MIN_WIDTH,
+  DetailBlock,
+  DetailPager,
+  DetailSheetShell,
+  DetailShell,
+  formatTime,
+  Meta,
+  shortId,
+} from "@/features/admin/components/shared";
+import { useContainerWidth } from "@/hooks/use-container-width";
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-HK", { hour12: false });
+function StepDetailContent({
+  detail,
+  onOpenSession,
+}: {
+  detail: NodeStepDetail;
+  onOpenSession?: (sessionId: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-3">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+        <Meta label={t("admin.table.node")}>{detail.node}</Meta>
+        <Meta label={t("admin.table.seq")}>{detail.seq}</Meta>
+        <Meta label={t("admin.table.time")}>{formatTime(detail.created_at)}</Meta>
+        <Meta label={t("admin.table.mode")}>
+          {detail.mode_in ?? "—"} → {detail.mode_out ?? "—"}
+        </Meta>
+      </dl>
+
+      <div>
+        <dt className="text-xs text-muted-foreground">{t("admin.table.turnId")}</dt>
+        <dd className="mt-0.5 font-mono text-[10px] text-foreground" title={detail.turn_id}>
+          {shortId(detail.turn_id)}
+        </dd>
+      </div>
+      {detail.session_id && (
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <dt className="text-xs text-muted-foreground">{t("admin.filters.sessionId")}</dt>
+            <dd className="mt-0.5 font-mono text-[10px] text-foreground" title={detail.session_id}>
+              {shortId(detail.session_id)}
+            </dd>
+          </div>
+          {onOpenSession && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onOpenSession(detail.session_id!)}
+            >
+              {t("admin.openSessionTrace")}
+            </Button>
+          )}
+        </div>
+      )}
+
+      <DetailBlock
+        label={t("admin.nodeStepDetail.output")}
+        value={JSON.stringify(detail.output, null, 2)}
+      />
+
+      {detail.llm_calls.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">
+            {t("admin.nodeStepDetail.llmCalls")}
+          </p>
+          <ul className="space-y-1 text-xs">
+            {detail.llm_calls.map((c) => (
+              <li key={c.id} className="rounded-lg bg-secondary px-2 py-1.5">
+                {c.status} · {c.kind} · {c.model ?? "—"} · {c.total_tokens ?? "—"} tok
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepTable({
+  items,
+  condensed,
+  loading,
+  selectedId,
+  onSelect,
+}: {
+  items: NodeStepSummary[];
+  condensed: boolean;
+  loading: boolean;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const cols = condensed ? 5 : 7;
+  return (
+    <div className="relative min-h-[18rem] overflow-hidden rounded-xl border border-border bg-card">
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-card/70 backdrop-blur-[1px]">
+          <Spinner className="size-6 text-primary" />
+        </div>
+      )}
+      <Table className={condensed ? undefined : "min-w-[48rem]"}>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("admin.table.time")}</TableHead>
+            <TableHead>{t("admin.table.seq")}</TableHead>
+            <TableHead>{t("admin.table.node")}</TableHead>
+            <TableHead>{t("admin.table.mode")}</TableHead>
+            <TableHead>{t("admin.table.intent")}</TableHead>
+            {!condensed && (
+              <>
+                <TableHead>{t("admin.table.turnId")}</TableHead>
+                <TableHead>{t("admin.table.outputKeys")}</TableHead>
+              </>
+            )}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {!loading && items.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={cols} className="py-8 text-center text-muted-foreground">
+                {t("admin.nodeStepsEmpty")}
+              </TableCell>
+            </TableRow>
+          )}
+          {items.map((row) => (
+            <TableRow
+              key={row.id}
+              className="cursor-pointer"
+              data-state={selectedId === row.id ? "selected" : undefined}
+              onClick={() => onSelect(row.id)}
+            >
+              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                {formatTime(row.created_at)}
+              </TableCell>
+              <TableCell className="text-xs">{row.seq}</TableCell>
+              <TableCell className="text-foreground">{row.node}</TableCell>
+              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                {row.mode_in ?? "—"} → {row.mode_out ?? "—"}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {row.intent_out ?? "—"}
+              </TableCell>
+              {!condensed && (
+                <>
+                  <TableCell className="max-w-[10rem] truncate font-mono text-[10px] text-muted-foreground">
+                    {row.turn_id}
+                  </TableCell>
+                  <TableCell className="max-w-[12rem] truncate text-xs text-muted-foreground">
+                    {(row.output_keys as string[]).join(", ") || "—"}
+                  </TableCell>
+                </>
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
 }
 
 type Props = {
@@ -35,6 +192,8 @@ type Props = {
 export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
+  const { ref, width } = useContainerWidth();
+  const split = width >= ADMIN_SPLIT_MIN_WIDTH;
 
   const [nodeInput, setNodeInput] = useState("");
   const [sessionInput, setSessionInput] = useState("");
@@ -111,11 +270,14 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
     };
   }, [accessToken, selectedId]);
 
-  const from = items.length > 0 ? offset + 1 : 0;
-  const to = offset + items.length;
+  const selectRow = useCallback((id: string) => {
+    setSelectedId((cur) => (cur === id ? null : id));
+  }, []);
+
+  const condensed = !split || selectedId !== null;
 
   return (
-    <div>
+    <div ref={ref}>
       <div className="mb-3 flex flex-wrap items-end gap-2">
         <label
           htmlFor="admin-steps-filter-node"
@@ -175,158 +337,65 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
         </p>
       )}
 
-      <div className="relative min-h-[18rem] overflow-hidden rounded-xl border border-border bg-card">
-        {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-card/70 backdrop-blur-[1px]">
-            <Spinner className="size-6 text-primary" />
+      {split && selectedId ? (
+        <div className="flex items-start gap-6">
+          <div className="w-[460px] shrink-0">
+            <StepTable
+              items={items}
+              condensed
+              loading={loading}
+              selectedId={selectedId}
+              onSelect={selectRow}
+            />
+            <DetailPager
+              offset={offset}
+              count={items.length}
+              pageSize={NODE_STEP_PAGE_SIZE}
+              loading={loading}
+              onOffset={setOffset}
+            />
           </div>
-        )}
-        <Table className="min-w-[48rem]">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("admin.table.time")}</TableHead>
-              <TableHead>{t("admin.table.seq")}</TableHead>
-              <TableHead>{t("admin.table.node")}</TableHead>
-              <TableHead>{t("admin.table.mode")}</TableHead>
-              <TableHead>{t("admin.table.intent")}</TableHead>
-              <TableHead>{t("admin.table.turnId")}</TableHead>
-              <TableHead>{t("admin.table.outputKeys")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {!loading && items.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                  {t("admin.nodeStepsEmpty")}
-                </TableCell>
-              </TableRow>
-            )}
-            {items.map((row) => (
-              <TableRow
-                key={row.id}
-                className="cursor-pointer"
-                data-state={selectedId === row.id ? "selected" : undefined}
-                onClick={() => setSelectedId(row.id)}
-              >
-                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                  {formatTime(row.created_at)}
-                </TableCell>
-                <TableCell className="text-xs">{row.seq}</TableCell>
-                <TableCell>{row.node}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {row.mode_in ?? "—"} → {row.mode_out ?? "—"}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {row.intent_out ?? "—"}
-                </TableCell>
-                <TableCell className="max-w-[10rem] truncate font-mono text-[10px] text-muted-foreground">
-                  {row.turn_id}
-                </TableCell>
-                <TableCell className="max-w-[12rem] truncate text-xs text-muted-foreground">
-                  {(row.output_keys as string[]).join(", ") || "—"}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {t("admin.pagination.showing", { from, to })}
-        </p>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={offset === 0 || loading}
-            onClick={() => setOffset(Math.max(0, offset - NODE_STEP_PAGE_SIZE))}
-          >
-            {t("admin.pagination.prev")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={items.length < NODE_STEP_PAGE_SIZE || loading}
-            onClick={() => setOffset(offset + NODE_STEP_PAGE_SIZE)}
-          >
-            {t("admin.pagination.next")}
-          </Button>
+          <div className="min-w-0 flex-1">
+            <DetailShell
+              title={t("admin.nodeStepDetail.title")}
+              loading={detailLoading}
+              onClose={() => setSelectedId(null)}
+            >
+              {detail && <StepDetailContent detail={detail} onOpenSession={onOpenSession} />}
+            </DetailShell>
+          </div>
         </div>
-      </div>
+      ) : (
+        <>
+          <StepTable
+            items={items}
+            condensed={condensed}
+            loading={loading}
+            selectedId={selectedId}
+            onSelect={selectRow}
+          />
+          <DetailPager
+            offset={offset}
+            count={items.length}
+            pageSize={NODE_STEP_PAGE_SIZE}
+            loading={loading}
+            onOffset={setOffset}
+          />
+        </>
+      )}
 
-      <Sheet open={selectedId !== null} onOpenChange={(open) => !open && setSelectedId(null)}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>{t("admin.nodeStepDetail.title")}</SheetTitle>
-          </SheetHeader>
-          {detailLoading && (
-            <div className="flex justify-center py-10">
-              <Spinner className="size-5 text-muted-foreground" />
-            </div>
-          )}
-          {detail && !detailLoading && (
-            <div className="mt-4 space-y-3 text-sm">
-              <dl className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <dt className="text-muted-foreground">{t("admin.table.node")}</dt>
-                  <dd>{detail.node}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">{t("admin.table.seq")}</dt>
-                  <dd>{detail.seq}</dd>
-                </div>
-                <div className="col-span-2">
-                  <dt className="text-muted-foreground">{t("admin.table.turnId")}</dt>
-                  <dd className="font-mono text-[10px]">{detail.turn_id}</dd>
-                </div>
-                {detail.session_id && (
-                  <div className="col-span-2">
-                    <dt className="text-muted-foreground">{t("admin.filters.sessionId")}</dt>
-                    <dd className="flex items-center gap-2">
-                      <span className="font-mono text-[10px]">{detail.session_id}</span>
-                      {onOpenSession && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onOpenSession(detail.session_id!)}
-                        >
-                          {t("admin.openSessionTrace")}
-                        </Button>
-                      )}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">
-                  {t("admin.nodeStepDetail.output")}
-                </p>
-                <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-secondary p-3 text-xs">
-                  {JSON.stringify(detail.output, null, 2)}
-                </pre>
-              </div>
-              {detail.llm_calls.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    {t("admin.nodeStepDetail.llmCalls")}
-                  </p>
-                  <ul className="space-y-1 text-xs">
-                    {detail.llm_calls.map((c) => (
-                      <li key={c.id} className="rounded border border-border px-2 py-1">
-                        {c.status} · {c.kind} · {c.model ?? "—"} · {c.total_tokens ?? "—"} tok
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      {!split && (
+        <DetailSheetShell
+          title={t("admin.nodeStepDetail.title")}
+          loading={detailLoading}
+          open={selectedId !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelectedId(null);
+          }}
+        >
+          {detail && <StepDetailContent detail={detail} onOpenSession={onOpenSession} />}
+        </DetailSheetShell>
+      )}
     </div>
   );
 }
