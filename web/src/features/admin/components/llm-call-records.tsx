@@ -42,6 +42,11 @@ function formatLatency(ms: number | null): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`;
 }
 
+function formatUsd(usd: number | null): string {
+  if (usd == null) return "—";
+  return `$${usd.toFixed(4)}`;
+}
+
 function StatusBadge({ status }: { status: string }) {
   const variant =
     status === "ok"
@@ -141,8 +146,16 @@ function DetailSheet({
                 <dd className="text-foreground">{formatLatency(detail.latency_ms)}</dd>
               </div>
               <div>
+                <dt className="text-muted-foreground">{t("admin.detail.ttft")}</dt>
+                <dd className="text-foreground">{formatLatency(detail.ttft_ms)}</dd>
+              </div>
+              <div>
                 <dt className="text-muted-foreground">{t("admin.detail.temperature")}</dt>
                 <dd className="text-foreground">{detail.temperature ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{t("admin.detail.usd")}</dt>
+                <dd className="text-foreground">{formatUsd(detail.usd)}</dd>
               </div>
               <div className="col-span-2">
                 <dt className="text-muted-foreground">{t("admin.table.tokens")}</dt>
@@ -158,6 +171,10 @@ function DetailSheet({
                   <span>
                     {t("admin.detail.tokensTotal")}{" "}
                     <span className="font-medium">{detail.total_tokens ?? "—"}</span>
+                  </span>
+                  <span>
+                    {t("admin.detail.tokensCached")}{" "}
+                    <span className="font-medium">{detail.cached_tokens ?? "—"}</span>
                   </span>
                 </dd>
               </div>

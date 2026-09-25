@@ -21,9 +21,11 @@ class LlmCallRecordSummary(BaseModel):
     model: str | None
     status: str
     latency_ms: int | None
+    ttft_ms: int | None = None
     prompt_tokens: int | None
     completion_tokens: int | None
     total_tokens: int | None
+    cached_tokens: int | None = None
     parse_ok: bool | None
     fallback_used: bool
     key_source: str | None = None
@@ -40,6 +42,9 @@ class LlmCallRecordDetail(LlmCallRecordSummary):
     user_prompt: str | None
     response_text: str | None
     error: dict | None
+    # Computed at read time via internal.llm.pricing.usd_for — same rule as the
+    # eval pack: None when the model is unpriced, never an invented number.
+    usd: float | None = None
 
 
 class LlmCallRecordList(BaseModel):

@@ -53,7 +53,7 @@ Ask: was this a **bad prompt**, or did an **earlier node** feed bad state? Check
 | `system_prompt` | Contradictory rules? Missing JSON schema / language / Hong Kong context? |
 | `user_prompt` | Missing company profile, signals, or prior draft? |
 | `response_text` | Did the model follow a specific instruction, or invent? |
-| tokens / latency | Prompt too large? Wrong model tier? |
+| tokens / latency / ttft / est. usd | Prompt too large? Wrong model tier? Low `cached_tokens` on repeated system prompts? |
 
 Node-step **output** of step *N* is usually the real feedstock for step *N+1* — many “prompt bugs” are contract/state bugs.
 

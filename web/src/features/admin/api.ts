@@ -14,9 +14,11 @@ export type LlmCallRecordSummary = {
   model: string | null;
   status: string;
   latency_ms: number | null;
+  ttft_ms: number | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
+  cached_tokens: number | null;
   parse_ok: boolean | null;
   fallback_used: boolean;
   key_source?: "env" | "org" | null;
@@ -31,6 +33,7 @@ export type LlmCallRecordDetail = LlmCallRecordSummary & {
   user_prompt: string | null;
   response_text: string | null;
   error: Record<string, unknown> | null;
+  usd: number | null;
 };
 
 export type LlmCallRecordList = {
