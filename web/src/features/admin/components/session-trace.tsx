@@ -189,7 +189,7 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn, onOpenRes
                       onClick={() => setSelectedRevision(d.revision)}
                       className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition ${
                         selectedRevision === d.revision
-                          ? "border-primary bg-primary/5"
+                          ? "border-voice-border bg-accent"
                           : "border-border hover:bg-accent"
                       }`}
                     >
