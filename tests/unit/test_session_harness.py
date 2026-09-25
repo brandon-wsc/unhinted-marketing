@@ -133,6 +133,7 @@ async def test_stream_chat_reply_records_call_context(monkeypatch: pytest.Monkey
     assert rec.system_prompt
     assert rec.prompt_tokens is not None
     assert rec.completion_tokens is not None
+    assert rec.ttft_ms is not None
 
 
 def test_live_chat_model_uses_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:

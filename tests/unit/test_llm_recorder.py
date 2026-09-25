@@ -134,6 +134,30 @@ async def test_flush_order_matches_call_order(collected: list) -> None:
     assert [r.response_text for r in collected] == ["first", "second"]
 
 
+def test_mark_first_token_first_call_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    ticks = iter([100.25])
+    monkeypatch.setattr(recorder.time, "monotonic", lambda: next(ticks))
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec._started_mono = 100.0
+    rec.mark_first_token()
+    rec.mark_first_token()  # second call must not overwrite
+    assert rec.ttft_ms == 250
+
+
+async def test_track_stamps_ttft_when_marked(collected: list) -> None:
+    with recorder.track(kind="chat_json", model="gpt-test") as rec:
+        rec.mark_first_token()
+    assert collected[0].ttft_ms is not None
+    assert collected[0].latency_ms is not None
+    assert collected[0].ttft_ms <= collected[0].latency_ms
+
+
+async def test_track_ttft_none_when_never_marked(collected: list) -> None:
+    with recorder.track(kind="chat_json", model="gpt-test"):
+        pass
+    assert collected[0].ttft_ms is None
+
+
 def test_set_usage_from_object_and_dict() -> None:
     rec = recorder.LlmCallRecordBuilder(kind="chat_json")
     rec.set_usage(SimpleNamespace(prompt_tokens=3, completion_tokens=5, total_tokens=8))
@@ -160,6 +184,43 @@ def test_set_usage_from_object_and_dict() -> None:
     assert (rec5.prompt_tokens, rec5.completion_tokens, rec5.total_tokens) == (2, 4, 6)
 
 
+def test_set_usage_cached_tokens_provider_shapes() -> None:
+    # LiteLLM passthrough (DeepSeek/OpenRouter-style hit field).
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage({"prompt_cache_hit_tokens": 100, "prompt_tokens": 200})
+    assert rec.cached_tokens == 100
+
+    # OpenAI nested details, object form.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage(
+        SimpleNamespace(
+            prompt_tokens=200,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=42),
+        )
+    )
+    assert rec.cached_tokens == 42
+
+    # OpenAI nested details, dict form.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage({"prompt_tokens_details": {"cached_tokens": 7}})
+    assert rec.cached_tokens == 7
+
+    # Anthropic.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage({"cache_read_input_tokens": 55})
+    assert rec.cached_tokens == 55
+
+    # pydantic-ai RequestUsage/RunUsage.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage(SimpleNamespace(cache_read_tokens=9))
+    assert rec.cached_tokens == 9
+
+    # No cache fields anywhere — stays None, not 0.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage(SimpleNamespace(prompt_tokens=3, completion_tokens=1))
+    assert rec.cached_tokens is None
+
+
 def test_to_model_caps_long_text() -> None:
     rec = recorder.LlmCallRecordBuilder(
         kind="chat_json", caller="node:x", system_prompt="x" * 60_000
@@ -179,6 +240,15 @@ def test_to_model_summarizes_image_data_uri() -> None:
 def test_to_model_defaults_unknown_caller() -> None:
     model = recorder.LlmCallRecordBuilder(kind="chat_json").to_model()
     assert model.caller == "unknown"
+
+
+def test_to_model_copies_ttft_and_cached_tokens() -> None:
+    rec = recorder.LlmCallRecordBuilder(
+        kind="chat_json", caller="node:x", ttft_ms=120, cached_tokens=80
+    )
+    model = rec.to_model()
+    assert model.ttft_ms == 120
+    assert model.cached_tokens == 80
 
 
 def test_to_model_copies_key_source_and_last4() -> None:

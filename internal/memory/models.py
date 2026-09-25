@@ -356,9 +356,11 @@ class LlmCallRecord(Base):
     # Response + metrics
     response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ttft_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cached_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Diagnosis — the "which step went wrong" fields
     status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # ok | provider_error | cancelled | empty_response | error
     error: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
