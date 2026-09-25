@@ -87,6 +87,107 @@ def test_token_spike_fails() -> None:
     assert any("total_tokens" in line for line in failures)
 
 
+def _write(path, report: dict) -> None:
+    path.write_text(json.dumps(report), encoding="utf-8")
+
+
+def test_model_change_downgrades_metric_regressions(tmp_path, capsys) -> None:
+    baseline = tmp_path / "baseline.json"
+    latest = tmp_path / "latest.json"
+    b = _report({"a": True}, mean_voice=0.8, p95_ms=4000, total_tokens=10000)
+    b["models_used"] = ["model-old"]
+    new = _report({"a": True}, mean_voice=0.5, p95_ms=9000, total_tokens=20000)
+    new["models_used"] = ["model-new"]
+    _write(baseline, b)
+    _write(latest, new)
+    # voice drop, p95 spike, and token spike all downgrade to warnings.
+    assert main(["--baseline", str(baseline), "--latest", str(latest)]) == 0
+    out = capsys.readouterr().out
+    assert "MODEL CHANGED" in out
+    assert "model-old" in out and "model-new" in out
+    assert "WARNINGS" in out
+    assert "REGRESSION" not in out
+
+
+def test_model_change_case_flip_still_fails(tmp_path, capsys) -> None:
+    baseline = tmp_path / "baseline.json"
+    latest = tmp_path / "latest.json"
+    b = _report({"a": True, "b": True})
+    b["models_used"] = ["model-old"]
+    new = _report({"a": True, "b": False})
+    new["models_used"] = ["model-new"]
+    _write(baseline, b)
+    _write(latest, new)
+    assert main(["--baseline", str(baseline), "--latest", str(latest)]) == 1
+    out = capsys.readouterr().out
+    assert "MODEL CHANGED" in out
+    assert "'b'" in out
+
+
+def test_strict_models_fails_metric_regression(tmp_path) -> None:
+    baseline = tmp_path / "baseline.json"
+    latest = tmp_path / "latest.json"
+    b = _report({"a": True}, mean_voice=0.8)
+    b["models_used"] = ["model-old"]
+    new = _report({"a": True}, mean_voice=0.5)
+    new["models_used"] = ["model-new"]
+    _write(baseline, b)
+    _write(latest, new)
+    assert (
+        main(
+            [
+                "--baseline",
+                str(baseline),
+                "--latest",
+                str(latest),
+                "--strict-models",
+            ]
+        )
+        == 1
+    )
+
+
+def test_same_models_metric_regression_still_fails(tmp_path) -> None:
+    baseline = tmp_path / "baseline.json"
+    latest = tmp_path / "latest.json"
+    b = _report({"a": True}, mean_voice=0.8)
+    b["models_used"] = ["model-a"]
+    new = _report({"a": True}, mean_voice=0.5)
+    new["models_used"] = ["model-a"]
+    _write(baseline, b)
+    _write(latest, new)
+    assert main(["--baseline", str(baseline), "--latest", str(latest)]) == 1
+
+
+def test_missing_models_used_skips_guard(tmp_path, capsys) -> None:
+    baseline = tmp_path / "baseline.json"
+    latest = tmp_path / "latest.json"
+    # Baseline predates models_used; a metric regression still fails normally.
+    _write(baseline, _report({"a": True}, mean_voice=0.8))
+    new = _report({"a": True}, mean_voice=0.5)
+    new["models_used"] = ["model-new"]
+    _write(latest, new)
+    assert main(["--baseline", str(baseline), "--latest", str(latest)]) == 1
+    out = capsys.readouterr().out
+    assert "MODEL CHANGED" not in out
+    assert "model guard skipped" in out
+
+
+def test_status_counts_printed_when_present(tmp_path, capsys) -> None:
+    baseline = tmp_path / "baseline.json"
+    latest = tmp_path / "latest.json"
+    b = _report({"a": True})
+    b["status_counts"] = {"ok": 1}
+    new = _report({"a": True})
+    new["status_counts"] = {"ok": 1, "provider_error": 1}
+    _write(baseline, b)
+    _write(latest, new)
+    assert main(["--baseline", str(baseline), "--latest", str(latest)]) == 0
+    out = capsys.readouterr().out
+    assert "status_counts" in out
+    assert "provider_error=1" in out
+
+
 def test_missing_latest_exits_2(tmp_path) -> None:
     baseline = tmp_path / "baseline.json"
     baseline.write_text(json.dumps(_report({"a": True})), encoding="utf-8")

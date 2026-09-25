@@ -96,16 +96,38 @@ def compute_deltas(
         "latest": latest.get("passed"),
         "delta": (latest.get("passed") or 0) - (baseline.get("passed") or 0),
     }
+    base_models = baseline.get("models_used")
+    new_models = latest.get("models_used")
     return {
         "metrics": metrics,
         "regressions": regressions,
         "fixed": fixed,
         "added": added,
         "dropped": dropped,
+        "models": {
+            "baseline": base_models,
+            "latest": new_models,
+            "changed": bool(
+                isinstance(base_models, list)
+                and isinstance(new_models, list)
+                and sorted(base_models) != sorted(new_models)
+            ),
+        },
+        "status_counts": {
+            "baseline": baseline.get("status_counts") or {},
+            "latest": latest.get("status_counts") or {},
+        },
     }
 
 
-def check_regressions(
+def _case_failures(deltas: dict[str, Any]) -> list[str]:
+    """pass->fail case flips — always a regression, even across model changes."""
+    return [
+        f"case {cid!r} passed in baseline, fails now" for cid in deltas["regressions"]
+    ]
+
+
+def _metric_failures(
     deltas: dict[str, Any],
     *,
     max_voice_drop: float,
@@ -113,10 +135,8 @@ def check_regressions(
     max_p95_abs_ms: int,
     max_token_ratio: float,
 ) -> list[str]:
-    """Human-readable failure lines; empty list = no regression."""
+    """Metric threshold failures (voice/p95/tokens); empty = none."""
     failures: list[str] = []
-    for cid in deltas["regressions"]:
-        failures.append(f"case {cid!r} passed in baseline, fails now")
     voice = deltas["metrics"]["mean_voice"]
     if voice["delta"] is not None and voice["delta"] < -max_voice_drop:
         failures.append(
@@ -146,6 +166,24 @@ def check_regressions(
     return failures
 
 
+def check_regressions(
+    deltas: dict[str, Any],
+    *,
+    max_voice_drop: float,
+    max_p95_ratio: float,
+    max_p95_abs_ms: int,
+    max_token_ratio: float,
+) -> list[str]:
+    """Human-readable failure lines; empty list = no regression."""
+    return _case_failures(deltas) + _metric_failures(
+        deltas,
+        max_voice_drop=max_voice_drop,
+        max_p95_ratio=max_p95_ratio,
+        max_p95_abs_ms=max_p95_abs_ms,
+        max_token_ratio=max_token_ratio,
+    )
+
+
 def _fmt(value: Any, *, money: bool = False) -> str:
     if value is None:
         return "—"
@@ -154,7 +192,35 @@ def _fmt(value: Any, *, money: bool = False) -> str:
     return str(value)
 
 
-def _print(deltas: dict[str, Any], failures: list[str]) -> None:
+def _fmt_counts(counts: dict[str, Any] | None) -> str:
+    if not counts:
+        return "—"
+    return ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+
+
+def _fmt_models(models: Any) -> str:
+    if not isinstance(models, list) or not models:
+        return "—"
+    return ", ".join(str(m) for m in models)
+
+
+def _print(
+    deltas: dict[str, Any],
+    failures: list[str],
+    warnings: list[str] | None = None,
+) -> None:
+    models = deltas.get("models") or {}
+    if models.get("changed"):
+        print(
+            f"MODEL CHANGED: {_fmt_models(models.get('baseline'))}"
+            f" -> {_fmt_models(models.get('latest'))}"
+        )
+        print("cross-model metric deltas are informational; case flips still fail")
+        print()
+    elif bool(models.get("latest")) != bool(models.get("baseline")):
+        which = "baseline" if models.get("latest") else "latest"
+        print(f"note: {which} predates models_used — model guard skipped")
+        print()
     print(f"{'metric':<14} {'baseline':>10} {'latest':>10} {'delta':>10}")
     print("-" * 48)
     for key, row in deltas["metrics"].items():
@@ -164,11 +230,21 @@ def _print(deltas: dict[str, Any], failures: list[str]) -> None:
             f" {_fmt(row['latest'], money=money):>10}"
             f" {_fmt(round(row['delta'], 4) if isinstance(row['delta'], float) else row['delta'], money=money):>10}"
         )
+    status = deltas.get("status_counts") or {}
+    if status.get("baseline") or status.get("latest"):
+        print(
+            f"{'status_counts':<14} {_fmt_counts(status.get('baseline')):>10}"
+            f" {_fmt_counts(status.get('latest')):>10}"
+        )
     for label in ("regressions", "fixed", "added", "dropped"):
         ids = deltas[label]
         if ids:
             print(f"\n{label}: {', '.join(ids)}")
     print()
+    if warnings:
+        print("WARNINGS (downgraded — model changed):")
+        for line in warnings:
+            print(f"  - {line}")
     if failures:
         print("REGRESSION:")
         for line in failures:
@@ -195,6 +271,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Do not fail on pass->fail case flips (metric thresholds still apply)",
     )
     parser.add_argument(
+        "--strict-models",
+        action="store_true",
+        help="Fail on metric regressions even when models_used differs between"
+        " baseline and latest (default: model change downgrades metric"
+        " regressions to warnings; case flips still fail)",
+    )
+    parser.add_argument(
         "--accept",
         action="store_true",
         help="Copy --latest over --baseline (accept current run as the new anchor)",
@@ -217,14 +300,20 @@ def main(argv: list[str] | None = None) -> int:
     deltas = compute_deltas(baseline, latest)
     if args.allow_case_flips:
         deltas["regressions"] = []
-    failures = check_regressions(
-        deltas,
-        max_voice_drop=args.max_voice_drop,
-        max_p95_ratio=args.max_p95_ratio,
-        max_p95_abs_ms=args.max_p95_abs_ms,
-        max_token_ratio=args.max_token_ratio,
-    )
-    _print(deltas, failures)
+    thresholds = {
+        "max_voice_drop": args.max_voice_drop,
+        "max_p95_ratio": args.max_p95_ratio,
+        "max_p95_abs_ms": args.max_p95_abs_ms,
+        "max_token_ratio": args.max_token_ratio,
+    }
+    warnings: list[str] = []
+    if deltas["models"]["changed"] and not args.strict_models:
+        # Cross-model metric deltas are informational — warn, don't fail.
+        failures = _case_failures(deltas)
+        warnings = _metric_failures(deltas, **thresholds)
+    else:
+        failures = check_regressions(deltas, **thresholds)
+    _print(deltas, failures, warnings)
     return 1 if failures else 0
 
 

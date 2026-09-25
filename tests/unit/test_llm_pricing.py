@@ -74,3 +74,28 @@ def test_summarize_usage_empty() -> None:
     assert out["calls"] == 0
     assert out["total_tokens"] is None
     assert out["usd"] is None
+    assert out["status_counts"] == {}
+
+
+def test_summarize_usage_status_counts() -> None:
+    class _Rec:
+        latency_ms = 5
+        prompt_tokens = 1
+        completion_tokens = 1
+        total_tokens = 2
+        model = "gpt-4o-mini"
+
+        def __init__(self, status: str) -> None:
+            self.status = status
+
+    out = summarize_usage([_Rec("ok"), _Rec("ok"), _Rec("provider_error")])
+    assert out["status_counts"] == {"ok": 2, "provider_error": 1}
+
+
+def test_summarize_usage_missing_status_defaults_ok() -> None:
+    class _Rec:
+        latency_ms = 5
+        model = "gpt-4o-mini"
+
+    out = summarize_usage([_Rec()])
+    assert out["status_counts"] == {"ok": 1}

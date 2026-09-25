@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.config import settings
 from internal.llm import recorder
-from internal.llm.pricing import summarize_usage
+from internal.llm.pricing import normalize_model_id, summarize_usage
 from internal.llm.router import LlmProviderError, has_llm_credentials
 from internal.session import execute_harness as EH
 from internal.session import ingest as ingest_mod
@@ -304,10 +304,17 @@ def _write_reports(report: dict[str, Any], out_json: Path) -> tuple[Path, Path]:
     unknown = report.get("usd_unknown_models") or []
     if unknown:
         usd_text += f" (unpriced: {', '.join(unknown)})"
+    status_counts = report.get("status_counts") or {}
+    status_text = (
+        ", ".join(f"{k}={v}" for k, v in sorted(status_counts.items())) or "—"
+    )
     lines = [
         f"# Agent eval — `{report['suite']}`",
         "",
         f"- when: {report['when']}",
+        f"- elapsed_ms: {report['elapsed_ms'] if report.get('elapsed_ms') is not None else '—'}",
+        f"- models: {', '.join(report['models_used']) if report.get('models_used') else '—'}",
+        f"- status: {status_text}",
         f"- ok: **{report['ok']}**",
         f"- cases: {report['passed']}/{report['total']} passed"
         f" (pass_rate {report.get('pass_rate')})",
@@ -386,6 +393,7 @@ async def _eval_suite(
         raise SystemExit(f"no cases for suite {suite!r} in {cases_dir}")
 
     rows: list[dict[str, Any]] = []
+    suite_start = time.monotonic()
     with _tool_stubs(signals):
         for case in selected:
             cid = str(case.get("id") or "unnamed")
@@ -444,6 +452,7 @@ async def _eval_suite(
                         "total_tokens": usage["total_tokens"],
                         "models": usage["models"],
                         "unknown_models": usage["unknown_models"],
+                        "status_counts": usage["status_counts"],
                     },
                     "usd": usage["usd"],
                     "output": _summarize_output(node, output),
@@ -467,9 +476,22 @@ async def _eval_suite(
     )
     usd_vals = [float(r["usd"]) for r in rows if r.get("usd") is not None]
     total_usd = round(sum(usd_vals), 6) if usd_vals and not unknown_models else None
+    status_counts: dict[str, int] = {}
+    for r in rows:
+        for status, count in ((r.get("usage") or {}).get("status_counts") or {}).items():
+            status_counts[status] = status_counts.get(status, 0) + int(count)
+    models_used = sorted(
+        {
+            normalized
+            for r in rows
+            for model in ((r.get("usage") or {}).get("models") or [])
+            if (normalized := normalize_model_id(model))
+        }
+    )
     return {
         "suite": suite,
         "when": datetime.now(UTC).isoformat(),
+        "elapsed_ms": int((time.monotonic() - suite_start) * 1000),
         "ok": passed == len(rows),
         "passed": passed,
         "total": len(rows),
@@ -491,8 +513,16 @@ async def _eval_suite(
         or None,
         "total_usd": total_usd,
         "usd_unknown_models": unknown_models,
+        "models_used": models_used,
+        "status_counts": status_counts,
         "cases": rows,
     }
+
+
+def _is_deterministic(case: dict[str, Any], *, skip_judge: bool) -> bool:
+    """True when the case makes no LLM call, so it can run without keys."""
+    node = str(case.get("node") or "")
+    return node == "grounding_check" or (node == "voice_fixture" and skip_judge)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -521,12 +551,27 @@ def main(argv: list[str] | None = None) -> int:
 
     _silence_recording()
     if not has_llm_credentials():
+        # Keyless runs only when every selected case is deterministic —
+        # grounding_check always; voice_fixture needs no LLM with --skip-judge.
+        selected = [
+            c for c in _load_cases(args.cases_dir) if _in_suite(c, args.suite)
+        ]
+        llm_cases = [
+            str(c.get("id") or "?")
+            for c in selected
+            if not _is_deterministic(c, skip_judge=args.skip_judge)
+        ]
+        if llm_cases:
+            print(
+                "eval_agent: OPENAI_API_KEY or ANTHROPIC_API_KEY is not set "
+                "(see .env). Refusing to skip.",
+                file=sys.stderr,
+            )
+            return 2
         print(
-            "eval_agent: OPENAI_API_KEY or ANTHROPIC_API_KEY is not set "
-            "(see .env). Refusing to skip.",
+            "eval_agent: no LLM credentials; running deterministic cases only",
             file=sys.stderr,
         )
-        return 2
 
     report = asyncio.run(
         _eval_suite(
