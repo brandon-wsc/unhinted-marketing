@@ -13,6 +13,8 @@ import { isAdmin } from "@/lib/platform-level";
 
 type SystemTab = "llm" | "steps" | "trace" | "research" | "instance";
 
+const TAB_SCROLL_CLASS = "min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]";
+
 function parseTab(raw: string | null): SystemTab {
   if (raw === "steps" || raw === "trace" || raw === "research" || raw === "instance") {
     return raw;
@@ -73,44 +75,48 @@ export function SystemPage() {
   }
 
   return (
-    <AppShell mainClassName="overflow-y-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <h1 className="mb-4 text-lg font-semibold text-foreground">{t("system.title")}</h1>
-        <Tabs value={tab} onValueChange={(value) => setTab(parseTab(value))}>
-          <TabsList>
+    <AppShell mainClassName="overflow-hidden">
+      <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-4 py-6 sm:px-6">
+        <h1 className="mb-4 shrink-0 text-lg font-semibold text-foreground">{t("system.title")}</h1>
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(parseTab(value))}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <TabsList className="shrink-0 self-start">
             <TabsTrigger value="llm">{t("admin.tabs.llm")}</TabsTrigger>
             <TabsTrigger value="steps">{t("admin.tabs.steps")}</TabsTrigger>
             <TabsTrigger value="research">{t("admin.tabs.research")}</TabsTrigger>
             <TabsTrigger value="trace">{t("admin.tabs.trace")}</TabsTrigger>
             <TabsTrigger value="instance">{t("admin.tabs.instance")}</TabsTrigger>
           </TabsList>
-          <TabsContent value="llm">
+          <TabsContent value="llm" className={TAB_SCROLL_CLASS}>
             <LlmCallRecords
               onOpenTurn={(id) => setTab("steps", { turn: id })}
               onOpenSession={(id) => setTab("trace", { session: id })}
               onOpenResearch={(id) => setTab("research", { session: id })}
             />
           </TabsContent>
-          <TabsContent value="steps">
+          <TabsContent value="steps" className={TAB_SCROLL_CLASS}>
             <NodeStepsPanel
               initialTurnId={turnId}
               onOpenSession={(id) => setTab("trace", { session: id })}
             />
           </TabsContent>
-          <TabsContent value="research">
+          <TabsContent value="research" className={TAB_SCROLL_CLASS}>
             <ResearchPanel
               initialSessionId={sessionId}
               onOpenTurn={(id) => setTab("steps", { turn: id })}
             />
           </TabsContent>
-          <TabsContent value="trace">
+          <TabsContent value="trace" className={TAB_SCROLL_CLASS}>
             <SessionTracePanel
               initialSessionId={sessionId}
               onOpenTurn={(id) => setTab("steps", { turn: id })}
               onOpenResearch={(id) => setTab("research", { session: id })}
             />
           </TabsContent>
-          <TabsContent value="instance">
+          <TabsContent value="instance" className={TAB_SCROLL_CLASS}>
             <InstancePanel />
           </TabsContent>
         </Tabs>
