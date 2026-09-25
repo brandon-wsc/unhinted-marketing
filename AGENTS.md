@@ -112,7 +112,11 @@ optional body explaining why
 | `ci` | CI/CD config |
 | `perf` | Performance improvement |
 
-Prefer domain names over roadmap phases for `scope`: `auth`, `signals`, `sessions`, `web`, `db`, `llm`, `workers`, `docs`, `repo`. Prefer why over what. Keep Phase 0/1-style milestone bullets when the commit spans many areas. Never put secrets or env values in messages.
+Prefer domain names over roadmap phases for `scope`: `auth`, `signals`, `sessions`, `web`, `db`, `llm`, `workers`, `docs`, `repo`. Prefer why over what. Keep Phase 0/1-style milestone bullets when the commit spans many areas. Never put secrets or env values in messages. Keep the **subject line ASCII-only** — CJK/emoji in subjects has broken tooling before; put Chinese detail in the body if needed.
+
+## Branch names
+
+`type/slug` — the prefix mirrors the commit type: `feat/…`, `fix/…`, `refactor/…`, `docs/…`, `chore/…`, `test/…`, `ci/…`, `perf/…` (`backup/…` as an escape hatch). Slug is lowercase, hyphen-separated, e.g. `fix/executor-post-voice`. No other prefixes — CI rejects PRs whose head branch does not match.
 
 ## Alembic migrations
 
