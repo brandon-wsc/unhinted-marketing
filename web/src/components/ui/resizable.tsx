@@ -28,8 +28,9 @@ function ResizableHandle({
     <ResizablePrimitive.Separator
       data-slot="resizable-handle"
       className={cn(
-        // 1px line in flow (reads as a border). 7px transparent hit: right 3px, width 7px.
-        "relative w-px shrink-0 bg-border after:absolute after:inset-y-0 after:right-[3px] after:w-[7px] after:bg-transparent focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:w-full aria-[orientation=horizontal]:after:inset-x-0 aria-[orientation=horizontal]:after:top-auto aria-[orientation=horizontal]:after:bottom-[3px] aria-[orientation=horizontal]:after:h-[7px] aria-[orientation=horizontal]:after:w-auto [&[aria-orientation=horizontal]>div]:rotate-90",
+        // 1px line in flow (reads as a border); the Group's
+        // resizeTargetMinimumSize owns the wider hit rect + hover cursor.
+        "relative w-px shrink-0 bg-border focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:w-full [&[aria-orientation=horizontal]>div]:rotate-90",
         className,
       )}
       {...props}

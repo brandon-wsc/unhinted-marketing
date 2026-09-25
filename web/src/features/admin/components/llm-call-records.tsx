@@ -35,6 +35,7 @@ import {
   DetailPager,
   DetailSheetShell,
   DetailShell,
+  DetailSplit,
   formatTime,
   Meta,
   shortId,
@@ -277,19 +278,16 @@ function DetailSheet({
 
 function CallTable({
   items,
-  condensed,
   loading,
   selectedId,
   onSelect,
 }: {
   items: LlmCallRecordSummary[];
-  condensed: boolean;
   loading: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation();
-  const cols = condensed ? 4 : 9;
   return (
     <div className="relative min-h-[18rem] overflow-hidden rounded-xl border border-border bg-card">
       {loading && (
@@ -297,28 +295,19 @@ function CallTable({
           <Spinner className="size-6 text-primary" />
         </div>
       )}
-      <Table className={condensed ? undefined : "min-w-[52rem]"}>
+      <Table>
         <TableHeader>
           <TableRow>
             <TableHead>{t("admin.table.time")}</TableHead>
             <TableHead>{t("admin.table.node")}</TableHead>
-            {!condensed && (
-              <>
-                <TableHead>{t("admin.table.caller")}</TableHead>
-                <TableHead>{t("admin.table.kind")}</TableHead>
-                <TableHead>{t("admin.table.model")}</TableHead>
-              </>
-            )}
             <TableHead>{t("admin.table.status")}</TableHead>
-            {!condensed && <TableHead>{t("admin.table.tokens")}</TableHead>}
             <TableHead>{t("admin.table.latency")}</TableHead>
-            {!condensed && <TableHead>{t("admin.table.flags")}</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {!loading && items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={cols} className="py-8 text-center text-muted-foreground">
+              <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                 {t("admin.empty")}
               </TableCell>
             </TableRow>
@@ -334,31 +323,12 @@ function CallTable({
                 {formatTime(row.created_at)}
               </TableCell>
               <TableCell className="text-foreground">{row.node ?? "—"}</TableCell>
-              {!condensed && (
-                <>
-                  <TableCell className="text-xs text-muted-foreground">{row.caller}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{row.kind}</TableCell>
-                  <TableCell className="max-w-[10rem] truncate text-xs text-muted-foreground">
-                    {row.model ?? "—"}
-                  </TableCell>
-                </>
-              )}
               <TableCell>
                 <StatusBadge status={row.status} />
               </TableCell>
-              {!condensed && (
-                <TableCell className="text-xs text-muted-foreground">
-                  {row.total_tokens ?? "—"}
-                </TableCell>
-              )}
               <TableCell className="text-xs text-muted-foreground">
                 {formatLatency(row.latency_ms)}
               </TableCell>
-              {!condensed && (
-                <TableCell>
-                  <Flags row={row} />
-                </TableCell>
-              )}
             </TableRow>
           ))}
         </TableBody>
@@ -406,9 +376,12 @@ export function LlmCallRecords({
     return () => clearTimeout(handle);
   }, [nodeInput]);
 
-  useEffect(() => {
+  // Reset to the first page whenever the applied filters change.
+  const [appliedFilters, setAppliedFilters] = useState(filters);
+  if (appliedFilters !== filters) {
+    setAppliedFilters(filters);
     setOffset(0);
-  }, [filters]);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -453,8 +426,6 @@ export function LlmCallRecords({
   const selectRow = useCallback((id: string) => {
     setSelectedId((cur) => (cur === id ? null : id));
   }, []);
-
-  const condensed = !split || selectedId !== null;
 
   return (
     <div ref={ref}>
@@ -529,44 +500,42 @@ export function LlmCallRecords({
         </p>
       )}
 
-      {split && selectedId ? (
-        <div className="flex items-start gap-6">
-          <div className="w-[420px] shrink-0">
-            <CallTable
-              items={items}
-              condensed
-              loading={loading}
-              selectedId={selectedId}
-              onSelect={selectRow}
-            />
-            <DetailPager
-              offset={offset}
-              count={items.length}
-              pageSize={LLM_CALL_PAGE_SIZE}
-              loading={loading}
-              onOffset={setOffset}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <DetailCard
-              detail={detail}
-              loading={detailLoading}
-              onClose={() => setSelectedId(null)}
-              onOpenTurn={onOpenTurn}
-              onOpenSession={onOpenSession}
-              onOpenResearch={onOpenResearch}
-            />
-          </div>
-        </div>
+      {split ? (
+        <DetailSplit
+          storageKey="llm-calls"
+          list={
+            <>
+              <CallTable
+                items={items}
+                loading={loading}
+                selectedId={selectedId}
+                onSelect={selectRow}
+              />
+              <DetailPager
+                offset={offset}
+                count={items.length}
+                pageSize={LLM_CALL_PAGE_SIZE}
+                loading={loading}
+                onOffset={setOffset}
+              />
+            </>
+          }
+          detail={
+            selectedId ? (
+              <DetailCard
+                detail={detail}
+                loading={detailLoading}
+                onClose={() => setSelectedId(null)}
+                onOpenTurn={onOpenTurn}
+                onOpenSession={onOpenSession}
+                onOpenResearch={onOpenResearch}
+              />
+            ) : null
+          }
+        />
       ) : (
         <>
-          <CallTable
-            items={items}
-            condensed={condensed}
-            loading={loading}
-            selectedId={selectedId}
-            onSelect={selectRow}
-          />
+          <CallTable items={items} loading={loading} selectedId={selectedId} onSelect={selectRow} />
           <DetailPager
             offset={offset}
             count={items.length}

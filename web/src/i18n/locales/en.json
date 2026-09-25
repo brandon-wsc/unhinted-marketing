@@ -831,6 +831,7 @@
     "detail": {
       "title": "Call detail",
       "close": "Close",
+      "resize": "Resize list and detail",
       "session": "Session",
       "user": "User",
       "temperature": "Temperature",
