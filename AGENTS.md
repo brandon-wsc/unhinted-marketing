@@ -112,7 +112,16 @@ optional body explaining why
 | `ci` | CI/CD config |
 | `perf` | Performance improvement |
 
-Prefer domain names over roadmap phases for `scope`: `auth`, `signals`, `sessions`, `web`, `db`, `llm`, `workers`, `docs`, `repo`. Prefer why over what. Keep Phase 0/1-style milestone bullets when the commit spans many areas. Never put secrets or env values in messages.
+Prefer domain names over roadmap phases for `scope`: `auth`, `signals`, `sessions`, `web`, `db`, `llm`, `workers`, `docs`, `repo`. Prefer why over what. Keep Phase 0/1-style milestone bullets when the commit spans many areas. Never put secrets or env values in messages. Keep the **subject line ASCII-only** — CJK/emoji in subjects has broken tooling before; put Chinese detail in the body if needed.
+
+## Branch names
+
+Follow the [Conventional Branch](https://conventionalbranch.org/) purpose prefixes: `feat/…` (or `feature/…`), `fix/…` (or `bugfix/…`), `hotfix/…`, `release/…` (dots OK for versions, e.g. `release/v1.2.0`), `chore/…`. Slug is lowercase, hyphen-separated — e.g. `fix/executor-post-voice`. There is no `ci/`, `docs/`, `test/`, `refactor/`, or `perf/` branch — branch type is work intent, not commit type: CI-config, docs, refactor, and test-only work all branch under `chore/…` (their commits still use the commit-type table above). CI rejects PRs whose head branch does not match.
+
+## Feature work
+
+- **New feature / fix → fresh branch off latest `main`.** Never commit on `main`; never reuse a merged or unrelated branch — one branch + PR per change.
+- **New feature → ADR.** A feature that adds or changes a product contract, routing/behavior rule, or architectural decision gets `docs/adr/NNNN-<slug>.md` (next number) before or with the code — supersede the old ADR rather than rewriting it. Pure bug fixes, docs-only, and chore/tooling changes do not need one.
 
 ## Alembic migrations
 
