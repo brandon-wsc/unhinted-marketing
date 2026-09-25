@@ -43,11 +43,13 @@ export function DetailShell({
   title,
   loading,
   onClose,
+  actions,
   children,
 }: {
   title: string;
   loading: boolean;
   onClose: () => void;
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -55,14 +57,17 @@ export function DetailShell({
     <section className="rounded-xl border border-border bg-card p-5">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        <IconButton
-          size="icon"
-          className="size-7"
-          onClick={onClose}
-          aria-label={t("admin.detail.close")}
-        >
-          <X className="size-4" />
-        </IconButton>
+        <div className="flex items-center gap-2">
+          {actions}
+          <IconButton
+            size="icon"
+            className="size-7"
+            onClick={onClose}
+            aria-label={t("admin.detail.close")}
+          >
+            <X className="size-4" />
+          </IconButton>
+        </div>
       </div>
       {loading ? (
         <div className="flex justify-center py-10">
@@ -81,12 +86,14 @@ export function DetailSheetShell({
   loading,
   open,
   onOpenChange,
+  actions,
   children,
 }: {
   title: string;
   loading: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -94,6 +101,7 @@ export function DetailSheetShell({
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
+          {actions}
         </SheetHeader>
         {loading ? (
           <div className="flex justify-center py-10">
