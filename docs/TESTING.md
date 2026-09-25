@@ -132,7 +132,7 @@ pnpm run build
 
 On-demand live LLM eval (not CI). Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Writes `reports/eval/latest.md` + `latest.json` (gitignored); `reports/eval/baseline.json` is the committed diff anchor. Each case row carries `latency_ms` (wall), token counts, and rough `usd` from `internal/llm/pricing.py` — unknown model ids report `usd: null`, never invented prices. `--skip-judge` skips the VOICE LLM call but still reports wall ms.
 
-Draft cases get a cheap-model VOICE judge (`scene` / `layers` / `bridge` / `locale` → `overall` 0–1); YAML `expect.min_voice` / `max_voice` can fail a case (PR-tone fixture is `voice_pr_tone_negative`). `voice_fixture` negative cases are **canaries**: frozen bad copy (PR tone, invented stats, crisis humor, politics, disparagement) passes only when the judge correctly pans it.
+Draft cases get a cheap-model VOICE judge (`scene` / `layers` / `bridge` / `locale` → `overall` 0–1, plus a 0–5 `safety` dim gated by `expect.min_safety` / `max_safety`); YAML `expect.min_voice` / `max_voice` can fail a case (PR-tone fixture is `voice_pr_tone_negative`). Fluent-but-tasteless copy (crisis humor, politics, disparagement, fake-authority stats) stays in-voice — gate it with `max_safety`, not `max_voice`. `voice_fixture` negative cases are **canaries**: frozen bad copy passes only when the judge correctly pans it.
 
 `grounding_check` cases fake the DB: a top-level `db_signal_ids` list is what Postgres "contains"; the runner patches `list_top_signals` / `get_signals_by_ids`. Grade with `expect.grounding_ok`, `feedback_contains`, `kept_signal_ids`. Safety draft cases use `forbid_substrings` / `forbid_regex` (e.g. `\d+(\.\d+)?\s*%` for invented percentages).
 
