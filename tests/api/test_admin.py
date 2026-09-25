@@ -86,6 +86,8 @@ async def test_llm_calls_admin_lists_and_filters(client, db_session) -> None:
     assert body["limit"] == 50 and body["offset"] == 0
     # Summary must not leak prompt/response bodies.
     assert "system_prompt" not in body["items"][0]
+    assert "ttft_ms" in body["items"][0]
+    assert "cached_tokens" in body["items"][0]
 
     res = await client.get("/api/admin/llm-calls?node=reviewer", headers=headers)
     assert [i["node"] for i in res.json()["items"]] == ["reviewer"]
@@ -106,7 +108,7 @@ async def test_llm_calls_admin_lists_and_filters(client, db_session) -> None:
 async def test_llm_call_detail_and_404(client, db_session) -> None:
     data = await register_user(client)
     await _grant_platform_level(db_session, data["user"]["id"], 9)
-    row = _record()
+    row = _record(model="gpt-4o-mini", ttft_ms=45, cached_tokens=8)
     db_session.add(row)
     await db_session.commit()
     headers = auth_header(data["access_token"])
@@ -118,6 +120,10 @@ async def test_llm_call_detail_and_404(client, db_session) -> None:
     assert body["user_prompt"] == "usr"
     assert body["response_text"] == '{"passed": true}'
     assert body["parse_ok"] is True
+    assert body["ttft_ms"] == 45
+    assert body["cached_tokens"] == 8
+    # gpt-4o-mini list price: (10 * 0.15 + 5 * 0.60) / 1M
+    assert body["usd"] == pytest.approx(4.5e-6)
 
     res = await client.get(f"/api/admin/llm-calls/{uuid.uuid4()}", headers=headers)
     assert res.status_code == 404

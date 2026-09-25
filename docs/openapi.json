@@ -7021,6 +7021,17 @@
             ],
             "title": "Latency Ms"
           },
+          "ttft_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttft Ms"
+          },
           "prompt_tokens": {
             "anyOf": [
               {
@@ -7053,6 +7064,17 @@
               }
             ],
             "title": "Total Tokens"
+          },
+          "cached_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached Tokens"
           },
           "parse_ok": {
             "anyOf": [
@@ -7170,6 +7192,17 @@
               }
             ],
             "title": "Error"
+          },
+          "usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usd"
           }
         },
         "type": "object",
@@ -7318,6 +7351,17 @@
             ],
             "title": "Latency Ms"
           },
+          "ttft_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttft Ms"
+          },
           "prompt_tokens": {
             "anyOf": [
               {
@@ -7350,6 +7394,17 @@
               }
             ],
             "title": "Total Tokens"
+          },
+          "cached_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached Tokens"
           },
           "parse_ok": {
             "anyOf": [

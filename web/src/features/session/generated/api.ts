@@ -2156,12 +2156,16 @@ export type components = {
             status: string;
             /** Latency Ms */
             latency_ms: number | null;
+            /** Ttft Ms */
+            ttft_ms?: number | null;
             /** Prompt Tokens */
             prompt_tokens: number | null;
             /** Completion Tokens */
             completion_tokens: number | null;
             /** Total Tokens */
             total_tokens: number | null;
+            /** Cached Tokens */
+            cached_tokens?: number | null;
             /** Parse Ok */
             parse_ok: boolean | null;
             /** Fallback Used */
@@ -2186,6 +2190,8 @@ export type components = {
             error: {
                 [key: string]: unknown;
             } | null;
+            /** Usd */
+            usd?: number | null;
         };
         /** LlmCallRecordList */
         LlmCallRecordList: {
@@ -2229,12 +2235,16 @@ export type components = {
             status: string;
             /** Latency Ms */
             latency_ms: number | null;
+            /** Ttft Ms */
+            ttft_ms?: number | null;
             /** Prompt Tokens */
             prompt_tokens: number | null;
             /** Completion Tokens */
             completion_tokens: number | null;
             /** Total Tokens */
             total_tokens: number | null;
+            /** Cached Tokens */
+            cached_tokens?: number | null;
             /** Parse Ok */
             parse_ok: boolean | null;
             /** Fallback Used */

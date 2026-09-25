@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
@@ -30,33 +29,39 @@ import {
   type LlmCallRecordDetail,
   type LlmCallRecordSummary,
 } from "@/features/admin/api";
+import {
+  ADMIN_SPLIT_MIN_WIDTH,
+  DetailBlock,
+  DetailPager,
+  DetailSheetShell,
+  DetailShell,
+  formatTime,
+  Meta,
+  shortId,
+} from "@/features/admin/components/shared";
+import { useContainerWidth } from "@/hooks/use-container-width";
 
 const STATUS_OPTIONS = ["ok", "empty_response", "provider_error", "cancelled", "error"];
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-HK", { hour12: false });
-}
-
+const SPLIT_MIN_WIDTH = ADMIN_SPLIT_MIN_WIDTH;
 function formatLatency(ms: number | null): string {
   if (ms == null) return "—";
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`;
 }
 
+function formatUsd(usd: number | null): string {
+  if (usd == null) return "—";
+  return `$${usd.toFixed(4)}`;
+}
+
 function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "ok"
-      ? "secondary"
-      : status === "provider_error" || status === "error"
-        ? "destructive"
-        : "outline";
   const className =
     status === "ok"
-      ? "border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      ? "bg-success-soft text-success-foreground"
       : status === "provider_error" || status === "error"
-        ? "border-transparent bg-destructive-soft text-destructive-foreground"
-        : "border-transparent bg-amber-500/10 text-amber-600 dark:text-amber-400";
+        ? "bg-destructive-soft text-destructive-foreground"
+        : "bg-voice-soft text-voice";
   return (
-    <Badge variant={variant} className={className}>
+    <Badge variant="secondary" className={className}>
       {status}
     </Badge>
   );
@@ -72,7 +77,7 @@ function Flags({ row }: { row: LlmCallRecordSummary }) {
         </Badge>
       )}
       {row.fallback_used && (
-        <Badge className="border-transparent bg-amber-500/10 text-amber-600 dark:text-amber-400">
+        <Badge className="border-transparent bg-voice-soft text-voice">
           {t("admin.badges.fallback")}
         </Badge>
       )}
@@ -80,15 +85,156 @@ function Flags({ row }: { row: LlmCallRecordSummary }) {
   );
 }
 
-function DetailBlock({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null;
+function DetailContent({
+  detail,
+  onOpenTurn,
+  onOpenSession,
+  onOpenResearch,
+}: {
+  detail: LlmCallRecordDetail;
+  onOpenTurn?: (turnId: string) => void;
+  onOpenSession?: (sessionId: string) => void;
+  onOpenResearch?: (sessionId: string) => void;
+}) {
+  const { t } = useTranslation();
+  const hasFlags = detail.parse_ok === false || detail.fallback_used;
   return (
-    <div>
-      <p className="mb-1 text-xs font-medium text-muted-foreground">{label}</p>
-      <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-secondary p-3 text-xs text-foreground">
-        {value}
-      </pre>
+    <div className="space-y-3">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+        <Meta label={t("admin.table.time")}>{formatTime(detail.created_at)}</Meta>
+        <Meta label={t("admin.detail.ttft")}>{formatLatency(detail.ttft_ms)}</Meta>
+        <Meta label={t("admin.table.status")}>
+          <StatusBadge status={detail.status} />
+        </Meta>
+        <Meta label={t("admin.detail.temperature")}>{detail.temperature ?? "—"}</Meta>
+        <Meta label={t("admin.table.latency")}>{formatLatency(detail.latency_ms)}</Meta>
+        <Meta label={t("admin.detail.usd")}>{formatUsd(detail.usd)}</Meta>
+        <Meta label={t("admin.table.model")}>{detail.model ?? "—"}</Meta>
+        <Meta label={t("admin.table.kind")}>{detail.kind}</Meta>
+        <Meta label={t("admin.table.caller")}>{detail.caller}</Meta>
+        <Meta label={t("admin.table.flags")}>{hasFlags ? <Flags row={detail} /> : "—"}</Meta>
+      </dl>
+
+      <div className="flex flex-wrap gap-x-6 rounded-lg bg-secondary px-3 py-2 text-xs text-muted-foreground">
+        <span>
+          {t("admin.detail.tokensPrompt")}{" "}
+          <span className="font-medium text-foreground">{detail.prompt_tokens ?? "—"}</span>
+        </span>
+        <span>
+          {t("admin.detail.tokensCompletion")}{" "}
+          <span className="font-medium text-foreground">{detail.completion_tokens ?? "—"}</span>
+        </span>
+        <span>
+          {t("admin.detail.tokensTotal")}{" "}
+          <span className="font-medium text-foreground">{detail.total_tokens ?? "—"}</span>
+        </span>
+        <span>
+          {t("admin.detail.tokensCached")}{" "}
+          <span className="font-medium text-foreground">{detail.cached_tokens ?? "—"}</span>
+        </span>
+      </div>
+
+      {detail.turn_id && (
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <dt className="text-xs text-muted-foreground">{t("admin.table.turnId")}</dt>
+            <dd className="mt-0.5 font-mono text-[10px] text-foreground" title={detail.turn_id}>
+              {shortId(detail.turn_id)}
+            </dd>
+          </div>
+          {onOpenTurn && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onOpenTurn(detail.turn_id!)}
+            >
+              {t("admin.openNodeSteps")}
+            </Button>
+          )}
+        </div>
+      )}
+      {detail.session_id && (
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <dt className="text-xs text-muted-foreground">{t("admin.detail.session")}</dt>
+            <dd className="mt-0.5 font-mono text-[10px] text-foreground" title={detail.session_id}>
+              {shortId(detail.session_id)}
+            </dd>
+          </div>
+          <div className="flex gap-2">
+            {onOpenSession && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => onOpenSession(detail.session_id!)}
+              >
+                {t("admin.openSessionTrace")}
+              </Button>
+            )}
+            {onOpenResearch && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => onOpenResearch(detail.session_id!)}
+              >
+                {t("admin.openResearch")}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+      {detail.user_id && (
+        <div>
+          <dt className="text-xs text-muted-foreground">{t("admin.detail.user")}</dt>
+          <dd className="mt-0.5 font-mono text-[10px] text-foreground" title={detail.user_id}>
+            {shortId(detail.user_id)}
+          </dd>
+        </div>
+      )}
+
+      <DetailBlock label={t("admin.detail.systemPrompt")} value={detail.system_prompt} />
+      <DetailBlock label={t("admin.detail.userPrompt")} value={detail.user_prompt} />
+      <DetailBlock label={t("admin.detail.response")} value={detail.response_text} />
+      {detail.error && (
+        <DetailBlock
+          label={t("admin.detail.error")}
+          value={JSON.stringify(detail.error, null, 2)}
+        />
+      )}
     </div>
+  );
+}
+
+function DetailCard({
+  detail,
+  loading,
+  onClose,
+  onOpenTurn,
+  onOpenSession,
+  onOpenResearch,
+}: {
+  detail: LlmCallRecordDetail | null;
+  loading: boolean;
+  onClose: () => void;
+  onOpenTurn?: (turnId: string) => void;
+  onOpenSession?: (sessionId: string) => void;
+  onOpenResearch?: (sessionId: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <DetailShell title={t("admin.detail.title")} loading={loading} onClose={onClose}>
+      {detail && (
+        <DetailContent
+          detail={detail}
+          onOpenTurn={onOpenTurn}
+          onOpenSession={onOpenSession}
+          onOpenResearch={onOpenResearch}
+        />
+      )}
+    </DetailShell>
   );
 }
 
@@ -111,135 +257,113 @@ function DetailSheet({
 }) {
   const { t } = useTranslation();
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>{t("admin.detail.title")}</SheetTitle>
-        </SheetHeader>
+    <DetailSheetShell
+      title={t("admin.detail.title")}
+      loading={loading}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      {detail && (
+        <DetailContent
+          detail={detail}
+          onOpenTurn={onOpenTurn}
+          onOpenSession={onOpenSession}
+          onOpenResearch={onOpenResearch}
+        />
+      )}
+    </DetailSheetShell>
+  );
+}
 
-        {loading && (
-          <div className="flex justify-center py-10">
-            <Spinner className="size-5 text-muted-foreground" />
-          </div>
-        )}
-
-        {detail && !loading && (
-          <div className="mt-4 space-y-3">
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-              <div>
-                <dt className="text-muted-foreground">{t("admin.table.time")}</dt>
-                <dd className="text-foreground">{formatTime(detail.created_at)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">{t("admin.table.status")}</dt>
-                <dd>
-                  <StatusBadge status={detail.status} />
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">{t("admin.table.latency")}</dt>
-                <dd className="text-foreground">{formatLatency(detail.latency_ms)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">{t("admin.detail.temperature")}</dt>
-                <dd className="text-foreground">{detail.temperature ?? "—"}</dd>
-              </div>
-              <div className="col-span-2">
-                <dt className="text-muted-foreground">{t("admin.table.tokens")}</dt>
-                <dd className="flex flex-wrap gap-x-4 text-foreground">
-                  <span>
-                    {t("admin.detail.tokensPrompt")}{" "}
-                    <span className="font-medium">{detail.prompt_tokens ?? "—"}</span>
-                  </span>
-                  <span>
-                    {t("admin.detail.tokensCompletion")}{" "}
-                    <span className="font-medium">{detail.completion_tokens ?? "—"}</span>
-                  </span>
-                  <span>
-                    {t("admin.detail.tokensTotal")}{" "}
-                    <span className="font-medium">{detail.total_tokens ?? "—"}</span>
-                  </span>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">{t("admin.detail.parseOk")}</dt>
-                <dd className="text-foreground">
-                  {detail.parse_ok == null
-                    ? "—"
-                    : detail.parse_ok
-                      ? "OK"
-                      : t("admin.badges.parseFailed")}
-                </dd>
-              </div>
-              {detail.turn_id && (
-                <div className="col-span-2">
-                  <dt className="text-muted-foreground">{t("admin.table.turnId")}</dt>
-                  <dd className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[10px] text-foreground">{detail.turn_id}</span>
-                    {onOpenTurn && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onOpenTurn(detail.turn_id!)}
-                      >
-                        {t("admin.openNodeSteps")}
-                      </Button>
-                    )}
-                  </dd>
-                </div>
-              )}
-              {detail.session_id && (
-                <div className="col-span-2">
-                  <dt className="text-muted-foreground">{t("admin.detail.session")}</dt>
-                  <dd className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[10px] text-foreground">
-                      {detail.session_id}
-                    </span>
-                    {onOpenSession && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onOpenSession(detail.session_id!)}
-                      >
-                        {t("admin.openSessionTrace")}
-                      </Button>
-                    )}
-                    {onOpenResearch && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onOpenResearch(detail.session_id!)}
-                      >
-                        {t("admin.openResearch")}
-                      </Button>
-                    )}
-                  </dd>
-                </div>
-              )}
-              {detail.user_id && (
-                <div className="col-span-2">
-                  <dt className="text-muted-foreground">{t("admin.detail.user")}</dt>
-                  <dd className="font-mono text-[10px] text-foreground">{detail.user_id}</dd>
-                </div>
-              )}
-            </dl>
-
-            <DetailBlock label={t("admin.detail.systemPrompt")} value={detail.system_prompt} />
-            <DetailBlock label={t("admin.detail.userPrompt")} value={detail.user_prompt} />
-            <DetailBlock label={t("admin.detail.response")} value={detail.response_text} />
-            {detail.error && (
-              <DetailBlock
-                label={t("admin.detail.error")}
-                value={JSON.stringify(detail.error, null, 2)}
-              />
+function CallTable({
+  items,
+  condensed,
+  loading,
+  selectedId,
+  onSelect,
+}: {
+  items: LlmCallRecordSummary[];
+  condensed: boolean;
+  loading: boolean;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const cols = condensed ? 4 : 9;
+  return (
+    <div className="relative min-h-[18rem] overflow-hidden rounded-xl border border-border bg-card">
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-card/70 backdrop-blur-[1px]">
+          <Spinner className="size-6 text-primary" />
+        </div>
+      )}
+      <Table className={condensed ? undefined : "min-w-[52rem]"}>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("admin.table.time")}</TableHead>
+            <TableHead>{t("admin.table.node")}</TableHead>
+            {!condensed && (
+              <>
+                <TableHead>{t("admin.table.caller")}</TableHead>
+                <TableHead>{t("admin.table.kind")}</TableHead>
+                <TableHead>{t("admin.table.model")}</TableHead>
+              </>
             )}
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
+            <TableHead>{t("admin.table.status")}</TableHead>
+            {!condensed && <TableHead>{t("admin.table.tokens")}</TableHead>}
+            <TableHead>{t("admin.table.latency")}</TableHead>
+            {!condensed && <TableHead>{t("admin.table.flags")}</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {!loading && items.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={cols} className="py-8 text-center text-muted-foreground">
+                {t("admin.empty")}
+              </TableCell>
+            </TableRow>
+          )}
+          {items.map((row) => (
+            <TableRow
+              key={row.id}
+              data-state={selectedId === row.id ? "selected" : undefined}
+              className="cursor-pointer"
+              onClick={() => onSelect(row.id)}
+            >
+              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                {formatTime(row.created_at)}
+              </TableCell>
+              <TableCell className="text-foreground">{row.node ?? "—"}</TableCell>
+              {!condensed && (
+                <>
+                  <TableCell className="text-xs text-muted-foreground">{row.caller}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{row.kind}</TableCell>
+                  <TableCell className="max-w-[10rem] truncate text-xs text-muted-foreground">
+                    {row.model ?? "—"}
+                  </TableCell>
+                </>
+              )}
+              <TableCell>
+                <StatusBadge status={row.status} />
+              </TableCell>
+              {!condensed && (
+                <TableCell className="text-xs text-muted-foreground">
+                  {row.total_tokens ?? "—"}
+                </TableCell>
+              )}
+              <TableCell className="text-xs text-muted-foreground">
+                {formatLatency(row.latency_ms)}
+              </TableCell>
+              {!condensed && (
+                <TableCell>
+                  <Flags row={row} />
+                </TableCell>
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -256,6 +380,8 @@ export function LlmCallRecords({
 }: LlmCallRecordsProps = {}) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
+  const { ref, width } = useContainerWidth();
+  const split = width >= SPLIT_MIN_WIDTH;
 
   const [nodeInput, setNodeInput] = useState("");
   const [filters, setFilters] = useState<LlmCallFilters>({});
@@ -324,11 +450,14 @@ export function LlmCallRecords({
     };
   }, [accessToken, selectedId]);
 
-  const from = items.length > 0 ? offset + 1 : 0;
-  const to = offset + items.length;
+  const selectRow = useCallback((id: string) => {
+    setSelectedId((cur) => (cur === id ? null : id));
+  }, []);
+
+  const condensed = !split || selectedId !== null;
 
   return (
-    <div>
+    <div ref={ref}>
       <div className="mb-3 flex flex-wrap items-end gap-2">
         <label
           htmlFor="admin-llm-filter-node"
@@ -400,105 +529,67 @@ export function LlmCallRecords({
         </p>
       )}
 
-      <div className="relative min-h-[18rem] overflow-hidden rounded-xl border border-border bg-card">
-        {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-card/70 backdrop-blur-[1px]">
-            <Spinner className="size-6 text-primary" />
+      {split && selectedId ? (
+        <div className="flex items-start gap-6">
+          <div className="w-[420px] shrink-0">
+            <CallTable
+              items={items}
+              condensed
+              loading={loading}
+              selectedId={selectedId}
+              onSelect={selectRow}
+            />
+            <DetailPager
+              offset={offset}
+              count={items.length}
+              pageSize={LLM_CALL_PAGE_SIZE}
+              loading={loading}
+              onOffset={setOffset}
+            />
           </div>
-        )}
-        <Table className="min-w-[52rem]">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("admin.table.time")}</TableHead>
-              <TableHead>{t("admin.table.node")}</TableHead>
-              <TableHead>{t("admin.table.caller")}</TableHead>
-              <TableHead>{t("admin.table.kind")}</TableHead>
-              <TableHead>{t("admin.table.model")}</TableHead>
-              <TableHead>{t("admin.table.status")}</TableHead>
-              <TableHead>{t("admin.table.tokens")}</TableHead>
-              <TableHead>{t("admin.table.latency")}</TableHead>
-              <TableHead>{t("admin.table.flags")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {!loading && items.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                  {t("admin.empty")}
-                </TableCell>
-              </TableRow>
-            )}
-            {items.map((row) => (
-              <TableRow
-                key={row.id}
-                data-state={selectedId === row.id ? "selected" : undefined}
-                className="cursor-pointer"
-                onClick={() => setSelectedId(row.id)}
-              >
-                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                  {formatTime(row.created_at)}
-                </TableCell>
-                <TableCell className="text-foreground">{row.node ?? "—"}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{row.caller}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{row.kind}</TableCell>
-                <TableCell className="max-w-[10rem] truncate text-xs text-muted-foreground">
-                  {row.model ?? "—"}
-                </TableCell>
-                <TableCell>
-                  <StatusBadge status={row.status} />
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {row.total_tokens ?? "—"}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {formatLatency(row.latency_ms)}
-                </TableCell>
-                <TableCell>
-                  <Flags row={row} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {t("admin.pagination.showing", { from, to })}
-        </p>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={offset === 0 || loading}
-            onClick={() => setOffset(Math.max(0, offset - LLM_CALL_PAGE_SIZE))}
-          >
-            {t("admin.pagination.prev")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={items.length < LLM_CALL_PAGE_SIZE || loading}
-            onClick={() => setOffset(offset + LLM_CALL_PAGE_SIZE)}
-          >
-            {t("admin.pagination.next")}
-          </Button>
+          <div className="min-w-0 flex-1">
+            <DetailCard
+              detail={detail}
+              loading={detailLoading}
+              onClose={() => setSelectedId(null)}
+              onOpenTurn={onOpenTurn}
+              onOpenSession={onOpenSession}
+              onOpenResearch={onOpenResearch}
+            />
+          </div>
         </div>
-      </div>
+      ) : (
+        <>
+          <CallTable
+            items={items}
+            condensed={condensed}
+            loading={loading}
+            selectedId={selectedId}
+            onSelect={selectRow}
+          />
+          <DetailPager
+            offset={offset}
+            count={items.length}
+            pageSize={LLM_CALL_PAGE_SIZE}
+            loading={loading}
+            onOffset={setOffset}
+          />
+        </>
+      )}
 
-      <DetailSheet
-        detail={detail}
-        loading={detailLoading}
-        open={selectedId !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedId(null);
-        }}
-        onOpenTurn={onOpenTurn}
-        onOpenSession={onOpenSession}
-        onOpenResearch={onOpenResearch}
-      />
+      {!split && (
+        <DetailSheet
+          detail={detail}
+          loading={detailLoading}
+          open={selectedId !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelectedId(null);
+          }}
+          onOpenTurn={onOpenTurn}
+          onOpenSession={onOpenSession}
+          onOpenResearch={onOpenResearch}
+        />
+      )}
     </div>
   );
 }

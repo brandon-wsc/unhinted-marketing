@@ -9,6 +9,7 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.roles import PlatformLevel, require_platform_level
+from internal.llm.pricing import usd_for
 from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import (
@@ -100,7 +101,9 @@ async def get_llm_call(
     row = await db.get(LlmCallRecord, record_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
-    return LlmCallRecordDetail.model_validate(row)
+    detail = LlmCallRecordDetail.model_validate(row)
+    detail.usd = usd_for(row.model, row.prompt_tokens, row.completion_tokens)
+    return detail
 
 
 @router.get("/node-steps", response_model=NodeStepList)
