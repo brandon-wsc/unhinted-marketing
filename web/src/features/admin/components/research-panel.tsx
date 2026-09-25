@@ -18,16 +18,184 @@ import {
   type ResearchTurn,
   type SessionResearch,
 } from "@/features/admin/api";
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("zh-HK", { hour12: false });
-}
+import {
+  ADMIN_SPLIT_MIN_WIDTH,
+  DetailSheetShell,
+  DetailShell,
+  DetailSplit,
+  formatTime,
+  Meta,
+  shortId,
+} from "@/features/admin/components/shared";
+import { useContainerWidth } from "@/hooks/use-container-width";
 
 function flag(v: boolean | null | undefined): string {
   if (v === true) return "true";
   if (v === false) return "false";
   return "—";
+}
+
+function turnQueries(turn: ResearchTurn): string[] {
+  if (turn.search_queries.length) return turn.search_queries;
+  return turn.search_query ? [turn.search_query] : [];
+}
+
+function TurnDetailContent({ turn }: { turn: ResearchTurn }) {
+  const { t } = useTranslation();
+  const queries = turnQueries(turn);
+  return (
+    <div className="space-y-3">
+      <dl className="flex flex-wrap gap-x-7 gap-y-3">
+        <Meta label={t("admin.research.semantic")}>
+          <span className="font-mono">{turn.semantic_route ?? "—"}</span>
+        </Meta>
+        <Meta label={t("admin.research.rulePass")}>
+          <span className="font-mono">{flag(turn.research_rule_pass)}</span>
+        </Meta>
+        <Meta label={t("admin.research.needFacts")}>
+          <span className="font-mono">{flag(turn.need_facts)}</span>
+        </Meta>
+        <Meta label={t("admin.research.querySource")}>
+          <span className="font-mono">{turn.query_source ?? "—"}</span>
+        </Meta>
+        <Meta label={t("admin.table.turnId")}>
+          <span className="font-mono" title={turn.turn_id}>
+            {shortId(turn.turn_id)}
+          </span>
+        </Meta>
+        <Meta label={t("admin.research.askClarify")}>
+          <span className="font-mono">{flag(turn.ask_clarify)}</span>
+        </Meta>
+        <Meta label={t("admin.research.entity")}>
+          <span className="font-mono">{turn.entity_surface ?? "—"}</span>
+        </Meta>
+        <Meta label={t("admin.research.ingest")}>
+          <span className="font-mono">{flag(turn.ran_research_ingest)}</span>
+        </Meta>
+        <Meta label={t("admin.research.signalsTrusted")}>
+          <span className="font-mono">{flag(turn.signals_trusted)}</span>
+        </Meta>
+      </dl>
+
+      <div>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">
+          {t("admin.research.queries")}
+        </p>
+        {queries.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t("admin.research.noQueries")}</p>
+        ) : (
+          <ul className="list-inside list-disc space-y-1 font-mono text-[13px]">
+            {queries.map((q) => (
+              <li key={q}>{q}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">
+          {t("admin.research.signals")}
+        </p>
+        {turn.signals.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t("admin.research.noSignals")}</p>
+        ) : (
+          <ul className="space-y-2">
+            {turn.signals.map((s) => (
+              <li key={s.signal_id} className="rounded-md border border-border px-3 py-2.5 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-secondary-foreground">
+                    {s.source || "?"}
+                  </span>
+                  <span className="font-medium">{s.title || s.signal_id}</span>
+                </div>
+                {s.query ? (
+                  <p className="mt-1 font-mono text-muted-foreground">q: {s.query}</p>
+                ) : null}
+                {s.url ? (
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block truncate text-primary underline-offset-2 hover:underline"
+                  >
+                    {s.url}
+                  </a>
+                ) : null}
+                {s.excerpt ? (
+                  <p className="mt-1 line-clamp-3 text-muted-foreground">{s.excerpt}</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TurnsTable({
+  turns,
+  loading,
+  selectedId,
+  onSelect,
+}: {
+  turns: ResearchTurn[];
+  loading: boolean;
+  selectedId: string | null;
+  onSelect: (turn: ResearchTurn) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="relative min-h-[18rem] overflow-hidden rounded-xl border border-border bg-card">
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-card/70 backdrop-blur-[1px]">
+          <Spinner className="size-6 text-primary" />
+        </div>
+      )}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("admin.table.time")}</TableHead>
+            <TableHead>{t("admin.research.semantic")}</TableHead>
+            <TableHead>{t("admin.research.rulePass")}</TableHead>
+            <TableHead>{t("admin.research.queries")}</TableHead>
+            <TableHead>{t("admin.research.hits")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {!loading && turns.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                {t("admin.research.noTurns")}
+              </TableCell>
+            </TableRow>
+          )}
+          {turns.map((turn) => (
+            <TableRow
+              key={turn.turn_id}
+              className="cursor-pointer"
+              data-state={selectedId === turn.turn_id ? "selected" : undefined}
+              onClick={() => onSelect(turn)}
+            >
+              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                {turn.created_at ? formatTime(turn.created_at) : "—"}
+              </TableCell>
+              <TableCell className="font-mono text-xs text-foreground">
+                {turn.semantic_route ?? "—"}
+              </TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground">
+                {flag(turn.research_rule_pass)}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {turnQueries(turn).length}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">{turn.signals.length}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
 }
 
 type Props = {
@@ -38,6 +206,9 @@ type Props = {
 export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
+  const { ref, width } = useContainerWidth();
+  const split = width >= ADMIN_SPLIT_MIN_WIDTH;
+
   const [sessionInput, setSessionInput] = useState(initialSessionId);
   const [sessionId, setSessionId] = useState(initialSessionId.trim());
   const [data, setData] = useState<SessionResearch | null>(null);
@@ -65,7 +236,10 @@ export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
     try {
       const next = await apiAdminGetSessionResearch(accessToken, id);
       setData(next);
-      setSelected(next.turns[0] ?? null);
+      // Re-resolve a kept selection after refresh; never auto-select.
+      setSelected((cur) =>
+        cur ? (next.turns.find((t) => t.turn_id === cur.turn_id) ?? null) : null,
+      );
     } catch (err) {
       setData(null);
       setSelected(null);
@@ -79,8 +253,24 @@ export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
     void load();
   }, [load]);
 
+  const selectTurn = useCallback((turn: ResearchTurn) => {
+    setSelected((cur) => (cur?.turn_id === turn.turn_id ? null : turn));
+  }, []);
+
+  const detailActions =
+    selected && onOpenTurn ? (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => onOpenTurn(selected.turn_id)}
+      >
+        {t("admin.openNodeSteps")}
+      </Button>
+    ) : undefined;
+
   return (
-    <div className="space-y-4">
+    <div ref={ref} className="space-y-4">
       <div className="flex flex-wrap items-end gap-2">
         <label
           htmlFor="admin-research-filter-session"
@@ -114,7 +304,7 @@ export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
       </div>
 
       {error ? (
-        <p className="text-sm text-destructive">
+        <p className="rounded-lg bg-destructive-soft px-3 py-2 text-sm text-destructive-foreground">
           {t("admin.loadFailed")}: {error}
         </p>
       ) : null}
@@ -129,160 +319,54 @@ export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
         </div>
       ) : null}
 
-      {data && data.turns.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("admin.research.noTurns")}</p>
+      {data ? (
+        split ? (
+          <DetailSplit
+            storageKey="research"
+            list={
+              <TurnsTable
+                turns={data.turns}
+                loading={loading}
+                selectedId={selected?.turn_id ?? null}
+                onSelect={selectTurn}
+              />
+            }
+            detail={
+              selected ? (
+                <DetailShell
+                  title={t("admin.research.turnDetail")}
+                  loading={false}
+                  onClose={() => setSelected(null)}
+                  actions={detailActions}
+                >
+                  <TurnDetailContent turn={selected} />
+                </DetailShell>
+              ) : null
+            }
+          />
+        ) : (
+          <TurnsTable
+            turns={data.turns}
+            loading={loading}
+            selectedId={selected?.turn_id ?? null}
+            onSelect={selectTurn}
+          />
+        )
       ) : null}
 
-      {data && data.turns.length > 0 ? (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("admin.table.time")}</TableHead>
-                  <TableHead>{t("admin.research.semantic")}</TableHead>
-                  <TableHead>{t("admin.research.rulePass")}</TableHead>
-                  <TableHead>{t("admin.research.queries")}</TableHead>
-                  <TableHead>{t("admin.research.hits")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.turns.map((turn) => (
-                  <TableRow
-                    key={turn.turn_id}
-                    className={
-                      selected?.turn_id === turn.turn_id
-                        ? "cursor-pointer bg-muted/50"
-                        : "cursor-pointer"
-                    }
-                    onClick={() => setSelected(turn)}
-                  >
-                    <TableCell className="whitespace-nowrap text-xs">
-                      {formatTime(turn.created_at)}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {turn.semantic_route ?? "—"}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {flag(turn.research_rule_pass)}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {turn.search_queries.length
-                        ? turn.search_queries.length
-                        : turn.search_query
-                          ? 1
-                          : 0}
-                    </TableCell>
-                    <TableCell className="text-xs">{turn.signals.length}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {selected ? (
-            <div className="space-y-3 rounded-lg border border-border bg-card p-4 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-semibold">{t("admin.research.turnDetail")}</h2>
-                {onOpenTurn ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onOpenTurn(selected.turn_id)}
-                  >
-                    {t("admin.openNodeSteps")}
-                  </Button>
-                ) : null}
-              </div>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                <dt className="text-muted-foreground">{t("admin.table.turnId")}</dt>
-                <dd className="break-all font-mono">{selected.turn_id}</dd>
-                <dt className="text-muted-foreground">{t("admin.research.semantic")}</dt>
-                <dd className="font-mono">{selected.semantic_route ?? "—"}</dd>
-                <dt className="text-muted-foreground">{t("admin.research.rulePass")}</dt>
-                <dd className="font-mono">{flag(selected.research_rule_pass)}</dd>
-                <dt className="text-muted-foreground">{t("admin.research.needFacts")}</dt>
-                <dd className="font-mono">{flag(selected.need_facts)}</dd>
-                <dt className="text-muted-foreground">{t("admin.research.askClarify")}</dt>
-                <dd className="font-mono">{flag(selected.ask_clarify)}</dd>
-                <dt className="text-muted-foreground">{t("admin.research.entity")}</dt>
-                <dd>{selected.entity_surface ?? "—"}</dd>
-                <dt className="text-muted-foreground">{t("admin.research.ingest")}</dt>
-                <dd className="font-mono">{flag(selected.ran_research_ingest)}</dd>
-                <dt className="text-muted-foreground">{t("admin.research.querySource")}</dt>
-                <dd className="font-mono">{selected.query_source ?? "—"}</dd>
-                <dt className="text-muted-foreground">{t("admin.research.signalsTrusted")}</dt>
-                <dd className="font-mono">{flag(selected.signals_trusted)}</dd>
-              </dl>
-
-              <div>
-                <h3 className="mb-1 text-xs font-semibold text-muted-foreground">
-                  {t("admin.research.queries")}
-                </h3>
-                {(selected.search_queries.length
-                  ? selected.search_queries
-                  : selected.search_query
-                    ? [selected.search_query]
-                    : []
-                ).length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t("admin.research.noQueries")}</p>
-                ) : (
-                  <ul className="list-inside list-disc space-y-1 font-mono text-xs">
-                    {(selected.search_queries.length
-                      ? selected.search_queries
-                      : [selected.search_query!]
-                    ).map((q) => (
-                      <li key={q}>{q}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div>
-                <h3 className="mb-1 text-xs font-semibold text-muted-foreground">
-                  {t("admin.research.signals")}
-                </h3>
-                {selected.signals.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t("admin.research.noSignals")}</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {selected.signals.map((s) => (
-                      <li
-                        key={s.signal_id}
-                        className="rounded-md border border-border px-2 py-1.5 text-xs"
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          <span className="rounded bg-muted px-1.5 py-0.5 font-mono">
-                            {s.source || "?"}
-                          </span>
-                          <span className="font-medium">{s.title || s.signal_id}</span>
-                        </div>
-                        {s.query ? (
-                          <p className="mt-0.5 font-mono text-muted-foreground">q: {s.query}</p>
-                        ) : null}
-                        {s.url ? (
-                          <a
-                            href={s.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-0.5 block truncate text-primary underline-offset-2 hover:underline"
-                          >
-                            {s.url}
-                          </a>
-                        ) : null}
-                        {s.excerpt ? (
-                          <p className="mt-1 line-clamp-3 text-muted-foreground">{s.excerpt}</p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      {!split && (
+        <DetailSheetShell
+          title={t("admin.research.turnDetail")}
+          loading={false}
+          open={selected !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelected(null);
+          }}
+          actions={detailActions}
+        >
+          {selected && <TurnDetailContent turn={selected} />}
+        </DetailSheetShell>
+      )}
     </div>
   );
 }
