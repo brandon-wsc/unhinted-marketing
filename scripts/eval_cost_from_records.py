@@ -59,9 +59,11 @@ async def _collect(args: argparse.Namespace) -> dict[str, Any] | None:
         return None
 
     latencies = [r.latency_ms for r in rows if r.latency_ms is not None]
+    ttfts = [r.ttft_ms for r in rows if r.ttft_ms is not None]
     prompt = sum(r.prompt_tokens or 0 for r in rows)
     completion = sum(r.completion_tokens or 0 for r in rows)
     total = sum(r.total_tokens or 0 for r in rows)
+    cached = sum(r.cached_tokens or 0 for r in rows)
     usd = 0.0
     unknown: list[str] = []
     for r in rows:
@@ -76,12 +78,23 @@ async def _collect(args: argparse.Namespace) -> dict[str, Any] | None:
     for r in rows:
         leaf = normalize_model_id(r.model) or "unknown"
         bucket = per_model.setdefault(
-            leaf, {"calls": 0, "latency_ms": [], "total_tokens": 0, "usd": 0.0}
+            leaf,
+            {
+                "calls": 0,
+                "latency_ms": [],
+                "ttft_ms": [],
+                "total_tokens": 0,
+                "cached_tokens": 0,
+                "usd": 0.0,
+            },
         )
         bucket["calls"] += 1
         if r.latency_ms is not None:
             bucket["latency_ms"].append(r.latency_ms)
+        if r.ttft_ms is not None:
+            bucket["ttft_ms"].append(r.ttft_ms)
         bucket["total_tokens"] += r.total_tokens or 0
+        bucket["cached_tokens"] += r.cached_tokens or 0
         call_usd = usd_for(r.model, r.prompt_tokens, r.completion_tokens)
         if call_usd is not None:
             bucket["usd"] += call_usd
@@ -89,9 +102,13 @@ async def _collect(args: argparse.Namespace) -> dict[str, Any] | None:
         "calls": len(rows),
         "p50_ms": _percentile(latencies, 0.5),
         "p95_ms": _percentile(latencies, 0.95),
+        "p50_ttft_ms": _percentile(ttfts, 0.5),
+        "p95_ttft_ms": _percentile(ttfts, 0.95),
         "prompt_tokens": prompt,
         "completion_tokens": completion,
         "total_tokens": total,
+        "cached_tokens": cached,
+        "cache_hit_rate": round(cached / prompt, 3) if prompt else None,
         "usd": round(usd, 6) if not unknown else None,
         "unknown_models": unknown,
         "per_model": per_model,
@@ -108,15 +125,24 @@ def _print(summary: dict[str, Any], *, days: int) -> None:
     print(
         f"latency p50 {_fmt_ms(summary['p50_ms'])}"
         f"  p95 {_fmt_ms(summary['p95_ms'])}"
+        f"  ttft p50 {_fmt_ms(summary['p50_ttft_ms'])}"
+        f"  p95 {_fmt_ms(summary['p95_ttft_ms'])}"
         f"  tokens {summary['total_tokens']}"
         f" ({summary['prompt_tokens']} in / {summary['completion_tokens']} out)"
         f"  usd {_fmt_usd(summary['usd'])}"
     )
+    if summary["cached_tokens"]:
+        rate = summary["cache_hit_rate"]
+        rate_text = f"{rate:.1%}" if rate is not None else "—"
+        print(f"cached_tokens {summary['cached_tokens']} (hit rate {rate_text})")
     if summary["unknown_models"]:
         print(f"unpriced models: {', '.join(summary['unknown_models'])}")
     print()
-    print(f"{'model':<36} {'calls':>6} {'p50':>8} {'p95':>8} {'tokens':>10} {'usd':>10}")
-    print("-" * 78)
+    print(
+        f"{'model':<36} {'calls':>6} {'p50':>8} {'p95':>8}"
+        f" {'ttft50':>8} {'ttft95':>8} {'tokens':>10} {'cached':>8} {'usd':>10}"
+    )
+    print("-" * 104)
     for model, bucket in sorted(
         summary["per_model"].items(), key=lambda kv: -kv[1]["calls"]
     ):
@@ -124,7 +150,10 @@ def _print(summary: dict[str, Any], *, days: int) -> None:
             f"{model:<36} {bucket['calls']:>6}"
             f" {_fmt_ms(_percentile(bucket['latency_ms'], 0.5)):>8}"
             f" {_fmt_ms(_percentile(bucket['latency_ms'], 0.95)):>8}"
-            f" {bucket['total_tokens']:>10} {_fmt_usd(bucket['usd'] or None):>10}"
+            f" {_fmt_ms(_percentile(bucket['ttft_ms'], 0.5)):>8}"
+            f" {_fmt_ms(_percentile(bucket['ttft_ms'], 0.95)):>8}"
+            f" {bucket['total_tokens']:>10} {bucket['cached_tokens']:>8}"
+            f" {_fmt_usd(bucket['usd'] or None):>10}"
         )
 
 

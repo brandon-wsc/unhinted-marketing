@@ -321,6 +321,8 @@ def _write_reports(report: dict[str, Any], out_json: Path) -> tuple[Path, Path]:
         f"- mean_voice: {report['mean_voice'] if report.get('mean_voice') is not None else '—'}",
         f"- latency_ms p50/p95: {report.get('p50_ms') or '—'} / {report.get('p95_ms') or '—'}",
         f"- ttft_ms p50/p95: {report.get('p50_ttft_ms') or '—'} / {report.get('p95_ttft_ms') or '—'}",
+        f"- cached_tokens: {report.get('total_cached_tokens') or '—'}"
+        f" (hit_rate {report.get('cache_hit_rate') if report.get('cache_hit_rate') is not None else '—'})",
         f"- tokens: {report.get('total_tokens') or '—'} total"
         f" ({report.get('total_prompt_tokens') or 0} in"
         f" / {report.get('total_completion_tokens') or 0} out)",
@@ -455,6 +457,7 @@ async def _eval_suite(
                         "unknown_models": usage["unknown_models"],
                         "status_counts": usage["status_counts"],
                         "ttft_ms": usage["ttft_ms"],
+                        "cached_tokens": usage["cached_tokens"],
                     },
                     "usd": usage["usd"],
                     "output": _summarize_output(node, output),
@@ -490,6 +493,15 @@ async def _eval_suite(
             if (normalized := normalize_model_id(model))
         }
     )
+    prompt_total = sum(
+        int((r.get("usage") or {}).get("prompt_tokens") or 0) for r in rows
+    )
+    cached_total = sum(
+        int((r.get("usage") or {}).get("cached_tokens") or 0) for r in rows
+    )
+    # Cached prompt tokens bill far below list price — hit rate only;
+    # `usd` stays a rough list-price estimate.
+    cache_hit_rate = round(cached_total / prompt_total, 3) if prompt_total else None
     return {
         "suite": suite,
         "when": datetime.now(UTC).isoformat(),
@@ -509,10 +521,7 @@ async def _eval_suite(
             [v for r in rows for v in ((r.get("usage") or {}).get("ttft_ms") or [])],
             0.95,
         ),
-        "total_prompt_tokens": sum(
-            int((r.get("usage") or {}).get("prompt_tokens") or 0) for r in rows
-        )
-        or None,
+        "total_prompt_tokens": prompt_total or None,
         "total_completion_tokens": sum(
             int((r.get("usage") or {}).get("completion_tokens") or 0) for r in rows
         )
@@ -523,6 +532,8 @@ async def _eval_suite(
         or None,
         "total_usd": total_usd,
         "usd_unknown_models": unknown_models,
+        "total_cached_tokens": cached_total or None,
+        "cache_hit_rate": cache_hit_rate,
         "models_used": models_used,
         "status_counts": status_counts,
         "cases": rows,

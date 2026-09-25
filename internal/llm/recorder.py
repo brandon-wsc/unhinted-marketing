@@ -85,6 +85,7 @@ class LlmCallRecordBuilder:
     key_source: str | None = None
     key_last4: str | None = None
     ttft_ms: int | None = None
+    cached_tokens: int | None = None
     _started_mono: float = field(default_factory=time.monotonic)
 
     def fail(self, status: str, error: dict) -> None:
@@ -114,10 +115,29 @@ class LlmCallRecordBuilder:
         total = _usage_int(usage, "total_tokens")
         if total is None:
             total = _usage_int(usage, "total_token_count")
+        # Prompt-cache hits — provider shapes differ; first non-None wins.
+        # LiteLLM/DeepSeek: prompt_cache_hit_tokens; OpenAI:
+        # prompt_tokens_details.cached_tokens; Anthropic:
+        # cache_read_input_tokens; pydantic-ai: cache_read_tokens.
+        cached = _usage_int(usage, "prompt_cache_hit_tokens")
+        if cached is None:
+            details = (
+                usage.get("prompt_tokens_details")
+                if isinstance(usage, dict)
+                else getattr(usage, "prompt_tokens_details", None)
+            )
+            if details is not None:
+                cached = _usage_int(details, "cached_tokens")
+        if cached is None:
+            cached = _usage_int(usage, "cache_read_input_tokens")
+        if cached is None:
+            cached = _usage_int(usage, "cache_read_tokens")
         if prompt is not None:
             self.prompt_tokens = prompt
         if completion is not None:
             self.completion_tokens = completion
+        if cached is not None:
+            self.cached_tokens = cached
         self.total_tokens = (
             total if total is not None else (prompt or 0) + (completion or 0) or None
         )
@@ -142,6 +162,8 @@ class LlmCallRecordBuilder:
             user_prompt=_cap(self.user_prompt),
             response_text=_cap(response),
             latency_ms=self.latency_ms,
+            ttft_ms=self.ttft_ms,
+            cached_tokens=self.cached_tokens,
             prompt_tokens=self.prompt_tokens,
             completion_tokens=self.completion_tokens,
             total_tokens=self.total_tokens,

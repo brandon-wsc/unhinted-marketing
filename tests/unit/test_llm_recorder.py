@@ -184,6 +184,43 @@ def test_set_usage_from_object_and_dict() -> None:
     assert (rec5.prompt_tokens, rec5.completion_tokens, rec5.total_tokens) == (2, 4, 6)
 
 
+def test_set_usage_cached_tokens_provider_shapes() -> None:
+    # LiteLLM passthrough (DeepSeek/OpenRouter-style hit field).
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage({"prompt_cache_hit_tokens": 100, "prompt_tokens": 200})
+    assert rec.cached_tokens == 100
+
+    # OpenAI nested details, object form.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage(
+        SimpleNamespace(
+            prompt_tokens=200,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=42),
+        )
+    )
+    assert rec.cached_tokens == 42
+
+    # OpenAI nested details, dict form.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage({"prompt_tokens_details": {"cached_tokens": 7}})
+    assert rec.cached_tokens == 7
+
+    # Anthropic.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage({"cache_read_input_tokens": 55})
+    assert rec.cached_tokens == 55
+
+    # pydantic-ai RequestUsage/RunUsage.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage(SimpleNamespace(cache_read_tokens=9))
+    assert rec.cached_tokens == 9
+
+    # No cache fields anywhere — stays None, not 0.
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec.set_usage(SimpleNamespace(prompt_tokens=3, completion_tokens=1))
+    assert rec.cached_tokens is None
+
+
 def test_to_model_caps_long_text() -> None:
     rec = recorder.LlmCallRecordBuilder(
         kind="chat_json", caller="node:x", system_prompt="x" * 60_000
@@ -203,6 +240,15 @@ def test_to_model_summarizes_image_data_uri() -> None:
 def test_to_model_defaults_unknown_caller() -> None:
     model = recorder.LlmCallRecordBuilder(kind="chat_json").to_model()
     assert model.caller == "unknown"
+
+
+def test_to_model_copies_ttft_and_cached_tokens() -> None:
+    rec = recorder.LlmCallRecordBuilder(
+        kind="chat_json", caller="node:x", ttft_ms=120, cached_tokens=80
+    )
+    model = rec.to_model()
+    assert model.ttft_ms == 120
+    assert model.cached_tokens == 80
 
 
 def test_to_model_copies_key_source_and_last4() -> None:

@@ -99,3 +99,22 @@ def test_summarize_usage_missing_status_defaults_ok() -> None:
 
     out = summarize_usage([_Rec()])
     assert out["status_counts"] == {"ok": 1}
+
+
+def test_summarize_usage_ttft_and_cached() -> None:
+    class _Rec:
+        latency_ms = 5
+        model = "gpt-4o-mini"
+        status = "ok"
+
+        def __init__(self, ttft, cached) -> None:
+            self.ttft_ms = ttft
+            self.cached_tokens = cached
+
+    out = summarize_usage([_Rec(120, 30), _Rec(None, None), _Rec(80, 10)])
+    assert out["ttft_ms"] == [120, 80]
+    assert out["cached_tokens"] == 40
+
+    out = summarize_usage([_Rec(None, None)])
+    assert out["ttft_ms"] == []
+    assert out["cached_tokens"] is None
