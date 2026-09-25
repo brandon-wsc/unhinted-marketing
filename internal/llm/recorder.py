@@ -84,11 +84,18 @@ class LlmCallRecordBuilder:
     fallback_used: bool = False
     key_source: str | None = None
     key_last4: str | None = None
+    ttft_ms: int | None = None
+    _started_mono: float = field(default_factory=time.monotonic)
 
     def fail(self, status: str, error: dict) -> None:
         """Pre-mark a specific failure; ``track``'s generic except keeps it."""
         self.status = status
         self.error = error
+
+    def mark_first_token(self) -> None:
+        """Stamp time-to-first-token once; later calls are no-ops."""
+        if self.ttft_ms is None:
+            self.ttft_ms = int((time.monotonic() - self._started_mono) * 1000)
 
     def set_usage(self, usage: Any) -> None:
         """Accept LiteLLM or Pydantic AI usage (object or dict)."""
@@ -258,6 +265,7 @@ def track(
     _stamp_key_meta(rec)
 
     start = time.monotonic()
+    rec._started_mono = start
     try:
         yield rec
     except (asyncio.CancelledError, GeneratorExit):

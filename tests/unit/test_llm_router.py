@@ -315,6 +315,7 @@ async def test_complete_json_records_ok_with_usage(
     assert rec.response_text == '{"ok": true}'
     assert (rec.prompt_tokens, rec.completion_tokens, rec.total_tokens) == (3, 5, 8)
     assert rec.latency_ms is not None
+    assert rec.ttft_ms is not None
 
 
 @pytest.mark.asyncio
@@ -344,6 +345,17 @@ async def test_complete_json_records_cancel(
     with pytest.raises(asyncio.CancelledError):
         await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
     assert recorded[0].status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_complete_json_ttft_none_when_cancel_before_first_token(
+    monkeypatch: pytest.MonkeyPatch, recorded: list
+) -> None:
+    _stub_chat_provider(monkeypatch, _FakeStream(["x"], fail_after=0))
+    with pytest.raises(asyncio.CancelledError):
+        await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
+    assert recorded[0].status == "cancelled"
+    assert recorded[0].ttft_ms is None
 
 
 @pytest.mark.asyncio
@@ -433,7 +445,7 @@ async def test_generate_image_records_provider_error(
 
 @pytest.mark.asyncio
 async def test_complete_json_vertex_express_skips_litellm(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, recorded: list
 ) -> None:
     from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
 
@@ -470,6 +482,7 @@ async def test_complete_json_vertex_express_skips_litellm(
         raw = await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
     assert raw == '{"ok": true}'
     assert called["stream"]["model"] == "gemini-2.5-flash"
+    assert recorded[0].ttft_ms is not None
 
 
 @pytest.mark.asyncio

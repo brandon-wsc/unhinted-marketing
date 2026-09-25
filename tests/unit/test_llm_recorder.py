@@ -134,6 +134,30 @@ async def test_flush_order_matches_call_order(collected: list) -> None:
     assert [r.response_text for r in collected] == ["first", "second"]
 
 
+def test_mark_first_token_first_call_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    ticks = iter([100.25])
+    monkeypatch.setattr(recorder.time, "monotonic", lambda: next(ticks))
+    rec = recorder.LlmCallRecordBuilder(kind="chat_json")
+    rec._started_mono = 100.0
+    rec.mark_first_token()
+    rec.mark_first_token()  # second call must not overwrite
+    assert rec.ttft_ms == 250
+
+
+async def test_track_stamps_ttft_when_marked(collected: list) -> None:
+    with recorder.track(kind="chat_json", model="gpt-test") as rec:
+        rec.mark_first_token()
+    assert collected[0].ttft_ms is not None
+    assert collected[0].latency_ms is not None
+    assert collected[0].ttft_ms <= collected[0].latency_ms
+
+
+async def test_track_ttft_none_when_never_marked(collected: list) -> None:
+    with recorder.track(kind="chat_json", model="gpt-test"):
+        pass
+    assert collected[0].ttft_ms is None
+
+
 def test_set_usage_from_object_and_dict() -> None:
     rec = recorder.LlmCallRecordBuilder(kind="chat_json")
     rec.set_usage(SimpleNamespace(prompt_tokens=3, completion_tokens=5, total_tokens=8))

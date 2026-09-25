@@ -96,8 +96,12 @@ def summarize_usage(records: list[Any]) -> dict[str, Any]:
     unknown: list[str] = []
     models: list[str] = []
     status_counts: dict[str, int] = {}
+    ttft: list[int] = []
     for rec in records:
         latency += int(getattr(rec, "latency_ms", None) or 0)
+        ttft_ms = getattr(rec, "ttft_ms", None)
+        if ttft_ms is not None:
+            ttft.append(int(ttft_ms))
         status = getattr(rec, "status", None) or "ok"
         status_counts[str(status)] = status_counts.get(str(status), 0) + 1
         p = getattr(rec, "prompt_tokens", None)
@@ -130,4 +134,5 @@ def summarize_usage(records: list[Any]) -> dict[str, Any]:
         "models": models,
         "unknown_models": unknown,
         "status_counts": status_counts,
+        "ttft_ms": ttft,
     }

@@ -174,6 +174,7 @@ async def _vertex_astream_text(
     temperature: float,
     json_mode: bool = False,
     usage_sink: Any = None,
+    on_first_token: Any = None,
 ) -> AsyncIterator[str]:
     from google.genai import types
     from google.genai.errors import APIError
@@ -192,6 +193,7 @@ async def _vertex_astream_text(
             contents=user,
             config=types.GenerateContentConfig(**config_kwargs),
         )
+        first = True
         async for chunk in stream:
             if usage_sink is not None:
                 usage = getattr(chunk, "usage_metadata", None)
@@ -199,6 +201,10 @@ async def _vertex_astream_text(
                     usage_sink(usage)
             piece = getattr(chunk, "text", None)
             if piece:
+                if first:
+                    first = False
+                    if on_first_token is not None:
+                        on_first_token()
                 yield str(piece)
     except asyncio.CancelledError:
         raise
@@ -486,9 +492,11 @@ async def _astream_completion(
     model: str,
     kwargs: dict[str, Any],
     usage_sink: Any = None,
+    on_first_token: Any = None,
 ) -> AsyncIterator[str]:
     """Stream chat completion deltas; always aclose on exit (including CancelledError)."""
     response: Any = None
+    first = True
     try:
         response = await litellm.acompletion(**kwargs)
         async for chunk in response:
@@ -498,6 +506,10 @@ async def _astream_completion(
                     usage_sink(usage)
             piece = _delta_text(chunk)
             if piece:
+                if first:
+                    first = False
+                    if on_first_token is not None:
+                        on_first_token()
                 yield piece
     except asyncio.CancelledError:
         raise
@@ -532,6 +544,7 @@ async def complete_json(
                 temperature=temperature,
                 json_mode=True,
                 usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
             ):
                 parts.append(piece)
             content = "".join(parts)
@@ -558,7 +571,12 @@ async def complete_json(
         system=system, user=user,
     ) as rec:
         parts: list[str] = []
-        async for piece in _astream_completion(model=model, kwargs=kwargs, usage_sink=rec.set_usage):
+        async for piece in _astream_completion(
+            model=model,
+            kwargs=kwargs,
+            usage_sink=rec.set_usage,
+            on_first_token=rec.mark_first_token,
+        ):
             parts.append(piece)
         content = "".join(parts)
         if not content:
@@ -644,6 +662,7 @@ async def astream_text(
                 user=user,
                 temperature=temperature,
                 usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
             ):
                 parts.append(piece)
                 yield piece
@@ -662,7 +681,12 @@ async def astream_text(
         system=system, user=user,
     ) as rec:
         parts: list[str] = []
-        async for piece in _astream_completion(model=model, kwargs=kwargs, usage_sink=rec.set_usage):
+        async for piece in _astream_completion(
+            model=model,
+            kwargs=kwargs,
+            usage_sink=rec.set_usage,
+            on_first_token=rec.mark_first_token,
+        ):
             parts.append(piece)
             yield piece
         rec.response_text = "".join(parts)

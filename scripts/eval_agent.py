@@ -320,6 +320,7 @@ def _write_reports(report: dict[str, Any], out_json: Path) -> tuple[Path, Path]:
         f" (pass_rate {report.get('pass_rate')})",
         f"- mean_voice: {report['mean_voice'] if report.get('mean_voice') is not None else '—'}",
         f"- latency_ms p50/p95: {report.get('p50_ms') or '—'} / {report.get('p95_ms') or '—'}",
+        f"- ttft_ms p50/p95: {report.get('p50_ttft_ms') or '—'} / {report.get('p95_ttft_ms') or '—'}",
         f"- tokens: {report.get('total_tokens') or '—'} total"
         f" ({report.get('total_prompt_tokens') or 0} in"
         f" / {report.get('total_completion_tokens') or 0} out)",
@@ -453,6 +454,7 @@ async def _eval_suite(
                         "models": usage["models"],
                         "unknown_models": usage["unknown_models"],
                         "status_counts": usage["status_counts"],
+                        "ttft_ms": usage["ttft_ms"],
                     },
                     "usd": usage["usd"],
                     "output": _summarize_output(node, output),
@@ -499,6 +501,14 @@ async def _eval_suite(
         "mean_voice": mean_voice,
         "p50_ms": _percentile(latencies, 0.5),
         "p95_ms": _percentile(latencies, 0.95),
+        "p50_ttft_ms": _percentile(
+            [v for r in rows for v in ((r.get("usage") or {}).get("ttft_ms") or [])],
+            0.5,
+        ),
+        "p95_ttft_ms": _percentile(
+            [v for r in rows for v in ((r.get("usage") or {}).get("ttft_ms") or [])],
+            0.95,
+        ),
         "total_prompt_tokens": sum(
             int((r.get("usage") or {}).get("prompt_tokens") or 0) for r in rows
         )

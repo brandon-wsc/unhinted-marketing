@@ -247,6 +247,7 @@ async def stream_chat_reply(
         try:
             async with agent.run_stream(user_prompt, deps=deps) as result:
                 async for chunk in result.stream_text(delta=True):
+                    rec.mark_first_token()
                     parts.append(chunk)
                     pending.append(chunk)
                     if session_id:
