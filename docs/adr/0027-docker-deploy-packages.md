@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-13
 - **Supersedes:** —
-- **Related:** [ADR 0023](./0023-deployment-mode-flag.md) (mode baked into images), [ADR 0024](./0024-media-storage-local-and-s3.md) (local media root), [ADR 0026](./0026-onprem-first-run-setup.md) (first-run wizard), [ADR 0020](./0020-org-byok-keys-models-routing.md) (BYOK Fernet KEK)
+- **Related:** [ADR 0023](./0023-deployment-mode-flag.md) (mode baked into images), [ADR 0024](./0024-media-storage-local-and-s3.md) (local media root), [ADR 0026](./0026-onprem-first-run-setup.md) (first-run wizard), [ADR 0020](./0020-org-byok-keys-models-routing.md) (BYOK Fernet KEK), [ADR 0038](./0038-demo-local-cd.md) (demo hosts track `main`; customer installs stay on Releases)
 
 ## Context
 

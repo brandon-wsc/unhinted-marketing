@@ -4,6 +4,9 @@ name: Release
 # (pull-only, build: stripped, IMAGE_TAG pinned) compose assets to the
 # GitHub Release. Re-run an existing tag via workflow_dispatch.
 #
+# Customer pull CD only. Demo / local hosts that track main HEAD use
+# deploy/demo-sync.sh (ADR 0038) — do not build main or poll Releases here.
+#
 # One-time manual step after the first publish: the GHCR packages start
 # private — flip each to public under github.com/users/<owner>/packages →
 # package → Settings → Change visibility. GITHUB_TOKEN cannot do this.

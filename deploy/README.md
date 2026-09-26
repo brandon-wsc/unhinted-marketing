@@ -10,6 +10,61 @@ Two Docker Compose packages (ADR 0027), both production (`APP_ENV=production`,
 
 Requires Docker with Compose v2.20+ (`docker compose version`).
 
+## Two update tracks
+
+Same compose shape, different source of truth ([ADR 0038](../docs/adr/0038-demo-local-cd.md)).
+
+| Track | Who | What runs | How it updates |
+|-------|-----|-----------|----------------|
+| **Demo / local CD** | Personal machine or private demo host | Current `main` HEAD, built on that machine | `./demo-sync.sh` (git fast-forward + `docker compose up -d --build`) |
+| **Customer pull CD** | Versioned self-hosted install | A published GitHub Release (GHCR version tag; floating `onprem` moves only when a release is published) | Release compose assets, or `docker compose pull` |
+
+`demo-sync.sh` does not download Release assets and does not pull the floating
+`onprem` tag. There is no `deploy/update.sh` on this track. A customer updater
+must not check out `main` — running the demo script against a versioned
+install rebuilds unpublished source over that install's images.
+
+### Demo / local CD
+
+Use a **dedicated clone** (a cron job on a working tree you also edit will
+stop at the first dirty tracked file). `deploy/.env` is gitignored and is
+kept across updates.
+
+```bash
+git clone https://github.com/brandon-wsc/unhinted-marketing.git /opt/unhinted
+cd /opt/unhinted
+cp deploy/.env.example deploy/.env   # optional; all-in-one boots without it
+./deploy/demo-sync.sh                 # → http://localhost:8484
+```
+
+External DB (required secrets already in `deploy/.env`):
+
+```bash
+./deploy/demo-sync.sh -f docker-compose.external-db.yml
+```
+
+The script is the one-liner `git fetch origin main && git checkout main &&
+git merge --ff-only origin/main && cd deploy && docker compose up -d --build`.
+It builds `DEPLOYMENT_MODE=onprem` / `VITE_DEPLOYMENT_MODE=onprem` from that
+commit (SPA + API + migrate). A cron entry on the dedicated clone:
+
+```bash
+*/30 * * * * /opt/unhinted/deploy/demo-sync.sh >>/var/log/unhinted-demo-sync.log 2>&1
+```
+
+**Env.** All-in-one defaults `WEB_BASE_URL` and `CORS_ORIGINS` to
+`http://localhost:8484`. Set both in `deploy/.env` when the browser origin is
+anything else (another port, a LAN host, a public name). Those values seed
+`instance_settings` on first boot only — afterwards edit System → Instance
+(ADR 0026). A tunnel is only for Meta: Instagram Login and real publish need
+a public HTTPS origin Meta can call. A localhost demo does not need one.
+
+### Customer pull CD
+
+Leave this track on a Release. The curl installs below, and `docker compose
+pull` of `IMAGE_TAG=onprem` or a `v*` tag, are this track. They are not
+`main` HEAD.
+
 ## All-in-one (one command)
 
 Standalone install (prebuilt images, no repo checkout):
@@ -25,6 +80,9 @@ Or from a repo checkout:
 cd deploy
 docker compose up -d --build
 ```
+
+That builds the commit already checked out. A demo host that should follow
+`origin/main` uses `./demo-sync.sh` instead.
 
 Open http://localhost:8484 — the first-run `/setup` wizard creates the
 SUPERADMIN account and first org (ADR 0026). LLM keys are skippable there and
@@ -76,8 +134,10 @@ floating `onprem` tag, then attaches standalone compose assets
 Release. The standalone files are derived from the `deploy/` compose files —
 `build:` sections stripped, `IMAGE_TAG` default pinned to the release version.
 
-Inside a repo checkout `up -d --build` still builds locally;
-`docker compose pull` fetches the latest release (the `onprem` tag).
+Inside a repo checkout `up -d --build` builds **this commit** locally
+(demo / local CD uses `./demo-sync.sh` so that commit is `origin/main`).
+`docker compose pull` fetches the latest **published release** (the floating
+`onprem` tag) — customer pull CD, not `main`.
 Coordinates are overridable:
 
 ```bash
@@ -108,7 +168,8 @@ docker compose exec api python -m cmd.worker reset-signals --reingest
 docker compose exec api sh -c 'set -a; . /app/data/.secrets.env; set +a; \
   python -m cmd.worker connect-social-account --company UUID --ig-user-id ID --token TOKEN'
 
-# Upgrade in place (migrate runs again automatically on up)
+# Rebuild the commit already checked out (migrate runs again on up).
+# To move a demo host to latest main, use ./demo-sync.sh — not compose pull.
 docker compose up -d --build
 ```
 

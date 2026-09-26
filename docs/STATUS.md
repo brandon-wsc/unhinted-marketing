@@ -87,6 +87,11 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **`AUTO_SECRETS` entrypoint** (`docker/api-entrypoint.sh`, api image `ENTRYPOINT`) — all-in-one generates + persists JWT/BYOK keys on the `appdata` volume (`/app/data/.secrets.env`); inert on external-DB; `APP_ENV=production` unchanged
 - **Images** `ghcr.io/brandon-wsc/unhinted-{api,web}` with `IMAGE_PREFIX`/`IMAGE_TAG` overrides + `build:` fallback; `.github/workflows/release.yml` publishes on `v*` tags (version + floating `onprem` tag) and attaches derived standalone pull-only compose assets (`compose.yaml`, `compose.external-db.yaml`, `env.example`) to the Release. GHCR packages need a one-time public-visibility flip after first publish
 
+**Decision (2026-09-26) — Demo / local CD tracks `main`, separate from customer releases:** → [ADR 0038](./adr/0038-demo-local-cd.md)
+
+- **Demo / local hosts** fast-forward a dedicated checkout to `origin/main` and `docker compose up -d --build` from `deploy/` (`deploy/demo-sync.sh`). Images are built from that commit with `DEPLOYMENT_MODE=onprem` — the same compose shape as a customer install (SPA + API + migrate)
+- **Customer installs** stay on GitHub Releases and GHCR version / floating `onprem` tags (`.github/workflows/release.yml`). Release assets and `docker compose pull` are that track. The demo helper does not poll Releases and must not upgrade a versioned install
+
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
 - **Native `provider_type` only when the wire is not Chat Completions + Images.** Enum is `openai` \| `anthropic` \| `openai_compatible` \| `gemini` \| `vertex_ai`. Clones stay `openai_compatible` (DeepSeek, OpenRouter, Groq, …). Vertex **OAuth** / Bedrock / Cohere / Ollama-native / Azure-as-type deferred
