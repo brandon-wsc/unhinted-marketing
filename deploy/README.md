@@ -90,6 +90,58 @@ step (package → Settings → Change visibility) after the first publish.
 `DEPLOYMENT_MODE` is baked at image build time (ADR 0023) — on-prem is the
 default and correct for both packages.
 
+## Public exposure via Cloudflare Tunnel (ADR 0037)
+
+Recommended way to put an install on the internet: a remotely-managed
+Cloudflare Tunnel. `cloudflared` dials **out** — no port-forwarding, no
+inbound firewall rules, the host IP is never published, edge TLS is free.
+Public HTTPS is also required for Meta OAuth / Live mode (the relay fans
+callbacks back to the instance server-to-server — ADR 0032/0033).
+
+1. Zero Trust → Networks → Tunnels → create a tunnel → add a public
+   hostname (e.g. `marketing.example.com`) with service `http://web:80`.
+2. Copy the tunnel token into `.env` as `CLOUDFLARE_TUNNEL_TOKEN`.
+3. Set `WEB_BASE_URL` / `CORS_ORIGINS` to the public `https://` origin and
+   `WEB_BIND=127.0.0.1` so the web port stays off the LAN.
+4. Start with the override:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d
+   ```
+
+Only `web` is exposed — `db` publishes no host port and no other service has
+a tunnel ingress. Note: Meta platform callbacks reach the instance
+server-to-server via the relay, so don't blanket-gate the hostname with
+Cloudflare Access (or bypass `/api/social/meta/*` + `/api/social/oauth/*`).
+Rely on the app's own auth plus edge WAF/rate-limiting instead.
+
+## Pull-based updates (ADR 0037)
+
+`update.sh` is the install-side half of CD. Run it on the Docker host under
+cron or Synology Task Scheduler — it polls GitHub Releases and, on a newer
+tag: dumps the bundled `db` to `backups/`, pins `IMAGE_TAG` in `.env`,
+`compose pull && up -d` (migrate re-runs alembic), then waits for `/api`
+healthy. No self-hosted runner, no inbound channel from GitHub.
+
+```bash
+./update.sh           # update to the latest release tag
+./update.sh --check   # print current vs latest, change nothing
+TARGET_TAG=v1.2.3 ./update.sh   # pin a specific tag — also the rollback path
+```
+
+`COMPOSE_FILES` selects the stack shape (env or `.env`), e.g.
+`COMPOSE_FILES="docker-compose.yml docker-compose.tunnel.yml"` or
+`docker-compose.external-db.yml`. Standalone installs auto-detect
+`compose.yaml`.
+
+**Synology:** copy the release assets (`compose.yaml`, `compose.tunnel.yaml`,
+`env.example` → `.env`, `update.sh`) into e.g. `/volume1/docker/unhinted`,
+`chmod +x update.sh`, start via Container Manager project or
+`docker compose -f compose.yaml -f compose.tunnel.yaml up -d` over SSH, then
+schedule `cd /volume1/docker/unhinted && ./update.sh` in Task Scheduler
+(e.g. every 30 min). Output appends to `update.log`; dumps land in
+`backups/`.
+
 ## Operations
 
 ```bash
@@ -108,7 +160,8 @@ docker compose exec api python -m cmd.worker reset-signals --reingest
 docker compose exec api sh -c 'set -a; . /app/data/.secrets.env; set +a; \
   python -m cmd.worker connect-social-account --company UUID --ig-user-id ID --token TOKEN'
 
-# Upgrade in place (migrate runs again automatically on up)
+# Upgrade in place (migrate runs again automatically on up) — or let
+# update.sh poll + apply releases with a pre-upgrade db dump
 docker compose up -d --build
 ```
 

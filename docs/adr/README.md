@@ -39,6 +39,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0033](./0033-meta-live-mode-platform-callbacks.md) | Meta Live mode: deauthorize + data-deletion callbacks | Accepted |
 | [0034](./0034-relay-per-install-shared-secret.md) | OAuth relay per-install shared secret | Accepted |
 | [0035](./0035-queue-then-interrupt.md) | Empty Enter interrupts a queued in-flight turn (keeps the turn) | Accepted |
+| [0037](./0037-onprem-pull-cd-and-tunnel.md) | On-prem CD: pull-based image updates + Cloudflare Tunnel exposure | Accepted |
 
 ## Format
 

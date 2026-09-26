@@ -142,6 +142,9 @@ jobs:
           standalone deploy/docker-compose.yml              compose.header            compose.yaml
           standalone deploy/docker-compose.external-db.yml  compose.external-db.header compose.external-db.yaml
           cp deploy/.env.example out/env.example
+          # ADR 0037 — tunnel override has no build: section; copy verbatim.
+          cp deploy/docker-compose.tunnel.yml out/compose.tunnel.yaml
+          cp deploy/update.sh out/update.sh
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -149,5 +152,7 @@ jobs:
           files: |
             out/compose.yaml
             out/compose.external-db.yaml
+            out/compose.tunnel.yaml
             out/env.example
+            out/update.sh
           generate_release_notes: true

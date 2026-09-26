@@ -87,6 +87,12 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **`AUTO_SECRETS` entrypoint** (`docker/api-entrypoint.sh`, api image `ENTRYPOINT`) — all-in-one generates + persists JWT/BYOK keys on the `appdata` volume (`/app/data/.secrets.env`); inert on external-DB; `APP_ENV=production` unchanged
 - **Images** `ghcr.io/brandon-wsc/unhinted-{api,web}` with `IMAGE_PREFIX`/`IMAGE_TAG` overrides + `build:` fallback; `.github/workflows/release.yml` publishes on `v*` tags (version + floating `onprem` tag) and attaches derived standalone pull-only compose assets (`compose.yaml`, `compose.external-db.yaml`, `env.example`) to the Release. GHCR packages need a one-time public-visibility flip after first publish
 
+**Decision (2026-09-26) — On-prem CD: pull-based updates + Cloudflare Tunnel exposure:** → [ADR 0037](./adr/0037-onprem-pull-cd-and-tunnel.md)
+
+- **`deploy/update.sh` is the install-side half of CD** — host cron / Synology Task Scheduler polls GitHub Releases; on a newer tag: `pg_dump` backup → pin `IMAGE_TAG` in `.env` → `compose pull && up -d` (migrate re-runs alembic) → wait `api` healthy. `TARGET_TAG` pins/rolls back; `COMPOSE_FILES` picks the stack shape. No self-hosted runner — the repo is public, so GitHub gets no channel into the host
+- **`deploy/docker-compose.tunnel.yml`** adds a token-managed `cloudflared` (hostname → `http://web:80`, outbound only); `WEB_BIND=127.0.0.1` makes the tunnel the only ingress. No blanket Cloudflare Access — Meta platform callbacks arrive server-to-server via the relay
+- **Release assets** now include `compose.tunnel.yaml` + `update.sh` for standalone installs
+
 **Decision (2026-08-31) — Native Gemini + Vertex Express BYOK:** → [ADR 0021](./adr/0021-org-byok-native-gemini.md)
 
 - **Native `provider_type` only when the wire is not Chat Completions + Images.** Enum is `openai` \| `anthropic` \| `openai_compatible` \| `gemini` \| `vertex_ai`. Clones stay `openai_compatible` (DeepSeek, OpenRouter, Groq, …). Vertex **OAuth** / Bedrock / Cohere / Ollama-native / Azure-as-type deferred

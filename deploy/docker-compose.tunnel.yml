@@ -1,0 +1,25 @@
+# Cloudflare Tunnel exposure (ADR 0037). Remote-managed tunnel: create it under
+# Zero Trust → Networks → Tunnels, point the public hostname at http://web:80,
+# copy the tunnel token into .env as CLOUDFLARE_TUNNEL_TOKEN, then:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d
+#
+# (external-DB installs: swap the first file for docker-compose.external-db.yml)
+#
+# cloudflared dials OUT to Cloudflare — no inbound ports, no port-forwarding,
+# the host IP is never published. Set WEB_BIND=127.0.0.1 in .env so the web
+# port stays off the LAN and the tunnel is the only ingress.
+#
+# Only `web` is exposed; `db` publishes no host port and nothing else is
+# reachable through the tunnel. Do not add extra ingress rules for api/db.
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      web:
+        condition: service_started
