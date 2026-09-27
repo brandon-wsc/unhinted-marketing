@@ -22,7 +22,9 @@ cp env.example .env   # DATABASE_URL, JWT_SECRET, BYOK_ENCRYPTION_KEY, WEB_BASE_
 docker compose -f compose.external-db.yaml up -d
 ```
 
-From a checkout instead: `cd deploy && docker compose up -d --build` (external DB: `-f docker-compose.external-db.yml`).
+From a checkout instead: `cd deploy && docker compose up -d --build` (external DB: `-f docker-compose.external-db.yml`). That builds whatever commit is checked out.
+
+**Demo / local CD** — a personal machine or private demo host that should always run latest `main`, still the on-prem compose package: [`./deploy/demo-sync.sh`](deploy/demo-sync.sh). Customer installs stay on a GitHub Release; do not use the demo script to update those.
 
 ## Develop
 
