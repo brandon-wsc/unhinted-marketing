@@ -30,6 +30,7 @@ import {
   type SocialAccountItem,
   type SocialOAuthStatus,
 } from "@/features/company-settings/api";
+import { copyText } from "@/lib/copy-text";
 import { mapApiError } from "@/lib/map-api-error";
 import { isSuperAdmin } from "@/lib/platform-level";
 import { cn } from "@/lib/utils";
@@ -50,8 +51,7 @@ function DashboardUrlRow({ url }: { url: string }) {
         variant="outline"
         className={copied ? "text-success" : undefined}
         onClick={() => {
-          void navigator.clipboard.writeText(url);
-          setCopied(true);
+          void copyText(url).then(setCopied);
         }}
       >
         {copied ? t("common.copied") : t("common.copy")}
