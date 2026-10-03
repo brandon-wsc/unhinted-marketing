@@ -29,7 +29,7 @@ Explicitly **not** built in the original slice: OAuth connect flow (added 2026-0
 ### 2. Publish adapter behind a feature flag
 
 - `internal/tools/publish.py` exposes `publish_social_post(PublishSocialPostRequest) -> PublishSocialPostResponse`, consuming the shapes already locked in [`schemas/tools.py`](../../schemas/tools.py).
-- Env `PUBLISH_ADAPTER=stub|instagram`, default `stub`. CI, dev, and tests never hit Meta unless explicitly opted in.
+- Env `PUBLISH_ADAPTER=stub|instagram`. The app process default is `stub`. CI, dev, and tests never hit Meta unless explicitly opted in. **Amendment (2026-10-03):** the on-prem compose packages (`deploy/docker-compose.yml` and `deploy/docker-compose.external-db.yml`) default the variable to `instagram`, so a customer or demo host does not Confirm into a stub receipt. Set `PUBLISH_ADAPTER=stub` in that install's `.env` to opt out.
 - The Instagram adapter implements the Graph two-phase publish on `graph.instagram.com`: `POST /{ig-user-id}/media` (container; requires a publicly reachable `image_url`) then `POST /{ig-user-id}/media_publish`. Token decryption reuses the BYOK Fernet helper ([`internal/llm/keys.py`](../../internal/llm/keys.py)).
 - The publish image is the draft's first `media_ids` entry; Confirm derives a Meta-reachable URL via `resolve_external_url` (object key or leftover baked URL → current `WEB_BASE_URL` / CDN; browser preview uses relative `resolve_stored_url` — [ADR 0024](./0024-media-storage-local-and-s3.md)). Multi-image carousels are deferred. On-prem local disk is unreachable by Meta unless `WEB_BASE_URL` is public; on-prem S3-compatible behind `S3_PUBLIC_BASE_URL` or cloud S3/CDN satisfies it — unit tests mock httpx.
 
