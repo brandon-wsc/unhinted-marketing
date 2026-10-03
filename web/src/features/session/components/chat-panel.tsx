@@ -70,6 +70,7 @@ import { useRecommendedQuestions } from "@/features/session/use-recommended-ques
 import { useSession } from "@/features/session/use-session";
 import { useContainerWidth } from "@/hooks/use-container-width";
 import { useNow } from "@/hooks/use-now";
+import { copyText } from "@/lib/copy-text";
 import { classifyRelativeTime, formatAbsoluteDateTime } from "@/lib/format-relative-time";
 import { formatWorkedDuration, workedDurationLocale } from "@/lib/format-worked-duration";
 import { mapApiError } from "@/lib/map-api-error";
@@ -1242,12 +1243,7 @@ function MessageMeta({
         : null;
 
   async function onCopy() {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
+    setCopied(await copyText(content));
   }
 
   const copyButton = (

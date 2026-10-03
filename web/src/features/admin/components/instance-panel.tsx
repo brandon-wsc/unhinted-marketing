@@ -22,6 +22,7 @@ import {
   type MetaOAuthMode,
   type SetupEmailBackend,
 } from "@/features/setup/api";
+import { copyText } from "@/lib/copy-text";
 import { mapApiError } from "@/lib/map-api-error";
 import { isSuperAdmin } from "@/lib/platform-level";
 
@@ -47,8 +48,7 @@ function CopyUrlField({
           variant="outline"
           className={copied ? "text-success" : undefined}
           onClick={() => {
-            void navigator.clipboard.writeText(value);
-            setCopied(true);
+            void copyText(value).then(setCopied);
           }}
         >
           {copied ? t("common.copied") : t("common.copy")}
@@ -354,8 +354,7 @@ export function InstancePanel() {
                     variant="outline"
                     className={instanceIdCopied ? "text-success" : undefined}
                     onClick={() => {
-                      void navigator.clipboard.writeText(settings.meta_oauth_instance_id);
-                      setInstanceIdCopied(true);
+                      void copyText(settings.meta_oauth_instance_id).then(setInstanceIdCopied);
                     }}
                   >
                     {instanceIdCopied ? t("common.copied") : t("common.copy")}

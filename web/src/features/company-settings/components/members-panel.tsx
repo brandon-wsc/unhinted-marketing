@@ -48,6 +48,7 @@ import {
   type InviteRole,
   type OrgInviteItem,
 } from "@/features/company-settings/api";
+import { copyText } from "@/lib/copy-text";
 import { mapApiError } from "@/lib/map-api-error";
 import { isValidEmail } from "@/lib/simple-email";
 
@@ -229,8 +230,7 @@ export function MembersPanel({
 
   async function onCopyLink() {
     if (!inviteUrl) return;
-    await navigator.clipboard.writeText(inviteUrl);
-    setCopied(true);
+    setCopied(await copyText(inviteUrl));
   }
 
   async function onRevoke(invite: OrgInviteItem) {
