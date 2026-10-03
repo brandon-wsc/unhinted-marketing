@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -12,12 +13,13 @@ from sqlalchemy.exc import InvalidRequestError
 from internal.llm.resolve import CompanyLlmBundle
 from internal.llm.router import LlmProviderError
 from internal.session.service import (
+    SessionTurnConflict,
     _invoke_graph,
     _llm_failure_reply,
     _turn_failure_reply,
     run_session_turn,
 )
-from internal.session.turn_registry import session_turn_registry
+from internal.session.turn_registry import TurnInFlightError, session_turn_registry
 
 
 @pytest.fixture(autouse=True)
@@ -244,3 +246,60 @@ async def test_run_session_turn_clears_registry_when_session_id_expires() -> Non
 
     assert session_turn_registry.get(captured_id) is None
     assert session_turn_registry.is_busy(captured_id) is False
+
+
+@pytest.mark.asyncio
+async def test_registry_second_begin_raises_in_flight() -> None:
+    session_id = uuid.uuid4()
+    entry = await session_turn_registry.begin(
+        session_id,
+        task=asyncio.current_task(),  # type: ignore[arg-type]
+        pre_state={},
+        user_message_id=uuid.uuid4(),
+    )
+    try:
+        with pytest.raises(TurnInFlightError):
+            await session_turn_registry.begin(
+                session_id,
+                task=asyncio.current_task(),  # type: ignore[arg-type]
+                pre_state={},
+                user_message_id=uuid.uuid4(),
+            )
+    finally:
+        await session_turn_registry.clear(session_id, entry=entry)
+
+
+@pytest.mark.asyncio
+async def test_run_session_turn_begin_race_is_busy_conflict() -> None:
+    """A rival request that reaches begin() first must yield a 409-class
+    conflict, not an unhandled RuntimeError → 500."""
+    session = _plain_session()
+    db = AsyncMock()
+    user_msg = SimpleNamespace(id=uuid.uuid4(), metadata_={})
+
+    with (
+        patch(
+            "internal.session.service.session_park_kind",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "internal.session.service.repos.add_session_message",
+            AsyncMock(return_value=user_msg),
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+        patch.object(session_turn_registry, "is_busy", return_value=False),
+        patch.object(
+            session_turn_registry,
+            "begin",
+            AsyncMock(
+                side_effect=TurnInFlightError("session turn already in flight")
+            ),
+        ),
+        pytest.raises(SessionTurnConflict) as exc,
+    ):
+        await run_session_turn(db, session, user_content="hi")
+
+    assert exc.value.reason == "busy"

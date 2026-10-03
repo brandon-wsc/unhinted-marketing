@@ -34,7 +34,11 @@ from internal.session.media import image_format_from_plan, media_item_payload
 from internal.session.nodes import angle_pick_payload, offered_angles, offered_personas
 from internal.session.state import MODE_CHAT, MODE_PREVIEW
 from internal.session.trace import turn_trace
-from internal.session.turn_registry import TurnEntry, session_turn_registry
+from internal.session.turn_registry import (
+    TurnEntry,
+    TurnInFlightError,
+    session_turn_registry,
+)
 from schemas.contracts import DraftCopy, PreviewMediaItem, PreviewUpdatedData
 
 logger = logging.getLogger(__name__)
@@ -1233,12 +1237,19 @@ async def run_session_turn(
     task = asyncio.current_task()
     if task is None:
         raise RuntimeError("run_session_turn requires a running asyncio task")
-    entry = await session_turn_registry.begin(
-        session_id,
-        task=task,
-        pre_state=pre_state,
-        user_message_id=user_msg.id,
-    )
+    try:
+        entry = await session_turn_registry.begin(
+            session_id,
+            task=task,
+            pre_state=pre_state,
+            user_message_id=user_msg.id,
+        )
+    except TurnInFlightError as exc:
+        # Lost the race between the is_busy pre-check and registration (the
+        # user row above is flushed, not committed — the request rolls back).
+        raise SessionTurnConflict(
+            "busy", "Session turn already in progress"
+        ) from exc
     entry.prior_message_count = len(message_dicts)
 
     try:
@@ -1336,12 +1347,17 @@ async def _resume_parked_turn(
     task = asyncio.current_task()
     if task is None:
         raise RuntimeError("_resume_parked_turn requires a running asyncio task")
-    entry = await session_turn_registry.begin(
-        session_id,
-        task=task,
-        pre_state=_strip_discard_meta(parked_restore),
-        user_message_id=user_msg.id if user_msg else uuid.uuid4(),
-    )
+    try:
+        entry = await session_turn_registry.begin(
+            session_id,
+            task=task,
+            pre_state=_strip_discard_meta(parked_restore),
+            user_message_id=user_msg.id if user_msg else uuid.uuid4(),
+        )
+    except TurnInFlightError as exc:
+        raise SessionTurnConflict(
+            "busy", "Session turn already in progress"
+        ) from exc
     entry.kind = _PARK_ENTRY_KIND[kind]
     entry.parked_restore = parked_restore
     # A typed pick joins the original draft turn's discard scope (persisted via

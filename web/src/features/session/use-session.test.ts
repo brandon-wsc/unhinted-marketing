@@ -611,6 +611,60 @@ describe("useSession", () => {
     expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["head", "tail"]);
   });
 
+  it("drops an identical repeat send inside the double-submit window", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: sessionFixture,
+      messages: [],
+    });
+    apiPostSessionMessage.mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    await act(async () => {
+      void result.current.sendMessage("plan a post");
+      await result.current.sendMessage("plan a post");
+    });
+
+    expect(apiPostSessionMessage).toHaveBeenCalledTimes(1);
+    expect(result.current.queuedMessages).toEqual([]);
+  });
+
+  it("queues a send fired while the first is still creating the session", async () => {
+    let resolveCreate: (value: Session) => void = () => {};
+    apiCreateSession.mockImplementation(
+      () =>
+        new Promise<Session>((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+    apiPostSessionMessage.mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+
+    act(() => {
+      void result.current.sendMessage("first");
+    });
+    await act(async () => {
+      await result.current.sendMessage("follow up");
+    });
+
+    // The second send lands inside the create-session await — it must queue
+    // rather than race a second session + POST.
+    expect(apiCreateSession).toHaveBeenCalledTimes(1);
+    expect(apiPostSessionMessage).not.toHaveBeenCalled();
+    expect(result.current.queuedMessages.map((q) => q.content)).toEqual(["follow up"]);
+
+    await act(async () => {
+      resolveCreate(sessionFixture);
+    });
+
+    await waitFor(() => expect(apiPostSessionMessage).toHaveBeenCalledTimes(1));
+    expect(apiPostSessionMessage.mock.calls[0]?.[2]).toBe("first");
+  });
+
   it("enqueueQueuedMessage inserts at an index", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({

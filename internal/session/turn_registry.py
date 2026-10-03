@@ -15,6 +15,10 @@ from typing import Any, Literal
 TurnKind = Literal["message", "resume_image", "choose_angle"]
 
 
+class TurnInFlightError(RuntimeError):
+    """begin() lost the registration race — a turn is already in flight."""
+
+
 @dataclass
 class TurnEntry:
     task: asyncio.Task[Any]
@@ -55,7 +59,7 @@ class SessionTurnRegistry:
         async with self._lock:
             existing = self._entries.get(session_id)
             if existing is not None and not existing.task.done():
-                raise RuntimeError("session turn already in flight")
+                raise TurnInFlightError("session turn already in flight")
             entry = TurnEntry(
                 task=task,
                 pre_state=copy.deepcopy(pre_state),
