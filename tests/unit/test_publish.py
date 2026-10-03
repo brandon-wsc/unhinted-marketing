@@ -123,6 +123,21 @@ def test_classify_graph_error_kinds() -> None:
     assert classify_graph_error({}, 403) == ERROR_PERMISSION
 
 
+def test_classify_coded_oauth_exception_is_not_token_expired() -> None:
+    """code 9007 'Media ID is not available' (container not ready) is a media
+    error — an OAuthException 400 with a code must not masquerade as an
+    expired token and send the user back to settings."""
+    payload = {
+        "error": {
+            "code": 9007,
+            "type": "OAuthException",
+            "error_subcode": 2207027,
+            "message": "Media ID is not available",
+        }
+    }
+    assert classify_graph_error(payload, 400) == ERROR_PLATFORM
+
+
 @pytest.mark.asyncio
 async def test_stub_adapter_does_not_call_graph(
     monkeypatch: pytest.MonkeyPatch,
@@ -165,7 +180,10 @@ async def test_instagram_two_phase_success(monkeypatch: pytest.MonkeyPatch) -> N
             (200, {"id": "container-1"}),
             (200, {"id": "media-99"}),
         ],
-        gets=[(200, {"permalink": "https://www.instagram.com/p/ABC/"})],
+        gets=[
+            (200, {"status_code": "FINISHED"}),
+            (200, {"permalink": "https://www.instagram.com/p/ABC/"}),
+        ],
     )
     monkeypatch.setattr(
         "internal.tools.publish.httpx.AsyncClient",
@@ -181,6 +199,79 @@ async def test_instagram_two_phase_success(monkeypatch: pytest.MonkeyPatch) -> N
     assert account.last_verified_at is not None
     assert f"https://graph.instagram.com/v22.0/{IG_USER}/media" == client.post_urls[0]
     assert f"https://graph.instagram.com/v22.0/{IG_USER}/media_publish" == client.post_urls[1]
+
+
+@pytest.mark.asyncio
+async def test_instagram_waits_for_container_finished(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """media_publish must not fire while the container is still IN_PROGRESS —
+    Meta answers 'Media ID is not available' (code 9007)."""
+    monkeypatch.setattr("internal.tools.publish._CONTAINER_POLL_SECONDS", 0)
+    account = _account(monkeypatch)
+    _patch_account(monkeypatch, account)
+    client = ScriptedClient(
+        posts=[
+            (200, {"id": "container-1"}),
+            (200, {"id": "media-99"}),
+        ],
+        gets=[
+            (200, {"status_code": "IN_PROGRESS"}),
+            (200, {"status_code": "IN_PROGRESS"}),
+            (200, {"status_code": "FINISHED"}),
+            (200, {"permalink": "https://www.instagram.com/p/ABC/"}),
+        ],
+    )
+    monkeypatch.setattr(
+        "internal.tools.publish.httpx.AsyncClient",
+        lambda *a, **k: client,
+    )
+    outcome = await publish_social_post(AsyncMock(), _req(), company_id=account.company_id)
+    assert outcome.status == PUBLISHED_STATUS
+    assert outcome.media_id == "media-99"
+    assert client.get_urls[0] == "https://graph.instagram.com/v22.0/container-1"
+    assert len(client.post_urls) == 2
+
+
+@pytest.mark.asyncio
+async def test_instagram_container_error_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    account = _account(monkeypatch)
+    _patch_account(monkeypatch, account)
+    client = ScriptedClient(
+        posts=[(200, {"id": "container-1"})],
+        gets=[(200, {"status_code": "ERROR"})],
+    )
+    monkeypatch.setattr(
+        "internal.tools.publish.httpx.AsyncClient",
+        lambda *a, **k: client,
+    )
+    outcome = await publish_social_post(AsyncMock(), _req(), company_id=account.company_id)
+    assert outcome.status == FAILED_STATUS
+    assert outcome.error_kind == ERROR_PLATFORM
+    assert account.last_error_kind == ERROR_PLATFORM
+    assert len(client.post_urls) == 1  # media_publish never fired
+
+
+@pytest.mark.asyncio
+async def test_instagram_container_not_ready_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("internal.tools.publish._CONTAINER_POLL_SECONDS", 0)
+    monkeypatch.setattr("internal.tools.publish._CONTAINER_POLL_TIMEOUT", 0)
+    account = _account(monkeypatch)
+    _patch_account(monkeypatch, account)
+    client = ScriptedClient(
+        posts=[(200, {"id": "container-1"})],
+        gets=[(200, {"status_code": "IN_PROGRESS"}) for _ in range(3)],
+    )
+    monkeypatch.setattr(
+        "internal.tools.publish.httpx.AsyncClient",
+        lambda *a, **k: client,
+    )
+    outcome = await publish_social_post(AsyncMock(), _req(), company_id=account.company_id)
+    assert outcome.status == FAILED_STATUS
+    assert outcome.error_kind == ERROR_PLATFORM
+    assert len(client.post_urls) == 1
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -30,6 +32,13 @@ ERROR_PLATFORM = "platform_error"
 
 _TOKEN_EXPIRED_CODES = frozenset({102, 190})
 _PERMISSION_CODES = frozenset({4, 10, 200})
+
+# Meta rejects media_publish while the container is still processing
+# ('Media ID is not available', code 9007) — poll status_code to FINISHED.
+_CONTAINER_READY_STATES = frozenset({"FINISHED", "PUBLISHED"})
+_CONTAINER_FAILED_STATES = frozenset({"ERROR", "EXPIRED"})
+_CONTAINER_POLL_SECONDS = 2.0
+_CONTAINER_POLL_TIMEOUT = 45.0
 
 
 class PublishPreconditionError(Exception):
@@ -90,7 +99,9 @@ def classify_graph_error(payload: dict[str, Any] | None, status_code: int) -> st
         return ERROR_TOKEN_EXPIRED
     if code in _PERMISSION_CODES or status_code == 403:
         return ERROR_PERMISSION
-    if err_type == "OAuthException" and status_code in {400, 401}:
+    # Code-less OAuthException 400s are historically token failures; a coded
+    # error (e.g. 9007 media not ready) must not masquerade as token_expired.
+    if err_type == "OAuthException" and status_code == 400 and code is None:
         return ERROR_TOKEN_EXPIRED
     return ERROR_PLATFORM
 
@@ -194,6 +205,10 @@ async def _publish_instagram(
                 error_kind=ERROR_PLATFORM,
                 message="Graph media container response missing id",
             )
+        err = await _await_container_ready(client, creation_id, token)
+        if err is not None:
+            account.last_error_kind = err.error_kind
+            return err
         published, err = await _graph_post(
             client,
             f"{_graph_base()}/{account.ig_user_id}/media_publish",
@@ -249,17 +264,82 @@ async def _graph_post(
         payload = {}
     if response.is_success:
         return payload, None
-    kind = classify_graph_error(payload, response.status_code)
-    message = ""
-    error = payload.get("error")
-    if isinstance(error, dict):
-        message = str(error.get("message") or "")
     return None, PublishOutcome(
         status=FAILED_STATUS,
         platform="instagram",
-        error_kind=kind,
-        message=message or f"Instagram HTTP {response.status_code}",
+        error_kind=classify_graph_error(payload, response.status_code),
+        message=_error_message(payload, response.status_code),
     )
+
+
+def _json(response: httpx.Response) -> dict[str, Any]:
+    try:
+        parsed = response.json()
+    except ValueError:
+        return {}
+    if isinstance(parsed, dict):
+        return parsed
+    return {}
+
+
+def _error_message(payload: dict[str, Any], status_code: int) -> str:
+    error = payload.get("error")
+    if isinstance(error, dict):
+        message = str(error.get("message") or "")
+        if message:
+            return message
+    return f"Instagram HTTP {status_code}"
+
+
+async def _await_container_ready(
+    client: httpx.AsyncClient,
+    container_id: str,
+    token: str,
+) -> PublishOutcome | None:
+    """Wait for the media container to reach FINISHED before media_publish.
+
+    The container endpoint returns an id before Meta finishes fetching /
+    processing the image; publishing immediately gets code 9007 'Media ID is
+    not available'. Polls ``GET /{id}?fields=status_code`` with a bounded
+    deadline; transient request failures keep polling until it lapses.
+    """
+    deadline = time.monotonic() + _CONTAINER_POLL_TIMEOUT
+    while True:
+        state = ""
+        try:
+            response = await client.get(
+                f"{_graph_base()}/{container_id}",
+                params={"fields": "status_code", "access_token": token},
+            )
+        except httpx.HTTPError:
+            response = None
+        if response is not None:
+            payload = _json(response)
+            state = str(payload.get("status_code") or "").upper()
+            if state in _CONTAINER_READY_STATES:
+                return None
+            if state in _CONTAINER_FAILED_STATES:
+                return PublishOutcome(
+                    status=FAILED_STATUS,
+                    platform="instagram",
+                    error_kind=ERROR_PLATFORM,
+                    message=f"Instagram media container processing {state.lower()}",
+                )
+            if not state and not response.is_success:
+                return PublishOutcome(
+                    status=FAILED_STATUS,
+                    platform="instagram",
+                    error_kind=classify_graph_error(payload, response.status_code),
+                    message=_error_message(payload, response.status_code),
+                )
+        if time.monotonic() >= deadline:
+            return PublishOutcome(
+                status=FAILED_STATUS,
+                platform="instagram",
+                error_kind=ERROR_PLATFORM,
+                message="Instagram media container not ready",
+            )
+        await asyncio.sleep(_CONTAINER_POLL_SECONDS)
 
 
 async def _fetch_permalink(
