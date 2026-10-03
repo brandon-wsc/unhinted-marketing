@@ -138,6 +138,32 @@ def test_classify_coded_oauth_exception_is_not_token_expired() -> None:
     assert classify_graph_error(payload, 400) == ERROR_PLATFORM
 
 
+def test_classify_oauth_exception_400_media_error_is_platform() -> None:
+    """Meta reuses type 'OAuthException' for non-auth 400s — e.g. code 100
+    'Media ID is not available' when the container's image_url was
+    unfetchable. That is a media/permission failure, not an expired token."""
+    payload = {
+        "error": {
+            "type": "OAuthException",
+            "code": 100,
+            "message": "Media ID is not available",
+        }
+    }
+    assert classify_graph_error(payload, 400) == ERROR_PLATFORM
+    assert (
+        classify_graph_error({"error": {"type": "OAuthException"}}, 400)
+        == ERROR_PLATFORM
+    )
+
+
+def test_classify_token_codes_and_401_are_token_expired() -> None:
+    """Real token failures carry code 102/190 (subcode 463/467) or HTTP 401."""
+    assert classify_graph_error({"error": {"code": 190}}, 400) == ERROR_TOKEN_EXPIRED
+    assert classify_graph_error({"error": {"code": 102}}, 400) == ERROR_TOKEN_EXPIRED
+    assert classify_graph_error({"error": {"code": 100}}, 401) == ERROR_TOKEN_EXPIRED
+    assert classify_graph_error({}, 401) == ERROR_TOKEN_EXPIRED
+
+
 @pytest.mark.asyncio
 async def test_stub_adapter_does_not_call_graph(
     monkeypatch: pytest.MonkeyPatch,
@@ -339,6 +365,42 @@ async def test_instagram_non_http_image_is_platform_error(
     )
     assert outcome.status == FAILED_STATUS
     assert outcome.error_kind == ERROR_PLATFORM
+
+
+@pytest.mark.asyncio
+async def test_instagram_media_unavailable_is_platform_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """media_publish 'Media ID is not available' (OAuthException 400, code
+    100) is an unfetchable-image failure, not an expired token — the UI must
+    not bounce the user to settings."""
+    account = _account(monkeypatch)
+    _patch_account(monkeypatch, account)
+    client = ScriptedClient(
+        posts=[
+            (200, {"id": "container-1"}),
+            (
+                400,
+                {
+                    "error": {
+                        "type": "OAuthException",
+                        "code": 100,
+                        "message": "Media ID is not available",
+                    }
+                },
+            ),
+        ],
+        gets=[(200, {"status_code": "FINISHED"})],
+    )
+    monkeypatch.setattr(
+        "internal.tools.publish.httpx.AsyncClient",
+        lambda *a, **k: client,
+    )
+    outcome = await publish_social_post(AsyncMock(), _req(), company_id=account.company_id)
+    assert outcome.status == FAILED_STATUS
+    assert outcome.error_kind == ERROR_PLATFORM
+    assert account.last_error_kind == ERROR_PLATFORM
+    assert outcome.message == "Media ID is not available"
 
 
 @pytest.mark.asyncio
