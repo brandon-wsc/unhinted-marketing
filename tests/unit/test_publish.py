@@ -145,6 +145,18 @@ async def test_stub_adapter_does_not_call_graph(
 
 
 @pytest.mark.asyncio
+async def test_unknown_adapter_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A mistyped PUBLISH_ADAPTER must fail, not silently stub (on-prem safety)."""
+    from internal import config
+
+    monkeypatch.setattr(config.settings, "publish_adapter", "instagrm")
+    outcome = await publish_social_post(AsyncMock(), _req(), company_id=uuid.uuid4())
+    assert outcome.status == FAILED_STATUS
+    assert outcome.error_kind == ERROR_PLATFORM
+    assert "instagrm" in outcome.message
+
+
+@pytest.mark.asyncio
 async def test_instagram_two_phase_success(monkeypatch: pytest.MonkeyPatch) -> None:
     account = _account(monkeypatch)
     _patch_account(monkeypatch, account)

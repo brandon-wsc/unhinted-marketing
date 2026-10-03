@@ -187,9 +187,11 @@ losing `BYOK_ENCRYPTION_KEY`, ADR 0020).
 
 ## Notes
 
-- **HTTPS / Instagram OAuth** — real publish (`PUBLISH_ADAPTER=instagram`) and
-  Instagram Login need a public HTTPS `WEB_BASE_URL` plus `META_*` env; default
-  `stub` adapter never calls Meta (ADR 0022).
+- **HTTPS / Instagram OAuth** — both compose files default
+  `PUBLISH_ADAPTER=instagram`, so Confirm calls Meta. Set `stub` in `.env`
+  for a dry run. Instagram Login and a Meta-reachable image still need a
+  public HTTPS `WEB_BASE_URL` plus `META_*` (ADR 0022). The app process
+  default used by dev and CI stays `stub`.
 - **Media** — local disk under `appdata` by default (ADR 0024); optional S3
   env seeds the first `storage_configs` row, then System → Storage in the app
   is the source of truth (ADR 0025).

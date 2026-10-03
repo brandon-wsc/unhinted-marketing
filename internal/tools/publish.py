@@ -115,7 +115,14 @@ async def publish_social_post(
     if adapter == "instagram":
         return await _publish_instagram(db, req, company_id=company_id)
     if adapter not in {"stub", ""}:
-        logger.warning("Unknown PUBLISH_ADAPTER %r; using stub", adapter)
+        # Fail closed: a mistyped adapter must not silently stub a real Confirm.
+        logger.error("Unknown PUBLISH_ADAPTER %r; refusing to publish", adapter)
+        return PublishOutcome(
+            status=FAILED_STATUS,
+            platform=adapter,
+            error_kind=ERROR_PLATFORM,
+            message=f"Unknown PUBLISH_ADAPTER {adapter!r} — refusing to publish",
+        )
     return _publish_stub()
 
 
