@@ -89,20 +89,14 @@ def _graph_base() -> str:
 def classify_graph_error(payload: dict[str, Any] | None, status_code: int) -> str:
     error = (payload or {}).get("error") if isinstance(payload, dict) else None
     code: int | None = None
-    err_type = ""
     if isinstance(error, dict):
         raw_code = error.get("code")
         if isinstance(raw_code, int):
             code = raw_code
-        err_type = str(error.get("type") or "")
     if code in _TOKEN_EXPIRED_CODES or status_code in {401}:
         return ERROR_TOKEN_EXPIRED
     if code in _PERMISSION_CODES or status_code == 403:
         return ERROR_PERMISSION
-    # Code-less OAuthException 400s are historically token failures; a coded
-    # error (e.g. 9007 media not ready) must not masquerade as token_expired.
-    if err_type == "OAuthException" and status_code == 400 and code is None:
-        return ERROR_TOKEN_EXPIRED
     return ERROR_PLATFORM
 
 
