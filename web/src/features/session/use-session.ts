@@ -71,6 +71,9 @@ export { parseBrief } from "./session-helpers";
 
 type SseReadyHandle = { promise: Promise<void>; resolve: () => void };
 
+// Identical send inside this window is treated as a double-click and dropped.
+const DUP_SEND_WINDOW_MS = 1200;
+
 type LiveChatSnapshot = {
   messages: ChatMessage[];
   agentActions: AgentActionRecord[];
@@ -187,6 +190,12 @@ export function useSession(companyId: string | undefined) {
   // the next send on the session now on screen.
   const suppressLiveTurnEventsRef = useRef(false);
   const sendingRef = useRef(false);
+  // Set synchronously when a send commits to launching — covers the awaits
+  // (session create, SSE ready) before registerInFlight can mark `sending`.
+  const sendLaunchingRef = useRef(false);
+  // Double-submit guard: identical text inside the window is a repeat click,
+  // not a queued follow-up (ADR 0016 queues intentional sends only).
+  const lastSendRef = useRef<{ text: string; at: number } | null>(null);
   const stoppingRef = useRef(false);
   const awaitingImageOkRef = useRef(false);
   const awaitingAnglePickRef = useRef(false);
@@ -1351,15 +1360,27 @@ export function useSession(companyId: string | undefined) {
   }, []);
 
   const sendMessage = useCallback(
-    async (content: string, options?: { queueIndex?: number; sourceQuestionId?: string }) => {
+    async (
+      content: string,
+      options?: { queueIndex?: number; sourceQuestionId?: string; skipDupGuard?: boolean },
+    ) => {
       const text = content.trim();
       if (!text || !accessToken || !companyId || stoppingRef.current) {
         return;
       }
-      if (sendingRef.current || options?.queueIndex != null) {
+      const sendAt = Date.now();
+      if (!options?.skipDupGuard) {
+        const last = lastSendRef.current;
+        if (last && last.text === text && sendAt - last.at < DUP_SEND_WINDOW_MS) {
+          return;
+        }
+        lastSendRef.current = { text, at: sendAt };
+      }
+      if (sendingRef.current || sendLaunchingRef.current || options?.queueIndex != null) {
         enqueueQueuedAt(text, options?.queueIndex);
         return;
       }
+      sendLaunchingRef.current = true;
       // Image-park Send is a new script (ADR 0036). Angle park is a typed pick (ADR 0028).
       // A typed reply while angle-parked IS the pick (ADR 0028) — remember it
       // so Retry re-issues the pick; any fresh turn clears the stale one.
@@ -1390,6 +1411,8 @@ export function useSession(companyId: string | undefined) {
         epoch = bumpEpoch(active.id);
         abort = new AbortController();
         registerInFlight(active.id, abort);
+        // sendingRef covers the queue gate from here — the launch window is over.
+        sendLaunchingRef.current = false;
         suppressLiveTurnEventsRef.current = stillOn(active.id)
           ? false
           : suppressLiveTurnEventsRef.current;
@@ -1554,8 +1577,11 @@ export function useSession(companyId: string | undefined) {
         setStreamingText(null);
         finishRunningActions();
         turnAnchorRef.current = null;
+        // Let a manual retry of the same text through the dup guard.
+        if (lastSendRef.current?.at === sendAt) lastSendRef.current = null;
         throw err;
       } finally {
+        sendLaunchingRef.current = false;
         dropInFlight(boundId);
         if (stillOn(boundId)) drainQueueRef.current();
       }
@@ -1581,14 +1607,20 @@ export function useSession(companyId: string | undefined) {
 
   drainQueueRef.current = () => {
     // Angle park holds the queue (ADR 0016). Image park drains as a direction change (ADR 0036).
-    if (sendingRef.current || stoppingRef.current || awaitingAnglePickRef.current) {
+    if (
+      sendingRef.current ||
+      sendLaunchingRef.current ||
+      stoppingRef.current ||
+      awaitingAnglePickRef.current
+    ) {
       return;
     }
     const next = queuedRef.current[0];
     if (!next) return;
     queuedRef.current = queuedRef.current.slice(1);
     setQueuedMessages(queuedRef.current);
-    void sendMessage(next.content);
+    // Queued sends are deliberate — skip the double-click window.
+    void sendMessage(next.content, { skipDupGuard: true });
   };
 
   const dequeueQueuedMessage = useCallback((id: string): number => {
