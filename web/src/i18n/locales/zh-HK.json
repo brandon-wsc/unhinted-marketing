@@ -250,7 +250,7 @@
       "error": {
         "token_expired": "Token 過咗期，去設定更新之後再確認。",
         "permission": "Instagram 權限唔夠，檢查帳號設定之後再確認。",
-        "platform_error": "Instagram 暫時處理唔到，陣間再確認。"
+        "platform_error": "Instagram 出唔到個 post。檢查張圖同帳號之後再確認；如果冇問題，陣間再試。"
       }
     },
     "exemplar": {
