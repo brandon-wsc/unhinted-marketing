@@ -250,7 +250,7 @@
       "error": {
         "token_expired": "The Instagram token expired. Update it in settings, then confirm again.",
         "permission": "Instagram didn’t allow this post. Check the account, then confirm again.",
-        "platform_error": "Instagram couldn’t take the post. Try confirming again in a moment."
+        "platform_error": "Instagram couldn’t take the post. Fix the image or account, then confirm again — or retry in a moment."
       }
     },
     "exemplar": {
