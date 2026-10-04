@@ -134,7 +134,7 @@ class Settings(BaseSettings):
     # ADR 0034 — per-install shared secret the relay issues at registration.
     # Seeds instance_settings.meta_oauth_relay_secret (Fernet) while unset;
     # afterwards the portal wins. Dev/UAT convenience — production installs
-    # paste it via System → Instance.
+    # paste it via Platform → Instance.
     oauth_relay_secret: str | None = None
 
     # Product catalog embeddings (COLLECT K4) — same FastEmbed family as semantic gate

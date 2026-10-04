@@ -511,8 +511,8 @@
       "connectingBody": "喺新視窗完成授權之後，呢度會自動更新。卡住可以取消再試。",
       "oauthFailed": "連接失敗，請再試一次。",
       "oauthAborted": "授權已取消或逾時，請重新連接。",
-      "oauthNotConfigured": "仲未設定 Instagram Login — 要平台管理員喺 系統 → Instance 入 Meta app 憑證。",
-      "oauthModeUnavailable": "連接流程同而家嘅 OAuth mode 唔夾 — 請檢查 系統 → Instance 嘅設定。",
+      "oauthNotConfigured": "仲未設定 Instagram Login — 要平台管理員喺 平台 → Instance 入 Meta app 憑證。",
+      "oauthModeUnavailable": "連接流程同而家嘅 OAuth mode 唔夾 — 請檢查 平台 → Instance 嘅設定。",
       "oauthNotProfessional": "呢個 Instagram 帳號唔係專業帳號（Business／Creator）。出帖要先喺 Instagram 轉做專業帳號。",
       "oauthMissingPublish": "授權成功，但未批准出帖權限。請重新連接並批准 instagram_business_content_publish。",
       "oauthCsrfMismatch": "授權視窗同呢個瀏覽器 session 對唔上，請再撳連接。",
@@ -520,14 +520,14 @@
       "needsAppTitle": "要先整個 Meta app",
       "needsAppStep1": "去 Meta for Developers 開個 app，加 Instagram use case（API setup with Instagram login）。",
       "needsAppStep2": "喺 app 嘅 Instagram 設定，將下面條 redirect URI 貼落 Valid OAuth Redirect URIs，再將你嘅 Instagram 專業帳號加入個 app。",
-      "needsAppStep3": "喺 系統 → Instance 入 Instagram App ID 同 Secret，返嚟再撳連接。",
+      "needsAppStep3": "喺 平台 → Instance 入 Instagram App ID 同 Secret，返嚟再撳連接。",
       "needsAppRedirectLabel": "Valid OAuth Redirect URIs",
       "needsAppDeauthorizeLabel": "Deauthorize Callback URL",
       "needsAppDataDeletionLabel": "Data Deletion Request URL",
       "needsAppLiveNote": "轉 Live mode 仲要上面兩條 URL，同埋喺 App Settings → Basic 填 Privacy Policy URL；未轉之前，只有加入咗個 app 嘅 Instagram 帳號 connect 到。",
       "standardAccessNote": "連接自己擁有或管理嘅 Instagram 帳號只需要 Standard Access — 唔使 Meta App Review 同 Business Verification。",
-      "openInstanceSettings": "去 系統 → Instance",
-      "needsAppViewerNote": "要平台管理員先喺 系統 → Instance 入 Meta app 憑證。",
+      "openInstanceSettings": "去 平台 → Instance",
+      "needsAppViewerNote": "要平台管理員先喺 平台 → Instance 入 Meta app 憑證。",
       "readyCaption": "會經呢個 instance 自己嘅 Meta app 連接。",
       "readyCaptionRelay": "會經供應商嘅代管 relay 連接 — token 會經過供應商基建（只做交收，唔會儲存）。",
       "manualToggle": "進階：手動貼 token",
@@ -691,7 +691,7 @@
       "itemInstance": "網址同邀請電郵",
       "itemLlm": "LLM 供應商",
       "cta": "開始設定",
-      "footer": "全部設定之後都可以喺 系統 → Instance 改返。"
+      "footer": "全部設定之後都可以喺 平台 → Instance 改返。"
     },
     "account": {
       "title": "建立管理員帳戶",
@@ -711,7 +711,7 @@
       "smtpPassword": "密碼",
       "smtpTls": "啟用 TLS（STARTTLS）",
       "emailFrom": "寄件人地址",
-      "linkNote": "邀請會以連結形式俾你複製 — 唔會寄出電郵。之後可以喺「系統 → Instance」設定 SMTP。"
+      "linkNote": "邀請會以連結形式俾你複製 — 唔會寄出電郵。之後可以喺「平台 → Instance」設定 SMTP。"
     },
     "llm": {
       "title": "連接 AI 模型",
@@ -730,7 +730,7 @@
       "nextTitle": "下一步",
       "nextModels": "連接或調整模型 — 設定 → API Keys",
       "nextMembers": "邀請成員 — 設定 → Members",
-      "nextInstance": "電郵同網站網址 — 系統 → Instance",
+      "nextInstance": "電郵同網站網址 — 平台 → Instance",
       "cta": "開始使用"
     },
     "next": "繼續",
@@ -738,11 +738,11 @@
     "submitting": "儲存緊…"
   },
   "system": {
-    "menuEntry": "系統",
-    "title": "系統",
+    "menuEntry": "平台",
+    "title": "平台",
     "forbidden": {
       "title": "未授權",
-      "body": "系統工具要夠高平台權限先入到。",
+      "body": "平台工具要夠高權限先入到。",
       "back": "返回主頁"
     },
     "instance": {

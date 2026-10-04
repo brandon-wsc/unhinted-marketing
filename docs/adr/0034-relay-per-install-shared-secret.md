@@ -10,7 +10,7 @@
 ADR 0032's relay protocol uses `meta_oauth_instance_id` for two jobs: the
 REGISTRY routing slug **and** the only secret-ish value on the path. But the
 slug travels in plaintext `state` — it appears in the authorize URL any org
-member's browser receives, in browser history, and in System → Instance. Two
+member's browser receives, in browser history, and in Platform → Instance. Two
 gaps follow:
 
 - **Bearer ticket.** `GET /ticket/{uuid}` returns a live long-lived IG token to
@@ -34,7 +34,7 @@ wrangler kv key put --namespace-id <REGISTRY_ID> "<instance_id>" \
 ```
 
 Bare-string entries are **rejected** (fail closed — re-register in the new
-shape). The admin pastes the issued secret into System → Instance:
+shape). The admin pastes the issued secret into Platform → Instance:
 `meta_oauth_relay_secret` is a write-only `PUT /api/instance/settings` field
 stored Fernet-encrypted (`meta_oauth_relay_secret_encrypted` +
 `meta_oauth_relay_secret_last4`, same pattern as `meta_app_secret`).

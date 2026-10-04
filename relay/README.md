@@ -76,7 +76,7 @@ npx wrangler deploy
 ## Register an install
 
 The install's `meta_oauth_instance_id` is auto-generated and shown read-only
-under **System → Instance** (relay mode). Registration is two-sided (ADR
+under **Platform → Instance** (relay mode). Registration is two-sided (ADR
 0034): issue a shared secret, store it with the base URL in REGISTRY, and
 hand the same secret to the install admin.
 
@@ -84,7 +84,7 @@ hand the same secret to the install admin.
 SECRET=$(openssl rand -hex 32)
 npx wrangler kv key put --namespace-id <REGISTRY_ID> "<instance_id>" \
   "{\"url\":\"https://marketing.acme.com\",\"secret\":\"$SECRET\"}"
-# → give $SECRET to the install admin (they paste it in System → Instance)
+# → give $SECRET to the install admin (they paste it in Platform → Instance)
 ```
 
 - `url` must be `https:` — the Worker 302s the browser to
@@ -98,7 +98,7 @@ npx wrangler kv key put --namespace-id <REGISTRY_ID> "<instance_id>" \
 
 ## On the instance
 
-1. System → Instance → OAuth mode = **relay**. The relay base URL is
+1. Platform → Instance → OAuth mode = **relay**. The relay base URL is
    pre-configured to the hosted Unhinted relay (read-only in the UI); a
    self-hosted/dev relay can still be pointed at via env `OAUTH_RELAY_URL`
    before first boot.

@@ -106,7 +106,7 @@ singleton row (ADR 0026), following the `smtp_password` pattern:
 
 ## Consequences
 
-- Cloud deployments are unchanged; on-prem admins manage Meta creds in System →
+- Cloud deployments are unchanged; on-prem admins manage Meta creds in Platform →
   Instance with no restart (snapshot TTL), matching `web_base_url`.
 - `meta_app_secret` joins BYOK keys and `smtp_password` under the Fernet KEK —
   rotating `BYOK_ENCRYPTION_KEY` breaks it the same way (ADR 0020).
