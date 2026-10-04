@@ -58,6 +58,6 @@ class RecommendedQuestionsGenerating(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     company_id: uuid.UUID
-    run_id: uuid.UUID | None = None
-    status: str = "running"  # running | failed (a fresh spawn is always running)
+    run_id: uuid.UUID | None = None  # null while the fill job is still queued (ADR 0039)
+    status: str = "running"  # running | failed (queued or in-flight fills are "running")
     retry_after_seconds: int = 3

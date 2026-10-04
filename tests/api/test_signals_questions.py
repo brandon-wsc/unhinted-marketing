@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
 
 from internal.memory import repos
-from internal.memory.models import RawNewsEvent
+from internal.memory.models import Job, RawNewsEvent
 from tests.api.helpers import auth_header, register_user
 
 
@@ -82,16 +81,11 @@ async def test_upsert_signal_url_hash_collision_keeps_existing(db_session) -> No
 
 
 @pytest.mark.asyncio
-async def test_recommended_questions_miss_returns_202(client, monkeypatch) -> None:
+async def test_recommended_questions_miss_returns_202(client, db_session) -> None:
+    """GET miss enqueues a questions job (ADR 0039) and answers 202 generating."""
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
-    run_id = uuid.uuid4()
 
-    async def fake_start(*, company_id, trigger):
-        assert trigger == "get_miss"
-        return SimpleNamespace(id=run_id, status="running"), True
-
-    monkeypatch.setattr("cmd.api.routes.questions.start_or_join_run", fake_start)
     res = await client.get(
         f"/api/companies/{company_id}/recommended-questions",
         headers=auth_header(data["access_token"]),
@@ -99,8 +93,26 @@ async def test_recommended_questions_miss_returns_202(client, monkeypatch) -> No
     assert res.status_code == 202, res.text
     body = res.json()
     assert body["status"] == "running"
-    assert body["run_id"] == str(run_id)
+    assert body["run_id"] is None  # worker creates the run row on claim
     assert body["company_id"] == company_id
+
+    jobs = (
+        await db_session.scalars(select(Job).where(Job.kind == "questions"))
+    ).all()
+    assert len(jobs) == 1
+    assert jobs[0].payload == {"company_id": company_id, "trigger": "get_miss"}
+    assert jobs[0].status == "pending"
+
+    # A poll in the same minute dedupes onto the same job — no stampede.
+    res = await client.get(
+        f"/api/companies/{company_id}/recommended-questions",
+        headers=auth_header(data["access_token"]),
+    )
+    assert res.status_code == 202
+    jobs = (
+        await db_session.scalars(select(Job).where(Job.kind == "questions"))
+    ).all()
+    assert len(jobs) == 1
 
 
 @pytest.mark.asyncio
@@ -122,22 +134,47 @@ async def test_recommended_questions_failed_run_surfaced(client, db_session) -> 
 
 
 @pytest.mark.asyncio
-async def test_recommended_questions_refresh_force_runs(client, monkeypatch) -> None:
+async def test_recommended_questions_miss_joins_active_run(client, db_session) -> None:
+    """An in-flight run is joined — no new job, response carries its run_id."""
+    data = await register_user(client)
+    company_id = uuid.UUID(data["user"]["organizations"][0]["id"])
+    run = await repos.create_question_run(db_session, company_id=company_id, trigger="get_miss")
+    await db_session.commit()
+
+    res = await client.get(
+        f"/api/companies/{company_id}/recommended-questions",
+        headers=auth_header(data["access_token"]),
+    )
+    assert res.status_code == 202, res.text
+    body = res.json()
+    assert body["status"] == "running"
+    assert body["run_id"] == str(run.id)
+
+    jobs = (
+        await db_session.scalars(select(Job).where(Job.kind == "questions"))
+    ).all()
+    assert jobs == []
+
+
+@pytest.mark.asyncio
+async def test_recommended_questions_refresh_enqueues_job(client, db_session) -> None:
     data = await register_user(client)
     company_id = data["user"]["organizations"][0]["id"]
-    run_id = uuid.uuid4()
 
-    async def fake_start(*, company_id, trigger):
-        assert trigger == "refresh"
-        return SimpleNamespace(id=run_id, status="running"), True
-
-    monkeypatch.setattr("cmd.api.routes.questions.start_or_join_run", fake_start)
     res = await client.post(
         f"/api/companies/{company_id}/recommended-questions/refresh",
         headers=auth_header(data["access_token"]),
     )
     assert res.status_code == 202, res.text
-    assert res.json()["run_id"] == str(run_id)
+    body = res.json()
+    assert body["status"] == "running"
+    assert body["run_id"] is None
+
+    jobs = (
+        await db_session.scalars(select(Job).where(Job.kind == "questions"))
+    ).all()
+    assert len(jobs) == 1
+    assert jobs[0].payload == {"company_id": company_id, "trigger": "refresh"}
 
 
 @pytest.mark.asyncio

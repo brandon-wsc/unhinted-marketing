@@ -1,8 +1,9 @@
-"""Question run lifecycle (ADR 0018): dedupe, semaphore, persistence, spawn.
+"""Question run lifecycle (ADR 0018): dedupe, semaphore, persistence.
 
 Dedupe is DB-enforced (partial unique index on one running run per company) —
-multi-worker safe, no in-memory futures. The API spawns runs as background
-tasks; the scheduler/CLI may also drive runs inline via ``run_company_now``.
+multi-worker safe, no in-memory futures. HTTP callers enqueue a ``questions``
+job and join an in-flight run (ADR 0039); ``cmd.worker serve`` and the CLI
+drive runs inline via ``run_company_now``.
 """
 
 from __future__ import annotations
@@ -22,10 +23,10 @@ from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.models import Entity, QuestionRun
 from internal.memory.repos import (
     create_question_run,
+    enqueue_job,
     finish_question_run,
     get_active_question_run,
     get_company,
-    get_latest_question_run,
     list_personas,
     list_products,
     list_recent_question_history,
@@ -42,7 +43,6 @@ TRIGGER_GET_MISS = "get_miss"
 TRIGGER_REFRESH = "refresh"
 TRIGGER_SCHEDULER = "scheduler"
 
-_background_tasks: set[asyncio.Task] = set()
 _live_run_ids: set[uuid.UUID] = set()
 _semaphore: asyncio.Semaphore | None = None
 _GRAPH_TIMEOUT = timedelta(minutes=6)
@@ -90,53 +90,41 @@ def _should_abandon(active: QuestionRun, trigger: str) -> bool:
     return age > _JOIN_ABANDON_AFTER
 
 
-async def start_or_join_run(
-    *, company_id: uuid.UUID, trigger: str
-) -> tuple[QuestionRun, bool]:
-    """Return (run, spawned). One active run per company; callers join in-flight runs."""
-    async with SessionLocal() as db:
-        active = await _sweep_stale_run(db, company_id)
-        if active is not None and _should_abandon(active, trigger):
-            await finish_question_run(
-                db, active, status="failed", error="abandoned: worker lost the run"
-            )
-            await db.commit()
-            logger.warning(
-                "abandoned question run %s for company %s (trigger=%s)",
-                active.id,
-                company_id,
-                trigger,
-            )
-            active = None
-        if active is not None:
-            return active, False
-        run: QuestionRun | None = None
-        try:
-            run = await create_question_run(db, company_id=company_id, trigger=trigger)
-            _live_run_ids.add(run.id)
-            await db.commit()
-        except IntegrityError:
-            # Another worker won the race (partial unique index) — join theirs.
-            await db.rollback()
-            if run is not None:
-                _live_run_ids.discard(run.id)
-            active = await get_active_question_run(db, company_id)
-            if active is not None:
-                return active, False
-            latest = await get_latest_question_run(db, company_id)
-            if latest is not None:
-                return latest, False
-            raise
+async def enqueue_or_join_run(
+    db: AsyncSession, *, company_id: uuid.UUID, trigger: str
+) -> QuestionRun | None:
+    """Join the company's in-flight run, else enqueue a ``questions`` job.
 
-    _spawn(run.id, company_id)
-    return run, True
-
-
-def _spawn(run_id: uuid.UUID, company_id: uuid.UUID) -> None:
-    _live_run_ids.add(run_id)
-    task = asyncio.create_task(_execute_guarded(run_id=run_id, company_id=company_id))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    Returns the active run when joining. Returns ``None`` when the request is
+    queued instead — the ``cmd.worker serve`` process creates the
+    ``question_runs`` row when it claims the job (ADR 0039), so there is no
+    run id yet; callers answer 202 and the SPA polls the GET.
+    """
+    active = await _sweep_stale_run(db, company_id)
+    if active is not None and _should_abandon(active, trigger):
+        await finish_question_run(
+            db, active, status="failed", error="abandoned: worker lost the run"
+        )
+        await db.flush()
+        logger.warning(
+            "abandoned question run %s for company %s (trigger=%s)",
+            active.id,
+            company_id,
+            trigger,
+        )
+        active = None
+    if active is not None:
+        return active
+    # Minute bucket scopes dedupe to the pending window; a second enqueue an
+    # hour later must land, and run-level dedupe absorbs any double-claim.
+    bucket = datetime.now(UTC).strftime("%Y%m%d%H%M")
+    await enqueue_job(
+        db,
+        kind="questions",
+        payload={"company_id": str(company_id), "trigger": trigger},
+        dedupe_key=f"questions:{company_id}:{trigger}:{bucket}",
+    )
+    return None
 
 
 async def run_company_now(

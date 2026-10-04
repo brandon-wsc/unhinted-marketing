@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     news_promote_window_hours: int = 24
     scheduler_hot_search_interval_minutes: int = 60
     scheduler_questions_interval_hours: int = 12
+    # Worker service (ADR 0039) — idle poll between claim attempts on the
+    # jobs table; backs off while the queue stays empty.
+    worker_poll_seconds: int = 5
 
     # Tavily web search ingest (ADR 0009) — session research upserts into raw_news_events
     tavily_api_key: str | None = None

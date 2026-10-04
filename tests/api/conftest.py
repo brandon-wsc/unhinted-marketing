@@ -22,6 +22,7 @@ from internal.session.graph import set_session_graph
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 TRUNCATE_TABLES = (
+    "jobs",
     "tool_receipts",
     "preview_drafts",
     "preview_images",

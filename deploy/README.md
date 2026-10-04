@@ -90,8 +90,9 @@ can be added later per-org.
 
 What happens on `up`: `db` (pgvector/pgvector:pg18) starts → `migrate` runs
 `alembic upgrade head` and generates `JWT_SECRET` / `BYOK_ENCRYPTION_KEY`
-(persisted to the `appdata` volume) → `api` + `scheduler` start → `web` (nginx)
-serves the SPA and proxies `/api`.
+(persisted to the `appdata` volume) → `api` + `scheduler` + `worker` start →
+`web` (nginx) serves the SPA and proxies `/api`. The scheduler enqueues jobs
+onto the Postgres `jobs` table; the worker claims and runs them (ADR 0039).
 
 Optional overrides via `.env` (`cp .env.example .env`): `WEB_PORT` /
 `WEB_BIND`, `WEB_BASE_URL`, `OPENAI_API_KEY`, `POSTGRES_*` — see
@@ -117,8 +118,8 @@ Your Postgres must have the pgvector extension available (migrations run
 `CREATE EXTENSION IF NOT EXISTS vector`). No `AUTO_SECRETS` here — the compose
 file fails fast on missing `DATABASE_URL` / `JWT_SECRET` / `BYOK_ENCRYPTION_KEY`.
 
-`migrate` is a one-shot service that runs `alembic upgrade head` before `api`
-and `scheduler` start. To run it standalone (e.g. before a rolling update):
+`migrate` is a one-shot service that runs `alembic upgrade head` before `api`,
+`scheduler`, and `worker` start. To run it standalone (e.g. before a rolling update):
 
 ```bash
 docker compose -f docker-compose.external-db.yml run --rm migrate
@@ -155,9 +156,11 @@ default and correct for both packages.
 ```bash
 # Logs / status
 docker compose logs -f api
+docker compose logs -f worker   # job queue consumer (ADR 0039)
 docker compose ps
 
-# Admin CLI (worker subcommands run inside the api container)
+# Admin CLI (ops subcommands run inside the api container — `worker` itself
+# is the long-running `serve` service; these are the one-shot commands)
 docker compose exec api python -m cmd.worker signals
 docker compose exec api python -m cmd.worker set-platform-role --email you@x.com --level superadmin
 docker compose exec api python -m cmd.worker reset-signals --reingest

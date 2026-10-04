@@ -26,9 +26,10 @@ async def generate_questions_for_company(
     company: Entity,
     *,
     force: bool = False,
+    trigger: str | None = None,
 ) -> dict:
     run = await run_company_now(
-        company, trigger=TRIGGER_REFRESH if force else TRIGGER_SCHEDULER
+        company, trigger=trigger or (TRIGGER_REFRESH if force else TRIGGER_SCHEDULER)
     )
     latest = await get_latest_questions(db, company.id)
     return {

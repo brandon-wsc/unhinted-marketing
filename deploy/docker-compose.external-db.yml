@@ -1,6 +1,6 @@
-# External-DB deployment (ADR 0027): migrate + api + scheduler + web against a
-# Postgres you operate (must have the pgvector extension available; migrations
-# run CREATE EXTENSION IF NOT EXISTS vector).
+# External-DB deployment (ADR 0027): migrate + api + scheduler + worker + web
+# against a Postgres you operate (must have the pgvector extension available;
+# migrations run CREATE EXTENSION IF NOT EXISTS vector).
 #
 #   cd deploy
 #   cp .env.example .env   # fill DATABASE_URL + JWT_SECRET + BYOK_ENCRYPTION_KEY
@@ -35,8 +35,8 @@ x-backend-env: &backend-env
   S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
 
 services:
-  # Only `api` carries `build:` — migrate/scheduler share the same image tag,
-  # and a multi-service bake racing one tag fails with "already exists".
+  # Only `api` carries `build:` — migrate/scheduler/worker share the same
+  # image tag, and a multi-service bake racing one tag fails with "already exists".
   migrate:
     image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-api:${IMAGE_TAG:-onprem}
     command: ["alembic", "upgrade", "head"]
@@ -72,6 +72,18 @@ services:
   scheduler:
     image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-api:${IMAGE_TAG:-onprem}
     command: ["python", "-m", "cmd.scheduler"]
+    environment: *backend-env
+    volumes:
+      - appdata:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Queue consumer (ADR 0039): claims jobs the scheduler enqueues.
+  worker:
+    image: ${IMAGE_PREFIX:-ghcr.io/brandon-wsc}/unhinted-api:${IMAGE_TAG:-onprem}
+    command: ["python", "-m", "cmd.worker", "serve"]
     environment: *backend-env
     volumes:
       - appdata:/app/data

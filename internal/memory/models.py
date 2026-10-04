@@ -775,3 +775,40 @@ class InstanceSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Job(Base):
+    """Postgres-backed job queue row (ADR 0039) — off-request/periodic work only.
+
+    Workers claim the oldest due ``pending`` row with UPDATE … FOR UPDATE
+    SKIP LOCKED; ``dedupe_key`` makes enqueue idempotent. The session/agent
+    turn never goes through this table.
+    """
+
+    __tablename__ = "jobs"
+    __table_args__ = (
+        Index("ix_jobs_status_run_after", "status", "run_after"),
+        Index("ix_jobs_locked_at", "locked_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    dedupe_key: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, default="pending", server_default="pending"
+    )  # pending | running | succeeded | failed
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3, server_default="3"
+    )
+    run_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

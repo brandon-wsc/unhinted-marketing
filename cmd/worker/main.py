@@ -1,23 +1,35 @@
-"""Worker CLI: hot search ingest, question generation, news promotion, admin grants."""
+"""Worker CLI + service: job queue serve mode, hot search ingest, question
+generation, news promotion, admin grants."""
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
+import os
+import signal
+import socket
 import sys
+import time
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.roles import parse_platform_level
+from internal.config import settings
 from internal.llm.keys import ByokEncryptionError, encrypt_key, mask_key
 from internal.llm.recorder import drain as drain_llm_records
-from internal.memory.database import SessionLocal
-from internal.memory.models import User
+from internal.memory.database import SessionLocal, open_session
+from internal.memory.models import Job, User
 from internal.memory.repos import (
+    claim_next_job,
+    finish_job,
     get_company,
     list_top_signals,
+    reclaim_stale_jobs,
     reset_market_signals,
     upsert_social_account,
 )
@@ -31,6 +43,147 @@ from internal.perception.rss_news import ingest_rss_news
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+
+# --- serve: Postgres job queue service mode (ADR 0039) ----------------------
+
+_RECLAIM_INTERVAL_SECONDS = 60
+_IDLE_BACKOFF_MAX_SECONDS = 30
+
+
+async def _job_hot_search(db: AsyncSession, job: Job) -> None:
+    counts = await ingest_hot_search(db)
+    rss = await ingest_rss_news(db)
+    logger.info("job %s hot_search: trends=%s rss=%s", job.id, counts, rss)
+
+
+async def _job_promote(db: AsyncSession, job: Job) -> None:
+    counts = await promote_signals(db)
+    logger.info("job %s promote_signals: %s", job.id, counts)
+
+
+async def _job_questions(db: AsyncSession, job: Job) -> None:
+    company_id = job.payload.get("company_id")
+    if not company_id:
+        raise RuntimeError("questions job missing payload.company_id")
+    company = await get_company(db, uuid.UUID(company_id))
+    if company is None:
+        raise RuntimeError(f"company {company_id} not found")
+    result = await generate_questions_for_company(
+        db, company, trigger=job.payload.get("trigger")
+    )
+    logger.info("job %s questions: company=%s status=%s", job.id, company_id, result["status"])
+
+
+# kind → handler. A new job type is one dict entry.
+_JOB_HANDLERS: dict[str, Callable[[AsyncSession, Job], Awaitable[None]]] = {
+    "hot_search": _job_hot_search,
+    "promote_signals": _job_promote,
+    "questions": _job_questions,
+}
+
+
+async def _run_one_job(worker_id: str) -> bool:
+    """One service tick: claim → dispatch → finish. True when a job ran."""
+    async with open_session() as db:
+        job = await claim_next_job(db, worker_id=worker_id)
+        await db.commit()
+        if job is None:
+            return False
+        logger.info(
+            "claimed job %s kind=%s attempt %d/%d",
+            job.id,
+            job.kind,
+            job.attempts,
+            job.max_attempts,
+        )
+        handler = _JOB_HANDLERS.get(job.kind)
+        try:
+            if handler is None:
+                raise RuntimeError(f"unknown job kind {job.kind!r}")
+            await handler(db, job)
+        except BaseException as exc:
+            logger.exception("job %s (%s) raised", job.id, job.kind)
+            await db.rollback()
+            await finish_job(db, job, ok=False, error=str(exc))
+            await db.commit()
+            if isinstance(exc, asyncio.CancelledError):
+                # Shutdown/cancel mid-job — back to pending, no lease left behind.
+                raise
+            if job.status == "failed":
+                logger.error("job %s (%s) failed: %s", job.id, job.kind, job.error)
+            else:
+                logger.warning(
+                    "job %s (%s) retry %d/%d",
+                    job.id,
+                    job.kind,
+                    job.attempts,
+                    job.max_attempts,
+                )
+        else:
+            await finish_job(db, job, ok=True)
+            await db.commit()
+            logger.info("job %s (%s) succeeded", job.id, job.kind)
+        return True
+
+
+async def _cmd_serve() -> int:
+    """Long-running queue consumer (ADR 0039).
+
+    SIGTERM/SIGINT stop claiming new work; the in-flight job finishes first,
+    then the loop exits 0. A hard kill leaves a ``running`` lease that the
+    reclaim sweep returns to ``pending`` after 15 minutes.
+    """
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop.set)
+
+    worker_id = f"{socket.gethostname()}:{os.getpid()}"
+    logger.info(
+        "Worker %s started (poll %ss, reclaim every %ss)",
+        worker_id,
+        settings.worker_poll_seconds,
+        _RECLAIM_INTERVAL_SECONDS,
+    )
+
+    last_reclaim = 0.0
+    idle_streak = 0
+    while not stop.is_set():
+        if time.monotonic() - last_reclaim >= _RECLAIM_INTERVAL_SECONDS:
+            last_reclaim = time.monotonic()
+            try:
+                async with open_session() as db:
+                    reclaimed = await reclaim_stale_jobs(db)
+                    await db.commit()
+                if reclaimed:
+                    logger.info("reclaimed %d stale job(s)", reclaimed)
+            except Exception:
+                logger.exception("reclaim sweep failed")
+
+        try:
+            ran = await _run_one_job(worker_id)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("worker tick failed")
+            ran = False
+
+        if ran:
+            idle_streak = 0
+            continue
+        idle_streak += 1
+        # Idle backoff: poll interval doubles on each empty tick, capped.
+        delay = min(
+            settings.worker_poll_seconds * 2 ** min(idle_streak - 1, 3),
+            _IDLE_BACKOFF_MAX_SECONDS,
+        )
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=delay)
+
+    await drain_llm_records()
+    logger.info("Worker %s stopped", worker_id)
+    return 0
 
 
 async def _cmd_hot_search() -> int:
@@ -204,6 +357,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Unhinted marketing workers")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("serve", help="Run the job-queue worker service (ADR 0039)")
     sub.add_parser("hot-search", help="Ingest Google Trends HK + RSS news")
     q = sub.add_parser("questions", help="Generate recommended questions (12h cache)")
     q.add_argument("--force", action="store_true", help="Ignore cache TTL")
@@ -241,6 +395,7 @@ def main() -> None:
 
     args = parser.parse_args()
     commands = {
+        "serve": lambda: _cmd_serve(),
         "hot-search": lambda: _cmd_hot_search(),
         "questions": lambda: _cmd_questions(args.force, getattr(args, "company_id", None)),
         "promote": lambda: _cmd_promote(),
