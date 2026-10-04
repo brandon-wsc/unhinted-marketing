@@ -17,7 +17,7 @@ from internal.memory.repos import (
 from internal.perception.question_graph.runner import (
     TRIGGER_GET_MISS,
     TRIGGER_REFRESH,
-    start_or_join_run,
+    enqueue_or_join_run,
 )
 from schemas.perception import (
     RecommendedQuestionItem,
@@ -87,8 +87,13 @@ async def recommended_questions(
     latest_run = await get_latest_question_run(db, company_id)
     if latest_run is not None and latest_run.status == "failed":
         return _generating_response(company_id, run_id=latest_run.id, status="failed")
-    run, _spawned = await start_or_join_run(company_id=company_id, trigger=TRIGGER_GET_MISS)
-    return _generating_response(company_id, run_id=run.id, status=run.status)
+    # Join an in-flight run or enqueue a questions job (ADR 0039). The worker
+    # creates the question_runs row on claim, so a queued fill has no run_id yet.
+    run = await enqueue_or_join_run(db, company_id=company_id, trigger=TRIGGER_GET_MISS)
+    await db.commit()
+    return _generating_response(
+        company_id, run_id=run.id if run else None, status=run.status if run else "running"
+    )
 
 
 @router.post(
@@ -105,5 +110,10 @@ async def refresh_recommended_questions(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    run, _spawned = await start_or_join_run(company_id=company_id, trigger=TRIGGER_REFRESH)
-    return RecommendedQuestionsGenerating(company_id=company_id, run_id=run.id, status=run.status)
+    run = await enqueue_or_join_run(db, company_id=company_id, trigger=TRIGGER_REFRESH)
+    await db.commit()
+    return RecommendedQuestionsGenerating(
+        company_id=company_id,
+        run_id=run.id if run else None,
+        status=run.status if run else "running",
+    )

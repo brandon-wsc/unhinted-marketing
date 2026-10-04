@@ -1,19 +1,20 @@
-"""Periodic scheduler for hot search and question generation."""
+"""Periodic scheduler: enqueues pipeline jobs onto the Postgres queue (ADR 0039).
+
+The scheduler no longer runs pipelines itself — each tick inserts deduped rows
+into ``jobs`` and a ``cmd.worker serve`` process claims them.
+"""
 
 import argparse
 import asyncio
 import hashlib
 import logging
 import signal
+import time
+from datetime import UTC, datetime, timedelta
 
 from internal.config import settings
-from internal.llm.recorder import drain as drain_llm_records
-from internal.memory.database import SessionLocal
-from internal.memory.repos import list_companies
-from internal.perception.hot_search import ingest_hot_search
-from internal.perception.news_promoter import promote_signals
-from internal.perception.question_graph.runner import TRIGGER_SCHEDULER, run_company_now
-from internal.perception.rss_news import ingest_rss_news
+from internal.memory.database import open_session
+from internal.memory.repos import enqueue_job, list_companies
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -26,14 +27,20 @@ def _handle_sigterm(*_args) -> None:
     _stop = True
 
 
-async def _run_hot_search_cycle() -> None:
-    async with SessionLocal() as db:
-        counts = await ingest_hot_search(db)
-        logger.info("hot-search: %s", counts)
-        rss = await ingest_rss_news(db)
-        logger.info("rss-news: %s", rss)
-        promo = await promote_signals(db)
-        logger.info("promote: %s", promo)
+def _tick_bucket(interval_seconds: int) -> str:
+    """Dedupe scope per tick window — a restart mid-window cannot double-enqueue."""
+    return str(int(time.time() // interval_seconds))
+
+
+async def _enqueue_hot_search_cycle() -> None:
+    """Hot tick: one ingest job + one promote job per interval bucket."""
+    bucket = _tick_bucket(settings.scheduler_hot_search_interval_minutes * 60)
+    async with open_session() as db:
+        for kind in ("hot_search", "promote_signals"):
+            job = await enqueue_job(db, kind=kind, dedupe_key=f"{kind}:{bucket}")
+            if job is not None:
+                logger.info("enqueued %s job %s (bucket %s)", kind, job.id, bucket)
+        await db.commit()
 
 
 def _company_jitter_seconds(company_id) -> int:
@@ -42,35 +49,28 @@ def _company_jitter_seconds(company_id) -> int:
     return int(digest, 16) % 1800
 
 
-async def _run_questions_cycle(force: bool = False) -> None:
-    async with SessionLocal() as db:
+async def _enqueue_questions_cycle(force: bool = False) -> None:
+    """Questions tick: one job per company; the jitter becomes ``run_after``."""
+    bucket = _tick_bucket(settings.scheduler_questions_interval_hours * 3600)
+    now = datetime.now(UTC)
+    async with open_session() as db:
         companies = await list_companies(db)
-    # Same graph + runner as the HTTP fill path (ADR 0018); the runner's global
-    # semaphore caps concurrency across the fan-out.
-    results = await asyncio.gather(
-        *(
-            run_company_now(
-                company,
-                trigger=TRIGGER_SCHEDULER,
-                jitter_seconds=0 if force else _company_jitter_seconds(company.id),
+        queued = 0
+        for company in companies:
+            jitter = 0 if force else _company_jitter_seconds(company.id)
+            job = await enqueue_job(
+                db,
+                kind="questions",
+                payload={"company_id": str(company.id)},
+                dedupe_key=f"questions:{company.id}:{bucket}",
+                run_after=now + timedelta(seconds=jitter),
             )
-            for company in companies
-        ),
-        return_exceptions=True,
+            if job is not None:
+                queued += 1
+        await db.commit()
+    logger.info(
+        "questions: enqueued %d/%d jobs (bucket %s)", queued, len(companies), bucket
     )
-    ok = 0
-    failed = 0
-    for company, result in zip(companies, results, strict=True):
-        if isinstance(result, Exception):
-            failed += 1
-            logger.exception("questions cycle failed for %s", company.id, exc_info=result)
-        elif getattr(result, "status", None) == "succeeded":
-            ok += 1
-        else:
-            failed += 1
-    logger.info("questions: %d succeeded, %d failed/skipped", ok, failed)
-    # Flush pending LLM call records before the next sleep (ADR 0005).
-    await drain_llm_records()
 
 
 async def run_scheduler(*, once: bool = False) -> None:
@@ -83,8 +83,8 @@ async def run_scheduler(*, once: bool = False) -> None:
     question_elapsed = question_interval
 
     if once:
-        await _run_hot_search_cycle()
-        await _run_questions_cycle(force=True)
+        await _enqueue_hot_search_cycle()
+        await _enqueue_questions_cycle(force=True)
         return
 
     logger.info(
@@ -101,23 +101,23 @@ async def run_scheduler(*, once: bool = False) -> None:
         if hot_elapsed >= hot_interval:
             hot_elapsed = 0
             try:
-                await _run_hot_search_cycle()
+                await _enqueue_hot_search_cycle()
             except Exception:
-                logger.exception("hot-search cycle failed")
+                logger.exception("hot-search enqueue failed")
 
         if question_elapsed >= question_interval:
             question_elapsed = 0
             try:
-                await _run_questions_cycle()
+                await _enqueue_questions_cycle()
             except Exception:
-                logger.exception("questions cycle failed")
+                logger.exception("questions enqueue failed")
 
     logger.info("Scheduler stopped")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Unhinted marketing scheduler")
-    parser.add_argument("--once", action="store_true", help="Run one cycle and exit")
+    parser.add_argument("--once", action="store_true", help="Enqueue one cycle and exit")
     args = parser.parse_args()
     asyncio.run(run_scheduler(once=args.once))
 

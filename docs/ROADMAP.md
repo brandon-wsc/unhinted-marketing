@@ -284,10 +284,10 @@ awaiting_image_ok     # bool — mirrored into sessions.state when graph is park
 |-------|--------|-------|
 | API | FastAPI + uvicorn | REST + SSE for preview updates |
 | Auth | JWT (python-jose) + argon2 | Access/refresh; httpOnly refresh cookie |
-| Workers | Python (`cmd/worker`, `cmd/scheduler`) | ARQ + Redis when provisioned; PG job queue fallback |
+| Workers | Python (`cmd/worker`, `cmd/scheduler`) | Postgres `jobs` queue ([ADR 0039](./adr/0039-postgres-job-queue.md)); `cmd.worker serve`; broker only if fan-out ever needs one |
 | Agent | LangGraph + LiteLLM | Structured output via Pydantic |
 | DB | PostgreSQL 16+ | pgvector for signal similarity (MVP) |
-| Cache / queue | Redis (optional MVP) | Question cache, job queue, rate limits |
+| Cache / queue | Postgres `jobs` table ([ADR 0039](./adr/0039-postgres-job-queue.md)) | SKIP LOCKED claim + `dedupe_key`; Redis stays unprovisioned (rate limits in-process) |
 | Media | Local disk default on-prem; optional S3-compatible; AWS S3 in cloud ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)) | Postgres stores object keys; URLs derived at read |
 | Frontend | React + Vite + Tailwind + Streamdown | Session UI; Streamdown for streaming MD; shadcn optional later |
 | Hot search | pytrends / SerpAPI | Meta Graph API Phase 3 |
@@ -300,8 +300,8 @@ awaiting_image_ok     # bool — mirrored into sessions.state when graph is park
 unhinted-marketing/
 ├── cmd/
 │   ├── api/                 # FastAPI entrypoint (public routes under /api)
-│   ├── worker/              # ARQ / async job consumer
-│   └── scheduler/           # Cron: hot_search, question_gen
+│   ├── worker/              # `serve` job-queue consumer (ADR 0039) + ops CLI
+│   └── scheduler/           # Cron tick → enqueue jobs (hot_search, questions)
 ├── internal/
 │   ├── auth/                # JWT, password, deps, refresh tokens
 │   ├── perception/          # hot_search, news_scanner, news_promoter
@@ -458,7 +458,7 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 
 - [ ] Real Meta/IG Graph API integration in Confirm handler
 - [ ] Budget circuit breaker (atomic PG updates)
-- [ ] Redis for queue + question cache (if not already)
+- [x] Job queue — Postgres `jobs` table + `cmd.worker serve` ([ADR 0039](./adr/0039-postgres-job-queue.md)); Redis/broker deferred unless fan-out needs it
 - [x] Media storage: local disk default on-prem; optional S3-compatible; AWS S3 in cloud ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). Portal-driven local→S3 migrate ([ADR 0025](./adr/0025-db-storage-config-and-portal-migration.md)). Signed/private URLs remain STATUS hardening
 - [ ] OAuth providers (Google) for login
 
@@ -495,7 +495,7 @@ All metrics stored in PG with provenance before LLM reads them. Session research
 | 1 | Company profile storage | PG JSON column on `entities` (type=company) |
 | 2 | First publish platform | Instagram (Meta Graph API) |
 | 3 | Image provider | OpenAI DALL-E 3 |
-| 4 | Redis in MVP | PG job queue fallback; add Redis when provisioned |
+| 4 | Redis in MVP | **Decided — no broker.** PG `jobs` table is the queue ([ADR 0039](./adr/0039-postgres-job-queue.md)); revisit only for wide fan-out |
 | 5 | Secondary HK signal source | Meta Graph API (Phase 3); no news RSS |
 | 6 | Migration tool | Alembic (Python-native) |
 | 7 | Auth provider (MVP) | Email/password JWT; OAuth Phase 4 |

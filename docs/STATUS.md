@@ -83,9 +83,11 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 **Decision (2026-09-13) — Docker deployment packages (all-in-one vs external-DB):** → [ADR 0027](./adr/0027-docker-deploy-packages.md)
 
 - **`deploy/` holds two production compose shapes** — `docker-compose.yml` (bundled pgvector `db`, one command, no `.env`) and `docker-compose.external-db.yml` (BYO Postgres; `${VAR:?}` requires `DATABASE_URL` + `JWT_SECRET` + `BYOK_ENCRYPTION_KEY` + `WEB_BASE_URL`/`CORS_ORIGINS`)
-- **`migrate` one-shot service** — api image runs `alembic upgrade head` before `api`/`scheduler` (`service_completed_successfully`); safe for replica scaling
+- **`migrate` one-shot service** — api image runs `alembic upgrade head` before `api`/`scheduler`/`worker` (`service_completed_successfully`); safe for replica scaling
 - **`AUTO_SECRETS` entrypoint** (`docker/api-entrypoint.sh`, api image `ENTRYPOINT`) — all-in-one generates + persists JWT/BYOK keys on the `appdata` volume (`/app/data/.secrets.env`); inert on external-DB; `APP_ENV=production` unchanged
 - **Images** `ghcr.io/brandon-wsc/unhinted-{api,web}` with `IMAGE_PREFIX`/`IMAGE_TAG` overrides + `build:` fallback; `.github/workflows/release.yml` publishes on `v*` tags (version + floating `onprem` tag) and attaches derived standalone pull-only compose assets (`compose.yaml`, `compose.external-db.yaml`, `env.example`) to the Release. GHCR packages need a one-time public-visibility flip after first publish
+
+**Decision (2026-10-04) — Postgres-backed job queue; `worker` is a service:** → [ADR 0039](./adr/0039-postgres-job-queue.md). `jobs` table + one-statement `claim_next_job` (`UPDATE … FOR UPDATE SKIP LOCKED`, never SELECT-then-UPDATE); scheduler enqueues `hot_search` / `promote_signals` / `questions` instead of running pipelines; `python -m cmd.worker serve` reclaims → claims → dispatches → finishes (backoff retry, 15-min lease, graceful SIGTERM). Questions GET-miss / refresh now enqueue and still answer 202 — `run_id` is `null` until the worker creates `question_runs` on claim. Session turn, SSE bus, and turn registry stay in-process.
 
 **Decision (2026-10-04) — Preview payloads carry resolved source signals:** → [ADR 0038](./adr/0038-preview-source-signals.md). `PreviewUpdatedData`, `UpdateDraftResponse`, `PreviewMediaMutationResponse`, and `session.snapshot` emit `source_signals` (`{signal_id, source, title, url, excerpt}`, draft order, missing rows dropped); `signals.updated` stays ids-only. Preview pane renders a read-only Sources block; grounding itself is unchanged ([ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)).
 
@@ -130,7 +132,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 **Decision (2026-08-24) — Recommended questions worker graph + fill:** → [ADR 0018](./adr/0018-recommended-questions-worker-graph.md)
 
 - **Not the session graph** — dedicated worker LangGraph; must not `start` / Confirm / upsert org catalog. Clicking a card stays `sendMessage` (optional `source_question_id` handoff warms first-turn research)
-- **GET miss fills** — no row: start or join per-company run as a background task, answer **202 generating immediately** (`run_id` + `status`; no in-request wait; join = poll `question_runs` in PG, multi-worker safe); last run `failed` → 202 `status: failed` for a retry CTA. Expired cache stays 200 + `is_stale` (no auto-run, no landing refresh). **POST `…/recommended-questions/refresh`** is the empty-state retry after `failed` (and CLI `--force`); scheduler does routine replacement. GET 200 adds `run_status` (`idle` / `running` / `failed`). A `running` row with no live worker (uvicorn reload / crash) is **abandoned** instead of joined. Cache TTL (13h) outlives the 12h tick
+- **GET miss fills** — no row: join an in-flight run or enqueue a `questions` job (was: spawn a background task — amended by [ADR 0039](./adr/0039-postgres-job-queue.md); the worker creates `question_runs` on claim, so `run_id` is `null` until then), answer **202 generating immediately** (`status` + optional `run_id`; no in-request wait); last run `failed` → 202 `status: failed` for a retry CTA. Expired cache stays 200 + `is_stale` (no auto-run, no landing refresh). **POST `…/recommended-questions/refresh`** is the empty-state retry after `failed` (and CLI `--force`); scheduler does routine replacement. GET 200 adds `run_status` (`idle` / `running` / `failed`). A `running` row with no live worker (uvicorn reload / crash) is **abandoned** instead of joined. Cache TTL (13h) outlives the 12h tick
 - **Pipeline** — `ensure_signals` → `cheap_screen` → `shallow_research` → `filter` → `deep_research` → `product_match` (read-only) → `compose_questions` (voice + roast, real signal refs, text + trend-combo dedupe vs last N days). Timing corpus is **Trends + RSS only** (Tavily still persists for research, but is not next-run recency fuel). `cheap_screen` cluster-caps one topic per IP/entity and does **not** recency-top-up rejected citywide trends. An empty LLM `keep` (or zero keyword overlap) falls back to a cluster-capped corpus slice (`screen_empty_fallback`) instead of wiping the shortlist. `filter` drops no-bridge Latin-IP / celebrity-gossip titles unless the fingerprint matches. Cold-start ladder unchanged (fingerprint → `profile.inferred_category` → diversity fallback, also cluster-capped). **Compose voice ≠ topic gravity** — civic/weather signals stay; questions stay 輕鬆小編 (scene + 出 post), not 時事／政策評論. `deep_research` scene/emotion/products are passed into compose.
 - **Trace** — `question_runs` (status `running|succeeded|failed`) + `question_node_steps`; do not overload Session Trace; admin run list aggregates per-run tokens/cost from `llm_call_records`
 
@@ -330,7 +332,8 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | Default personas | ✅ | Seeded in `entities` (type=persona) on first question run |
 | Signals API | ✅ | `GET /api/signals/top` |
 | Questions API | ✅ | `GET /api/companies/{id}/recommended-questions` (200 cache / 202 fill); `POST …/refresh` |
-| Scheduler | ✅ | `python -m cmd.scheduler` |
+| Scheduler | ✅ | `python -m cmd.scheduler` — enqueue-only; jobs land in `jobs` ([ADR 0039](./adr/0039-postgres-job-queue.md)) |
+| Worker service | ✅ | `python -m cmd.worker serve` — claim → dispatch → finish on the `jobs` queue |
 | CLI signals | ✅ | `python -m cmd.worker signals` |
 
 ### Phase 2 — LangGraph Session + API · **soft-complete (~65%)**
@@ -410,6 +413,7 @@ API docs: http://localhost:8000/docs
 ### Workers (`cmd/worker`, `cmd/scheduler`)
 
 ```bash
+python -m cmd.worker serve         # Job-queue service: claim → dispatch → finish (ADR 0039)
 python -m cmd.worker hot-search    # Google Trends HK → PG
 python -m cmd.worker signals       # CLI: print top HK signals
 python -m cmd.worker questions     # Generate cached questions per company
@@ -418,7 +422,7 @@ python -m cmd.worker all           # Full pipeline
 python -m cmd.worker reset-signals              # Wipe signal data (destructive)
 python -m cmd.worker reset-signals --reingest   # Wipe + hot-search → promote → questions
 python -m cmd.worker set-platform-role --email you@x.com --level superadmin   # Grant platform level (ADR 0005)
-python -m cmd.scheduler --once     # One scheduler cycle
+python -m cmd.scheduler --once     # Enqueue one scheduler cycle
 ```
 
 Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; without keys, session/question code uses heuristic/template fallbacks.
@@ -436,6 +440,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `recommended_questions` | 13h cached landing question JSON |
 | `question_runs` | Worker graph run status (ADR 0018) |
 | `question_node_steps` | Per-node I/O for question runs |
+| `jobs` | Postgres job queue: `kind` + `dedupe_key` + lease fields ([ADR 0039](./adr/0039-postgres-job-queue.md)) |
 | `sessions` | Chat session (mode, user_id, company_id, title, pinned, state JSONB) |
 | `session_messages` | Chat log (user always; assistant for chat / ack / LLM errors — not every Agent node) |
 | `preview_drafts` | Revision chain + approval_token + `media_ids` |

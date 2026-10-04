@@ -2,7 +2,7 @@ import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import Text, cast, delete, desc, exists, func, or_, select
+from sqlalchemy import Text, cast, delete, desc, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,7 @@ from internal.memory.models import (
     Edge,
     Entity,
     InstanceSettings,
+    Job,
     MigrationDoneKey,
     OrganizationMember,
     OrgInvite,
@@ -1997,3 +1998,111 @@ async def list_all_media_refs(db: AsyncSession) -> list[str]:
         )
     ).all()
     return [u for u in (*images, *drafts) if u]
+
+
+# --- Job queue (ADR 0039) ---------------------------------------------------
+
+_JOB_RETRY_BASE_SECONDS = 30
+_JOB_RETRY_MAX_SECONDS = 1800
+
+
+async def enqueue_job(
+    db: AsyncSession,
+    *,
+    kind: str,
+    payload: dict | None = None,
+    dedupe_key: str | None = None,
+    run_after: datetime | None = None,
+    max_attempts: int = 3,
+) -> Job | None:
+    """Insert a job; ``dedupe_key`` makes enqueue idempotent.
+
+    Returns the new row, or ``None`` when a row with the same ``dedupe_key``
+    already exists — the key is a one-shot scope, so recurring jobs include a
+    time bucket (e.g. ``hot_search:{hour}``).
+    """
+    stmt = (
+        insert(Job)
+        .values(
+            kind=kind,
+            payload=payload or {},
+            dedupe_key=dedupe_key,
+            run_after=run_after or datetime.now(UTC),
+            max_attempts=max_attempts,
+        )
+        .on_conflict_do_nothing(index_elements=["dedupe_key"])
+        .returning(Job)
+    )
+    return await db.scalar(stmt)
+
+
+async def claim_next_job(db: AsyncSession, *, worker_id: str) -> Job | None:
+    """Atomically claim the oldest due ``pending`` job (ADR 0039).
+
+    One UPDATE … RETURNING whose inner SELECT is FOR UPDATE SKIP LOCKED —
+    concurrent workers can never claim the same row. Never split this into a
+    SELECT + UPDATE pair: that drops the concurrency guarantee. Caller commits.
+    """
+    due = (
+        select(Job.id)
+        .where(Job.status == "pending", Job.run_after <= func.now())
+        .order_by(Job.run_after, Job.created_at)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    stmt = (
+        update(Job)
+        .where(Job.id.in_(due))
+        .values(
+            status="running",
+            locked_at=func.now(),
+            locked_by=worker_id,
+            attempts=Job.attempts + 1,
+        )
+        .returning(Job)
+    )
+    return await db.scalar(stmt)
+
+
+async def finish_job(
+    db: AsyncSession,
+    job: Job,
+    *,
+    ok: bool,
+    error: str | None = None,
+) -> Job:
+    """Stamp the outcome. Failures retry with exponential backoff in
+    ``run_after`` while ``attempts < max_attempts``, else the job is ``failed``."""
+    if ok:
+        job.status = "succeeded"
+        job.error = None
+    elif job.attempts < job.max_attempts:
+        job.status = "pending"
+        delay = min(
+            _JOB_RETRY_BASE_SECONDS * 2 ** (job.attempts - 1),
+            _JOB_RETRY_MAX_SECONDS,
+        )
+        job.run_after = datetime.now(UTC) + timedelta(seconds=delay)
+        job.error = (error or "")[:500] or None
+        job.locked_at = None
+        job.locked_by = None
+    else:
+        job.status = "failed"
+        job.error = (error or "")[:500] or None
+    await db.flush()
+    return job
+
+
+async def reclaim_stale_jobs(db: AsyncSession, *, older_than_minutes: int = 15) -> int:
+    """Return ``running`` jobs whose lease expired to ``pending``.
+
+    A crashed worker must not wedge the queue: anything still ``running``
+    with a ``locked_at`` older than the lease is claimable again.
+    """
+    cutoff = datetime.now(UTC) - timedelta(minutes=older_than_minutes)
+    result = await db.execute(
+        update(Job)
+        .where(Job.status == "running", Job.locked_at < cutoff)
+        .values(status="pending", locked_at=None, locked_by=None)
+    )
+    return result.rowcount or 0
