@@ -174,6 +174,7 @@ Adding UI: check `components/ui` first; if missing, `pnpm dlx shadcn@latest add 
 - Prefer standard `sm` / `md` / `lg` for micro chrome only (no one-off `min-[…px]:`)
 - Session workspace: **content-based** `split` | `paged` in the shell (`session-layout.ts` + `useContainerWidth`) — do not gate panes on viewport `lg` or device names
 - Leaf widgets take a `paged` / mode prop from the shell; they do not decide layout mode themselves
+- **zh-HK copy split:** titles / labels / buttons stay all-Chinese — product & console names exempt (Instagram, S3, Meta, OAuth, API key, Token, tier names, Meta dashboard field names). Descriptions, hints, and running sentences may code-mix; HK loanwords (session, provider, orphan, prompt, load) are voice, not leftovers. Generic nouns inside a title still translate (計劃, not Plan).
 
 ## When reviewing changes
 
