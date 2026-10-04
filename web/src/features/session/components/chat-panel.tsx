@@ -44,6 +44,7 @@ import {
   agentNodeFallbackKey,
   agentNodeLabelKey,
   agentTrailHeader,
+  imagePlanSummary,
   isConfirmSuccessStatus,
   lastAgentActionNode,
   MAX_QUEUED_SESSION_MESSAGES,
@@ -547,6 +548,7 @@ export function ChatPanel() {
       sending={sending || stopping}
       onResume={() => void onResumeImageGen()}
       onDiscard={() => void onStopTurn()}
+      plan={draft ? imagePlanSummary(draft) : null}
     />
   );
 

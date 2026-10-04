@@ -160,6 +160,7 @@
         "confirm": "Generate image",
         "working": "Generating…",
         "discard": "Discard",
+        "plan": "Image plan",
         "formatLabel": "Image format",
         "formatSingle": "Single image",
         "formatComic": "4-panel comic"

@@ -46,6 +46,23 @@ describe("InterruptCard", () => {
     expect(onResume).toHaveBeenCalledWith();
   });
 
+  it("shows the pending image plan collapsed at the approve point", () => {
+    render(
+      <InterruptCard
+        sending={false}
+        onResume={vi.fn()}
+        onDiscard={vi.fn()}
+        plan={{ format: "comic_4panel", prompt: "draw the stall", beats: ["beat 1", "beat 2"] }}
+      />,
+    );
+    const summaryRow = screen.getByText("chat.agent.interrupt.plan");
+    expect(summaryRow.closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("chat.agent.interrupt.formatComic")).toBeInTheDocument();
+    expect(screen.getByText("draw the stall")).toBeInTheDocument();
+    expect(screen.getByText("beat 1")).toBeInTheDocument();
+    expect(screen.getByText("beat 2")).toBeInTheDocument();
+  });
+
   it("discards the pending version", async () => {
     const onDiscard = vi.fn();
     const user = userEvent.setup();

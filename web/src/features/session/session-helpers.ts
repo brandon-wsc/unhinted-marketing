@@ -409,6 +409,41 @@ export function mergePreviewDraft(
   };
 }
 
+export function sortedMedia(draft: PreviewDraft): PreviewMediaItem[] {
+  return [...(draft.media ?? [])].sort((a, b) => a.seq - b.seq);
+}
+
+export function primaryMediaItem(draft: PreviewDraft): PreviewMediaItem | null {
+  const media = sortedMedia(draft);
+  if (media.length === 0) return null;
+  return media.find((item) => item.role === "primary") ?? media[0];
+}
+
+export type ImagePlan = {
+  format: ImageFormat | null;
+  prompt: string;
+  beats: string[];
+};
+
+/** Format + prompt + panel beats of the primary media — what the image park approves. */
+export function imagePlanSummary(draft: PreviewDraft): ImagePlan {
+  const primary = primaryMediaItem(draft);
+  const plan = primary?.plan ?? {};
+  const fromPlan = typeof plan.format === "string" ? plan.format : "";
+  const format = parseImageFormat(primary?.format || fromPlan);
+  const prompt = typeof plan.prompt === "string" ? plan.prompt.trim() : "";
+  const beats: string[] = [];
+  if (Array.isArray(plan.panels)) {
+    for (const panel of plan.panels) {
+      if (panel && typeof panel === "object" && "beat" in panel) {
+        const beat = String((panel as { beat?: unknown }).beat ?? "").trim();
+        if (beat) beats.push(beat);
+      }
+    }
+  }
+  return { format, prompt, beats };
+}
+
 export function parseMediaItems(raw: unknown): PreviewMediaItem[] | null {
   if (!Array.isArray(raw)) return null;
   const out: PreviewMediaItem[] = [];
