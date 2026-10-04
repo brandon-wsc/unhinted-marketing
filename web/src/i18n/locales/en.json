@@ -511,8 +511,8 @@
       "connectingBody": "Complete authorization in the new window. This panel updates automatically; cancel if it stays stuck.",
       "oauthFailed": "Connection failed. Please try again.",
       "oauthAborted": "Authorization was cancelled or timed out. Please reconnect.",
-      "oauthNotConfigured": "Instagram Login isn't configured yet — a platform admin needs to add the Meta app credentials under System → Instance.",
-      "oauthModeUnavailable": "The connect flow doesn't match the configured mode — check the OAuth mode under System → Instance.",
+      "oauthNotConfigured": "Instagram Login isn't configured yet — a platform admin needs to add the Meta app credentials under Platform → Instance.",
+      "oauthModeUnavailable": "The connect flow doesn't match the configured mode — check the OAuth mode under Platform → Instance.",
       "oauthNotProfessional": "This Instagram account isn't a professional account (Business or Creator). Convert it in Instagram before connecting.",
       "oauthMissingPublish": "Authorized, but posting permission wasn't granted. Reconnect and allow instagram_business_content_publish.",
       "oauthCsrfMismatch": "The connect window didn't match this browser session. Try Connect again.",
@@ -520,14 +520,14 @@
       "needsAppTitle": "Set up your Meta app first",
       "needsAppStep1": "Create an app at Meta for Developers and add the Instagram use case (API setup with Instagram login).",
       "needsAppStep2": "In the app's Instagram settings, paste the redirect URI below into Valid OAuth Redirect URIs, and add your Instagram professional account to the app.",
-      "needsAppStep3": "Enter the Instagram App ID and Secret under System → Instance, then come back and connect.",
+      "needsAppStep3": "Enter the Instagram App ID and Secret under Platform → Instance, then come back and connect.",
       "needsAppRedirectLabel": "Valid OAuth Redirect URIs",
       "needsAppDeauthorizeLabel": "Deauthorize Callback URL",
       "needsAppDataDeletionLabel": "Data Deletion Request URL",
       "needsAppLiveNote": "Going Live also needs the two callback URLs above and a Privacy Policy URL (App Settings → Basic). Until the app is Live, only Instagram accounts added to it can connect.",
       "standardAccessNote": "Connecting an Instagram account you own or manage only needs Standard Access — no Meta App Review or Business Verification required.",
-      "openInstanceSettings": "Open System → Instance",
-      "needsAppViewerNote": "A platform admin needs to add the Meta app credentials under System → Instance first.",
+      "openInstanceSettings": "Open Platform → Instance",
+      "needsAppViewerNote": "A platform admin needs to add the Meta app credentials under Platform → Instance first.",
       "readyCaption": "Connects through this instance's own Meta app.",
       "readyCaptionRelay": "Connects via the vendor's hosted relay — tokens transit vendor infrastructure (transit-only, not stored).",
       "manualToggle": "Advanced: paste a token manually",
@@ -691,7 +691,7 @@
       "itemInstance": "Site URL & invite email",
       "itemLlm": "LLM provider",
       "cta": "Start setup",
-      "footer": "You can change all of this later under System → Instance."
+      "footer": "You can change all of this later under Platform → Instance."
     },
     "account": {
       "title": "Create administrator account",
@@ -711,7 +711,7 @@
       "smtpPassword": "Password",
       "smtpTls": "Enable TLS (STARTTLS)",
       "emailFrom": "Sender address",
-      "linkNote": "Invites are shared as links you copy — no email is sent. You can configure SMTP later in System → Instance."
+      "linkNote": "Invites are shared as links you copy — no email is sent. You can configure SMTP later in Platform → Instance."
     },
     "llm": {
       "title": "Connect an AI model",
@@ -730,7 +730,7 @@
       "nextTitle": "Next steps",
       "nextModels": "Connect or adjust models — Settings → API Keys",
       "nextMembers": "Invite members — Settings → Members",
-      "nextInstance": "Email and site URL — System → Instance",
+      "nextInstance": "Email and site URL — Platform → Instance",
       "cta": "Start using"
     },
     "next": "Continue",
@@ -738,11 +738,11 @@
     "submitting": "Saving…"
   },
   "system": {
-    "menuEntry": "System",
-    "title": "System",
+    "menuEntry": "Platform",
+    "title": "Platform",
     "forbidden": {
       "title": "No access",
-      "body": "System tools require elevated platform access.",
+      "body": "Platform tools require elevated access.",
       "back": "Back to home"
     },
     "instance": {

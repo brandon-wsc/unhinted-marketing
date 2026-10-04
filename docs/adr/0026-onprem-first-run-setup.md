@@ -90,7 +90,7 @@ via env" hints.
   `SUPERADMIN` and seeds the first org — no CLI promotion needed.
 - Invite links, Instagram Login callback, Instagram Confirm image fetch, OAuth
   success landing, and invite emails all read the DB-backed instance URL —
-  changing it in **System → Instance** takes effect within the snapshot TTL,
+  changing it in **Platform → Instance** takes effect within the snapshot TTL,
   no restart. Meta's Valid OAuth Redirect URI must match
   `{web_base_url}/api/social/oauth/callback` after a URL change.
 - Anyone hitting an on-prem instance post-setup cannot self-register; access

@@ -55,7 +55,7 @@ commit (SPA + API + migrate). A cron entry on the dedicated clone:
 **Env.** All-in-one defaults `WEB_BASE_URL` and `CORS_ORIGINS` to
 `http://localhost:8484`. Set both in `deploy/.env` when the browser origin is
 anything else (another port, a LAN host, a public name). Those values seed
-`instance_settings` on first boot only — afterwards edit System → Instance
+`instance_settings` on first boot only — afterwards edit Platform → Instance
 (ADR 0026). A tunnel is only for Meta: Instagram Login and real publish need
 a public HTTPS origin Meta can call. A localhost demo does not need one.
 
@@ -193,7 +193,7 @@ losing `BYOK_ENCRYPTION_KEY`, ADR 0020).
   public HTTPS `WEB_BASE_URL` plus `META_*` (ADR 0022). The app process
   default used by dev and CI stays `stub`.
 - **Media** — local disk under `appdata` by default (ADR 0024); optional S3
-  env seeds the first `storage_configs` row, then System → Storage in the app
+  env seeds the first `storage_configs` row, then Settings → Storage in the app
   is the source of truth (ADR 0025).
 - The root `docker-compose.yml` is the dev database only (db + adminer) — it is
   unrelated to these deployment packages.

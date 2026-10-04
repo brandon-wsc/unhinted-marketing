@@ -69,4 +69,4 @@ tags. Demo / local CD stays on `demo-sync.sh`.
   only required when Meta must reach the host (Instagram Login or real
   publish). Localhost demos keep the compose default `http://localhost:8484`.
 - Env `WEB_BASE_URL` seeds `instance_settings` on first boot only; afterwards
-  System → Instance wins (ADR 0026).
+  Platform → Instance wins (ADR 0026).
