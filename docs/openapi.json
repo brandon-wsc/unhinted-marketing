@@ -8283,6 +8283,13 @@
             "type": "boolean",
             "title": "Awaiting Image Ok",
             "default": false
+          },
+          "source_signals": {
+            "items": {
+              "$ref": "#/components/schemas/SourceSignal"
+            },
+            "type": "array",
+            "title": "Source Signals"
           }
         },
         "type": "object",
@@ -8294,7 +8301,8 @@
           "media",
           "platform",
           "mode",
-          "awaiting_image_ok"
+          "awaiting_image_ok",
+          "source_signals"
         ],
         "title": "PreviewMediaMutationResponse",
         "description": "Shared shape after plan edit / regen / add (new draft revision)."
@@ -8337,6 +8345,13 @@
             "maxLength": 40,
             "title": "Platform",
             "default": "instagram"
+          },
+          "source_signals": {
+            "items": {
+              "$ref": "#/components/schemas/SourceSignal"
+            },
+            "type": "array",
+            "title": "Source Signals"
           }
         },
         "type": "object",
@@ -8346,7 +8361,8 @@
           "image_url",
           "media",
           "copy",
-          "platform"
+          "platform",
+          "source_signals"
         ],
         "title": "PreviewUpdatedData",
         "description": "Payload for SSE / turn event `preview.updated`."
@@ -10230,6 +10246,54 @@
         "title": "SocialOAuthInfo",
         "description": "Current connection state for an org's Instagram account."
       },
+      "SourceSignal": {
+        "properties": {
+          "signal_id": {
+            "type": "string",
+            "title": "Signal Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "signal_id",
+          "source",
+          "title",
+          "url",
+          "excerpt"
+        ],
+        "title": "SourceSignal",
+        "description": "Resolved grounding signal on preview payloads (ADR 0038)."
+      },
       "StopSessionRequest": {
         "properties": {
           "mode": {
@@ -10944,6 +11008,13 @@
           "mode": {
             "type": "string",
             "title": "Mode"
+          },
+          "source_signals": {
+            "items": {
+              "$ref": "#/components/schemas/SourceSignal"
+            },
+            "type": "array",
+            "title": "Source Signals"
           }
         },
         "type": "object",
@@ -10954,7 +11025,8 @@
           "image_url",
           "media",
           "platform",
-          "mode"
+          "mode",
+          "source_signals"
         ],
         "title": "UpdateDraftResponse"
       },

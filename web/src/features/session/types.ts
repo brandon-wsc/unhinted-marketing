@@ -34,6 +34,7 @@ export type AudiencePersonaOption = components["schemas"]["AudiencePersonaOption
 // --- Generated from JSON Schema mirrors (schemas/ → docs/contracts) ---
 export type AgentProgress = import("./generated/agent-progress").AgentProgressData;
 export type PreviewDraft = import("./generated/preview-updated").PreviewUpdatedData;
+export type SourceSignal = import("./generated/preview-updated").SourceSignal;
 export type SessionBrief = import("./generated/session-brief").SessionBriefData;
 
 // --- FE-local / not-yet-contracted ---

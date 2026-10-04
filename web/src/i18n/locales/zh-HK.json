@@ -313,6 +313,9 @@
       "formatComic": "四格漫畫",
       "generatingTitle": "出緊圖"
     },
+    "sources": {
+      "title": "出處"
+    },
     "error": {
       "saveFailed": "草稿儲存唔到喎，再試一次。",
       "confirmFailed": "確認唔到喎，再試一次。",

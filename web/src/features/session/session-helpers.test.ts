@@ -521,6 +521,7 @@ describe("mergePreviewDraft", () => {
     revision: 1,
     approval_token: "tok",
     platform: "instagram",
+    source_signals: [],
   };
 
   it("returns prev when incomplete and no prior draft", () => {
@@ -555,6 +556,7 @@ describe("mergePreviewDraft", () => {
       revision: 2,
       approval_token: "t1",
       platform: "instagram",
+      source_signals: [],
     });
   });
 

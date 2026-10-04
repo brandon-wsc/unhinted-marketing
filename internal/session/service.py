@@ -39,7 +39,12 @@ from internal.session.turn_registry import (
     TurnInFlightError,
     session_turn_registry,
 )
-from schemas.contracts import DraftCopy, PreviewMediaItem, PreviewUpdatedData
+from schemas.contracts import (
+    DraftCopy,
+    PreviewMediaItem,
+    PreviewUpdatedData,
+    SourceSignal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +140,35 @@ def normalize_draft_copy(copy: dict[str, Any] | None) -> dict[str, Any]:
     ).model_dump()
 
 
+async def resolve_source_signals(
+    db: AsyncSession, signal_ids: list[Any]
+) -> list[dict[str, Any]]:
+    """Resolve draft grounding ids to display rows, preserving draft order (ADR 0038).
+
+    Best-effort: missing rows are dropped, a failed lookup yields [] — never a
+    failed preview payload.
+    """
+    ids = [str(s) for s in (signal_ids or []) if s]
+    if not ids:
+        return []
+    try:
+        rows = await repos.get_signals_by_ids(db, ids)
+    except Exception:
+        logger.debug("source signal lookup failed", exc_info=True)
+        return []
+    by_id = {r.signal_id: r for r in rows}
+    return [
+        {
+            "signal_id": row.signal_id,
+            "source": row.source,
+            "title": row.title,
+            "url": row.url,
+            "excerpt": row.excerpt,
+        }
+        for row in (by_id[i] for i in ids if i in by_id)
+    ]
+
+
 def preview_updated_payload(
     *,
     revision: int,
@@ -143,6 +177,7 @@ def preview_updated_payload(
     copy: dict[str, Any] | None,
     platform: str | None = None,
     media: list[dict[str, Any]] | None = None,
+    source_signals: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     items = [PreviewMediaItem.model_validate(m) for m in (media or [])]
     primary = resolve_stored_url(image_url)
@@ -155,6 +190,9 @@ def preview_updated_payload(
         media=items,
         draft_copy=DraftCopy.model_validate(normalize_draft_copy(copy)),
         platform=platform or DEFAULT_PLATFORM,
+        source_signals=[
+            SourceSignal.model_validate(s) for s in (source_signals or [])
+        ],
     ).model_dump(by_alias=True)
 
 
@@ -252,6 +290,9 @@ async def latest_preview_payload(
             for item in loaded
             if isinstance(item, dict) and isinstance(item.get("id"), str)
         ]
+    source_signals = await resolve_source_signals(
+        db, list(getattr(draft, "source_signal_ids", None) or [])
+    )
     return preview_updated_payload(
         revision=revision,
         approval_token=token,
@@ -259,6 +300,7 @@ async def latest_preview_payload(
         copy=copy,
         platform=platform,
         media=media,
+        source_signals=source_signals,
     )
 
 
@@ -948,6 +990,7 @@ async def _persist_after_invoke(
                         copy=staged_preview["copy"],
                         platform=staged_preview.get("platform"),
                         media=staged_preview.get("media") or [],
+                        source_signals=staged_preview.get("source_signals"),
                     ),
                 }
             )
@@ -1011,6 +1054,9 @@ async def _persist_after_invoke(
                             copy=draft_copy,
                             platform=platform,
                             media=media,
+                            source_signals=await resolve_source_signals(
+                                db, list(values.get("source_signal_ids") or [])
+                            ),
                         ),
                     }
                 )
@@ -1797,6 +1843,7 @@ async def _bump_preview_revision(
             exc_info=True,
         )
 
+    resolved_signals = await resolve_source_signals(db, source_signal_ids)
     events = [
         {"type": "draft.copy_updated", "data": draft_copy},
         {
@@ -1808,6 +1855,7 @@ async def _bump_preview_revision(
                 copy=draft_copy,
                 platform=platform,
                 media=media,
+                source_signals=resolved_signals,
             ),
         },
     ]
@@ -1821,6 +1869,7 @@ async def _bump_preview_revision(
         "media": media,
         "platform": platform,
         "mode": MODE_PREVIEW,
+        "source_signals": resolved_signals,
         "events": events,
     }
 
@@ -2033,6 +2082,7 @@ async def _stage_pending_image_draft(
         "media": media,
         "platform": platform,
         "mode": MODE_PREVIEW,
+        "source_signals": await resolve_source_signals(db, signal_ids),
     }
 
 
@@ -2100,6 +2150,7 @@ async def update_session_image_plan(
                     copy=staged["copy"],
                     platform=staged.get("platform"),
                     media=staged.get("media") or [],
+                    source_signals=staged.get("source_signals"),
                 ),
             },
             {"type": "draft.awaiting_image_ok", "data": {"awaiting": True}},

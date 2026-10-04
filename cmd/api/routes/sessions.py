@@ -44,6 +44,7 @@ from internal.session.service import (
     normalize_draft_copy,
     regen_session_image,
     remove_session_image,
+    resolve_source_signals,
     resume_image_turn,
     run_session_turn,
     stop_session_turn,
@@ -57,7 +58,13 @@ from internal.tools.publish import (
     PublishPreconditionError,
     publish_social_post,
 )
-from schemas.contracts import DraftCopy, PreviewMediaItem, PreviewUpdatedData, SessionBriefData
+from schemas.contracts import (
+    DraftCopy,
+    PreviewMediaItem,
+    PreviewUpdatedData,
+    SessionBriefData,
+    SourceSignal,
+)
 from schemas.session import (
     AddSessionImageRequest,
     ChooseAngleRequest,
@@ -718,6 +725,13 @@ async def session_events(
             "copy": copy,
             "platform": platform,
             "interrupted": interrupted,
+            # ADR 0038: resolved grounding for the Sources block (draft row wins).
+            "source_signals": await resolve_source_signals(
+                db,
+                list(draft.source_signal_ids or [])
+                if draft
+                else list(state.get("source_signal_ids") or []),
+            ),
         }
         receipt_row = await repos.get_latest_publish_receipt(db, session.id)
         if receipt_row:
@@ -774,6 +788,9 @@ async def update_draft(
         media=[PreviewMediaItem.model_validate(m) for m in (result.get("media") or [])],
         platform=str(result["platform"]),
         mode=str(result["mode"]),
+        source_signals=[
+            SourceSignal.model_validate(s) for s in (result.get("source_signals") or [])
+        ],
     )
 
 
@@ -787,6 +804,9 @@ def _media_mutation_response(result: dict) -> PreviewMediaMutationResponse:
         platform=str(result["platform"]),
         mode=str(result["mode"]),
         awaiting_image_ok=bool(result.get("awaiting_image_ok")),
+        source_signals=[
+            SourceSignal.model_validate(s) for s in (result.get("source_signals") or [])
+        ],
     )
 
 

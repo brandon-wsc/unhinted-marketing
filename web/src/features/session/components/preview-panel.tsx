@@ -22,6 +22,7 @@ import type {
   DraftCopy,
   PreviewDraft,
   PreviewMediaItem,
+  SourceSignal,
 } from "@/features/session/types";
 
 type PreviewPhase = "accepted" | "pending" | "generating";
@@ -89,7 +90,11 @@ export function PreviewPanel({
 
   // Server wins on SSE / AI revise — reset local dirty state.
   useEffect(() => {
-    setLocal(toEditableCopy(draft));
+    setLocal({
+      caption: draft.copy.caption,
+      hashtags: draft.copy.hashtags,
+      cta: draft.copy.cta,
+    });
   }, [
     draft.revision,
     draft.approval_token,
@@ -234,6 +239,7 @@ export function PreviewPanel({
             }
           />
           {phase !== "accepted" && <ImagePlanSummary draft={draft} />}
+          <SourceSignalsList signals={draft.source_signals} />
         </div>
       </div>
 
@@ -405,6 +411,38 @@ function planSummary(draft: PreviewDraft): {
     }
   }
   return { format, prompt, beats };
+}
+
+function SourceSignalsList({ signals }: { signals: SourceSignal[] | undefined }) {
+  const { t } = useTranslation();
+  if (!signals?.length) return null;
+
+  return (
+    <div className="mx-auto w-full max-w-[340px] rounded-lg border border-border bg-card px-3 py-2.5">
+      <p className="text-xs font-medium text-muted-foreground">{t("preview.sources.title")}</p>
+      <ul className="mt-1.5 space-y-1">
+        {signals.map((signal) => (
+          <li key={signal.signal_id} className="text-xs leading-relaxed">
+            {signal.url ? (
+              <a
+                href={signal.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-voice underline-offset-2 hover:underline"
+              >
+                {signal.title}
+              </a>
+            ) : (
+              <span>{signal.title}</span>
+            )}
+            {signal.source ? (
+              <span className="text-muted-foreground"> · {signal.source}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function ImagePlanSummary({ draft }: { draft: PreviewDraft }) {

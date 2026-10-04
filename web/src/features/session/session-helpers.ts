@@ -11,6 +11,7 @@ import type {
   QueuedChatMessage,
   SessionBrief,
   SessionListItem,
+  SourceSignal,
 } from "./types";
 
 export function asStringList(value: unknown): string[] {
@@ -44,6 +45,24 @@ export function parseDraftCopy(data: unknown): DraftCopy | null {
   return { caption, hashtags, cta };
 }
 
+export function parseSourceSignals(raw: unknown): SourceSignal[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: SourceSignal[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.signal_id !== "string" || typeof rec.title !== "string") continue;
+    out.push({
+      signal_id: rec.signal_id,
+      source: typeof rec.source === "string" ? rec.source : "",
+      title: rec.title,
+      url: typeof rec.url === "string" ? rec.url : null,
+      excerpt: typeof rec.excerpt === "string" ? rec.excerpt : null,
+    });
+  }
+  return out;
+}
+
 /** Full preview from a Stop / `turn.cancelled` payload. Null when the shape is incomplete. */
 export function previewDraftFromPayload(data: unknown): PreviewDraft | null {
   if (!data || typeof data !== "object") return null;
@@ -59,6 +78,7 @@ export function previewDraftFromPayload(data: unknown): PreviewDraft | null {
     revision,
     approval_token: approvalToken,
     platform: typeof raw.platform === "string" && raw.platform ? raw.platform : "instagram",
+    source_signals: parseSourceSignals(raw.source_signals) ?? [],
   };
 }
 
@@ -350,6 +370,7 @@ export function mergePreviewDraft(
     revision?: number | null;
     approval_token?: string | null;
     platform?: string | null;
+    source_signals?: SourceSignal[] | null;
   },
 ): PreviewDraft | null {
   const copy = patch.copy ?? prev?.copy ?? null;
@@ -360,6 +381,10 @@ export function mergePreviewDraft(
   const revision = typeof patch.revision === "number" ? patch.revision : (prev?.revision ?? null);
   const media =
     patch.media !== undefined && patch.media !== null ? patch.media : (prev?.media ?? []);
+  const source_signals =
+    patch.source_signals !== undefined && patch.source_signals !== null
+      ? patch.source_signals
+      : (prev?.source_signals ?? []);
   if (!copy || !approval_token || revision == null) {
     if (copy && prev) {
       return {
@@ -368,6 +393,7 @@ export function mergePreviewDraft(
         image_url: patch.image_url !== undefined ? patch.image_url : prev.image_url,
         media,
         platform: patch.platform || prev.platform,
+        source_signals,
       };
     }
     return prev;
@@ -379,6 +405,7 @@ export function mergePreviewDraft(
     revision,
     approval_token,
     platform: patch.platform || prev?.platform || "instagram",
+    source_signals,
   };
 }
 

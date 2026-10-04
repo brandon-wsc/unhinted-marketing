@@ -40,6 +40,7 @@ import {
   parseDraftCopy,
   parseImageFormat,
   parseMediaItems,
+  parseSourceSignals,
   previewAnchorFromActions,
   previewDraftFromPayload,
   readComposerDraft,
@@ -678,6 +679,7 @@ export function useSession(companyId: string | undefined) {
             revision: typeof data.revision === "number" ? data.revision : null,
             approval_token: typeof data.approval_token === "string" ? data.approval_token : null,
             platform: typeof data.platform === "string" ? data.platform : null,
+            source_signals: parseSourceSignals(data.source_signals),
           }),
         );
         return;
@@ -771,6 +773,7 @@ export function useSession(companyId: string | undefined) {
                     ? state.approval_token
                     : null,
               platform: typeof data.platform === "string" ? data.platform : null,
+              source_signals: parseSourceSignals(data.source_signals),
             }),
           );
           if (typeof data.mode === "string" && data.mode === "PREVIEW") {
@@ -1556,6 +1559,7 @@ export function useSession(companyId: string | undefined) {
               revision: res.revision,
               image_url: (previewEv?.data?.image_url as string | undefined) ?? prev?.image_url,
               media: parseMediaItems(previewEv?.data?.media) ?? prev?.media,
+              source_signals: parseSourceSignals(previewEv?.data?.source_signals),
             }),
           );
         }
@@ -1682,6 +1686,7 @@ export function useSession(companyId: string | undefined) {
             revision: res.revision ?? null,
             image_url: (previewEv?.data?.image_url as string | undefined) ?? prev?.image_url,
             media: parseMediaItems(previewEv?.data?.media) ?? prev?.media,
+            source_signals: parseSourceSignals(previewEv?.data?.source_signals),
           }),
         );
       }
@@ -1848,8 +1853,13 @@ export function useSession(companyId: string | undefined) {
         revision: res.revision,
         approval_token: res.approval_token,
         platform: res.platform,
+        source_signals: res.source_signals ?? [],
       };
-      setDraft(next);
+      setDraft((prev) => ({
+        ...next,
+        // Media mutations keep the same grounding; prefer the server's echo.
+        source_signals: res.source_signals ?? prev?.source_signals ?? [],
+      }));
       setMode(res.mode);
       return next;
     },

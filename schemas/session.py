@@ -10,6 +10,7 @@ from schemas.contracts import (
     PreviewMediaItem,
     PreviewUpdatedData,
     SessionBriefData,
+    SourceSignal,
 )
 
 
@@ -217,6 +218,7 @@ class UpdateDraftResponse(BaseModel):
     media: list[PreviewMediaItem] = Field(default_factory=list)
     platform: str
     mode: str
+    source_signals: list[SourceSignal] = Field(default_factory=list)
 
 
 class SessionMediaListResponse(BaseModel):
@@ -247,6 +249,7 @@ class PreviewMediaMutationResponse(BaseModel):
     platform: str
     mode: str
     awaiting_image_ok: bool = False
+    source_signals: list[SourceSignal] = Field(default_factory=list)
 
 
 class SessionEvent(BaseModel):

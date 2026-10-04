@@ -36,6 +36,18 @@ class PreviewMediaItem(BaseModel):
     status: str = "ready"
 
 
+class SourceSignal(BaseModel):
+    """Resolved grounding signal on preview payloads (ADR 0038)."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    signal_id: str
+    source: str
+    title: str
+    url: str | None = None
+    excerpt: str | None = None
+
+
 class PreviewUpdatedData(BaseModel):
     """Payload for SSE / turn event `preview.updated`."""
 
@@ -50,6 +62,8 @@ class PreviewUpdatedData(BaseModel):
     # JSON key stays `copy` (FE / ADR); Python name avoids shadowing BaseModel.copy
     draft_copy: DraftCopy = Field(default_factory=DraftCopy, alias="copy")
     platform: str = Field(default="instagram", max_length=40)
+    # Resolved grounding signals in draft order (ADR 0038); ids stay on the row.
+    source_signals: list[SourceSignal] = Field(default_factory=list)
 
 
 class SessionBriefData(BaseModel):

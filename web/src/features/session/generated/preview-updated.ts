@@ -17,6 +17,12 @@ export type Caption = string;
 export type Hashtags = string[];
 export type Cta = string;
 export type Platform = string;
+export type SignalId = string;
+export type Source = string;
+export type Title = string;
+export type Url1 = string | null;
+export type Excerpt = string | null;
+export type SourceSignals = SourceSignal[];
 
 /**
  * Payload for SSE / turn event `preview.updated`.
@@ -28,6 +34,7 @@ export interface PreviewUpdatedData {
   media: Media;
   copy: DraftCopy;
   platform: Platform;
+  source_signals: SourceSignals;
 }
 /**
  * One append-only image version referenced by a draft (ADR 0008).
@@ -57,4 +64,17 @@ export interface DraftCopy {
   caption: Caption;
   hashtags: Hashtags;
   cta: Cta;
+}
+/**
+ * Resolved grounding signal on preview payloads (ADR 0038).
+ *
+ * This interface was referenced by `PreviewUpdatedData`'s JSON-Schema
+ * via the `definition` "SourceSignal".
+ */
+export interface SourceSignal {
+  signal_id: SignalId;
+  source: Source;
+  title: Title;
+  url: Url1;
+  excerpt: Excerpt;
 }
