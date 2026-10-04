@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
-from internal.memory.embeddings import cosine_similarity, embed_query
+from internal.memory.embeddings import embed_query
 from internal.memory.models import Product
 
 # Primary: top-1 score floor + margin vs #2 (COLLECT §5).
@@ -18,6 +20,8 @@ PRIMARY_MARGIN = 0.12
 # Tier C cosine floor (normalized MiniLM); below → ignore vector hit.
 VECTOR_MIN_SCORE = 0.42
 RRF_K = 60
+# Candidate pool pulled from pgvector for RRF fusion (final list is limit-sized).
+VECTOR_TOP_K = 20
 
 
 @dataclass(frozen=True)
@@ -187,23 +191,29 @@ def _lexical_hits(rows: list[Product], cleaned: list[str]) -> list[ProductHit]:
     return hits
 
 
-def _vector_hits(rows: list[Product], query_vec: list[float]) -> list[ProductHit]:
-    hits: list[ProductHit] = []
-    for row in rows:
-        emb = row.embedding
-        if emb is None:
+def _lexical_where(cleaned: list[str]):
+    """SQL superset of the ``_lexical_hits`` positive conditions.
+
+    Every clause that can raise a row's score above 0 is a substring test in
+    either direction (query in column, or column in query) — expressed here as
+    ``strpos`` on lowercased text so Postgres narrows the candidate set.
+    Scoring itself still happens in Python, so hit kinds/scores are unchanged.
+    """
+    conds = []
+    for q in cleaned:
+        qn = _norm(q)
+        if not qn:
             continue
-        # asyncpg may return ndarray
-        if hasattr(emb, "tolist"):
-            emb = emb.tolist()
-        if not isinstance(emb, list) or len(emb) != len(query_vec):
-            continue
-        sim = cosine_similarity(query_vec, [float(x) for x in emb])
-        if sim < VECTOR_MIN_SCORE:
-            continue
-        hits.append(ProductHit(product=row, score=float(sim), match_kind="vector"))
-    hits.sort(key=lambda h: (-h.score, 0 if h.product.owner_scope == "org" else 1))
-    return hits
+        conds.append(
+            or_(
+                func.strpos(func.lower(Product.sku), qn) > 0,
+                func.strpos(qn, func.lower(Product.sku)) > 0,
+                func.strpos(func.lower(Product.name), qn) > 0,
+                func.strpos(qn, func.lower(Product.name)) > 0,
+                func.strpos(func.lower(Product.search_document), qn) > 0,
+            )
+        )
+    return or_(*conds) if conds else None
 
 
 def _member_scope_filter(company_id: uuid.UUID, user_id: uuid.UUID):
@@ -231,18 +241,30 @@ async def search_products_for_member(
         return []
 
     # Always filter company_id in SQL — never global vector top-K then filter (COLLECT §6).
-    base = select(Product).where(*_member_scope_filter(company_id, user_id))
-    rows = list((await db.scalars(base)).all())
-    if not rows:
-        return []
+    scope = _member_scope_filter(company_id, user_id)
 
-    lexical = _lexical_hits(rows, cleaned)
+    lexical: list[ProductHit] = []
+    lexical_where = _lexical_where(cleaned)
+    if lexical_where is not None:
+        stmt = select(Product).options(defer(Product.embedding)).where(*scope).where(lexical_where)
+        lexical = _lexical_hits(list((await db.scalars(stmt)).all()), cleaned)
 
-    query_text = " ".join(cleaned)
-    query_vec = embed_query(query_text)
+    # Tier C runs in Postgres via pgvector <=> — no row scan in Python.
+    query_vec = await asyncio.to_thread(embed_query, " ".join(cleaned))
     vector: list[ProductHit] = []
     if query_vec is not None:
-        vector = _vector_hits(rows, query_vec)
+        dist = Product.embedding.cosine_distance(query_vec).label("cosine_dist")
+        stmt = (
+            select(Product, dist)
+            .options(defer(Product.embedding))
+            .where(*scope)
+            .where(Product.embedding.isnot(None))
+            .where(dist <= 1.0 - VECTOR_MIN_SCORE)
+            .order_by(dist)
+            .limit(VECTOR_TOP_K)
+        )
+        for product, d in (await db.execute(stmt)).all():
+            vector.append(ProductHit(product=product, score=float(1.0 - d), match_kind="vector"))
 
     merged = merge_lexical_and_vector(lexical, vector)
     return dedupe_org_wins(merged)[: max(1, limit)]

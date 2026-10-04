@@ -144,7 +144,7 @@ Extract + search flow detail: [SESSION.md](./SESSION.md). User import + retrieve
 | `products` | ✅ | Org / user catalog (`owner_scope`, SKU, `search_document`, `profile`, `embedding`) |
 | `entities` (`product`) | ❌ unused | Chose dedicated `products` table instead |
 | `edges` | ✅ | Graph links |
-| pgvector | ✅ products.embedding (K4) | Signals similarity still later |
+| pgvector | ✅ products.embedding (K4) — SQL `<=>` top-K + HNSW | Signals similarity still later |
 
 No second vector DB. No repo markdown bundle for tenant KB.
 
