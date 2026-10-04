@@ -27,6 +27,7 @@ from internal.memory.repos import (
     finish_question_run,
     get_active_question_run,
     get_company,
+    has_live_questions_job,
     list_personas,
     list_products,
     list_recent_question_history,
@@ -81,6 +82,11 @@ def _should_abandon(active: QuestionRun, trigger: str) -> bool:
 
     uvicorn --reload and crashes leave ``running`` rows with no task. POST refresh
     used to join those zombies, so the SPA polled old cache until it gave up.
+
+    ``_live_run_ids`` only sees this process's own executions — runs owned by a
+    ``cmd.worker serve`` process are invisible to it. Callers must gate this
+    check on ``has_live_questions_job`` so a live cross-process fill is joined,
+    not abandoned.
     """
     if active.id in _live_run_ids:
         return False
@@ -101,7 +107,13 @@ async def enqueue_or_join_run(
     run id yet; callers answer 202 and the SPA polls the GET.
     """
     active = await _sweep_stale_run(db, company_id)
-    if active is not None and _should_abandon(active, trigger):
+    if (
+        active is not None
+        and _should_abandon(active, trigger)
+        and not await has_live_questions_job(db, company_id=company_id)
+    ):
+        # Not in this process and no covering job — a real zombie (crashed
+        # executor), not a live fill running in a worker we cannot see.
         await finish_question_run(
             db, active, status="failed", error="abandoned: worker lost the run"
         )
@@ -128,14 +140,29 @@ async def enqueue_or_join_run(
 
 
 async def run_company_now(
-    company: Entity, *, trigger: str, jitter_seconds: int = 0
+    company: Entity,
+    *,
+    trigger: str,
+    jitter_seconds: int = 0,
+    serving_job_id: uuid.UUID | None = None,
 ) -> QuestionRun | None:
-    """Inline path for scheduler/CLI: dedupe, optional stagger, then execute."""
+    """Execute a fill inline: dedupe, optional stagger, then run the graph.
+
+    Called by ``cmd.worker serve`` (through ``generate_questions_for_company``)
+    and the ops CLI. ``serving_job_id`` is the ``jobs`` row being executed —
+    it must not count as the "live owner" covering a pre-existing run.
+    """
     if jitter_seconds > 0:
         await asyncio.sleep(jitter_seconds)
     async with SessionLocal() as db:
         active = await _sweep_stale_run(db, company.id)
-        if active is not None and _should_abandon(active, trigger):
+        if (
+            active is not None
+            and _should_abandon(active, trigger)
+            and not await has_live_questions_job(
+                db, company_id=company.id, exclude_job_id=serving_job_id
+            )
+        ):
             await finish_question_run(
                 db, active, status="failed", error="abandoned: worker lost the run"
             )

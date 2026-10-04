@@ -70,7 +70,7 @@ async def _job_questions(db: AsyncSession, job: Job) -> None:
     if company is None:
         raise RuntimeError(f"company {company_id} not found")
     result = await generate_questions_for_company(
-        db, company, trigger=job.payload.get("trigger")
+        db, company, trigger=job.payload.get("trigger"), serving_job_id=job.id
     )
     logger.info("job %s questions: company=%s status=%s", job.id, company_id, result["status"])
 

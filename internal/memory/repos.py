@@ -2,7 +2,7 @@ import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import Text, cast, delete, desc, exists, func, or_, select, update
+from sqlalchemy import Text, and_, cast, delete, desc, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -2106,3 +2106,36 @@ async def reclaim_stale_jobs(db: AsyncSession, *, older_than_minutes: int = 15) 
         .values(status="pending", locked_at=None, locked_by=None)
     )
     return result.rowcount or 0
+
+
+async def has_live_questions_job(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    exclude_job_id: uuid.UUID | None = None,
+    lease_minutes: int = 15,
+) -> bool:
+    """True when a ``questions`` job for the company is queued or executing.
+
+    ``pending`` counts (a worker will start the fill) and so does ``running``
+    under a lease younger than ``lease_minutes`` — the jobs row is the
+    cross-process proof that a fill is owned (ADR 0039), which an in-process
+    ``_live_run_ids`` set cannot see. ``exclude_job_id`` keeps the caller's own
+    row from counting as "another worker owns this".
+    """
+    cutoff = datetime.now(UTC) - timedelta(minutes=lease_minutes)
+    stmt = (
+        select(Job.id)
+        .where(
+            Job.kind == "questions",
+            Job.payload["company_id"].astext == str(company_id),
+            or_(
+                Job.status == "pending",
+                and_(Job.status == "running", Job.locked_at >= cutoff),
+            ),
+        )
+        .limit(1)
+    )
+    if exclude_job_id is not None:
+        stmt = stmt.where(Job.id != exclude_job_id)
+    return await db.scalar(stmt) is not None
