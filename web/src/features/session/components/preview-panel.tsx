@@ -16,12 +16,16 @@ import {
   isRenderableImageUrl,
   toEditableCopy,
 } from "@/features/session/components/ig-preview-mock";
-import { isConfirmSuccessStatus } from "@/features/session/session-helpers";
+import { ImagePlanFields } from "@/features/session/components/image-plan-fields";
+import {
+  imagePlanSummary,
+  isConfirmSuccessStatus,
+  primaryMediaItem,
+} from "@/features/session/session-helpers";
 import type {
   ConfirmSessionResponse,
   DraftCopy,
   PreviewDraft,
-  PreviewMediaItem,
   SourceSignal,
 } from "@/features/session/types";
 
@@ -370,16 +374,6 @@ export function PreviewPanel({
   );
 }
 
-function sortedMedia(draft: PreviewDraft): PreviewMediaItem[] {
-  return [...(draft.media ?? [])].sort((a, b) => a.seq - b.seq);
-}
-
-function primaryMediaItem(draft: PreviewDraft): PreviewMediaItem | null {
-  const media = sortedMedia(draft);
-  if (media.length === 0) return null;
-  return media.find((item) => item.role === "primary") ?? media[0];
-}
-
 /** A parked primary (`status: pending` or no renderable url) is not a ready post. */
 function primaryImageReady(draft: PreviewDraft): boolean {
   const primary = primaryMediaItem(draft);
@@ -388,29 +382,6 @@ function primaryImageReady(draft: PreviewDraft): boolean {
     return isRenderableImageUrl(primary.url);
   }
   return isRenderableImageUrl(draft.image_url);
-}
-
-function planSummary(draft: PreviewDraft): {
-  format: "single" | "comic_4panel" | null;
-  prompt: string;
-  beats: string[];
-} {
-  const primary = primaryMediaItem(draft);
-  const plan = primary?.plan ?? {};
-  const fromPlan = typeof plan.format === "string" ? plan.format : "";
-  const raw = primary?.format || fromPlan;
-  const format = raw === "comic_4panel" || raw === "single" ? raw : null;
-  const prompt = typeof plan.prompt === "string" ? plan.prompt.trim() : "";
-  const beats: string[] = [];
-  if (Array.isArray(plan.panels)) {
-    for (const panel of plan.panels) {
-      if (panel && typeof panel === "object" && "beat" in panel) {
-        const beat = String((panel as { beat?: unknown }).beat ?? "").trim();
-        if (beat) beats.push(beat);
-      }
-    }
-  }
-  return { format, prompt, beats };
 }
 
 function SourceSignalsList({ signals }: { signals: SourceSignal[] | undefined }) {
@@ -449,7 +420,7 @@ function SourceSignalsList({ signals }: { signals: SourceSignal[] | undefined })
 
 function ImagePlanSummary({ draft }: { draft: PreviewDraft }) {
   const { t } = useTranslation();
-  const plan = planSummary(draft);
+  const plan = imagePlanSummary(draft);
   const formatLabel =
     plan.format === "comic_4panel"
       ? t("preview.awaiting.formatComic")
@@ -464,18 +435,8 @@ function ImagePlanSummary({ draft }: { draft: PreviewDraft }) {
       <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">
         {t("preview.awaiting.plan")}
       </summary>
-      <div className="mt-2 space-y-1.5 leading-relaxed">
-        {formatLabel ? <p>{formatLabel}</p> : null}
-        {plan.prompt ? (
-          <p className="whitespace-pre-wrap text-muted-foreground">{plan.prompt}</p>
-        ) : null}
-        {plan.beats.length > 0 ? (
-          <ol className="list-decimal space-y-0.5 pl-5 text-muted-foreground">
-            {plan.beats.map((beat) => (
-              <li key={beat}>{beat}</li>
-            ))}
-          </ol>
-        ) : null}
+      <div className="mt-2 text-sm">
+        <ImagePlanFields plan={plan} formatLabel={formatLabel ? <p>{formatLabel}</p> : null} />
       </div>
     </details>
   );
