@@ -418,9 +418,11 @@ function SourceSignalsList({ signals }: { signals: SourceSignal[] | undefined })
   if (!signals?.length) return null;
 
   return (
-    <div className="mx-auto w-full max-w-[340px] rounded-lg border border-border bg-card px-3 py-2.5">
-      <p className="text-xs font-medium text-muted-foreground">{t("preview.sources.title")}</p>
-      <ul className="mt-1.5 space-y-1">
+    <details className="mx-auto w-full max-w-[340px] rounded-lg border border-border bg-card px-3 py-2.5 text-sm">
+      <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">
+        {t("preview.sources.title")} · {signals.length}
+      </summary>
+      <ul className="mt-2 space-y-1">
         {signals.map((signal) => (
           <li key={signal.signal_id} className="text-xs leading-relaxed">
             {signal.url ? (
@@ -441,7 +443,7 @@ function SourceSignalsList({ signals }: { signals: SourceSignal[] | undefined })
           </li>
         ))}
       </ul>
-    </div>
+    </details>
   );
 }
 
