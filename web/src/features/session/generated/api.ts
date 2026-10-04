@@ -2609,6 +2609,8 @@ export type components = {
              * @default false
              */
             awaiting_image_ok: boolean;
+            /** Source Signals */
+            source_signals: components["schemas"]["SourceSignal"][];
         };
         /**
          * PreviewUpdatedData
@@ -2629,6 +2631,8 @@ export type components = {
              * @default instagram
              */
             platform: string;
+            /** Source Signals */
+            source_signals: components["schemas"]["SourceSignal"][];
         };
         /** ProductCreateRequest */
         ProductCreateRequest: {
@@ -3389,6 +3393,22 @@ export type components = {
             data_deletion_url?: string | null;
         };
         /**
+         * SourceSignal
+         * @description Resolved grounding signal on preview payloads (ADR 0038).
+         */
+        SourceSignal: {
+            /** Signal Id */
+            signal_id: string;
+            /** Source */
+            source: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+            /** Excerpt */
+            excerpt: string | null;
+        };
+        /**
          * StopSessionRequest
          * @description ADR 0035 — interrupt keeps an in-flight turn's messages; discard wipes them.
          */
@@ -3659,6 +3679,8 @@ export type components = {
             platform: string;
             /** Mode */
             mode: string;
+            /** Source Signals */
+            source_signals: components["schemas"]["SourceSignal"][];
         };
         /** UpdateImagePlanRequest */
         UpdateImagePlanRequest: {

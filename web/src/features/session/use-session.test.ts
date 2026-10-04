@@ -1039,6 +1039,73 @@ describe("useSession", () => {
     );
   });
 
+  it("hydrates source signals from session.snapshot and preview.updated", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    apiGetSessionMessages.mockResolvedValue({
+      session: { ...sessionFixture, mode: "PREVIEW" },
+      messages: [],
+    });
+    const handlers = new Map<string, (type: string, data: Record<string, unknown>) => void>();
+    subscribeSessionEvents.mockImplementation(
+      (opts: {
+        sessionId: string;
+        onOpen?: () => void;
+        onEvent: (type: string, data: Record<string, unknown>) => void;
+      }) => {
+        handlers.set(opts.sessionId, opts.onEvent);
+        opts.onOpen?.();
+        return new Promise<void>(() => {});
+      },
+    );
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    await act(async () => {
+      handlers.get("sess-1")?.("session.snapshot", {
+        mode: "PREVIEW",
+        revision: 3,
+        approval_token: "tok",
+        copy: { caption: "cap", hashtags: [], cta: "" },
+        source_signals: [
+          {
+            signal_id: "sig_a",
+            source: "Google Trends",
+            title: "trend",
+            url: "https://example.com/a",
+            excerpt: "e",
+          },
+        ],
+      });
+    });
+    expect(result.current.draft?.source_signals).toEqual([
+      {
+        signal_id: "sig_a",
+        source: "Google Trends",
+        title: "trend",
+        url: "https://example.com/a",
+        excerpt: "e",
+      },
+    ]);
+
+    await act(async () => {
+      handlers.get("sess-1")?.("preview.updated", {
+        revision: 4,
+        approval_token: "tok2",
+        copy: { caption: "cap2", hashtags: [], cta: "" },
+        image_url: null,
+        media: [],
+        platform: "instagram",
+        source_signals: [
+          { signal_id: "sig_b", source: "RSS", title: "news", url: null, excerpt: null },
+        ],
+      });
+    });
+    expect(result.current.draft?.source_signals).toEqual([
+      { signal_id: "sig_b", source: "RSS", title: "news", url: null, excerpt: null },
+    ]);
+  });
+
   it("parses permalink and error_kind from confirm.completed without treating failed as confirmed", async () => {
     getRememberedSessionId.mockReturnValue("sess-1");
     apiGetSessionMessages.mockResolvedValue({

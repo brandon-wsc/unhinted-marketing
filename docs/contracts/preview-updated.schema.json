@@ -98,6 +98,56 @@
       ],
       "title": "PreviewMediaItem",
       "type": "object"
+    },
+    "SourceSignal": {
+      "description": "Resolved grounding signal on preview payloads (ADR 0038).",
+      "properties": {
+        "signal_id": {
+          "title": "Signal Id",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        }
+      },
+      "required": [
+        "signal_id",
+        "source",
+        "title",
+        "url",
+        "excerpt"
+      ],
+      "title": "SourceSignal",
+      "type": "object"
     }
   },
   "description": "Payload for SSE / turn event `preview.updated`.",
@@ -139,6 +189,13 @@
       "maxLength": 40,
       "title": "Platform",
       "type": "string"
+    },
+    "source_signals": {
+      "items": {
+        "$ref": "#/$defs/SourceSignal"
+      },
+      "title": "Source Signals",
+      "type": "array"
     }
   },
   "required": [
@@ -147,7 +204,8 @@
     "image_url",
     "media",
     "copy",
-    "platform"
+    "platform",
+    "source_signals"
   ],
   "title": "PreviewUpdatedData",
   "type": "object"

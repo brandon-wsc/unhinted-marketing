@@ -1,6 +1,6 @@
 # Unhinted Marketing — Project Status
 
-> **Last updated:** 2026-09-19 
+> **Last updated:** 2026-10-04 
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  
 > **Dev DB:** `192.168.5.20:5434` / database `unhinted` · **Test DB:** set `TEST_DATABASE_URL` (e.g. `unhinted_test`) for `pytest tests/api`
 
@@ -86,6 +86,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **`migrate` one-shot service** — api image runs `alembic upgrade head` before `api`/`scheduler` (`service_completed_successfully`); safe for replica scaling
 - **`AUTO_SECRETS` entrypoint** (`docker/api-entrypoint.sh`, api image `ENTRYPOINT`) — all-in-one generates + persists JWT/BYOK keys on the `appdata` volume (`/app/data/.secrets.env`); inert on external-DB; `APP_ENV=production` unchanged
 - **Images** `ghcr.io/brandon-wsc/unhinted-{api,web}` with `IMAGE_PREFIX`/`IMAGE_TAG` overrides + `build:` fallback; `.github/workflows/release.yml` publishes on `v*` tags (version + floating `onprem` tag) and attaches derived standalone pull-only compose assets (`compose.yaml`, `compose.external-db.yaml`, `env.example`) to the Release. GHCR packages need a one-time public-visibility flip after first publish
+
+**Decision (2026-10-04) — Preview payloads carry resolved source signals:** → [ADR 0038](./adr/0038-preview-source-signals.md). `PreviewUpdatedData`, `UpdateDraftResponse`, `PreviewMediaMutationResponse`, and `session.snapshot` emit `source_signals` (`{signal_id, source, title, url, excerpt}`, draft order, missing rows dropped); `signals.updated` stays ids-only. Preview pane renders a read-only Sources block; grounding itself is unchanged ([ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)).
 
 **Decision (2026-09-26) — Demo / local CD tracks `main`, separate from customer releases:** → [ADR 0037](./adr/0037-demo-local-cd.md)
 
@@ -178,7 +180,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - Compat: `image_url` / `image_plan` denormalized primary; SSE `preview.updated` includes `media[]`
 - **HTTP + Preview UI:** `GET/POST /sessions/{id}/media`, `PATCH .../media/{id}/plan`, `POST .../media/{id}/regen`, `POST .../media/{id}/remove`, `POST .../media/{id}/upload`; Edit Image dialog (Select, uploader, Generate/Regenerate, Delete); Edit Copy dialog from IG mock (caption / hashtags / CTA); multi-image carousel when `media[]` length > 1
 
-**Current user-facing flow:** Register or login → `/` chat → Agent brief/interrupt → Preview Mode (IG mock + Edit Copy / Edit Image) → Confirm (stub receipt). Meta ingest / BYOK / Trace still deferred.
+**Current user-facing flow:** Register or login → `/` chat → Agent brief/interrupt → Preview Mode (IG mock + Edit Copy / Edit Image) → Confirm (stub receipt). Meta ingest still deferred.
 
 **Decision (2026-07-29):** Remaining Phase 2 items are **held**; start Phase 3 product UI against the existing session APIs.
 
@@ -345,7 +347,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 | Session HTTP API | ✅ | `GET/POST /api/sessions`, `PATCH/DELETE /api/sessions/{id}` (delete GCs unreferenced store objects), `/messages`, `/choose-angle`, `/draft`, `/media` (+ plan/regen/remove/upload), `/confirm`; `GET /api/media/{key}` local stream
 | SSE `/events` | ✅ | Snapshot + live fan-out; `preview.updated` includes `copy` + `platform` + `media[]`; snapshot hydrates `media` from latest draft; auth + snapshot release the DB pool before streaming (idle tabs cannot exhaust QueuePool); client auto-reconnects (backoff while visible, instant on tab-visible/`online`) + REST resync for missed messages |
 | Image generation worker | 🟡 Soft | ``LLM_IMAGE_MODEL`` catalog id; compat bases with ``GET {base}/images/models`` → ``POST {base}/images`` ``{model, prompt}`` (no DALL·E size), else LiteLLM ``aimage_generation``. Chat-only / unset → ``llm.failed``. ``data:`` results always persist to the media store ([ADR 0024](./adr/0024-media-storage-local-and-s3.md)). ``placeholder`` / no credentials → mock URL |
-| `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; node adapter wiring still held |
+| `query_market_trends` tool schema | ✅ | Pydantic + JSON Schema in `schemas/tools.py` / `docs/contracts/`; wired as an inner-harness tool in chat / research / execute ([ADR 0019](./adr/0019-pydantic-ai-inner-harness.md)) |
 | Chat research + Tavily ingest | ✅ | ADR 0009; semantic gate + multi-query + gloss; Tavily adapter; admin Research tab; `TAVILY_API_KEY` for live search |
 | Curl exit-criteria script | ⏸ **Held** | Manual/API path works; formal curl checklist later |
 
@@ -353,7 +355,7 @@ Backend session loop is **UI-ready**. Graph contract locked in [ROADMAP.md](./RO
 
 ### Phase 3 — React Dashboard + Meta Signals · **~80% · IN PROGRESS**
 
-**Focus now:** Meta ingest / BYOK / Trace (core session UI shipped — chat → agent → preview → confirm + history).
+**Focus now:** Meta ingest (core session UI shipped — chat → agent → preview → confirm + history).
 
 | Item | Status | Notes |
 |------|--------|-------|
@@ -579,7 +581,7 @@ See `.env.example`. Local `.env` is gitignored.
 ### Other gaps
 
 1. **Phase 3 UI:** Core chat → agent action records (DB-backed on user-message metadata) → preview → confirm stub + history (desktop sidebar / mobile Record–Chat–Preview push pages) shipped. Agent path still rarely writes assistant chat bubbles (brief/preview are side-channel UI). Interrupt Generate-image + angle-pick CTAs rehydrate from graph/SSE after fail or refresh.
-2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` (bytes always persist to the media store; [ADR 0024](./adr/0024-media-storage-local-and-s3.md)); formal curl exit-criteria script still later; `query_market_trends` **schema** landed — adapter wiring still held.
+2. **Phase 2 soft / held:** Image gen via `LLM_IMAGE_MODEL` (bytes always persist to the media store; [ADR 0024](./adr/0024-media-storage-local-and-s3.md)); formal curl exit-criteria script still later.
 3. **Phase 3 later:** Meta Graph API ingest, BYOK settings page; FB/Threads preview skins. LLM call **records** + admin Trace viewer landed ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md), [ADR 0007](./adr/0007-admin-trace-viewer.md)) — ops guide: [PROMPT_TUNING.md](./PROMPT_TUNING.md). Next: retention/purge policy. `/api` prefix shipped ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md)).
 4. **Knowledge:** Settings through **K6 Approvals** shipped ([docs/knowledge/](./knowledge/), [ADR 0011](./adr/0011-knowledge-commit-without-llm.md)). Chat scratch still not org KB.
 5. **Hardening:** ~~Auth rate limits + JWT secret guard~~ + ~~confirm idempotency user/session scope~~; ~~basic API tests~~ + ~~frontend Vitest Tier 1/2~~ + ~~CI~~ ([TESTING.md](./TESTING.md), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); ~~contracts SSOT~~ ([AGENTS.md](../AGENTS.md), [adr/](./adr/), [contracts/](./contracts/)); ~~mock-LLM graph node tests + CI Tier 1b~~; ~~interrupt Stop / resume-image ([ADR 0004](./adr/0004-stop-discard-and-image-resume.md))~~; ~~persist LLM call records ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md))~~; ~~`/api` path prefix ([ADR 0006](./adr/0006-api-path-prefix-and-spa-proxy.md))~~; ~~on-demand live eval CLI (`python -m scripts.eval_agent`)~~; multi-worker SSE + turn-stop registry (Redis) if scaling beyond one API process; media private/signed URLs; re-check org membership on session access after revoke; enable branch protection requiring CI checks.
@@ -595,8 +597,8 @@ From ROADMAP; current completion:
 3. User can register, login, access protected dashboard — ✅  
 4. Chat → can/cannot recommendation → preview — ✅ API; ✅ chat/brief/preview UI  
 5. Unlimited preview revisions + reviewer gate — ✅ API (AI revise); ✅ UI + manual `POST /draft`  
-6. Confirm posts via platform API + receipt — 🟡 backend Instagram adapter + org `social_accounts` shipped (default stub); receipt / settings UI still stub ([ADR 0022](./adr/0022-real-publish-instagram.md))  
-7. Claims traceable to `source_signal_ids` — ✅ session grounding in graph; ⬜ UI trace links  
+6. Confirm posts via platform API + receipt — ✅ Instagram adapter + org `social_accounts` + receipts + `/settings?tab=instagram` shipped ([ADR 0022](./adr/0022-real-publish-instagram.md)); real publish needs a connected IG account  
+7. Claims traceable to `source_signal_ids` — ✅ session grounding in graph; ✅ Sources block on preview ([ADR 0038](./adr/0038-preview-source-signals.md))  
 
 ---
 

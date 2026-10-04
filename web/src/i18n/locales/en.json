@@ -313,6 +313,9 @@
       "formatComic": "4-panel comic",
       "generatingTitle": "Generating"
     },
+    "sources": {
+      "title": "Sources"
+    },
     "error": {
       "saveFailed": "Failed to save the draft. Please try again.",
       "confirmFailed": "Failed to confirm. Please try again.",

@@ -41,6 +41,7 @@ function draft(overrides: Partial<PreviewDraft> = {}): PreviewDraft {
     ],
     copy: { caption: "hi", hashtags: [], cta: "" },
     platform: "instagram",
+    source_signals: [],
     ...overrides,
   };
 }
