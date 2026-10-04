@@ -160,7 +160,7 @@
         "confirm": "出圖",
         "working": "出緊圖…",
         "discard": "棄置",
-        "plan": "圖計劃",
+        "plan": "出圖plan",
         "formatLabel": "圖片格式",
         "formatSingle": "單圖",
         "formatComic": "4格漫畫"
@@ -309,7 +309,7 @@
       "slotEmpty": "圖未出",
       "slotGenerating": "出緊圖…",
       "status": "棄置｜出圖喺對話。",
-      "plan": "圖計劃",
+      "plan": "出圖plan",
       "formatSingle": "單圖",
       "formatComic": "四格漫畫",
       "generatingTitle": "出緊圖"
