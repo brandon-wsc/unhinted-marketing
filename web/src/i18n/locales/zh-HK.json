@@ -75,7 +75,7 @@
     "stop": "停止",
     "stopping": "停緊…",
     "shell": {
-      "resize": "調 chat 同 preview 闊度"
+      "resize": "調對話同預覽闊度"
     },
     "queue": {
       "badge": "排隊緊",
@@ -149,7 +149,7 @@
         }
       },
       "brief": {
-        "title": "內容 Brief",
+        "title": "內容大綱",
         "canDo": "得做",
         "cannotDo": "唔會做",
         "angles": "角度"
@@ -272,12 +272,12 @@
       "empty": "寫啲文案先…"
     },
     "media": {
-      "title": "圖像 Plan",
+      "title": "圖像計劃",
       "edit": "編輯圖片",
       "editTitle": "編輯圖片",
       "editHint": "改 prompt 或者格式會寫過一篇稿同圖計劃。未撳出圖之前唔會重畫。",
       "stageDirection": "更新稿",
-      "empty": "未有圖 — 加一張再改 Plan。",
+      "empty": "未有圖 — 加一張再改計劃。",
       "prompt": "Prompt",
       "additionalPrompt": "額外 Prompt",
       "style": "風格",
@@ -285,7 +285,7 @@
       "panel": "第 {{n}} 格",
       "formatSingle": "單圖",
       "formatComic": "四格漫畫",
-      "savePlan": "儲存 Plan",
+      "savePlan": "儲存計劃",
       "generate": "出圖",
       "regen": "再出一次",
       "regenWorking": "出緊圖…",
@@ -321,7 +321,7 @@
       "confirmFailed": "確認唔到喎，再試一次。",
       "imageRequired": "Instagram 出帖要有圖，加張圖再開確認。",
       "notConnected": "未連接 Instagram。去公司設定貼 token。",
-      "planFailed": "圖像 Plan 儲存唔到喎，再試一次。",
+      "planFailed": "圖像計劃儲存唔到喎，再試一次。",
       "regenFailed": "再出圖失敗，再試一次。",
       "addFailed": "加圖失敗，再試一次。",
       "removeFailed": "刪圖失敗，再試一次。",
@@ -370,7 +370,7 @@
       },
       "invite": {
         "title": "邀請同事",
-        "hint": "出條 Link 俾同事；對方要用受邀電郵註冊或登入先入到。",
+        "hint": "出條連結俾同事；對方要用受邀電郵註冊或登入先入到。",
         "send": "發送邀請",
         "sending": "發送緊邀請…",
         "copy": "複製連結",
@@ -495,7 +495,7 @@
     },
     "instagram": {
       "title": "Instagram",
-      "subtitle": "Confirm 出帖會用呢個專業帳號。",
+      "subtitle": "確認出帖會用呢個專業帳號。",
       "igUserId": "Instagram 用戶 ID",
       "expiresAt": "到期（可選）",
       "pickDate": "揀日期",
@@ -538,7 +538,7 @@
     },
     "storage": {
       "title": "儲存",
-      "subtitle": "Preview 圖而家喺本機；要轉 object storage 就喺呢度搬，上載唔會停。",
+      "subtitle": "預覽圖而家喺本機；要轉去 S3 就喺呢度搬，上載唔會停。",
       "badgeLocal": "本機",
       "badgeS3": "S3",
       "badgeDualWrite": "雙寫緊",
@@ -555,15 +555,15 @@
       "copyingLocked": "搬檔期間唔可以改設定。",
       "start": "開始搬去 S3",
       "startHint": "而家用本機。S3 設定已存，可以開始搬。上載唔會停。",
-      "startDisabled": "先儲存 object storage 設定，先至可以開始搬。",
+      "startDisabled": "先儲存 S3 設定，先至可以開始搬。",
       "copyingTitle": "搬緊去 S3…",
       "copyingBody": "已複製 {{copied}} / {{scanned}} · {{size}} · 跳過 {{orphans}} 個 orphan。App 仲係讀本機。",
       "readyHint": "複製完。而家仲係本機。清走本機檔之前都可以改返。",
       "flip": "改用 S3",
       "flipTitle": "改用 S3？",
-      "flipBody": "Preview 會改讀 object storage。本機檔暫時留住，清走之前都可以改返。",
+      "flipBody": "預覽會改讀 S3。本機檔暫時留住，清走之前都可以改返。",
       "flippingTitle": "改緊用 S3…",
-      "graceHint": "而家用 object storage。本機副本仲喺，清走之前都可以改返本機。",
+      "graceHint": "而家用緊 S3。本機副本仲喺，清走之前都可以改返本機。",
       "rollback": "改返本機",
       "clean": "清走本機檔",
       "cleanTitle": "清走本機檔？",
@@ -577,7 +577,7 @@
     },
     "apiKeys": {
       "title": "模型",
-      "subtitle": "用自己嘅金鑰同模型，設定 cheap / medium / strong / image。成員睇唔到呢頁。",
+      "subtitle": "用自己嘅金鑰同模型，設定 Cheap、Medium、Strong、Image 四個層級。成員睇唔到呢頁。",
       "addModel": "新增模型",
       "addKey": "新增金鑰",
       "addKeyHint": "加完可以稍後先揀模型同路由。",
@@ -723,16 +723,16 @@
       "apiKey": "API Key",
       "apiBase": "Base URL",
       "chatModel": "預設模型",
-      "chatModelHint": "會用喺所有對話層級；之後可以喺「設定 → API Keys」調 routing。",
+      "chatModelHint": "會用喺所有對話層級；之後可以喺「公司設定 → 模型」調路由。",
       "save": "儲存並完成"
     },
     "done": {
       "banner": "設定完成",
-      "title": "你嘅 instance 已經 ready",
+      "title": "你嘅 instance 已經準備好",
       "subtitle": "而家可以開始用 — 設定隨時可以喺「設定」調整",
       "nextTitle": "下一步",
-      "nextModels": "連接或調整模型 — 設定 → API Keys",
-      "nextMembers": "邀請成員 — 設定 → Members",
+      "nextModels": "連接或調整模型 — 公司設定 → 模型",
+      "nextMembers": "邀請成員 — 公司設定 → 成員",
       "nextInstance": "電郵同網站網址 — 平台 → Instance",
       "cta": "開始使用"
     },
