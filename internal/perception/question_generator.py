@@ -7,6 +7,7 @@ worker CLI + scheduler call sites stable.
 from __future__ import annotations
 
 import logging
+import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,9 +28,12 @@ async def generate_questions_for_company(
     *,
     force: bool = False,
     trigger: str | None = None,
+    serving_job_id: uuid.UUID | None = None,
 ) -> dict:
     run = await run_company_now(
-        company, trigger=trigger or (TRIGGER_REFRESH if force else TRIGGER_SCHEDULER)
+        company,
+        trigger=trigger or (TRIGGER_REFRESH if force else TRIGGER_SCHEDULER),
+        serving_job_id=serving_job_id,
     )
     latest = await get_latest_questions(db, company.id)
     return {
