@@ -334,9 +334,9 @@
       "products": "產品",
       "members": "成員",
       "approvals": "審批",
-      "models": "Models",
+      "models": "模型",
       "instagram": "Instagram",
-      "storage": "Storage"
+      "storage": "儲存"
     },
     "noCompany": {
       "title": "未有公司",
@@ -534,7 +534,7 @@
       "accessToken": "Access token"
     },
     "storage": {
-      "title": "Storage",
+      "title": "儲存",
       "subtitle": "Preview 圖而家喺本機；要轉 object storage 就喺呢度搬，upload 唔會停。",
       "badgeLocal": "本機",
       "badgeS3": "S3",
@@ -569,34 +569,34 @@
       "doneHint": "本機檔已清。要返本機就要重新搬。",
       "tryAgain": "再試",
       "failed": "搬檔失敗。",
-      "loadFailed": "載入唔到 Storage 設定。",
+      "loadFailed": "載入唔到儲存設定。",
       "saveFailed": "儲存唔到，再試一次。"
     },
     "apiKeys": {
-      "title": "Models",
-      "subtitle": "用自己嘅 key 同 model，設定 cheap / medium / strong / image。成員睇唔到呢頁。",
-      "addModel": "新增 model",
-      "addKey": "新增 key",
-      "addKeyHint": "加完可以稍後先 set model 同 routing。",
-      "addModelHint": "儲存之後再喺 Routing 指派 slot。",
+      "title": "模型",
+      "subtitle": "用自己嘅金鑰同模型，設定 cheap / medium / strong / image。成員睇唔到呢頁。",
+      "addModel": "新增模型",
+      "addKey": "新增金鑰",
+      "addKeyHint": "加完可以稍後先 set 模型同路由。",
+      "addModelHint": "儲存之後再喺路由指派 slot。",
       "keys": {
-        "title": "Keys",
-        "empty": "未有 key。撳「新增 key」加第一條。",
+        "title": "金鑰",
+        "empty": "未有金鑰。撳「新增金鑰」加第一條。",
         "masked": "••••{{last4}}",
         "columns": {
           "label": "名稱",
-          "key": "Key",
+          "key": "金鑰",
           "type": "類型",
           "status": "狀態"
         }
       },
       "models": {
-        "title": "Models",
-        "empty": "未有 model。用「新增 model」加一條。",
-        "emptyNeedsKey": "先加 key，再註冊 model。",
+        "title": "模型",
+        "empty": "未有模型。用「新增模型」加一條。",
+        "emptyNeedsKey": "先加金鑰，再註冊模型。",
         "columns": {
-          "model": "Model",
-          "key": "Key",
+          "model": "模型",
+          "key": "金鑰",
           "capability": "用途",
           "status": "狀態"
         },
@@ -605,10 +605,10 @@
         "imageTestConfirm": "確認測試"
       },
       "routing": {
-        "title": "Routing",
-        "subtitle": "每個 slot 可以揀公司 model，或者留空用平台預設。",
+        "title": "路由",
+        "subtitle": "每個 slot 可以揀公司模型，或者留空用平台預設。",
         "platformDefault": "平台預設",
-        "helperOrg": "Company: {{modelId}}",
+        "helperOrg": "公司：{{modelId}}",
         "helperEnv": "平台預設",
         "slots": {
           "cheap": "Cheap",
@@ -623,8 +623,8 @@
         "pending": "驗證中"
       },
       "capability": {
-        "chat": "Chat",
-        "image": "Image"
+        "chat": "對話",
+        "image": "圖像"
       },
       "providerType": {
         "openai": "OpenAI",
@@ -639,7 +639,7 @@
         "delete": "刪除"
       },
       "wizard": {
-        "keyExisting": "Key",
+        "keyExisting": "金鑰",
         "label": "名稱",
         "providerType": "類型",
         "apiKey": "API key",
@@ -647,32 +647,32 @@
         "apiBaseHint": "OpenAI-compatible endpoint，例如 https://openrouter.ai/api/v1",
         "geminiKeyHint": "Google AI Studio 嘅 key（generativelanguage.googleapis.com）。Vertex Express 嗰條貼入去會 401。",
         "vertexKeyHint": "Vertex Express Mode 嘅 key（aiplatform.googleapis.com）。唔係 AI Studio 嗰條 Gemini key，都唔係 OpenAI 格式。",
-        "modelId": "Model id",
-        "modelFetching": "攞緊 model 清單…",
-        "modelFreeText": "呢個 key 唔支援自動清單，輸入 model id 就得。",
-        "modelTypedOk": "清單係參考。冇格都可以自己打 model id。",
+        "modelId": "模型 ID",
+        "modelFetching": "攞緊模型清單…",
+        "modelFreeText": "呢個金鑰唔支援自動清單，輸入模型 ID 就得。",
+        "modelTypedOk": "清單係參考。冇格都可以自己打模型 ID。",
         "capability": "用途"
       },
       "edit": {
-        "title": "編輯 key",
-        "apiKeyRotate": "要換 key 就貼新嘅；留空就沿用而家條。",
+        "title": "編輯金鑰",
+        "apiKeyRotate": "要換金鑰就貼新嘅；留空就沿用而家條。",
         "apiKeyPlaceholder": "留空 = 唔改"
       },
       "delete": {
-        "titleKey": "刪除 key",
-        "titleModel": "刪除 model",
+        "titleKey": "刪除金鑰",
+        "titleModel": "刪除模型",
         "bodyKey": "確定刪除「{{label}}」？",
         "bodyModel": "確定刪除 {{modelId}}？",
         "dependents": "仲有嘢依賴呢項：",
-        "modelsLabel": "Models：{{list}}",
-        "slotsLabel": "Slots：{{list}}",
+        "modelsLabel": "模型：{{list}}",
+        "slotsLabel": "路由：{{list}}",
         "force": "仍然刪除"
       },
       "errors": {
         "labelRequired": "要填名稱。",
         "keyRequired": "要填 API key。",
         "apiBaseRequired": "OpenAI-compatible 要填 API base。",
-        "modelRequired": "要填 model id。"
+        "modelRequired": "要填模型 ID。"
       }
     }
   },
