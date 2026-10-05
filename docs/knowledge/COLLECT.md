@@ -156,8 +156,8 @@ Used by `product_matcher` ([SESSION.md](./SESSION.md)). Merges **Org × Old** an
 1. LLM extract (cheap): `product_surface`, `search_queries[]`, `sell_intent` (`explicit` | `implicit` | `none`).
 2. If session scratch matches → use **User × New** for this turn (`primary_product.source = session_scratch`).
 3. **Tier A — SQL exact:** `sku` / external id, `company_id = :cid`, org rows + `(user_id = :uid OR owner_scope = org)`.
-4. **Tier B — SQL fuzzy:** `ILIKE`, `pg_trgm` on `search_document`; **prefer org hit over user hit** when both match.
-5. **Tier C — vector (K4):** embed queries; same tenant + scope filter; org rank boost on tie.
+4. **Tier B — SQL fuzzy:** `strpos` substring on lowercased `sku` / `name` / `search_document` (either direction) narrows candidates; scoring stays in Python. **Prefer org hit over user hit** when both match.
+5. **Tier C — vector (K4):** embed queries; pgvector `<=>` cosine distance in SQL — same tenant + scope filter, `ORDER BY` distance `LIMIT` top-K (HNSW `vector_cosine_ops` index).
 6. **RRF** merge → candidate list; dedupe by SKU with **org row retained**.
 7. **Primary:** top-1 if score ≥ threshold **and** margin vs top-2; else **`product_clarify`**.
 8. **Related:** neighbors from **org** catalog only, top-2 — empty OK.
@@ -202,7 +202,7 @@ Applies **only** to product `search_document` corpus (not market signals).
 | Topic | Default |
 |-------|---------|
 | Embedding model | Same family as semantic gate — FastEmbed multilingual MiniLM (`PRODUCT_EMBEDDING_MODEL` or `SEMANTIC_ROUTER_MODEL`) |
-| Dim | **384** (`products.embedding vector(384)` — Alembic `12d5c92e3f74`) |
+| Dim | **384** (`products.embedding vector(384)` — Alembic `12d5c92e3f74`; HNSW index `vector_cosine_ops` — `bc2dadfe3ebd`) |
 | Chunking | **One product row = one chunk** |
 | Query text | Joined `product_surface` / matcher queries — not full chat dump |
 | Thresholds | Lexical primary floor 0.55 + margin 0.12; vector cosine min **0.42** |
