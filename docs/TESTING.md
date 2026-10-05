@@ -168,7 +168,7 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
 3. ~~**Frontend Vitest**~~ — Tier 1 `web/src/lib/**` + Tier 2 PasswordBox / UserMenuDropdown
 4. ~~**CI/CD**~~ — `.github/workflows/ci.yml` (ruff + pytest unit/API + Biome + Vitest + build)
-5. Hold: SSE E2E, Playwright chat→preview→confirm. **Live LLM eval CLI landed** — `python -m scripts.eval_agent` (on-demand; not a PR job). `@pytest.mark.live_llm` remains unused. **Branch rules:** configured on GitHub but **Not enforced** (account-plan limit) — CI still runs on PRs; merge is not blocked by required checks until enforcement is available.
+5. Hold: SSE E2E, Playwright chat→preview→confirm. **Live LLM eval CLI landed** — `python -m scripts.eval_agent` (on-demand; not a PR job). `@pytest.mark.live_llm` remains unused. **Branch rules:** enforced on `main` — all 7 CI jobs are required checks (`strict`), `enforce_admins` on, conversation resolution required; PR approvals not required (count 0).
 6. ~~**Contracts SSOT**~~ — `AGENTS.md`, ADRs, `schemas/contracts.py` / `tools.py`, `docs/contracts/` + OpenAPI export
 7. ~~**Graph mock-LLM node tests + CI**~~ — `tests/unit/test_session_nodes.py` + routing; opt-in `node_trace_recording()`; CI Tier 1b ≥70%
 
