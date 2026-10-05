@@ -26,6 +26,19 @@ jobs:
             echo "(feat|feature|bugfix|fix|hotfix|release|chore)/lowercase-hyphen-slug"
             exit 1
           fi
+      - name: PR title is a Conventional Commit subject, ASCII-only
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if ! printf '%s' "$PR_TITLE" | grep -qE '^(feat|fix|refactor|docs|chore|test|ci|perf)(\([a-z0-9._/-]+\))?!?: [a-z0-9].{0,70}$'; then
+            echo "::error::PR title must match type(scope): summary, <=72 chars (release notes read PR titles)"
+            exit 1
+          fi
+          if printf '%s' "$PR_TITLE" | LC_ALL=C grep -q '[^ -~]'; then
+            echo "::error::PR title must be ASCII-only (CJK/emoji goes in the body)"
+            exit 1
+          fi
+          echo "PR title ok"
       - name: Commit subjects are Conventional Commits, ASCII-only
         run: |
           bad=0

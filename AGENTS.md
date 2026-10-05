@@ -118,6 +118,12 @@ Prefer domain names over roadmap phases for `scope`: `auth`, `signals`, `session
 
 Follow the [Conventional Branch](https://conventionalbranch.org/) purpose prefixes: `feat/…` (or `feature/…`), `fix/…` (or `bugfix/…`), `hotfix/…`, `release/…` (dots OK for versions, e.g. `release/v1.2.0`), `chore/…`. Slug is lowercase, hyphen-separated — e.g. `fix/executor-post-voice`. There is no `ci/`, `docs/`, `test/`, `refactor/`, or `perf/` branch — branch type is work intent, not commit type: CI-config, docs, refactor, and test-only work all branch under `chore/…` (their commits still use the commit-type table above). CI rejects PRs whose head branch does not match.
 
+## Pull requests
+
+- **Title** — same format as commit subjects (`type(scope): summary`, ≤72 chars, ASCII-only); use the dominant change's type/scope. CI's `conventions` job rejects non-conforming titles. Release notes (`generate_release_notes`) read PR titles, so keep them accurate.
+- **Body** — follow `.github/pull_request_template.md`: `## Summary` (what + why), `#### Test plan`, plus the `ADR:` / `Breaking:` lines.
+- **Merge method** — merge commit only (squash/rebase disabled): commit subjects land on `main` individually; the PR title does not.
+
 ## Feature work
 
 - **New feature / fix → fresh branch off latest `main`.** Never commit on `main`; never reuse a merged or unrelated branch — one branch + PR per change.
