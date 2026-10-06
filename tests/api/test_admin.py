@@ -8,9 +8,26 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import internal.llm.pricing as pricing
 from internal.memory import repos
 from internal.memory.models import LlmCallRecord, PreviewDraft, SessionNodeStep, User
 from tests.api.helpers import auth_header, register_user, seed_preview_session
+
+_FAKE_COST_MAP = {
+    "gpt-4o-mini": {
+        "input_cost_per_token": 1.5e-7,
+        "output_cost_per_token": 6e-7,
+        "cache_read_input_token_cost": 7.5e-8,
+        "litellm_provider": "openai",
+        "mode": "chat",
+    },
+}
+
+
+@pytest.fixture(autouse=True)
+def _fake_cost_map(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the cost map — CI must not depend on LiteLLM's remote fetch/repricing."""
+    monkeypatch.setattr(pricing, "_litellm_model_cost", lambda: _FAKE_COST_MAP)
 
 
 def _record(**overrides) -> LlmCallRecord:
@@ -109,7 +126,8 @@ async def test_llm_call_detail_and_404(client, db_session) -> None:
     data = await register_user(client)
     await _grant_platform_level(db_session, data["user"]["id"], 9)
     row = _record(model="gpt-4o-mini", ttft_ms=45, cached_tokens=8)
-    db_session.add(row)
+    unpriced = _record()  # gpt-test — no entry in any price source
+    db_session.add_all([row, unpriced])
     await db_session.commit()
     headers = auth_header(data["access_token"])
 
@@ -122,8 +140,16 @@ async def test_llm_call_detail_and_404(client, db_session) -> None:
     assert body["parse_ok"] is True
     assert body["ttft_ms"] == 45
     assert body["cached_tokens"] == 8
-    # gpt-4o-mini list price: (10 * 0.15 + 5 * 0.60) / 1M
-    assert body["usd"] == pytest.approx(4.5e-6)
+    # gpt-4o-mini: 2 full-price in + 8 cache-read in + 5 out
+    # (2 * 0.15 + 8 * 0.075 + 5 * 0.60) / 1M
+    assert body["usd"] == pytest.approx(3.9e-6)
+    assert body["usd_state"] == "priced"
+
+    res = await client.get(f"/api/admin/llm-calls/{unpriced.id}", headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["usd"] is None
+    assert body["usd_state"] == "unpriced"
 
     res = await client.get(f"/api/admin/llm-calls/{uuid.uuid4()}", headers=headers)
     assert res.status_code == 404
