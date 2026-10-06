@@ -1,15 +1,19 @@
-"""Rough per-model list prices for eval/cost reporting — never authoritative.
+"""Rough per-call USD estimates for eval/cost reporting — never authoritative.
 
-USD per 1M tokens ``(input, output)``. Only ids we have actually resolved in
-this stack belong here; unknown models return ``None`` so reports show
-``usd: null`` instead of an invented number. Update as providers re-price.
+Primary source is LiteLLM's ``model_cost`` map: fetched from upstream
+``model_prices_and_context_window.json`` at litellm import, falling back to the
+bundled snapshot (see ``LITELLM_MODEL_COST_MAP_URL`` /
+``LITELLM_LOCAL_MODEL_COST_MAP``). ``PRICE_PER_1M`` stays as the
+hand-maintained gap-fill for ids LiteLLM does not know (dated Anthropic
+aliases, image models, …). Unknown models return ``None`` so reports show
+``usd: null`` instead of an invented number.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-# (input, output) USD per 1M tokens — provider list prices.
+# (input, output) USD per 1M tokens — provider list prices; gap-fill only.
 PRICE_PER_1M: dict[str, tuple[float, float]] = {
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.00),
@@ -65,18 +69,66 @@ def price_for(model: str | None) -> tuple[float, float] | None:
     return PRICE_PER_1M.get(tail)
 
 
+def _litellm_model_cost() -> dict[str, Any] | None:
+    """LiteLLM's cost map; None when litellm is unavailable. Lazy import."""
+    try:
+        import litellm
+    except ImportError:
+        return None
+    return litellm.model_cost
+
+
+def _litellm_usd(
+    leaf: str, prompt: int, completion: int, cached: int | None
+) -> float | None:
+    """Price ``leaf`` from ``litellm.model_cost``; None when unpriced or $0."""
+    model_cost = _litellm_model_cost()
+    if not model_cost:
+        return None
+    entry: Any = None
+    for candidate in (leaf, leaf.rsplit("/", 1)[-1]):
+        candidate_entry = model_cost.get(candidate)
+        if isinstance(candidate_entry, dict):
+            entry = candidate_entry
+            break
+    if entry is None:
+        return None
+    in_cost = entry.get("input_cost_per_token")
+    out_cost = entry.get("output_cost_per_token")
+    if in_cost is None and out_cost is None:
+        return None
+    cache_cost = entry.get("cache_read_input_token_cost")
+    if cache_cost is None:
+        cache_cost = in_cost or 0.0
+    cached = min(max(int(cached or 0), 0), prompt)
+    usd = (
+        (prompt - cached) * (in_cost or 0.0)
+        + cached * cache_cost
+        + completion * (out_cost or 0.0)
+    )
+    # Entries with no real pricing resolve to $0 — report as unknown instead.
+    return usd if usd > 0 else None
+
+
 def usd_for(
     model: str | None,
     prompt_tokens: int | None,
     completion_tokens: int | None,
+    cached_tokens: int | None = None,
 ) -> float | None:
     """Rough USD for one call; None when the model or usage is unknown."""
-    price = price_for(model)
-    if price is None:
+    leaf = normalize_model_id(model)
+    if not leaf:
         return None
     prompt = prompt_tokens or 0
     completion = completion_tokens or 0
     if prompt == 0 and completion == 0:
+        return None
+    usd = _litellm_usd(leaf, prompt, completion, cached_tokens)
+    if usd is not None:
+        return usd
+    price = price_for(model)
+    if price is None:
         return None
     return (prompt * price[0] + completion * price[1]) / 1_000_000
 
@@ -115,7 +167,7 @@ def summarize_usage(records: list[Any]) -> dict[str, Any]:
         model = getattr(rec, "model", None)
         if model and model not in models:
             models.append(model)
-        price = usd_for(model, p, c)
+        price = usd_for(model, p, c, getattr(rec, "cached_tokens", None))
         if (p or c) and price is None:
             label = normalize_model_id(model) or "unknown"
             if label not in unknown:

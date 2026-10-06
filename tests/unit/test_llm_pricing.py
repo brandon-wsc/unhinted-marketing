@@ -1,8 +1,67 @@
-"""Static price table lookup — never invent a price for unknown models."""
+"""USD estimates: LiteLLM cost map first, static gap-fill — never guessed."""
 
 from __future__ import annotations
 
+import pytest
+
+import internal.llm.pricing as pricing
 from internal.llm.pricing import normalize_model_id, price_for, summarize_usage, usd_for
+
+_FAKE_COST_MAP = {
+    "litellm-model": {
+        "input_cost_per_token": 1e-6,
+        "output_cost_per_token": 2e-6,
+        "cache_read_input_token_cost": 5e-7,
+        "litellm_provider": "openai",
+        "mode": "chat",
+    },
+    "no-price-fields": {"litellm_provider": "openai", "mode": "chat"},
+    "free-model": {
+        "input_cost_per_token": 0.0,
+        "output_cost_per_token": 0.0,
+        "litellm_provider": "openai",
+        "mode": "chat",
+    },
+}
+
+
+@pytest.fixture(autouse=True)
+def fake_cost_map(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin LiteLLM's map so tests never depend on the remote fetch or repricing."""
+    monkeypatch.setattr(pricing, "_litellm_model_cost", lambda: _FAKE_COST_MAP)
+
+
+def test_litellm_map_prices_known_model() -> None:
+    # 1000 in * $1/1M + 500 out * $2/1M = 0.001 + 0.001
+    assert abs(usd_for("litellm-model", 1000, 500) - 0.002) < 1e-12
+
+
+def test_litellm_cached_tokens_billed_at_cache_rate() -> None:
+    # 800 full-price in + 200 cache-read in + 100 out
+    usd = usd_for("litellm-model", 1000, 100, cached_tokens=200)
+    assert usd is not None
+    assert abs(usd - (800 * 1e-6 + 200 * 5e-7 + 100 * 2e-6)) < 1e-12
+
+
+def test_litellm_cached_tokens_capped_at_prompt() -> None:
+    usd = usd_for("litellm-model", 100, 0, cached_tokens=5000)
+    assert usd is not None
+    assert abs(usd - 100 * 5e-7) < 1e-12
+
+
+def test_litellm_entry_without_price_fields_falls_back() -> None:
+    assert usd_for("no-price-fields", 1000, 1000) is None
+
+
+def test_litellm_zero_cost_entry_is_unknown_not_zero() -> None:
+    assert usd_for("free-model", 1000, 1000) is None
+
+
+def test_litellm_map_unavailable_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pricing, "_litellm_model_cost", lambda: None)
+    usd = usd_for("gpt-4o-mini", 1_000_000, 500_000)
+    assert usd is not None
+    assert abs(usd - (0.15 + 0.30)) < 1e-9
 
 
 def test_known_model_priced() -> None:
