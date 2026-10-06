@@ -1,0 +1,34 @@
+# Chunk-stress cases — challenge "one row = one chunk" + 512-token truncation.
+# Expects document CURRENT behavior; a failure here surfaces a real design gap
+# rather than a regression. See catalogs/chunk_stress.yaml for the pairs.
+
+- id: needle_tail_truncated
+  catalog: chunk_stress
+  # True truncation: TAIL needle sits past token 512 (doc is 722 tokens) —
+  # only filler reaches the embedding, so TAIL degrades to the filler baseline
+  # and must not outrank FRONT (needle survives in FRONT's first ~130 tokens).
+  queries: ["食水安全 重金屬檢測 水源抽驗"]
+  expect:
+    hit_any: [STRESS-FRONT-01]
+    rank_before:
+      - [STRESS-FRONT-01, STRESS-TAIL-01]
+    vector_hit: true
+
+- id: dilution_slim_beats_stuffed
+  catalog: chunk_stress
+  # Same needle, but STUFFED dilutes it with ~30 junk cells — mean pooling
+  # should still find it, just weaker: both hit, SLIM outranks STUFFED.
+  queries: ["礦泉水 水質安全 檢測報告"]
+  expect:
+    hit_all: [STRESS-SLIM-01, STRESS-STUFFED-01]
+    rank_before:
+      - [STRESS-SLIM-01, STRESS-STUFFED-01]
+
+- id: needle_front_is_visible
+  catalog: chunk_stress
+  # Control: a needle inside the first 512 tokens must be found — isolates
+  # position as the only difference vs needle_tail_truncated.
+  queries: ["食水安全認證 檢測"]
+  expect:
+    hit_any: [STRESS-FRONT-01, STRESS-SLIM-01]
+    hit_none: [STRESS-PLAIN-01]

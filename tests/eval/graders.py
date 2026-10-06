@@ -187,6 +187,15 @@ def grade_retrieve(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
         kinds = {str(h.get("match_kind")) for h in hits}
         if "vector" not in kinds:
             reasons.append(f"no vector-tier hit in {kinds!r}")
+    for pair in expect.get("rank_before") or []:
+        a, b = str(pair[0]), str(pair[1])
+        ia = skus.index(a) if a in skus else -1
+        ib = skus.index(b) if b in skus else -1
+        if ia < 0 or ib < 0:
+            missing = a if ia < 0 else b
+            reasons.append(f"rank_before {pair!r}: {missing!r} not in {skus!r}")
+        elif ia >= ib:
+            reasons.append(f"rank_before violated: {a}@{ia} not before {b}@{ib}")
     return reasons
 
 
