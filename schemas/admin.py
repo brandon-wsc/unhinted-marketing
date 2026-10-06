@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -45,6 +45,9 @@ class LlmCallRecordDetail(LlmCallRecordSummary):
     # Computed at read time via internal.llm.pricing.usd_for — same rule as the
     # eval pack: None when the model is unpriced, never an invented number.
     usd: float | None = None
+    # "priced" — usd resolved; "unpriced" — usage exists but no price entry;
+    # "no_usage" — no tokens recorded (image calls, failures, …).
+    usd_state: Literal["priced", "unpriced", "no_usage"] = "no_usage"
 
 
 class LlmCallRecordList(BaseModel):

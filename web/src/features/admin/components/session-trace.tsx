@@ -282,6 +282,9 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn, onOpenRes
                     {turn.llm_calls.length > 0 && (
                       <p className="mt-2 text-muted-foreground">
                         {t("admin.sessionTrace.llmCount", { n: turn.llm_calls.length })}
+                        {t("admin.sessionTrace.llmTokens", {
+                          n: turn.llm_calls.reduce((s, c) => s + (c.total_tokens ?? 0), 0),
+                        })}
                       </p>
                     )}
                   </li>

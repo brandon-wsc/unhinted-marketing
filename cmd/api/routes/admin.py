@@ -102,7 +102,16 @@ async def get_llm_call(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
     detail = LlmCallRecordDetail.model_validate(row)
-    detail.usd = usd_for(row.model, row.prompt_tokens, row.completion_tokens)
+    detail.usd = usd_for(
+        row.model, row.prompt_tokens, row.completion_tokens, row.cached_tokens
+    )
+    detail.usd_state = (
+        "priced"
+        if detail.usd is not None
+        else "unpriced"
+        if (row.prompt_tokens or row.completion_tokens)
+        else "no_usage"
+    )
     return detail
 
 

@@ -7203,6 +7203,16 @@
               }
             ],
             "title": "Usd"
+          },
+          "usd_state": {
+            "type": "string",
+            "enum": [
+              "priced",
+              "unpriced",
+              "no_usage"
+            ],
+            "title": "Usd State",
+            "default": "no_usage"
           }
         },
         "type": "object",

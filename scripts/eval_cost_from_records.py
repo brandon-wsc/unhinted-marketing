@@ -1,8 +1,8 @@
 """Cost/latency surface over prod ``llm_call_records`` (ADR 0005).
 
 Read-only. Answers "what is the p95 and rough $ of my LLM loop" without a
-dashboard. Uses the same static price table as the eval pack
-(``internal/llm/pricing.py``) — unknown models show ``usd —``, never invented.
+dashboard. Prices come from ``internal/llm/pricing.py`` (LiteLLM's cost map
+with a static gap-fill table) — unknown models show ``usd —``, never invented.
 
 Usage (repo root, DATABASE_URL pointing at a dev/prod copy):
 
@@ -67,7 +67,9 @@ async def _collect(args: argparse.Namespace) -> dict[str, Any] | None:
     usd = 0.0
     unknown: list[str] = []
     for r in rows:
-        call_usd = usd_for(r.model, r.prompt_tokens, r.completion_tokens)
+        call_usd = usd_for(
+            r.model, r.prompt_tokens, r.completion_tokens, r.cached_tokens
+        )
         if call_usd is not None:
             usd += call_usd
         elif (r.prompt_tokens or r.completion_tokens) and r.model:
@@ -95,7 +97,9 @@ async def _collect(args: argparse.Namespace) -> dict[str, Any] | None:
             bucket["ttft_ms"].append(r.ttft_ms)
         bucket["total_tokens"] += r.total_tokens or 0
         bucket["cached_tokens"] += r.cached_tokens or 0
-        call_usd = usd_for(r.model, r.prompt_tokens, r.completion_tokens)
+        call_usd = usd_for(
+            r.model, r.prompt_tokens, r.completion_tokens, r.cached_tokens
+        )
         if call_usd is not None:
             bucket["usd"] += call_usd
     return {

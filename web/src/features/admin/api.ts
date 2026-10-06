@@ -34,6 +34,7 @@ export type LlmCallRecordDetail = LlmCallRecordSummary & {
   response_text: string | null;
   error: Record<string, unknown> | null;
   usd: number | null;
+  usd_state: "priced" | "unpriced" | "no_usage";
 };
 
 export type LlmCallRecordList = {

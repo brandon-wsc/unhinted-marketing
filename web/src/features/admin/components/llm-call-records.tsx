@@ -49,9 +49,9 @@ function formatLatency(ms: number | null): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`;
 }
 
-function formatUsd(usd: number | null): string {
-  if (usd == null) return "—";
-  return `$${usd.toFixed(4)}`;
+function formatUsd(detail: LlmCallRecordDetail, unpriced: string): string {
+  if (detail.usd != null) return `$${detail.usd.toFixed(4)}`;
+  return detail.usd_state === "unpriced" ? unpriced : "—";
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -109,7 +109,11 @@ function DetailContent({
         </Meta>
         <Meta label={t("admin.detail.temperature")}>{detail.temperature ?? "—"}</Meta>
         <Meta label={t("admin.table.latency")}>{formatLatency(detail.latency_ms)}</Meta>
-        <Meta label={t("admin.detail.usd")}>{formatUsd(detail.usd)}</Meta>
+        <Meta label={t("admin.detail.usd")}>
+          <span title={detail.usd_state === "unpriced" ? (detail.model ?? undefined) : undefined}>
+            {formatUsd(detail, t("admin.detail.usdUnpriced"))}
+          </span>
+        </Meta>
         <Meta label={t("admin.table.model")}>{detail.model ?? "—"}</Meta>
         <Meta label={t("admin.table.kind")}>{detail.kind}</Meta>
         <Meta label={t("admin.table.caller")}>{detail.caller}</Meta>
@@ -301,13 +305,14 @@ function CallTable({
             <TableHead>{t("admin.table.time")}</TableHead>
             <TableHead>{t("admin.table.node")}</TableHead>
             <TableHead>{t("admin.table.status")}</TableHead>
+            <TableHead>{t("admin.table.tokens")}</TableHead>
             <TableHead>{t("admin.table.latency")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {!loading && items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+              <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                 {t("admin.empty")}
               </TableCell>
             </TableRow>
@@ -325,6 +330,9 @@ function CallTable({
               <TableCell className="text-foreground">{row.node ?? "—"}</TableCell>
               <TableCell>
                 <StatusBadge status={row.status} />
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {row.total_tokens != null ? row.total_tokens.toLocaleString() : "—"}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {formatLatency(row.latency_ms)}
