@@ -28,6 +28,7 @@ from internal.llm.router import (
 from internal.media.storage import media_object_key, persist_generated_image
 from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.product_retrieve import (
+    ProductHit,
     hit_to_payload,
     pick_primary,
     search_products_for_member,
@@ -846,9 +847,47 @@ def _should_match_product(state: SessionState) -> bool:
     )
 
 
+def _signal_product_queries(state: SessionState) -> list[str]:
+    """Top-2 ranked signal titles as catalog queries (ADR 0040)."""
+    queries: list[str] = []
+    for s in _ranked_signals(state):
+        title = str(s.get("title") or "").strip()
+        if title and title not in queries:
+            queries.append(title[:200])
+        if len(queries) >= 2:
+            break
+    return queries
+
+
+def _related_payloads(
+    user_hits: list[ProductHit],
+    signal_hits: list[ProductHit],
+    *,
+    exclude: set[uuid.UUID],
+) -> list[dict[str, Any]]:
+    """Org-scope related products (ADR 0040): user-pool leftovers first, then
+    signal-keyed suggestions. Deduped by product id, capped at 2."""
+    out: list[dict[str, Any]] = []
+    seen = set(exclude)
+    for hit in (*user_hits, *signal_hits):
+        if hit.product.owner_scope != "org":
+            continue
+        if hit.product.id in seen:
+            continue
+        seen.add(hit.product.id)
+        out.append(hit_to_payload(hit))
+        if len(out) >= 2:
+            break
+    return out
+
+
 @agent_progress("product_matcher")
 async def product_matcher(state: SessionState) -> dict[str, Any]:
-    """SQL catalog match — no LLM. Org covers user on SKU clash."""
+    """SQL catalog match — no LLM. Org covers user on SKU clash.
+
+    ADR 0040: ranked signal titles query the catalog as a *separate* pool that
+    feeds ``related_products`` only — never primary, never clarify candidates.
+    """
     empty = {
         "primary_product": None,
         "related_products": [],
@@ -856,7 +895,8 @@ async def product_matcher(state: SessionState) -> dict[str, Any]:
         "product_context_ids": [],
         "product_candidates": [],
     }
-    if not _should_match_product(state):
+    signal_queries = _signal_product_queries(state)
+    if not _should_match_product(state) and not signal_queries:
         return empty
 
     company_id = state.get("company_id")
@@ -864,20 +904,27 @@ async def product_matcher(state: SessionState) -> dict[str, Any]:
     if not company_id or not user_id:
         return empty
 
-    queries = _product_queries(state)
-    if not queries:
-        return empty
-
     db = get_db()
-    hits = await search_products_for_member(
-        db,
-        company_id=uuid.UUID(company_id),
-        user_id=uuid.UUID(user_id),
-        queries=queries,
-        limit=5,
-    )
+    cid = uuid.UUID(company_id)
+    uid = uuid.UUID(user_id)
+    queries = _product_queries(state)
+    hits: list[ProductHit] = []
+    if queries:
+        hits = await search_products_for_member(
+            db, company_id=cid, user_id=uid, queries=queries, limit=5
+        )
+
+    signal_hits: list[ProductHit] = []
+    if signal_queries:
+        signal_hits = await search_products_for_member(
+            db, company_id=cid, user_id=uid, queries=signal_queries, limit=4
+        )
+
     if not hits:
-        return empty
+        return {
+            **empty,
+            "related_products": _related_payloads([], signal_hits, exclude=set()),
+        }
 
     primary, clarify = pick_primary(hits)
     candidates = [hit_to_payload(h) for h in hits[:3]]
@@ -891,19 +938,11 @@ async def product_matcher(state: SessionState) -> dict[str, Any]:
         }
 
     primary_payload = hit_to_payload(primary)
-    related: list[dict[str, Any]] = []
-    for hit in hits[1:]:
-        if hit.product.owner_scope != "org":
-            continue
-        if hit.product.sku == primary.product.sku:
-            continue
-        related.append(hit_to_payload(hit))
-        if len(related) >= 2:
-            break
-
     return {
         "primary_product": primary_payload,
-        "related_products": related,
+        "related_products": _related_payloads(
+            hits[1:], signal_hits, exclude={primary.product.id}
+        ),
         "product_clarify": False,
         "product_context_ids": [primary_payload["product_id"]],
         "product_candidates": [],
