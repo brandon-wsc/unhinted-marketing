@@ -1,0 +1,116 @@
+# Fixed product catalog fixture for retrieve eval — the "what Postgres contains"
+# analogue of cassettes/signals.json. Seeded into the eval DB with real
+# FastEmbed vectors; never reads production data.
+#
+# Shape:
+#   id: fixture name referenced by cases (`catalog:`)
+#   products: list of { sku, name, scope(org|user), profile: {col: value} }
+# profile cells join into search_document via build_search_document — keep the
+# spread realistic: name + sku + a few selling columns.
+id: hk_grocer
+products:
+  # Water cluster — 冒牌水 / 飲用水安全 news hook; two SKUs force margin pressure
+  - sku: WAT-DIST-550
+    name: 蒸餾水 550ml
+    scope: org
+    profile:
+      brand: PureDrop
+      category: 飲品
+      price: "HK$8"
+      description: 香港製蒸餾水，通過重金屬同微生物檢測，辦公室同屋企日常補水
+  - sku: WAT-DIST-1500
+    name: 蒸餾水 1.5L 家庭裝
+    scope: org
+    profile:
+      brand: PureDrop
+      category: 飲品
+      price: "HK$18"
+      description: 大樽裝蒸餾水，一家人一日飲用量，水質安全有檢測報告
+  - sku: WAT-FILTER-JUG
+    name: 濾水壺 3.5L
+    scope: org
+    profile:
+      brand: PureDrop
+      category: 廚具
+      price: "HK$269"
+      description: 活性碳濾芯過濾自來水氯氣同雜質，濾芯三個月一換
+
+  # Energy / OT cluster
+  - sku: DRK-ENGY-250
+    name: 能量飲品 250ml
+    scope: org
+    profile:
+      brand: VoltMax
+      category: 飲品
+      price: "HK$12"
+      description: 低糖能量飲，咖啡因 80mg，加班返工提神
+  - sku: DRK-ELEC-500
+    name: 電解質飲品 500ml
+    scope: org
+    profile:
+      brand: VoltMax
+      category: 飲品
+      price: "HK$10"
+      description: 運動出汗補充電解質，酷熱天氣行山戶外適用
+  - sku: DRK-OAT-1L
+    name: 燕麥奶 1L
+    scope: org
+    profile:
+      brand: OatDay
+      category: 飲品
+      price: "HK$35"
+      description: 無乳糖燕麥奶，咖啡沖調用
+
+  # Weather hooks — heatwave / cold snap
+  - sku: ELC-FAN-MINI
+    name: 迷你手提風扇
+    scope: org
+    profile:
+      brand: CoolGo
+      category: 電器
+      price: "HK$99"
+      description: USB 充電手提風扇，三檔風速，酷熱天氣出街必備
+  - sku: SKN-SUN-50
+    name: 防曬乳 SPF50
+    scope: org
+    profile:
+      brand: OatDay
+      category: 護膚
+      price: "HK$128"
+      description: SPF50 PA++++ 防曬，戶外活動防曬傷
+  - sku: HWR-WARM-10
+    name: 暖包 10片裝
+    scope: org
+    profile:
+      brand: WarmPal
+      category: 生活用品
+      price: "HK$25"
+      description: 即棄暖包，寒潮冬天暖手用，維持八個鐘
+
+  # Air / hygiene
+  - sku: PPE-MASK-50
+    name: 口罩 50片裝
+    scope: org
+    profile:
+      brand: SafeAir
+      category: 生活用品
+      price: "HK$45"
+      description: 三層過濾口罩，BFE 98%
+  - sku: SKN-HAND-50
+    name: 潤手霜 50ml
+    scope: org
+    profile:
+      brand: OatDay
+      category: 護膚
+      price: "HK$68"
+      description: 乾燥天氣潤手，乳木果配方
+
+  # User-scope row — Mine library, exercises org∪user union path
+  - sku: PER-SNACK-01
+    name: 手工曲奇禮盒
+    scope: user
+    profile:
+      brand: 自家
+      category: 食品
+      price: "HK$88"
+      description: 送禮手工曲奇，牛油原味

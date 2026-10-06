@@ -1,0 +1,57 @@
+# Retrieve eval cases — "news first → which product can ride it" (UC3).
+#
+# Shape:
+#   id / catalog (catalogs/*.yaml) / queries (user or signal-derived strings)
+#   expect:
+#     hit_any / hit_all / hit_none — sku set assertions on returned hits
+#     primary_is / primary_none / primary_kind — pick_primary result
+#     clarify — bool, pick_primary margin outcome
+#     min_hits / max_hits — count bounds
+#     vector_hit — at least one vector-tier match among hits
+
+# Theme hits ride the 0.42 vector floor but stay under PRIMARY_MIN_SCORE
+# (0.55) / margin — they surface as candidates, never auto-primary. Locking
+# that contract here; if UC3 later promotes signal-keyed hits to primary,
+# these expects must be revisited deliberately.
+
+- id: water_scandal_theme
+  catalog: hk_grocer
+  # Signal-style query: no lexical overlap with any product text —
+  # only the vector tier can surface the water cluster.
+  queries: ["政府採購冒牌飲用水", "食水安全 信任"]
+  expect:
+    hit_any:
+      - [WAT-DIST-550, WAT-DIST-1500, WAT-FILTER-JUG]
+    vector_hit: true
+    primary_none: true
+    clarify: true
+
+- id: heatwave_theme
+  catalog: hk_grocer
+  queries: ["酷熱天氣警告 戶外中暑"]
+  expect:
+    hit_any:
+      - [ELC-FAN-MINI, DRK-ELEC-500, SKN-SUN-50]
+    vector_hit: true
+    primary_none: true
+    clarify: true
+
+- id: overtime_theme
+  catalog: hk_grocer
+  queries: ["連日加班 攰到爆"]
+  expect:
+    hit_any:
+      - [DRK-ENGY-250]
+    vector_hit: true
+    primary_none: true
+    clarify: true
+
+- id: cold_snap_theme
+  catalog: hk_grocer
+  queries: ["寒潮襲港 氣溫急降"]
+  expect:
+    hit_any:
+      - [HWR-WARM-10]
+    vector_hit: true
+    primary_none: true
+    clarify: true

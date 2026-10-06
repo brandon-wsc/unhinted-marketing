@@ -1127,6 +1127,154 @@ async def test_product_matcher_sets_primary(
     assert out["product_context_ids"] == ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]
 
 
+def _product_row(sku: str, prefix8: str, owner_scope: str = "org"):
+    from types import SimpleNamespace
+    from uuid import UUID
+
+    return SimpleNamespace(
+        id=UUID(f"{prefix8}-1111-4222-8333-444444444444"),
+        sku=sku,
+        name=sku,
+        search_document=f"{sku} doc",
+        owner_scope=owner_scope,
+        profile={},
+    )
+
+
+@pytest.mark.asyncio
+async def test_product_matcher_signal_keyed_related_only(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    """ADR 0040 — signal-keyed hits feed related_products, never primary."""
+    from internal.memory.product_retrieve import ProductHit
+
+    water = _product_row("WAT-DIST-550", "bbbbbbbb")
+    signal_hit = ProductHit(product=water, score=0.9, match_kind="vector")
+    calls: list[list[str]] = []
+
+    async def fake_search(_db, *, queries, **_kw):
+        calls.append(list(queries))
+        return [signal_hit] if any("冒牌水" in q for q in queries) else []
+
+    monkeypatch.setattr(N, "search_products_for_member", fake_search)
+    with session_db(mock_db):
+        out = await N.product_matcher(
+            _base_state(
+                intent="start",
+                user_id="22222222-2222-2222-2222-222222222222",
+                research={"need_product": False, "sell_intent": "none"},
+                ranked_signals=[
+                    {
+                        "signal_id": "s1",
+                        "source": "tavily",
+                        "title": "政府採購冒牌水",
+                        "excerpt": "",
+                        "metrics": {},
+                    }
+                ],
+            )
+        )
+    assert out["primary_product"] is None
+    assert out["product_clarify"] is False
+    assert [p["sku"] for p in out["related_products"]] == ["WAT-DIST-550"]
+    assert out["product_context_ids"] == []
+    assert len(calls) == 2  # user pool + signal pool
+
+
+@pytest.mark.asyncio
+async def test_product_matcher_signal_hit_dedupes_primary(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    """ADR 0040 — signal pool must not re-suggest the resolved primary."""
+    from internal.memory.product_retrieve import ProductHit
+
+    primary_row = _product_row("DRK-OL-12", "aaaaaaaa")
+    other_row = _product_row("WAT-FILTER-JUG", "cccccccc")
+    primary_hit = ProductHit(product=primary_row, score=1.0, match_kind="exact_sku")
+    same = ProductHit(product=primary_row, score=0.8, match_kind="vector")
+    other = ProductHit(product=other_row, score=0.7, match_kind="vector")
+
+    async def fake_search(_db, *, queries, **_kw):
+        if any("冒牌水" in q for q in queries):
+            return [same, other]
+        return [primary_hit]
+
+    monkeypatch.setattr(N, "search_products_for_member", fake_search)
+    with session_db(mock_db):
+        out = await N.product_matcher(
+            _base_state(
+                intent="start",
+                user_id="22222222-2222-2222-2222-222222222222",
+                research={
+                    "need_product": True,
+                    "sell_intent": "explicit",
+                    "product_surface": "DRK-OL-12",
+                },
+                ranked_signals=[
+                    {
+                        "signal_id": "s1",
+                        "source": "tavily",
+                        "title": "政府採購冒牌水",
+                        "excerpt": "",
+                        "metrics": {},
+                    }
+                ],
+            )
+        )
+    assert out["primary_product"]["sku"] == "DRK-OL-12"
+    assert [p["sku"] for p in out["related_products"]] == ["WAT-FILTER-JUG"]
+
+
+@pytest.mark.asyncio
+async def test_product_matcher_clarify_drops_signal_pool(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    """ADR 0040 — clarify candidates come from user intent only."""
+    from internal.memory.product_retrieve import ProductHit
+
+    a = _product_row("WAT-DIST-550", "dddddddd")
+    b = _product_row("WAT-DIST-1500", "eeeeeeee")
+    sig = _product_row("WAT-FILTER-JUG", "ffffffff")
+    ambiguous = [
+        ProductHit(product=a, score=0.9, match_kind="vector"),
+        ProductHit(product=b, score=0.88, match_kind="vector"),
+    ]
+    signal_hit = ProductHit(product=sig, score=0.9, match_kind="vector")
+
+    async def fake_search(_db, *, queries, **_kw):
+        if any("冒牌水" in q for q in queries):
+            return [signal_hit]
+        return ambiguous
+
+    monkeypatch.setattr(N, "search_products_for_member", fake_search)
+    with session_db(mock_db):
+        out = await N.product_matcher(
+            _base_state(
+                intent="start",
+                user_id="22222222-2222-2222-2222-222222222222",
+                research={
+                    "need_product": True,
+                    "sell_intent": "explicit",
+                    "product_surface": "蒸餾水",
+                },
+                ranked_signals=[
+                    {
+                        "signal_id": "s1",
+                        "source": "tavily",
+                        "title": "政府採購冒牌水",
+                        "excerpt": "",
+                        "metrics": {},
+                    }
+                ],
+            )
+        )
+    assert out["product_clarify"] is True
+    assert {c["sku"] for c in out["product_candidates"]} == {
+        "WAT-DIST-550",
+        "WAT-DIST-1500",
+    }
+
+
 @pytest.mark.asyncio
 async def test_grounding_rejects_invented_product_price(
     monkeypatch: pytest.MonkeyPatch, mock_db

@@ -199,7 +199,7 @@ Draft schema (planned): `product_context_ids` on `DraftOut` / `EditOut`; persist
 
 ## Current code (shipped baseline)
 
-Today `load_context` emits top-level `voice_pack` + `audience_catalog` and identity-only `company_context` (K1). `trend_searcher` writes top-level `ranked_signals` + `trend_notes` (K2). `product_matcher` (no LLM) resolves `primary_product` with org-wins cover + hybrid lexical/vector retrieve (K4); ambiguous matches route to `chat` via `product_clarify`.
+Today `load_context` emits top-level `voice_pack` + `audience_catalog` and identity-only `company_context` (K1). `trend_searcher` writes top-level `ranked_signals` + `trend_notes` (K2). `product_matcher` (no LLM) resolves `primary_product` with org-wins cover + hybrid lexical/vector retrieve (K4); ambiguous matches route to `chat` via `product_clarify`. When `ranked_signals` exist, it also runs a **signal-keyed** retrieve whose hits feed `related_products` only — never primary or clarify ([ADR 0040](../adr/0040-signal-keyed-product-retrieve.md)).
 
 ---
 

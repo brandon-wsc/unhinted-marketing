@@ -160,7 +160,7 @@ Used by `product_matcher` ([SESSION.md](./SESSION.md)). Merges **Org × Old** an
 5. **Tier C — vector (K4):** embed queries; pgvector `<=>` cosine distance in SQL — same tenant + scope filter, `ORDER BY` distance `LIMIT` top-K (HNSW `vector_cosine_ops` index).
 6. **RRF** merge → candidate list; dedupe by SKU with **org row retained**.
 7. **Primary:** top-1 if score ≥ threshold **and** margin vs top-2; else **`product_clarify`**.
-8. **Related:** neighbors from **org** catalog only, top-2 — empty OK.
+8. **Related:** user-pool leftovers first, then **signal-keyed** hits ([ADR 0040](../adr/0040-signal-keyed-product-retrieve.md)): top-2 `ranked_signals` titles query the same hybrid path as a separate pool feeding `related_products` only — never primary, never clarify. Org catalog only, top-2 — empty OK.
 
 MVP (K3): Tier A + B; org+user union with org-wins dedupe. **K4:** Tier C FastEmbed vectors + RRF-style merge (`max(lex, vec, scaled RRF)`); always `company_id` in SQL before score.
 

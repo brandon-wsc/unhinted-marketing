@@ -1,0 +1,33 @@
+# Retrieve eval cases — explicit product intent + negative controls.
+
+- id: exact_sku
+  catalog: hk_grocer
+  queries: ["WAT-DIST-550"]
+  expect:
+    primary_is: WAT-DIST-550
+    primary_kind: exact_sku
+    clarify: false
+
+- id: fuzzy_name
+  catalog: hk_grocer
+  queries: ["濾水壺"]
+  expect:
+    hit_any: [WAT-FILTER-JUG]
+
+- id: water_ambiguous_clarify
+  catalog: hk_grocer
+  # Two water SKUs tie at the same fuzzy score — margin collapses, must
+  # clarify rather than silently pick one.
+  queries: ["蒸餾水"]
+  expect:
+    hit_all: [WAT-DIST-550, WAT-DIST-1500]
+    primary_none: true
+    clarify: true
+
+- id: unrelated_piano
+  catalog: hk_grocer
+  # Nothing in catalog is remotely related — must not surface a primary.
+  queries: ["成人鋼琴班 學琴"]
+  expect:
+    primary_none: true
+    hit_none: [DRK-ENGY-250, WAT-DIST-550]
