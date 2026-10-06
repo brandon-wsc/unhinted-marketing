@@ -141,6 +141,55 @@ def grade_grounding(output: dict[str, Any], expect: dict[str, Any]) -> list[str]
     return reasons
 
 
+def grade_retrieve(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
+    """Deterministic product-retrieve outcome — hit sets, primary, clarify.
+
+    ``output`` shape: {"hits": [{sku, score, match_kind}], "primary_sku",
+    "primary_kind", "clarify"}. Assert set properties, never exact scores —
+    HNSW/model drift can move scores without breaking behavior.
+    """
+    reasons: list[str] = []
+    hits = output.get("hits") or []
+    skus = [str(h.get("sku") or "") for h in hits]
+
+    for group in expect.get("hit_any") or []:
+        needles = group if isinstance(group, list) else [group]
+        if not any(str(n) in skus for n in needles):
+            reasons.append(f"hits miss any-of {needles!r}: {skus!r}")
+    for sku in expect.get("hit_all") or []:
+        if str(sku) not in skus:
+            reasons.append(f"hits miss {sku!r}: {skus!r}")
+    for sku in expect.get("hit_none") or []:
+        if str(sku) in skus:
+            reasons.append(f"hit_none violated by {sku!r}")
+    if expect.get("primary_none") and output.get("primary_sku") is not None:
+        reasons.append(f"expected no primary, got {output.get('primary_sku')!r}")
+    want_primary = expect.get("primary_is")
+    if want_primary is not None and output.get("primary_sku") != want_primary:
+        reasons.append(
+            f"primary={output.get('primary_sku')!r} want {want_primary!r}"
+        )
+    want_kind = expect.get("primary_kind")
+    if want_kind and output.get("primary_kind") != want_kind:
+        reasons.append(
+            f"primary_kind={output.get('primary_kind')!r} want {want_kind!r}"
+        )
+    want_clarify = expect.get("clarify")
+    if want_clarify is not None and bool(output.get("clarify")) != bool(want_clarify):
+        reasons.append(f"clarify={output.get('clarify')!r} want {want_clarify!r}")
+    min_hits = expect.get("min_hits")
+    if min_hits is not None and len(hits) < int(min_hits):
+        reasons.append(f"got {len(hits)} hits, want >={min_hits}")
+    max_hits = expect.get("max_hits")
+    if max_hits is not None and len(hits) > int(max_hits):
+        reasons.append(f"got {len(hits)} hits, want <={max_hits}")
+    if expect.get("vector_hit"):
+        kinds = {str(h.get("match_kind")) for h in hits}
+        if "vector" not in kinds:
+            reasons.append(f"no vector-tier hit in {kinds!r}")
+    return reasons
+
+
 def grade_case(case: dict[str, Any], output: dict[str, Any]) -> list[str]:
     expect = case.get("expect") or {}
     node = case.get("node")

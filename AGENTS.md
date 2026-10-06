@@ -68,6 +68,7 @@ pytest tests/unit/test_session_nodes.py tests/unit/test_session_routing.py \
  --cov=internal.session.execute_harness --cov=internal.session.ingest --cov-fail-under=70
 python -m scripts.export_contracts   # OpenAPI + JSON Schema under docs/
 python -m scripts.eval_agent         # on-demand live LLM eval (needs keys; deterministic-only runs go keyless; not CI)
+python -m scripts.eval_retrieve      # keyless product-retrieve eval — seeds catalog fixture into scratch pgvector (EVAL_DATABASE_URL, never DATABASE_URL)
 python -m scripts.eval_agent --suite regression   # bigger pack; --out reports/eval/baseline.json refreshes anchor
 python -m scripts.eval_diff          # baseline vs latest — exits 1; model change downgrades metrics to warnings (--strict-models fails hard)
 python -m scripts.eval_cost_from_records  # prod llm_call_records p50/p95 + ttft + cache hit rate + rough $
