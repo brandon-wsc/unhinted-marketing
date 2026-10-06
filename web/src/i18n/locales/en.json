@@ -842,6 +842,7 @@
       "parseOk": "JSON parse",
       "ttft": "TTFT",
       "usd": "Est. cost",
+      "usdUnpriced": "Unpriced",
       "tokensPrompt": "Input",
       "tokensCompletion": "Output",
       "tokensTotal": "Total",
@@ -872,7 +873,8 @@
       "noSignals": "No source signals on this revision / no matching signal rows",
       "turns": "Graph turns",
       "noTurns": "No node-step / LLM turn records",
-      "llmCount": "{{n}} LLM calls"
+      "llmCount": "{{n}} LLM calls",
+      "llmTokens": " · {{n}} tok"
     },
     "research": {
       "placeholder": "Paste session UUID…",

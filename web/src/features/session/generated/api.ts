@@ -2192,6 +2192,12 @@ export type components = {
             } | null;
             /** Usd */
             usd?: number | null;
+            /**
+             * Usd State
+             * @default no_usage
+             * @enum {string}
+             */
+            usd_state: "priced" | "unpriced" | "no_usage";
         };
         /** LlmCallRecordList */
         LlmCallRecordList: {

@@ -842,6 +842,7 @@
       "parseOk": "JSON 解析",
       "ttft": "TTFT",
       "usd": "估算成本",
+      "usdUnpriced": "未能估價",
       "tokensPrompt": "輸入",
       "tokensCompletion": "輸出",
       "tokensTotal": "合計",
@@ -872,7 +873,8 @@
       "noSignals": "呢個修訂冇 Source signals / 搵唔到 Signal 列",
       "turns": "Graph turns",
       "noTurns": "未有 Node-step / LLM turn 紀錄",
-      "llmCount": "{{n}} 個 LLM calls"
+      "llmCount": "{{n}} 個 LLM calls",
+      "llmTokens": " · {{n}} tok"
     },
     "research": {
       "placeholder": "貼上 Session UUID…",

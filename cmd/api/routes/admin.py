@@ -105,6 +105,13 @@ async def get_llm_call(
     detail.usd = usd_for(
         row.model, row.prompt_tokens, row.completion_tokens, row.cached_tokens
     )
+    detail.usd_state = (
+        "priced"
+        if detail.usd is not None
+        else "unpriced"
+        if (row.prompt_tokens or row.completion_tokens)
+        else "no_usage"
+    )
     return detail
 
 
