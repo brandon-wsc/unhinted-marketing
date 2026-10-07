@@ -3,12 +3,12 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import jwt
+from pwdlib import PasswordHash
 
 from internal.config import settings
 
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+password_hasher = PasswordHash.recommended()
 
 ALGORITHM = "HS256"
 TOKEN_TYPE_ACCESS = "access"
@@ -16,11 +16,11 @@ TOKEN_TYPE_REFRESH = "refresh"
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return password_hasher.hash(password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return password_hasher.verify(plain, hashed)
 
 
 def hash_refresh_token(token: str) -> str:
@@ -55,7 +55,7 @@ def create_refresh_jwt(user_id: uuid.UUID, family_id: uuid.UUID) -> tuple[str, d
 def decode_token(token: str, expected_type: str) -> dict:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
-    except JWTError as exc:
+    except jwt.InvalidTokenError as exc:
         raise ValueError("Invalid token") from exc
     if payload.get("type") != expected_type:
         raise ValueError("Invalid token type")
