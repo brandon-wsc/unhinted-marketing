@@ -34,6 +34,8 @@ import {
 } from "@/features/admin/components/shared";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { useDebouncedEffect } from "@/hooks/use-debounced-effect";
+import { usePageOffset } from "@/hooks/use-page-offset";
 
 function StepDetailContent({
   detail,
@@ -184,7 +186,8 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
   const [filters, setFilters] = useState<NodeStepFilters>({
     turnId: initialTurnId || undefined,
   });
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = usePageOffset(filters);
+
   const [items, setItems] = useState<NodeStepSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<NodeStepDetail | null>(null);
@@ -196,23 +199,17 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
     }
   }, [initialTurnId]);
 
-  useEffect(() => {
-    const handle = setTimeout(() => {
+  useDebouncedEffect(
+    () => {
       setFilters({
         node: nodeInput.trim() || undefined,
         sessionId: sessionInput.trim() || undefined,
         turnId: turnInput.trim() || undefined,
       });
-    }, 350);
-    return () => clearTimeout(handle);
-  }, [nodeInput, sessionInput, turnInput]);
-
-  // Reset to the first page whenever the applied filters change.
-  const [appliedFilters, setAppliedFilters] = useState(filters);
-  if (appliedFilters !== filters) {
-    setAppliedFilters(filters);
-    setOffset(0);
-  }
+    },
+    350,
+    [nodeInput, sessionInput, turnInput],
+  );
 
   const {
     loading,

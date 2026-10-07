@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,8 @@ import {
 } from "@/features/admin/components/shared";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { useDebouncedEffect } from "@/hooks/use-debounced-effect";
+import { usePageOffset } from "@/hooks/use-page-offset";
 
 const STATUS_OPTIONS = ["ok", "empty_response", "provider_error", "cancelled", "error"];
 const SPLIT_MIN_WIDTH = ADMIN_SPLIT_MIN_WIDTH;
@@ -364,7 +366,7 @@ export function LlmCallRecords({
 
   const [nodeInput, setNodeInput] = useState("");
   const [filters, setFilters] = useState<LlmCallFilters>({});
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = usePageOffset(filters);
 
   const [items, setItems] = useState<LlmCallRecordSummary[]>([]);
 
@@ -372,22 +374,16 @@ export function LlmCallRecords({
   const [detail, setDetail] = useState<LlmCallRecordDetail | null>(null);
 
   // Debounce the node text search into filters; status/checkbox apply instantly.
-  useEffect(() => {
-    const handle = setTimeout(() => {
+  useDebouncedEffect(
+    () => {
       setFilters((f) => {
         const node = nodeInput.trim() || undefined;
         return f.node === node ? f : { ...f, node };
       });
-    }, 350);
-    return () => clearTimeout(handle);
-  }, [nodeInput]);
-
-  // Reset to the first page whenever the applied filters change.
-  const [appliedFilters, setAppliedFilters] = useState(filters);
-  if (appliedFilters !== filters) {
-    setAppliedFilters(filters);
-    setOffset(0);
-  }
+    },
+    350,
+    [nodeInput],
+  );
 
   const {
     loading,

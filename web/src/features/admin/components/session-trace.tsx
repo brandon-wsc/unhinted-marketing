@@ -6,10 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/auth-context";
 import { apiAdminGetSessionTrace, type SessionTrace } from "@/features/admin/api";
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-HK", { hour12: false });
-}
+import { formatTime } from "@/features/admin/components/shared";
 
 type Props = {
   initialSessionId?: string;
