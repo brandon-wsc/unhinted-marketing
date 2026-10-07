@@ -122,7 +122,8 @@ async def register(
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     user = await get_user_with_memberships(db, user.id)
-    assert user is not None
+    if user is None:
+        raise HTTPException(status_code=500, detail="user_load_failed")
     return _token_response(user, access, refresh, response)
 
 
@@ -139,7 +140,8 @@ async def login(
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     user = await get_user_with_memberships(db, user.id)
-    assert user is not None
+    if user is None:
+        raise HTTPException(status_code=500, detail="user_load_failed")
     return _token_response(user, access, refresh, response)
 
 
@@ -159,7 +161,8 @@ async def refresh(
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     user = await get_user_with_memberships(db, user.id)
-    assert user is not None
+    if user is None:
+        raise HTTPException(status_code=500, detail="user_load_failed")
     return _token_response(user, access, new_refresh, response)
 
 
