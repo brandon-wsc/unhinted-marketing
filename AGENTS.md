@@ -186,6 +186,7 @@ Adding UI: check `components/ui` first; if missing, `pnpm dlx shadcn@latest add 
 ## When reviewing changes
 
 - Flag chat/LLM paths that publish, confirm, or upsert org catalog products; those are HTTP-only (ADR 0003, ADR 0011).
+- Flag blocking sync calls (CPU-bound work like ONNX embeds, sync I/O) inside `async def` routes/deps — wrap with `asyncio.to_thread` / `run_in_threadpool`.
 - Flag a second knowledge store or a second streaming-markdown stack.
 - Flag hand-rolled Alembic revision IDs and parallel `Button`/`Input`/`Dialog` outside `web/src/components/ui`.
 - Leave formatting and lint to CI.

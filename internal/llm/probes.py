@@ -28,7 +28,7 @@ from internal.llm.vertex_express import (
     VERTEX_EXPRESS_PROBE_WAIT_SECONDS,
     express_client,
 )
-from internal.memory.database import SessionLocal
+from internal.memory.database import open_session
 from internal.memory.models import ByokModel, ByokProvider
 from schemas.byok import ByokListedModel, ByokModelListProxy, ByokProbeResult
 
@@ -534,7 +534,7 @@ async def run_provider_auth_probe(provider_id: uuid.UUID, company_id: uuid.UUID)
     from internal.memory import repos
 
     try:
-        async with SessionLocal() as db:
+        async with open_session() as db:
             provider = await repos.get_byok_provider(db, company_id, provider_id)
             if provider is None:
                 return
@@ -549,7 +549,7 @@ async def run_model_format_probe(model_pk: uuid.UUID, company_id: uuid.UUID) -> 
     from internal.memory import repos
 
     try:
-        async with SessionLocal() as db:
+        async with open_session() as db:
             model = await repos.get_byok_model(db, company_id, model_pk)
             if model is None or model.provider is None:
                 return
