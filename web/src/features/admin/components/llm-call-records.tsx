@@ -40,6 +40,7 @@ import {
   Meta,
   shortId,
 } from "@/features/admin/components/shared";
+import { useAsyncData } from "@/hooks/use-async-data";
 import { useContainerWidth } from "@/hooks/use-container-width";
 
 const STATUS_OPTIONS = ["ok", "empty_response", "provider_error", "cancelled", "error"];
@@ -366,12 +367,9 @@ export function LlmCallRecords({
   const [offset, setOffset] = useState(0);
 
   const [items, setItems] = useState<LlmCallRecordSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<LlmCallRecordDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   // Debounce the node text search into filters; status/checkbox apply instantly.
   useEffect(() => {
@@ -391,45 +389,22 @@ export function LlmCallRecords({
     setOffset(0);
   }
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiAdminListLlmCalls(accessToken, filters, offset);
-      setItems(data.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken, filters, offset]);
+  const {
+    loading,
+    error,
+    reload: load,
+  } = useAsyncData(
+    () => apiAdminListLlmCalls(accessToken, filters, offset),
+    (data) => setItems(data.items),
+    [accessToken, filters, offset],
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      return;
-    }
-    let cancelled = false;
-    setDetailLoading(true);
-    setDetail(null);
-    apiAdminGetLlmCall(accessToken, selectedId)
-      .then((data) => {
-        if (!cancelled) setDetail(data);
-      })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, selectedId]);
+  const { loading: detailLoading } = useAsyncData(
+    () => (selectedId ? apiAdminGetLlmCall(accessToken, selectedId) : Promise.resolve(null)),
+    setDetail,
+    [accessToken, selectedId],
+    { reset: () => setDetail(null), onError: () => setDetail(null) },
+  );
 
   const selectRow = useCallback((id: string) => {
     setSelectedId((cur) => (cur === id ? null : id));

@@ -32,6 +32,7 @@ import {
   Meta,
   shortId,
 } from "@/features/admin/components/shared";
+import { useAsyncData } from "@/hooks/use-async-data";
 import { useContainerWidth } from "@/hooks/use-container-width";
 
 function StepDetailContent({
@@ -185,11 +186,8 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
   });
   const [offset, setOffset] = useState(0);
   const [items, setItems] = useState<NodeStepSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<NodeStepDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     if (initialTurnId) {
@@ -216,44 +214,22 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
     setOffset(0);
   }
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiAdminListNodeSteps(accessToken, filters, offset);
-      setItems(data.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken, filters, offset]);
+  const {
+    loading,
+    error,
+    reload: load,
+  } = useAsyncData(
+    () => apiAdminListNodeSteps(accessToken, filters, offset),
+    (data) => setItems(data.items),
+    [accessToken, filters, offset],
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      return;
-    }
-    let cancelled = false;
-    setDetailLoading(true);
-    apiAdminGetNodeStep(accessToken, selectedId)
-      .then((data) => {
-        if (!cancelled) setDetail(data);
-      })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, selectedId]);
+  const { loading: detailLoading } = useAsyncData(
+    () => (selectedId ? apiAdminGetNodeStep(accessToken, selectedId) : Promise.resolve(null)),
+    setDetail,
+    [accessToken, selectedId],
+    { onError: () => setDetail(null) },
+  );
 
   const selectRow = useCallback((id: string) => {
     setSelectedId((cur) => (cur === id ? null : id));

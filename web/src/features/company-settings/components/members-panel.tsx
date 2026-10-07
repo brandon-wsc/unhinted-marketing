@@ -1,5 +1,5 @@
 import { MailX, UserMinus } from "lucide-react";
-import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
 import { IconButton } from "@/components/icon-button";
@@ -48,6 +48,7 @@ import {
   type InviteRole,
   type OrgInviteItem,
 } from "@/features/company-settings/api";
+import { useAsyncData } from "@/hooks/use-async-data";
 import { copyText } from "@/lib/copy-text";
 import { mapApiError } from "@/lib/map-api-error";
 import { isValidEmail } from "@/lib/simple-email";
@@ -98,8 +99,6 @@ export function MembersPanel({
 }: MembersPanelProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
   const [name, setName] = useState(companyName);
   const [savingName, setSavingName] = useState(false);
@@ -117,34 +116,22 @@ export function MembersPanel({
     setName(companyName);
   }, [companyName]);
 
-  const reload = useCallback(async () => {
-    const [memberRes, inviteRes] = await Promise.all([
-      apiListMembers(accessToken, companyId),
-      canManageTeam
-        ? apiListInvites(accessToken, companyId)
-        : Promise.resolve({ items: [] as OrgInviteItem[] }),
-    ]);
-    setMembers(memberRes.items);
-    setInvites(inviteRes.items);
-  }, [accessToken, companyId, canManageTeam]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    void (async () => {
-      try {
-        await reload();
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reload]);
+  const { loading, error, setError, reload } = useAsyncData(
+    async () => {
+      const [memberRes, inviteRes] = await Promise.all([
+        apiListMembers(accessToken, companyId),
+        canManageTeam
+          ? apiListInvites(accessToken, companyId)
+          : Promise.resolve({ items: [] as OrgInviteItem[] }),
+      ]);
+      return { members: memberRes.items, invites: inviteRes.items };
+    },
+    ({ members, invites }) => {
+      setMembers(members);
+      setInvites(invites);
+    },
+    [accessToken, companyId, canManageTeam],
+  );
 
   async function onSaveName() {
     const next = name.trim();

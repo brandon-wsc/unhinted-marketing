@@ -1,12 +1,5 @@
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import { useAsyncData } from "@/hooks/use-async-data";
 import {
   apiLogin,
   apiLogout,
@@ -48,27 +41,18 @@ function applySession(
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await apiRefresh();
-        if (!cancelled) applySession(setAccessToken, setUser, data);
-      } catch {
-        if (!cancelled) {
-          setAccessToken(null);
-          setUser(null);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { loading } = useAsyncData(
+    apiRefresh,
+    (data) => applySession(setAccessToken, setUser, data),
+    [],
+    {
+      onError: () => {
+        setAccessToken(null);
+        setUser(null);
+      },
+    },
+  );
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await apiLogin({ email, password });

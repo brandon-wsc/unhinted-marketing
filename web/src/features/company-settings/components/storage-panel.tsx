@@ -29,6 +29,7 @@ import {
   type StorageConfigUpdate,
   type StorageMigrationState,
 } from "@/features/company-settings/api";
+import { useAsyncData } from "@/hooks/use-async-data";
 import { mapApiError } from "@/lib/map-api-error";
 
 type StoragePanelProps = {
@@ -103,11 +104,9 @@ function shouldPoll(state: StorageMigrationState | undefined): boolean {
 export function StoragePanel({ companyId }: StoragePanelProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [config, setConfig] = useState<StorageConfig | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<"saved" | "tested" | null>(null);
   const [flipOpen, setFlipOpen] = useState(false);
   const [cleanOpen, setCleanOpen] = useState(false);
@@ -144,29 +143,20 @@ export function StoragePanel({ companyId }: StoragePanelProps) {
     }, STORAGE_POLL_MS);
   }, [accessToken, applyConfig, companyId, stopPolling]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const cfg = await load();
-        if (!cancelled && shouldPoll(cfg.migration?.state)) startPolling();
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? mapApiError(err.message, t) : t("settings.storage.loadFailed"),
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      stopPolling();
-    };
-  }, [load, startPolling, stopPolling, t]);
+  const { loading, error, setError } = useAsyncData(
+    load,
+    (cfg) => {
+      if (shouldPoll(cfg.migration?.state)) startPolling();
+    },
+    [load, startPolling],
+    {
+      errorMessage: (err) =>
+        err instanceof Error ? mapApiError(err.message, t) : t("settings.storage.loadFailed"),
+    },
+  );
+
+  // Stop polling when leaving the panel or switching company.
+  useEffect(() => () => stopPolling(), [stopPolling, companyId]);
 
   const migration = config?.migration ?? null;
   const state = migration?.state;
