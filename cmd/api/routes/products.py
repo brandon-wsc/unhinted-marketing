@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import Annotated, Literal
 
@@ -162,14 +163,16 @@ async def import_company_products(
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 5MB)")
 
-    parsed, parse_errors = parse_product_upload(filename, data)
+    parsed, parse_errors = await asyncio.to_thread(
+        parse_product_upload, filename, data
+    )
     if not parsed and parse_errors:
         raise HTTPException(status_code=400, detail=parse_errors[0])
 
     imported = 0
     updated = 0
     docs = [row["search_document"] for row in parsed]
-    embeddings = embed_texts(docs)
+    embeddings = await asyncio.to_thread(embed_texts, docs)
     for row, emb in zip(parsed, embeddings, strict=True):
         _, created = await upsert_product_row(
             db,

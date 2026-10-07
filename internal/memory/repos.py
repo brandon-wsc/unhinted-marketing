@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -1179,7 +1180,7 @@ async def upsert_product_row(
     from sqlalchemy.orm.attributes import flag_modified
 
     if embedding is None and embed:
-        vecs = embed_texts([search_document])
+        vecs = await asyncio.to_thread(embed_texts, [search_document])
         embedding = vecs[0] if vecs else None
 
     stmt = select(Product).where(
@@ -1300,7 +1301,7 @@ async def update_manual_product(
         profile.pop("notes", None)
 
     search_document = build_search_document(profile, sku=sku, name=name)
-    vecs = embed_texts([search_document])
+    vecs = await asyncio.to_thread(embed_texts, [search_document])
     product.sku = sku
     product.name = name
     product.profile = profile
