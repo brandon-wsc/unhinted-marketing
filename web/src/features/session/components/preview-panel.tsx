@@ -18,6 +18,7 @@ import {
 } from "@/features/session/components/ig-preview-mock";
 import { ImagePlanFields } from "@/features/session/components/image-plan-fields";
 import {
+  type ImageFormat,
   imagePlanSummary,
   isConfirmSuccessStatus,
   primaryMediaItem,
@@ -48,7 +49,7 @@ type Props = {
     plan: Record<string, unknown>,
   ) => Promise<PreviewDraft | null | unknown>;
   onRegenImage: (imageId: string) => Promise<unknown>;
-  onAddImage: (format?: "single" | "comic_4panel") => Promise<PreviewDraft | null | unknown>;
+  onAddImage: (format?: ImageFormat) => Promise<PreviewDraft | null | unknown>;
   onRemoveImage: (imageId: string) => Promise<PreviewDraft | null | unknown>;
   onUploadImage: (imageId: string, file: File) => Promise<PreviewDraft | null | unknown>;
   /** When true, show back affordance (paged shell); split shell hides it. */

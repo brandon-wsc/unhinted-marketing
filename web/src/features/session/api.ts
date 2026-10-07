@@ -2,6 +2,7 @@ import { fetchWithAuth } from "@/context/auth-context";
 import { API_BASE } from "@/lib/api-base";
 import { apiFetch, apiJson } from "@/lib/api-fetch";
 import { parseApiErrorResponse } from "@/lib/parse-api-error";
+import type { ImageFormat } from "./session-helpers";
 import type {
   ChooseAngleResponse,
   ConfirmSessionResponse,
@@ -106,7 +107,7 @@ export async function apiChooseSessionAngle(
     angleIndex?: number;
     angle?: string;
     persona?: string;
-    imageFormat?: "single" | "comic_4panel";
+    imageFormat?: ImageFormat;
   },
 ): Promise<ChooseAngleResponse> {
   return apiJson<ChooseAngleResponse>(
@@ -128,7 +129,7 @@ export async function apiChooseSessionAngle(
 export async function apiResumeSessionImage(
   accessToken: string | null,
   sessionId: string,
-  init?: { signal?: AbortSignal; imageFormat?: "single" | "comic_4panel" },
+  init?: { signal?: AbortSignal; imageFormat?: ImageFormat },
 ): Promise<PostMessageResponse> {
   return apiJson<PostMessageResponse>(
     accessToken,
@@ -203,7 +204,7 @@ export async function apiRegenImage(
 export async function apiAddSessionImage(
   accessToken: string | null,
   sessionId: string,
-  body?: { format?: "single" | "comic_4panel"; plan?: Record<string, unknown> },
+  body?: { format?: ImageFormat; plan?: Record<string, unknown> },
 ): Promise<PreviewMediaMutationResponse> {
   return apiJson<PreviewMediaMutationResponse>(
     accessToken,

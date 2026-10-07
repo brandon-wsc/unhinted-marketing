@@ -44,6 +44,7 @@ import {
   agentNodeFallbackKey,
   agentNodeLabelKey,
   agentTrailHeader,
+  type ImageFormat,
   imagePlanSummary,
   isConfirmSuccessStatus,
   lastAgentActionNode,
@@ -389,11 +390,7 @@ export function ChatPanel() {
     }
   }
 
-  async function onPickAngle(
-    angle: number | string,
-    persona?: string,
-    imageFormat?: "single" | "comic_4panel",
-  ) {
+  async function onPickAngle(angle: number | string, persona?: string, imageFormat?: ImageFormat) {
     try {
       await chooseAngle(angle, persona, imageFormat);
     } catch {
@@ -453,7 +450,7 @@ export function ChatPanel() {
     }
   }
 
-  async function onAddImage(format?: "single" | "comic_4panel") {
+  async function onAddImage(format?: ImageFormat) {
     try {
       return await addImage(format);
     } catch {
