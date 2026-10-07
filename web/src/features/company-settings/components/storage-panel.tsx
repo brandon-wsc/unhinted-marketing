@@ -30,6 +30,7 @@ import {
   type StorageMigrationState,
 } from "@/features/company-settings/api";
 import { useAsyncData } from "@/hooks/use-async-data";
+import { useFlash } from "@/hooks/use-flash";
 import { mapApiError } from "@/lib/map-api-error";
 
 type StoragePanelProps = {
@@ -107,7 +108,7 @@ export function StoragePanel({ companyId }: StoragePanelProps) {
   const [busy, setBusy] = useState(false);
   const [config, setConfig] = useState<StorageConfig | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [flash, setFlash] = useState<"saved" | "tested" | null>(null);
+  const [flash, setFlash] = useFlash<"saved" | "tested">();
   const [flipOpen, setFlipOpen] = useState(false);
   const [cleanOpen, setCleanOpen] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -187,7 +188,6 @@ export function StoragePanel({ companyId }: StoragePanelProps) {
       const cfg = await apiPutStorageConfig(accessToken, companyId, updateBody(form));
       applyConfig(cfg);
       setFlash("saved");
-      window.setTimeout(() => setFlash(null), 2500);
     } catch (err) {
       setError(
         err instanceof Error ? mapApiError(err.message, t) : t("settings.storage.saveFailed"),
@@ -206,7 +206,6 @@ export function StoragePanel({ companyId }: StoragePanelProps) {
       const result = await apiTestStorageConnection(accessToken, companyId, updateBody(form));
       if (result.ok) {
         setFlash("tested");
-        window.setTimeout(() => setFlash(null), 2500);
       } else {
         setError(result.error || t("settings.storage.saveFailed"));
       }

@@ -28,6 +28,7 @@ import type {
   PreviewDraft,
   SourceSignal,
 } from "@/features/session/types";
+import { useFlash } from "@/hooks/use-flash";
 
 type PreviewPhase = "accepted" | "pending" | "generating";
 
@@ -89,7 +90,7 @@ export function PreviewPanel({
   const [editImageOpen, setEditImageOpen] = useState(false);
   const [editCopyOpen, setEditCopyOpen] = useState(false);
   const [promoting, setPromoting] = useState(false);
-  const [promoteFlash, setPromoteFlash] = useState<"ok" | "dup" | "err" | null>(null);
+  const [promoteFlash, setPromoteFlash] = useFlash<"ok" | "dup" | "err">(3000);
   const [promoteError, setPromoteError] = useState<string | null>(null);
 
   // Server wins on SSE / AI revise — reset local dirty state.
@@ -166,9 +167,8 @@ export function PreviewPanel({
     try {
       const res = await apiPromoteVoiceExemplar(accessToken, companyId, local.caption);
       setPromoteFlash(res.added ? "ok" : "dup");
-      window.setTimeout(() => setPromoteFlash(null), 3000);
     } catch (err) {
-      setPromoteFlash("err");
+      setPromoteFlash("err", false);
       setPromoteError(err instanceof Error ? err.message : String(err));
     } finally {
       setPromoting(false);

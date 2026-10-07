@@ -31,6 +31,7 @@ import {
   type SocialAccountItem,
   type SocialOAuthStatus,
 } from "@/features/company-settings/api";
+import { useFlash } from "@/hooks/use-flash";
 import { mapApiError } from "@/lib/map-api-error";
 import { isSuperAdmin } from "@/lib/platform-level";
 import { cn } from "@/lib/utils";
@@ -69,7 +70,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const [manualBusy, setManualBusy] = useState(false);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [flash, setFlash] = useState<"disconnected" | null>(null);
+  const [flash, setFlash] = useFlash<"disconnected">();
   const popupRef = useRef<Window | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -262,7 +263,6 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
       setStatus("not_connected");
       setDisconnectOpen(false);
       setFlash("disconnected");
-      window.setTimeout(() => setFlash(null), 2500);
     } catch (err) {
       setError(
         err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.saveFailed"),

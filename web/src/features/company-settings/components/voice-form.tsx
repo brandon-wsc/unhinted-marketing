@@ -16,6 +16,7 @@ import {
   type CompanyVoiceSettings,
 } from "@/features/company-settings/api";
 import { useAsyncData } from "@/hooks/use-async-data";
+import { useFlash } from "@/hooks/use-flash";
 import { cn } from "@/lib/utils";
 
 const ROAST_LEVELS = [0, 1, 2, 3] as const;
@@ -39,7 +40,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
   const [saving, setSaving] = useState(false);
-  const [savedFlash, setSavedFlash] = useState(false);
+  const [savedFlash, setSavedFlash] = useFlash<boolean>();
   const [canEdit, setCanEdit] = useState(false);
   const [roastLevel, setRoastLevel] = useState(1);
   const [locale, setLocale] = useState("zh-HK");
@@ -124,7 +125,6 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
       setBaseline(updated);
       setCanEdit(updated.can_edit);
       setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2500);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

@@ -49,6 +49,7 @@ import {
   type OrgInviteItem,
 } from "@/features/company-settings/api";
 import { useAsyncData } from "@/hooks/use-async-data";
+import { useFlash } from "@/hooks/use-flash";
 import { mapApiError } from "@/lib/map-api-error";
 import { isValidEmail } from "@/lib/simple-email";
 
@@ -77,7 +78,7 @@ export function MembersPanel({
 }: MembersPanelProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
-  const [savedFlash, setSavedFlash] = useState(false);
+  const [savedFlash, setSavedFlash] = useFlash<boolean>();
   const [name, setName] = useState(companyName);
   const [savingName, setSavingName] = useState(false);
   const [members, setMembers] = useState<CompanyMember[]>([]);
@@ -119,7 +120,6 @@ export function MembersPanel({
       await apiPatchCompanyName(accessToken, companyId, next);
       await onCompanyRenamed?.();
       setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2500);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
