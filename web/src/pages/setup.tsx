@@ -26,6 +26,7 @@ import {
 } from "@/features/company-settings/api";
 import { BYOK_PROVIDER_TYPES } from "@/features/company-settings/byok-helpers";
 import { apiRunSetup, type SetupEmailBackend } from "@/features/setup/api";
+import { useFieldErrors } from "@/hooks/use-field-errors";
 import { mapApiError } from "@/lib/map-api-error";
 import { isValidEmail } from "@/lib/simple-email";
 import { cn } from "@/lib/utils";
@@ -65,7 +66,7 @@ export function SetupPage() {
 
   const [step, setStep] = useState<Step>("welcome");
   const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const { fieldErrors, setFieldErrors, clearFieldError, applyFieldErrors } = useFieldErrors();
   const [submitting, setSubmitting] = useState(false);
 
   // Step 1 — admin account + company
@@ -112,22 +113,6 @@ export function SetupPage() {
   const effectiveBaseUrl = (
     baseUrlTouched ? webBaseUrl : status?.web_base_url || window.location.origin
   ).trim();
-
-  function clearFieldError(id: string) {
-    setFieldErrors((prev) => {
-      if (!(id in prev)) return prev;
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  }
-
-  function applyFieldErrors(errors: Record<string, string>) {
-    setFieldErrors(errors);
-    const firstId = Object.keys(errors)[0];
-    if (firstId) document.getElementById(firstId)?.focus();
-    return Object.keys(errors).length === 0;
-  }
 
   function onAccountNext(e: FormEvent) {
     e.preventDefault();
