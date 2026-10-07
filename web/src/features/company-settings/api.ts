@@ -1,5 +1,6 @@
 import { fetchWithAuth } from "@/context/auth-context";
 import { API_BASE } from "@/lib/api-base";
+import { apiFetch, apiJson } from "@/lib/api-fetch";
 import {
   type ByokHasDependents,
   type ByokRoutingSlotName,
@@ -73,20 +74,18 @@ export class ProductSkuConflictError extends Error {
   }
 }
 
-async function throwProductWriteError(res: Response): Promise<never> {
+async function productWriteErrorMapper(res: Response): Promise<Error> {
   const body: unknown = await res.json().catch(() => null);
   const conflict = parseSkuConflict(body);
-  if (conflict) throw new ProductSkuConflictError(conflict);
-  throw new Error(parseApiErrorBody(body ?? {}, res.status));
+  if (conflict) return new ProductSkuConflictError(conflict);
+  return new Error(parseApiErrorBody(body ?? {}, res.status));
 }
 
 export async function apiGetCompanyVoice(
   accessToken: string | null,
   companyId: string,
 ): Promise<CompanyVoiceSettings> {
-  const res = await fetchWithAuth(accessToken, `${API_BASE}/companies/${companyId}/voice`);
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
+  return apiJson<CompanyVoiceSettings>(accessToken, `${API_BASE}/companies/${companyId}/voice`);
 }
 
 export async function apiPatchCompanyVoice(
@@ -94,13 +93,10 @@ export async function apiPatchCompanyVoice(
   companyId: string,
   body: CompanyVoiceUpdate,
 ): Promise<CompanyVoiceSettings> {
-  const res = await fetchWithAuth(accessToken, `${API_BASE}/companies/${companyId}/voice`, {
+  return apiJson<CompanyVoiceSettings>(accessToken, `${API_BASE}/companies/${companyId}/voice`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    json: body,
   });
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
 }
 
 export async function apiPromoteVoiceExemplar(
@@ -108,17 +104,11 @@ export async function apiPromoteVoiceExemplar(
   companyId: string,
   caption: string,
 ): Promise<ExemplarPromoteResponse> {
-  const res = await fetchWithAuth(
+  return apiJson<ExemplarPromoteResponse>(
     accessToken,
     `${API_BASE}/companies/${companyId}/voice/exemplars`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caption }),
-    },
+    { method: "POST", json: { caption } },
   );
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
 }
 
 export async function apiListProducts(
@@ -127,9 +117,10 @@ export async function apiListProducts(
   scope: ProductScope,
 ): Promise<ProductListResponse> {
   const qs = new URLSearchParams({ scope });
-  const res = await fetchWithAuth(accessToken, `${API_BASE}/companies/${companyId}/products?${qs}`);
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
+  return apiJson<ProductListResponse>(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/products?${qs}`,
+  );
 }
 
 export async function apiImportProducts(
@@ -141,13 +132,11 @@ export async function apiImportProducts(
   const qs = new URLSearchParams({ scope });
   const body = new FormData();
   body.append("file", file);
-  const res = await fetchWithAuth(
+  return apiJson<ProductImportResponse>(
     accessToken,
     `${API_BASE}/companies/${companyId}/products/import?${qs}`,
     { method: "POST", body },
   );
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
 }
 
 export async function apiCreateProduct(
@@ -157,17 +146,12 @@ export async function apiCreateProduct(
   input: { name: string; sku: string; notes?: string },
 ): Promise<ProductItem> {
   const qs = new URLSearchParams({ scope });
-  const res = await fetchWithAuth(
+  return apiJson<ProductItem>(
     accessToken,
     `${API_BASE}/companies/${companyId}/products?${qs}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    },
+    { method: "POST", json: input },
+    productWriteErrorMapper,
   );
-  if (!res.ok) await throwProductWriteError(res);
-  return res.json();
 }
 
 export async function apiPatchProduct(
@@ -176,17 +160,12 @@ export async function apiPatchProduct(
   productId: string,
   input: { name: string; sku: string; notes?: string },
 ): Promise<ProductItem> {
-  const res = await fetchWithAuth(
+  return apiJson<ProductItem>(
     accessToken,
     `${API_BASE}/companies/${companyId}/products/${productId}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    },
+    { method: "PATCH", json: input },
+    productWriteErrorMapper,
   );
-  if (!res.ok) await throwProductWriteError(res);
-  return res.json();
 }
 
 export async function apiArchiveProduct(
@@ -194,13 +173,11 @@ export async function apiArchiveProduct(
   companyId: string,
   productId: string,
 ): Promise<ProductItem> {
-  const res = await fetchWithAuth(
+  return apiJson<ProductItem>(
     accessToken,
     `${API_BASE}/companies/${companyId}/products/${productId}/archive`,
     { method: "POST" },
   );
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
 }
 
 export type ProposalFieldChange = "added" | "changed" | "removed" | "same";
@@ -234,13 +211,11 @@ export async function apiProposeProduct(
   companyId: string,
   productId: string,
 ): Promise<ProductProposalItem> {
-  const res = await fetchWithAuth(
+  return apiJson<ProductProposalItem>(
     accessToken,
     `${API_BASE}/companies/${companyId}/products/${productId}/propose`,
     { method: "POST" },
   );
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
 }
 
 export async function apiCancelProposal(
@@ -248,22 +223,18 @@ export async function apiCancelProposal(
   companyId: string,
   proposalId: string,
 ): Promise<ProductProposalItem> {
-  const res = await fetchWithAuth(
+  return apiJson<ProductProposalItem>(
     accessToken,
     `${API_BASE}/companies/${companyId}/proposals/${proposalId}/cancel`,
     { method: "POST" },
   );
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
 }
 
 export async function apiListProposals(
   accessToken: string | null,
   companyId: string,
 ): Promise<{ company_id: string; items: ProductProposalItem[] }> {
-  const res = await fetchWithAuth(accessToken, `${API_BASE}/companies/${companyId}/proposals`);
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
+  return apiJson(accessToken, `${API_BASE}/companies/${companyId}/proposals`);
 }
 
 export async function apiApproveProposal(
@@ -271,13 +242,11 @@ export async function apiApproveProposal(
   companyId: string,
   proposalId: string,
 ): Promise<ProductProposalItem> {
-  const res = await fetchWithAuth(
+  return apiJson<ProductProposalItem>(
     accessToken,
     `${API_BASE}/companies/${companyId}/proposals/${proposalId}/approve`,
     { method: "POST" },
   );
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
 }
 
 export async function apiRejectProposal(
@@ -285,13 +254,11 @@ export async function apiRejectProposal(
   companyId: string,
   proposalId: string,
 ): Promise<ProductProposalItem> {
-  const res = await fetchWithAuth(
+  return apiJson<ProductProposalItem>(
     accessToken,
     `${API_BASE}/companies/${companyId}/proposals/${proposalId}/reject`,
     { method: "POST" },
   );
-  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
-  return res.json();
 }
 
 export type CompanyMemberRole = "owner" | "admin" | "member";
@@ -341,31 +308,32 @@ export class ApiStatusError extends Error {
   }
 }
 
-async function throwApiError(res: Response): Promise<never> {
-  throw new ApiStatusError(res.status, await parseApiErrorResponse(res));
-}
+const statusErrorMapper = async (res: Response): Promise<Error> =>
+  new ApiStatusError(res.status, await parseApiErrorResponse(res));
 
 export async function apiPatchCompanyName(
   accessToken: string | null,
   companyId: string,
   name: string,
 ): Promise<CompanySummary> {
-  const res = await fetchWithAuth(accessToken, `${API_BASE}/companies/${companyId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<CompanySummary>(
+    accessToken,
+    `${API_BASE}/companies/${companyId}`,
+    { method: "PATCH", json: { name } },
+    statusErrorMapper,
+  );
 }
 
 export async function apiListMembers(
   accessToken: string | null,
   companyId: string,
 ): Promise<{ company_id: string; items: CompanyMember[] }> {
-  const res = await fetchWithAuth(accessToken, `${API_BASE}/companies/${companyId}/members`);
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/members`,
+    undefined,
+    statusErrorMapper,
+  );
 }
 
 export async function apiPatchMemberRole(
@@ -374,17 +342,12 @@ export async function apiPatchMemberRole(
   userId: string,
   role: InviteRole,
 ): Promise<CompanyMember> {
-  const res = await fetchWithAuth(
+  return apiJson<CompanyMember>(
     accessToken,
     `${API_BASE}/companies/${companyId}/members/${userId}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
-    },
+    { method: "PATCH", json: { role } },
+    statusErrorMapper,
   );
-  if (!res.ok) await throwApiError(res);
-  return res.json();
 }
 
 export async function apiRemoveMember(
@@ -392,21 +355,24 @@ export async function apiRemoveMember(
   companyId: string,
   userId: string,
 ): Promise<void> {
-  const res = await fetchWithAuth(
+  await apiFetch(
     accessToken,
     `${API_BASE}/companies/${companyId}/members/${userId}`,
     { method: "DELETE" },
+    statusErrorMapper,
   );
-  if (!res.ok) await throwApiError(res);
 }
 
 export async function apiListInvites(
   accessToken: string | null,
   companyId: string,
 ): Promise<{ company_id: string; items: OrgInviteItem[] }> {
-  const res = await fetchWithAuth(accessToken, `${API_BASE}/companies/${companyId}/invites`);
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/invites`,
+    undefined,
+    statusErrorMapper,
+  );
 }
 
 export async function apiCreateInvite(
@@ -414,13 +380,12 @@ export async function apiCreateInvite(
   companyId: string,
   body: { email: string; role: InviteRole },
 ): Promise<OrgInviteItem> {
-  const res = await fetchWithAuth(accessToken, `${API_BASE}/companies/${companyId}/invites`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<OrgInviteItem>(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/invites`,
+    { method: "POST", json: body },
+    statusErrorMapper,
+  );
 }
 
 export async function apiRevokeInvite(
@@ -428,29 +393,33 @@ export async function apiRevokeInvite(
   companyId: string,
   inviteId: string,
 ): Promise<void> {
-  const res = await fetchWithAuth(
+  await apiFetch(
     accessToken,
     `${API_BASE}/companies/${companyId}/invites/${inviteId}`,
     { method: "DELETE" },
+    statusErrorMapper,
   );
-  if (!res.ok) await throwApiError(res);
 }
 
 export async function apiGetInvitePreview(token: string): Promise<OrgInvitePreview> {
-  const res = await fetch(`${API_BASE}/invites/${encodeURIComponent(token)}`);
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<OrgInvitePreview>(
+    null,
+    `${API_BASE}/invites/${encodeURIComponent(token)}`,
+    undefined,
+    statusErrorMapper,
+  );
 }
 
 export async function apiAcceptInvite(
   accessToken: string | null,
   token: string,
 ): Promise<OrgInviteAcceptResponse> {
-  const res = await fetchWithAuth(accessToken, `${API_BASE}/invites/${token}/accept`, {
-    method: "POST",
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<OrgInviteAcceptResponse>(
+    accessToken,
+    `${API_BASE}/invites/${token}/accept`,
+    { method: "POST" },
+    statusErrorMapper,
+  );
 }
 
 export type ByokProviderType =
@@ -554,11 +523,11 @@ export class ByokDependentsError extends Error {
   }
 }
 
-async function throwByokError(res: Response): Promise<never> {
+async function byokErrorMapper(res: Response): Promise<Error> {
   const body: unknown = await res.json().catch(() => null);
   const conflict = parseHasDependents(body);
-  if (res.status === 409 && conflict) throw new ByokDependentsError(conflict);
-  throw new ApiStatusError(res.status, parseApiErrorBody(body ?? {}, res.status));
+  if (res.status === 409 && conflict) return new ByokDependentsError(conflict);
+  return new ApiStatusError(res.status, parseApiErrorBody(body ?? {}, res.status));
 }
 
 function byokPath(companyId: string, suffix: string): string {
@@ -569,9 +538,12 @@ export async function apiListByokProviders(
   accessToken: string | null,
   companyId: string,
 ): Promise<ByokProviderItem[]> {
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/providers"));
-  if (!res.ok) await throwApiError(res);
-  const body = (await res.json()) as { items: ByokProviderItem[] };
+  const body = await apiJson<{ items: ByokProviderItem[] }>(
+    accessToken,
+    byokPath(companyId, "/providers"),
+    undefined,
+    statusErrorMapper,
+  );
   return body.items;
 }
 
@@ -580,13 +552,12 @@ export async function apiCreateByokProvider(
   companyId: string,
   body: ByokProviderCreate,
 ): Promise<ByokProviderItem> {
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/providers"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await throwByokError(res);
-  return res.json();
+  return apiJson<ByokProviderItem>(
+    accessToken,
+    byokPath(companyId, "/providers"),
+    { method: "POST", json: body },
+    byokErrorMapper,
+  );
 }
 
 export async function apiPatchByokProvider(
@@ -595,13 +566,12 @@ export async function apiPatchByokProvider(
   providerId: string,
   body: ByokProviderPatch,
 ): Promise<ByokProviderItem> {
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, `/providers/${providerId}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await throwByokError(res);
-  return res.json();
+  return apiJson<ByokProviderItem>(
+    accessToken,
+    byokPath(companyId, `/providers/${providerId}`),
+    { method: "PATCH", json: body },
+    byokErrorMapper,
+  );
 }
 
 export async function apiDeleteByokProvider(
@@ -611,10 +581,7 @@ export async function apiDeleteByokProvider(
   force = false,
 ): Promise<void> {
   const suffix = force ? `/providers/${providerId}?force=true` : `/providers/${providerId}`;
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, suffix), {
-    method: "DELETE",
-  });
-  if (!res.ok) await throwByokError(res);
+  await apiFetch(accessToken, byokPath(companyId, suffix), { method: "DELETE" }, byokErrorMapper);
 }
 
 export async function apiTestByokProvider(
@@ -622,13 +589,12 @@ export async function apiTestByokProvider(
   companyId: string,
   providerId: string,
 ): Promise<ByokProbeResult> {
-  const res = await fetchWithAuth(
+  return apiJson<ByokProbeResult>(
     accessToken,
     byokPath(companyId, `/providers/${providerId}/test`),
     { method: "POST" },
+    statusErrorMapper,
   );
-  if (!res.ok) await throwApiError(res);
-  return res.json();
 }
 
 export async function apiListByokProviderCatalog(
@@ -636,21 +602,24 @@ export async function apiListByokProviderCatalog(
   companyId: string,
   providerId: string,
 ): Promise<ByokModelListProxy> {
-  const res = await fetchWithAuth(
+  return apiJson<ByokModelListProxy>(
     accessToken,
     byokPath(companyId, `/providers/${providerId}/models`),
+    undefined,
+    statusErrorMapper,
   );
-  if (!res.ok) await throwApiError(res);
-  return res.json();
 }
 
 export async function apiListByokModels(
   accessToken: string | null,
   companyId: string,
 ): Promise<ByokModelItem[]> {
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/models"));
-  if (!res.ok) await throwApiError(res);
-  const body = (await res.json()) as { items: ByokModelItem[] };
+  const body = await apiJson<{ items: ByokModelItem[] }>(
+    accessToken,
+    byokPath(companyId, "/models"),
+    undefined,
+    statusErrorMapper,
+  );
   return body.items;
 }
 
@@ -659,13 +628,12 @@ export async function apiCreateByokModel(
   companyId: string,
   body: ByokModelCreate,
 ): Promise<ByokModelItem> {
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/models"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await throwByokError(res);
-  return res.json();
+  return apiJson<ByokModelItem>(
+    accessToken,
+    byokPath(companyId, "/models"),
+    { method: "POST", json: body },
+    byokErrorMapper,
+  );
 }
 
 export async function apiDeleteByokModel(
@@ -675,10 +643,7 @@ export async function apiDeleteByokModel(
   force = false,
 ): Promise<void> {
   const suffix = force ? `/models/${modelPk}?force=true` : `/models/${modelPk}`;
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, suffix), {
-    method: "DELETE",
-  });
-  if (!res.ok) await throwByokError(res);
+  await apiFetch(accessToken, byokPath(companyId, suffix), { method: "DELETE" }, byokErrorMapper);
 }
 
 export async function apiTestByokModel(
@@ -690,20 +655,24 @@ export async function apiTestByokModel(
   const suffix = confirmPaid
     ? `/models/${modelPk}/test?confirm_paid=true`
     : `/models/${modelPk}/test`;
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, suffix), {
-    method: "POST",
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<ByokProbeResult>(
+    accessToken,
+    byokPath(companyId, suffix),
+    { method: "POST" },
+    statusErrorMapper,
+  );
 }
 
 export async function apiGetByokRouting(
   accessToken: string | null,
   companyId: string,
 ): Promise<ByokRoutingResponse> {
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/routing"));
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<ByokRoutingResponse>(
+    accessToken,
+    byokPath(companyId, "/routing"),
+    undefined,
+    statusErrorMapper,
+  );
 }
 
 export async function apiPutByokRouting(
@@ -711,13 +680,12 @@ export async function apiPutByokRouting(
   companyId: string,
   body: ByokRoutingUpdate,
 ): Promise<ByokRoutingResponse> {
-  const res = await fetchWithAuth(accessToken, byokPath(companyId, "/routing"), {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<ByokRoutingResponse>(
+    accessToken,
+    byokPath(companyId, "/routing"),
+    { method: "PUT", json: body },
+    statusErrorMapper,
+  );
 }
 
 export type SocialAccountItem = {
@@ -745,9 +713,12 @@ export async function apiListSocialAccounts(
   accessToken: string | null,
   companyId: string,
 ): Promise<SocialAccountItem[]> {
-  const res = await fetchWithAuth(accessToken, socialPath(companyId));
-  if (!res.ok) await throwApiError(res);
-  const body = (await res.json()) as SocialAccountList;
+  const body = await apiJson<SocialAccountList>(
+    accessToken,
+    socialPath(companyId),
+    undefined,
+    statusErrorMapper,
+  );
   return body.items ?? [];
 }
 
@@ -763,23 +734,25 @@ export async function apiUpsertSocialAccount(
   platform: string,
   body: SocialAccountUpsertBody,
 ): Promise<SocialAccountItem> {
-  const res = await fetchWithAuth(accessToken, socialPath(companyId, `/${platform}`), {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<SocialAccountItem>(
+    accessToken,
+    socialPath(companyId, `/${platform}`),
+    { method: "PUT", json: body },
+    statusErrorMapper,
+  );
 }
 
 export async function apiDisconnectInstagramAccount(
   accessToken: string | null,
   companyId: string,
 ): Promise<void> {
+  // 404 is fine — disconnect is idempotent.
   const res = await fetchWithAuth(accessToken, socialPath(companyId, "/instagram"), {
     method: "DELETE",
   });
-  if (!res.ok && res.status !== 404) await throwApiError(res);
+  if (!res.ok && res.status !== 404) {
+    throw new ApiStatusError(res.status, await parseApiErrorResponse(res));
+  }
 }
 
 export type SocialOAuthStatus = "not_connected" | "pending" | "connected";
@@ -799,31 +772,36 @@ export async function apiStartInstagramOAuth(
   accessToken: string | null,
   companyId: string,
 ): Promise<SocialOAuthInfo> {
-  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/oauth/start"), {
-    method: "POST",
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<SocialOAuthInfo>(
+    accessToken,
+    socialPath(companyId, "/oauth/start"),
+    { method: "POST" },
+    statusErrorMapper,
+  );
 }
 
 export async function apiGetInstagramOAuthStatus(
   accessToken: string | null,
   companyId: string,
 ): Promise<SocialOAuthInfo> {
-  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/oauth/status"));
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<SocialOAuthInfo>(
+    accessToken,
+    socialPath(companyId, "/oauth/status"),
+    undefined,
+    statusErrorMapper,
+  );
 }
 
 export async function apiCancelInstagramOAuth(
   accessToken: string | null,
   companyId: string,
 ): Promise<SocialOAuthInfo> {
-  const res = await fetchWithAuth(accessToken, socialPath(companyId, "/oauth/cancel"), {
-    method: "POST",
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<SocialOAuthInfo>(
+    accessToken,
+    socialPath(companyId, "/oauth/cancel"),
+    { method: "POST" },
+    statusErrorMapper,
+  );
 }
 
 export type StorageBackend = "local" | "s3";
@@ -891,9 +869,12 @@ export async function apiGetStorageConfig(
   accessToken: string | null,
   companyId: string,
 ): Promise<StorageConfig> {
-  const res = await fetchWithAuth(accessToken, storagePath(companyId, "/config"));
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<StorageConfig>(
+    accessToken,
+    storagePath(companyId, "/config"),
+    undefined,
+    statusErrorMapper,
+  );
 }
 
 export async function apiPutStorageConfig(
@@ -901,13 +882,12 @@ export async function apiPutStorageConfig(
   companyId: string,
   body: StorageConfigUpdate,
 ): Promise<StorageConfig> {
-  const res = await fetchWithAuth(accessToken, storagePath(companyId, "/config"), {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<StorageConfig>(
+    accessToken,
+    storagePath(companyId, "/config"),
+    { method: "PUT", json: body },
+    statusErrorMapper,
+  );
 }
 
 export async function apiTestStorageConnection(
@@ -915,24 +895,24 @@ export async function apiTestStorageConnection(
   companyId: string,
   body: StorageConfigUpdate,
 ): Promise<StorageTestResult> {
-  const res = await fetchWithAuth(accessToken, storagePath(companyId, "/test"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<StorageTestResult>(
+    accessToken,
+    storagePath(companyId, "/test"),
+    { method: "POST", json: body },
+    statusErrorMapper,
+  );
 }
 
 export async function apiStartStorageMigration(
   accessToken: string | null,
   companyId: string,
 ): Promise<StorageMigration> {
-  const res = await fetchWithAuth(accessToken, storagePath(companyId, "/migrations"), {
-    method: "POST",
-  });
-  if (!res.ok) await throwApiError(res);
-  return res.json();
+  return apiJson<StorageMigration>(
+    accessToken,
+    storagePath(companyId, "/migrations"),
+    { method: "POST" },
+    statusErrorMapper,
+  );
 }
 
 export async function apiFlipStorageMigration(
@@ -940,13 +920,12 @@ export async function apiFlipStorageMigration(
   companyId: string,
   migrationId: string,
 ): Promise<StorageMigration> {
-  const res = await fetchWithAuth(
+  return apiJson<StorageMigration>(
     accessToken,
     storagePath(companyId, `/migrations/${migrationId}/flip`),
     { method: "POST" },
+    statusErrorMapper,
   );
-  if (!res.ok) await throwApiError(res);
-  return res.json();
 }
 
 export async function apiRollbackStorageMigration(
@@ -954,13 +933,12 @@ export async function apiRollbackStorageMigration(
   companyId: string,
   migrationId: string,
 ): Promise<StorageMigration> {
-  const res = await fetchWithAuth(
+  return apiJson<StorageMigration>(
     accessToken,
     storagePath(companyId, `/migrations/${migrationId}/rollback`),
     { method: "POST" },
+    statusErrorMapper,
   );
-  if (!res.ok) await throwApiError(res);
-  return res.json();
 }
 
 export async function apiCleanStorageMigration(
@@ -968,11 +946,10 @@ export async function apiCleanStorageMigration(
   companyId: string,
   migrationId: string,
 ): Promise<StorageMigration> {
-  const res = await fetchWithAuth(
+  return apiJson<StorageMigration>(
     accessToken,
     storagePath(companyId, `/migrations/${migrationId}/clean`),
     { method: "POST" },
+    statusErrorMapper,
   );
-  if (!res.ok) await throwApiError(res);
-  return res.json();
 }
