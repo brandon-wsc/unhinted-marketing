@@ -17,7 +17,7 @@ import {
 } from "@/features/company-settings/api";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { useFlash } from "@/hooks/use-flash";
-import { cn } from "@/lib/utils";
+import { cn, errorMessage } from "@/lib/utils";
 
 const ROAST_LEVELS = [0, 1, 2, 3] as const;
 const MAX_EXEMPLARS = 3;
@@ -126,7 +126,7 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
       setCanEdit(updated.can_edit);
       setSavedFlash(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setSaving(false);
     }

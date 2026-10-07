@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { errorMessage } from "@/lib/utils";
 
 export type AsyncDataOptions = {
   /** Runs before every load attempt (e.g. clearing stale selection detail). */
@@ -60,7 +61,7 @@ export function useAsyncData<T>(
       if (opts?.onError) {
         opts.onError(err);
       } else {
-        setError(opts?.errorMessage?.(err) ?? (err instanceof Error ? err.message : String(err)));
+        setError(opts?.errorMessage?.(err) ?? errorMessage(err));
       }
     } finally {
       if (epoch === epochRef.current) setLoading(false);

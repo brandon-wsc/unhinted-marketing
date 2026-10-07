@@ -52,6 +52,7 @@ import {
 import { useAsyncData } from "@/hooks/use-async-data";
 import { mapApiError } from "@/lib/map-api-error";
 import type { ProductSkuConflict } from "@/lib/parse-api-error";
+import { errorMessage } from "@/lib/utils";
 
 type ProductsPanelProps = {
   companyId: string;
@@ -156,7 +157,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
       setImportResult(result);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -170,7 +171,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
       await apiProposeProduct(accessToken, companyId, productId);
       await refresh();
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusy(false);
     }
@@ -183,7 +184,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
       await apiCancelProposal(accessToken, companyId, proposalId);
       await refresh();
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusy(false);
     }
@@ -197,7 +198,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
       await apiArchiveProduct(accessToken, companyId, productId);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -220,7 +221,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
         setSkuConflict(err.conflict);
         return;
       }
-      setFormError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setFormError(mapApiError(errorMessage(err), t));
     } finally {
       setBusy(false);
     }
@@ -243,7 +244,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
         setSkuConflict(err.conflict);
         return;
       }
-      setFormError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setFormError(mapApiError(errorMessage(err), t));
     } finally {
       setBusy(false);
     }

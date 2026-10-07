@@ -52,6 +52,7 @@ import { useAsyncData } from "@/hooks/use-async-data";
 import { useFlash } from "@/hooks/use-flash";
 import { mapApiError } from "@/lib/map-api-error";
 import { isValidEmail } from "@/lib/simple-email";
+import { errorMessage } from "@/lib/utils";
 
 type MembersPanelProps = {
   companyId: string;
@@ -121,7 +122,7 @@ export function MembersPanel({
       await onCompanyRenamed?.();
       setSavedFlash(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setSavingName(false);
     }
@@ -133,7 +134,7 @@ export function MembersPanel({
       const updated = await apiPatchMemberRole(accessToken, companyId, member.user_id, role);
       setMembers((rows) => rows.map((row) => (row.user_id === updated.user_id ? updated : row)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   }
 
@@ -145,7 +146,7 @@ export function MembersPanel({
       setMembers((rows) => rows.filter((row) => row.user_id !== removeTarget.user_id));
       setRemoveTarget(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   }
 
@@ -177,7 +178,7 @@ export function MembersPanel({
       await reload();
     } catch (err) {
       setInviteUrl(null);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       if (
         err instanceof ApiStatusError &&
         (err.status === 422 || err.status === 409 || /email/i.test(message))
@@ -197,7 +198,7 @@ export function MembersPanel({
       await apiRevokeInvite(accessToken, companyId, invite.id);
       setInvites((rows) => rows.filter((row) => row.id !== invite.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   }
 
@@ -275,7 +276,7 @@ export function MembersPanel({
           </TableHeader>
           <TableBody>
             {members.map((member) => (
-              <TableRow key={member.user_id} className="hover:bg-accent">
+              <TableRow key={member.user_id}>
                 <TableCell>{member.display_name}</TableCell>
                 <TableCell>{member.email}</TableCell>
                 <TableCell>
@@ -405,7 +406,7 @@ export function MembersPanel({
             </TableHeader>
             <TableBody>
               {invites.map((invite) => (
-                <TableRow key={invite.id} className="hover:bg-accent">
+                <TableRow key={invite.id}>
                   <TableCell>{invite.email}</TableCell>
                   <TableCell>
                     <Badge variant={invite.role === "admin" ? "secondary" : "outline"}>

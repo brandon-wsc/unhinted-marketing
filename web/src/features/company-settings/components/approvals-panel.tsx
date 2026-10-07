@@ -26,6 +26,7 @@ import {
   type ProductProposalItem,
 } from "@/features/company-settings/api";
 import { useAsyncData } from "@/hooks/use-async-data";
+import { errorMessage } from "@/lib/utils";
 
 type ApprovalsPanelProps = {
   companyId: string;
@@ -66,7 +67,7 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
       setDetail(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -80,7 +81,7 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
       setDetail(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusyId(null);
     }

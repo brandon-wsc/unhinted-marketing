@@ -30,6 +30,7 @@ import type {
   SourceSignal,
 } from "@/features/session/types";
 import { useFlash } from "@/hooks/use-flash";
+import { errorMessage } from "@/lib/utils";
 
 type PreviewPhase = "accepted" | "pending" | "generating";
 
@@ -170,7 +171,7 @@ export function PreviewPanel({
       setPromoteFlash(res.added ? "ok" : "dup");
     } catch (err) {
       setPromoteFlash("err", false);
-      setPromoteError(err instanceof Error ? err.message : String(err));
+      setPromoteError(errorMessage(err));
     } finally {
       setPromoting(false);
     }

@@ -68,6 +68,7 @@ import {
 import { AddModelDialog } from "@/features/company-settings/components/add-model-dialog";
 import { KeyFormFields } from "@/features/company-settings/components/key-form-fields";
 import { mapApiError } from "@/lib/map-api-error";
+import { errorMessage } from "@/lib/utils";
 
 const ROUTING_SLOTS: ByokRoutingSlotName[] = ["cheap", "medium", "strong", "image"];
 const POLL_ATTEMPTS = 4;
@@ -202,7 +203,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
         }
       } catch (err) {
         if (cancelled) return;
-        setError(mapApiError(err instanceof Error ? err.message : String(err), tRef.current));
+        setError(mapApiError(errorMessage(err), tRef.current));
         setLoading(false);
       }
     })();
@@ -218,7 +219,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       await apiTestByokProvider(accessToken, companyId, item.id);
       await refresh();
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -232,7 +233,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       setImageTest(null);
       await refresh();
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -267,7 +268,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       setAddKey(null);
       await refresh({ poll: true });
     } catch (err) {
-      setDialogError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setDialogError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -294,7 +295,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       setEditKey(null);
       await refresh({ poll: true });
     } catch (err) {
-      setDialogError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setDialogError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -317,7 +318,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       if (err instanceof ByokDependentsError) {
         setPendingDelete({ ...pendingDelete, conflict: err.conflict });
       } else {
-        setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+        setError(mapApiError(errorMessage(err), t));
         setPendingDelete(null);
       }
     } finally {
@@ -334,7 +335,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       const next = await apiPutByokRouting(accessToken, companyId, update);
       setRouting(next.slots);
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -597,7 +598,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
           try {
             await refresh({ poll: true });
           } catch (err) {
-            setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+            setError(mapApiError(errorMessage(err), t));
             throw err;
           }
         }}
