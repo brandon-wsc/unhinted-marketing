@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -31,6 +31,7 @@ import {
 } from "@/features/company-settings/api";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { useFlash } from "@/hooks/use-flash";
+import { usePolling } from "@/hooks/use-polling";
 import { mapApiError } from "@/lib/map-api-error";
 
 type StoragePanelProps = {
@@ -111,7 +112,7 @@ export function StoragePanel({ companyId }: StoragePanelProps) {
   const [flash, setFlash] = useFlash<"saved" | "tested">();
   const [flipOpen, setFlipOpen] = useState(false);
   const [cleanOpen, setCleanOpen] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { start: startPoll, stop: stopPolling } = usePolling();
 
   const applyConfig = useCallback((cfg: StorageConfig) => {
     setConfig(cfg);
@@ -124,25 +125,20 @@ export function StoragePanel({ companyId }: StoragePanelProps) {
     return cfg;
   }, [accessToken, applyConfig, companyId]);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
   const startPolling = useCallback(() => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const cfg = await apiGetStorageConfig(accessToken, companyId);
-        applyConfig(cfg);
-        if (!shouldPoll(cfg.migration?.state)) stopPolling();
-      } catch {
-        // Keep polling through transient errors.
-      }
-    }, STORAGE_POLL_MS);
-  }, [accessToken, applyConfig, companyId, stopPolling]);
+    startPoll(
+      async () => {
+        try {
+          const cfg = await apiGetStorageConfig(accessToken, companyId);
+          applyConfig(cfg);
+          if (!shouldPoll(cfg.migration?.state)) stopPolling();
+        } catch {
+          // Keep polling through transient errors.
+        }
+      },
+      { intervalMs: STORAGE_POLL_MS },
+    );
+  }, [accessToken, applyConfig, companyId, startPoll, stopPolling]);
 
   const { loading, error, setError } = useAsyncData(
     load,

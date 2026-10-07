@@ -32,6 +32,7 @@ import {
   type SocialOAuthStatus,
 } from "@/features/company-settings/api";
 import { useFlash } from "@/hooks/use-flash";
+import { usePolling } from "@/hooks/use-polling";
 import { mapApiError } from "@/lib/map-api-error";
 import { isSuperAdmin } from "@/lib/platform-level";
 import { cn } from "@/lib/utils";
@@ -72,20 +73,8 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useFlash<"disconnected">();
   const popupRef = useRef<Window | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortingRef = useRef(false);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  }, []);
+  const { start: startPoll, stop: stopPolling } = usePolling();
 
   const loadAccounts = useCallback(
     async (withStatus: boolean) => {
@@ -139,35 +128,38 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
 
   // Poll the OAuth status while a connect is pending; resolve when done/failed.
   const pollStatus = useCallback(() => {
-    stopPolling();
-    timeoutRef.current = setTimeout(() => {
-      void abortConnect();
-    }, OAUTH_POLL_TIMEOUT_MS);
-    pollRef.current = setInterval(async () => {
-      try {
-        const oauth = await apiGetInstagramOAuthStatus(accessToken, companyId);
-        // User cancel / timeout already stopped the interval; ignore stale replies.
-        if (!pollRef.current) return;
-        setConfigured(Boolean(oauth.configured));
-        if (oauth.status === "connected") {
-          stopPolling();
-          setStatus("connected");
-          await loadAccounts(false);
-        } else if (oauth.status === "pending") {
-          setStatus("pending");
-        } else {
-          stopPolling();
-          setStatus("not_connected");
-          setError(t("settings.instagram.oauthAborted"));
+    startPoll(
+      async ({ isActive }) => {
+        try {
+          const oauth = await apiGetInstagramOAuthStatus(accessToken, companyId);
+          // User cancel / timeout already stopped the interval; ignore stale replies.
+          if (!isActive()) return;
+          setConfigured(Boolean(oauth.configured));
+          if (oauth.status === "connected") {
+            stopPolling();
+            setStatus("connected");
+            await loadAccounts(false);
+          } else if (oauth.status === "pending") {
+            setStatus("pending");
+          } else {
+            stopPolling();
+            setStatus("not_connected");
+            setError(t("settings.instagram.oauthAborted"));
+          }
+        } catch (err) {
+          // Transient network error — keep polling.
+          setError(
+            err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.loadFailed"),
+          );
         }
-      } catch (err) {
-        // Transient network error — keep polling.
-        setError(
-          err instanceof Error ? mapApiError(err.message, t) : t("settings.instagram.loadFailed"),
-        );
-      }
-    }, POLL_INTERVAL_MS);
-  }, [abortConnect, accessToken, companyId, loadAccounts, stopPolling, t]);
+      },
+      {
+        intervalMs: POLL_INTERVAL_MS,
+        timeoutMs: OAUTH_POLL_TIMEOUT_MS,
+        onTimeout: () => void abortConnect(),
+      },
+    );
+  }, [abortConnect, accessToken, companyId, loadAccounts, startPoll, stopPolling, t]);
 
   const load = useCallback(async () => {
     setLoading(true);
