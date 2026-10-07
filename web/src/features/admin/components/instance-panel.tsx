@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CopyField } from "@/components/copy-field";
 import { FormField } from "@/components/form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -38,23 +39,9 @@ function CopyUrlField({
   value: string;
   hint: string;
 }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
   return (
     <FormField id={id} label={label}>
-      <div className="flex gap-2">
-        <Input id={id} value={value} readOnly className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          className={copied ? "text-success" : undefined}
-          onClick={() => {
-            void copyText(value).then(setCopied);
-          }}
-        >
-          {copied ? t("common.copied") : t("common.copy")}
-        </Button>
-      </div>
+      <CopyField id={id} value={value} className="flex-row" />
       <p className="text-xs text-muted-foreground">{hint}</p>
     </FormField>
   );

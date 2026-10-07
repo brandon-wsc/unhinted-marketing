@@ -1,6 +1,7 @@
 import { MailX, UserMinus } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CopyField } from "@/components/copy-field";
 import { FormField } from "@/components/form-field";
 import { IconButton } from "@/components/icon-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -49,7 +50,6 @@ import {
   type OrgInviteItem,
 } from "@/features/company-settings/api";
 import { useAsyncData } from "@/hooks/use-async-data";
-import { copyText } from "@/lib/copy-text";
 import { mapApiError } from "@/lib/map-api-error";
 import { isValidEmail } from "@/lib/simple-email";
 
@@ -109,7 +109,6 @@ export function MembersPanel({
   const [inviteEmailError, setInviteEmailError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<CompanyMember | null>(null);
 
   useEffect(() => {
@@ -178,7 +177,6 @@ export function MembersPanel({
     const trimmed = inviteEmail.trim();
     setError(null);
     setInviteEmailError(null);
-    setCopied(false);
     if (!isValidEmail(trimmed)) {
       setInviteEmailError(t("settings.members.invite.invalidEmail"));
       return;
@@ -213,11 +211,6 @@ export function MembersPanel({
     } finally {
       setSending(false);
     }
-  }
-
-  async function onCopyLink() {
-    if (!inviteUrl) return;
-    setCopied(await copyText(inviteUrl));
   }
 
   async function onRevoke(invite: OrgInviteItem) {
@@ -404,17 +397,12 @@ export function MembersPanel({
           </form>
           {inviteUrl && (
             <div className="space-y-2">
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input value={inviteUrl} readOnly className="flex-1" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={copied ? "text-success" : undefined}
-                  onClick={() => void onCopyLink()}
-                >
-                  {copied ? t("settings.members.invite.copied") : t("settings.members.invite.copy")}
-                </Button>
-              </div>
+              <CopyField
+                key={inviteUrl}
+                value={inviteUrl}
+                copyLabel={t("settings.members.invite.copy")}
+                copiedLabel={t("settings.members.invite.copied")}
+              />
               <p className="text-xs text-muted-foreground">
                 {t("settings.members.invite.pasteHint")}
               </p>

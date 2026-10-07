@@ -2,6 +2,7 @@ import { CalendarIcon, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { CopyField } from "@/components/copy-field";
 import { FormField } from "@/components/form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -30,7 +31,6 @@ import {
   type SocialAccountItem,
   type SocialOAuthStatus,
 } from "@/features/company-settings/api";
-import { copyText } from "@/lib/copy-text";
 import { mapApiError } from "@/lib/map-api-error";
 import { isSuperAdmin } from "@/lib/platform-level";
 import { cn } from "@/lib/utils";
@@ -38,27 +38,6 @@ import { cn } from "@/lib/utils";
 type InstagramPanelProps = {
   companyId: string;
 };
-
-/** One copyable Meta-dashboard URL row in the guided setup card (ADR 0033). */
-function DashboardUrlRow({ url }: { url: string }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="flex flex-col gap-2 sm:flex-row">
-      <Input value={url} readOnly className="flex-1" />
-      <Button
-        type="button"
-        variant="outline"
-        className={copied ? "text-success" : undefined}
-        onClick={() => {
-          void copyText(url).then(setCopied);
-        }}
-      >
-        {copied ? t("common.copied") : t("common.copy")}
-      </Button>
-    </div>
-  );
-}
 
 const POLL_INTERVAL_MS = 2500;
 export const OAUTH_POLL_TIMEOUT_MS = 10 * 60 * 1000;
@@ -414,7 +393,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
               .map((row) => (
                 <div key={row.label} className="space-y-1">
                   <p className="text-xs text-muted-foreground">{row.label}</p>
-                  <DashboardUrlRow url={row.url} />
+                  <CopyField value={row.url} />
                 </div>
               ))}
             <p className="text-xs text-muted-foreground">
