@@ -1,9 +1,9 @@
 import { MailX, UserMinus } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CopyField } from "@/components/copy-field";
 import { FormField } from "@/components/form-field";
-import { IconButton } from "@/components/icon-button";
+import { RowIconAction } from "@/components/row-icon-action";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -34,7 +34,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import {
   ApiStatusError,
@@ -68,27 +67,6 @@ function roleBadgeVariant(role: CompanyMember["role"]): "default" | "secondary" 
   if (role === "owner") return "default";
   if (role === "admin") return "secondary";
   return "outline";
-}
-
-function RowIconAction({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <IconButton type="button" className="size-8" aria-label={label} onClick={onClick}>
-          {children}
-        </IconButton>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
-  );
 }
 
 export function MembersPanel({

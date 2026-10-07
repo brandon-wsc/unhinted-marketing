@@ -1,8 +1,8 @@
 import { CirclePlay, Pencil, Trash2 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
-import { IconButton } from "@/components/icon-button";
+import { RowIconAction } from "@/components/row-icon-action";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -37,7 +37,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import {
   apiCreateByokProvider,
@@ -106,38 +105,6 @@ function VerifiedBadge({
     return <Badge variant="destructive">{t("settings.apiKeys.status.error")}</Badge>;
   }
   return <Badge variant="secondary">{t("settings.apiKeys.status.pending")}</Badge>;
-}
-
-function RowIconAction({
-  label,
-  onClick,
-  disabled,
-  loading,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  loading?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <IconButton
-          type="button"
-          className="size-8"
-          disabled={disabled}
-          loading={loading}
-          aria-label={label}
-          onClick={onClick}
-        >
-          {loading ? null : children}
-        </IconButton>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
-  );
 }
 
 function dependentsSummary(
