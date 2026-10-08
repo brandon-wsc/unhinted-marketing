@@ -21,9 +21,11 @@ export type AsyncDataOptions = {
 /**
  * Fetch-on-mount/deps with loading + error state and a stale-result guard:
  * each run gets an epoch and only the latest may apply, so an older in-flight
- * response is dropped when deps change or reload() runs again. `load`/`apply`
- * may be fresh closures — only `deps` retriggers the cycle. `reload()` re-runs
- * it manually and never throws; failures land in `error`/`onError`.
+ * response is dropped when deps change or reload() runs again — and on unmount,
+ * so a late response can't apply (or restart a poll) after the component is
+ * gone. `load`/`apply` may be fresh closures — only `deps` retriggers the
+ * cycle. `reload()` re-runs it manually and never throws; failures land in
+ * `error`/`onError`.
  */
 export function useAsyncData<T>(
   load: () => Promise<T>,
@@ -67,6 +69,16 @@ export function useAsyncData<T>(
       if (epoch === epochRef.current) setLoading(false);
     }
   }, []);
+
+  // Unmount invalidates the epoch so an in-flight load drops its result
+  // (mirrors the old `cancelled` flag) — e.g. an apply that starts a poll
+  // must not run after the panel is gone.
+  useEffect(
+    () => () => {
+      epochRef.current += 1;
+    },
+    [],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: deps is the caller's trigger list.
   useEffect(() => {
