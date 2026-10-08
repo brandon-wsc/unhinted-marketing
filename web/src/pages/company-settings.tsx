@@ -9,10 +9,10 @@ import { ApprovalsPanel } from "@/features/company-settings/components/approvals
 import { InstagramPanel } from "@/features/company-settings/components/instagram-panel";
 import { MembersPanel } from "@/features/company-settings/components/members-panel";
 import { ProductsPanel } from "@/features/company-settings/components/products-panel";
+import { SettingsNavItem } from "@/features/company-settings/components/settings-nav-item";
 import { StoragePanel } from "@/features/company-settings/components/storage-panel";
 import { VoiceForm } from "@/features/company-settings/components/voice-form";
 import { useHorizontalOverflow } from "@/hooks/use-horizontal-overflow";
-import { cn } from "@/lib/utils";
 
 type SettingsTab =
   | "voice"
@@ -127,20 +127,12 @@ export function CompanySettingsPage() {
               aria-label={t("settings.title")}
             >
               {nav.map((id) => (
-                <button
+                <SettingsNavItem
                   key={id}
-                  type="button"
-                  aria-current={activeTab === id ? "page" : undefined}
+                  active={activeTab === id}
+                  label={t(`settings.nav.${id}`)}
                   onClick={() => setTab(id)}
-                  className={cn(
-                    "shrink-0 rounded-lg px-3 py-2.5 text-left text-sm whitespace-nowrap transition-colors",
-                    activeTab === id
-                      ? "bg-accent font-medium text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  {t(`settings.nav.${id}`)}
-                </button>
+                />
               ))}
             </nav>
           </ScrollRow>
