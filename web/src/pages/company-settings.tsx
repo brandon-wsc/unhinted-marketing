@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/app-header";
+import { ScrollRow } from "@/components/ui/scroll-row";
 import { useAuth } from "@/context/auth-context";
 import { ApiKeysPanel } from "@/features/company-settings/components/api-keys-panel";
 import { ApprovalsPanel } from "@/features/company-settings/components/approvals-panel";
@@ -10,6 +11,7 @@ import { MembersPanel } from "@/features/company-settings/components/members-pan
 import { ProductsPanel } from "@/features/company-settings/components/products-panel";
 import { StoragePanel } from "@/features/company-settings/components/storage-panel";
 import { VoiceForm } from "@/features/company-settings/components/voice-form";
+import { useHorizontalOverflow } from "@/hooks/use-horizontal-overflow";
 import { cn } from "@/lib/utils";
 
 type SettingsTab =
@@ -73,6 +75,7 @@ export function CompanySettingsPage() {
     },
     [params, scope, setParams],
   );
+  const navOverflow = useHorizontalOverflow<HTMLElement>('[aria-current="page"]');
 
   if (loading) {
     return (
@@ -116,23 +119,31 @@ export function CompanySettingsPage() {
           <p className="mb-3 px-3 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
             {t("settings.navLabel")}
           </p>
-          <nav className="flex gap-1 sm:flex-col" aria-label={t("settings.title")}>
-            {nav.map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setTab(id)}
-                className={cn(
-                  "rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
-                  activeTab === id
-                    ? "bg-accent font-medium text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                )}
-              >
-                {t(`settings.nav.${id}`)}
-              </button>
-            ))}
-          </nav>
+          <ScrollRow overflow={navOverflow} className="gap-1">
+            <nav
+              ref={navOverflow.ref}
+              style={navOverflow.fadeStyle}
+              className="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none] sm:flex-col sm:overflow-visible [&::-webkit-scrollbar]:hidden"
+              aria-label={t("settings.title")}
+            >
+              {nav.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-current={activeTab === id ? "page" : undefined}
+                  onClick={() => setTab(id)}
+                  className={cn(
+                    "shrink-0 rounded-lg px-3 py-2.5 text-left text-sm whitespace-nowrap transition-colors",
+                    activeTab === id
+                      ? "bg-accent font-medium text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  {t(`settings.nav.${id}`)}
+                </button>
+              ))}
+            </nav>
+          </ScrollRow>
         </aside>
 
         <div className="min-w-0 flex-1">
