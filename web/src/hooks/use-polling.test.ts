@@ -59,9 +59,7 @@ describe("usePolling", () => {
     const { result } = renderHook(() => usePolling());
     const tick = vi.fn();
     const onTimeout = vi.fn();
-    act(() =>
-      result.current.start(tick, { intervalMs: 100, timeoutMs: 300, onTimeout }),
-    );
+    act(() => result.current.start(tick, { intervalMs: 100, timeoutMs: 300, onTimeout }));
     act(() => vi.advanceTimersByTime(200));
     expect(tick).toHaveBeenCalledTimes(2);
     act(() => vi.advanceTimersByTime(100));
@@ -74,9 +72,7 @@ describe("usePolling", () => {
     const { result, unmount } = renderHook(() => usePolling());
     const tick = vi.fn();
     const onTimeout = vi.fn();
-    act(() =>
-      result.current.start(tick, { intervalMs: 100, timeoutMs: 300, onTimeout }),
-    );
+    act(() => result.current.start(tick, { intervalMs: 100, timeoutMs: 300, onTimeout }));
     unmount();
     act(() => vi.advanceTimersByTime(1000));
     expect(tick).not.toHaveBeenCalled();
