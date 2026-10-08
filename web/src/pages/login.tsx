@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
 import { useSetup } from "@/context/setup-context";
 import { useInvitePreview } from "@/features/company-settings/use-invite-preview";
+import { useFieldErrors } from "@/hooks/use-field-errors";
 import { inviteTokenFromPath } from "@/lib/invite-path";
 import { mapApiError } from "@/lib/map-api-error";
 import { getRememberedUser, patchRememberedUser } from "@/lib/remembered-user";
@@ -32,7 +33,7 @@ export function LoginPage() {
   const [email, setEmail] = useState(() => (inviteToken ? "" : (getRememberedUser()?.email ?? "")));
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const { fieldErrors, clearFieldError, applyFieldErrors } = useFieldErrors();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -51,15 +52,6 @@ export function LoginPage() {
     patchRememberedUser({ email: value });
   }
 
-  function clearFieldError(id: string) {
-    setFieldErrors((prev) => {
-      if (!(id in prev)) return prev;
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  }
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (invitePending) return;
@@ -68,12 +60,7 @@ export function LoginPage() {
     if (!email.trim()) errors.email = t("errors.emailRequired");
     else if (!isValidEmail(email)) errors.email = t("errors.invalidEmail");
     if (!password) errors.password = t("errors.passwordRequired");
-    setFieldErrors(errors);
-    const firstId = Object.keys(errors)[0];
-    if (firstId) {
-      document.getElementById(firstId)?.focus();
-      return;
-    }
+    if (!applyFieldErrors(errors)) return;
     setSubmitting(true);
     try {
       await login(emailLocked && preview ? preview.email : email, password);

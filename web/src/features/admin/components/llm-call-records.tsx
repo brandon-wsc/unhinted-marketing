@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,10 @@ import {
   Meta,
   shortId,
 } from "@/features/admin/components/shared";
+import { useAsyncData } from "@/hooks/use-async-data";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { useDebouncedEffect } from "@/hooks/use-debounced-effect";
+import { usePageOffset } from "@/hooks/use-page-offset";
 
 const STATUS_OPTIONS = ["ok", "empty_response", "provider_error", "cancelled", "error"];
 const SPLIT_MIN_WIDTH = ADMIN_SPLIT_MIN_WIDTH;
@@ -363,73 +366,41 @@ export function LlmCallRecords({
 
   const [nodeInput, setNodeInput] = useState("");
   const [filters, setFilters] = useState<LlmCallFilters>({});
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = usePageOffset(filters);
 
   const [items, setItems] = useState<LlmCallRecordSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<LlmCallRecordDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   // Debounce the node text search into filters; status/checkbox apply instantly.
-  useEffect(() => {
-    const handle = setTimeout(() => {
+  useDebouncedEffect(
+    () => {
       setFilters((f) => {
         const node = nodeInput.trim() || undefined;
         return f.node === node ? f : { ...f, node };
       });
-    }, 350);
-    return () => clearTimeout(handle);
-  }, [nodeInput]);
+    },
+    350,
+    [nodeInput],
+  );
 
-  // Reset to the first page whenever the applied filters change.
-  const [appliedFilters, setAppliedFilters] = useState(filters);
-  if (appliedFilters !== filters) {
-    setAppliedFilters(filters);
-    setOffset(0);
-  }
+  const {
+    loading,
+    error,
+    reload: load,
+  } = useAsyncData(
+    () => apiAdminListLlmCalls(accessToken, filters, offset),
+    (data) => setItems(data.items),
+    [accessToken, filters, offset],
+  );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiAdminListLlmCalls(accessToken, filters, offset);
-      setItems(data.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken, filters, offset]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      return;
-    }
-    let cancelled = false;
-    setDetailLoading(true);
-    setDetail(null);
-    apiAdminGetLlmCall(accessToken, selectedId)
-      .then((data) => {
-        if (!cancelled) setDetail(data);
-      })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, selectedId]);
+  const { loading: detailLoading } = useAsyncData(
+    () => (selectedId ? apiAdminGetLlmCall(accessToken, selectedId) : Promise.resolve(null)),
+    setDetail,
+    [accessToken, selectedId],
+    { reset: () => setDetail(null), onError: () => setDetail(null) },
+  );
 
   const selectRow = useCallback((id: string) => {
     setSelectedId((cur) => (cur === id ? null : id));

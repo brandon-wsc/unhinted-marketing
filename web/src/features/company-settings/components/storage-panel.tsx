@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -29,6 +29,9 @@ import {
   type StorageConfigUpdate,
   type StorageMigrationState,
 } from "@/features/company-settings/api";
+import { useAsyncData } from "@/hooks/use-async-data";
+import { useFlash } from "@/hooks/use-flash";
+import { usePolling } from "@/hooks/use-polling";
 import { mapApiError } from "@/lib/map-api-error";
 
 type StoragePanelProps = {
@@ -103,15 +106,13 @@ function shouldPoll(state: StorageMigrationState | undefined): boolean {
 export function StoragePanel({ companyId }: StoragePanelProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [config, setConfig] = useState<StorageConfig | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [error, setError] = useState<string | null>(null);
-  const [flash, setFlash] = useState<"saved" | "tested" | null>(null);
+  const [flash, setFlash] = useFlash<"saved" | "tested">();
   const [flipOpen, setFlipOpen] = useState(false);
   const [cleanOpen, setCleanOpen] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { start: startPoll, stop: stopPolling } = usePolling();
 
   const applyConfig = useCallback((cfg: StorageConfig) => {
     setConfig(cfg);
@@ -124,49 +125,35 @@ export function StoragePanel({ companyId }: StoragePanelProps) {
     return cfg;
   }, [accessToken, applyConfig, companyId]);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
   const startPolling = useCallback(() => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const cfg = await apiGetStorageConfig(accessToken, companyId);
-        applyConfig(cfg);
-        if (!shouldPoll(cfg.migration?.state)) stopPolling();
-      } catch {
-        // Keep polling through transient errors.
-      }
-    }, STORAGE_POLL_MS);
-  }, [accessToken, applyConfig, companyId, stopPolling]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const cfg = await load();
-        if (!cancelled && shouldPoll(cfg.migration?.state)) startPolling();
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? mapApiError(err.message, t) : t("settings.storage.loadFailed"),
-          );
+    startPoll(
+      async () => {
+        try {
+          const cfg = await apiGetStorageConfig(accessToken, companyId);
+          applyConfig(cfg);
+          if (!shouldPoll(cfg.migration?.state)) stopPolling();
+        } catch {
+          // Keep polling through transient errors.
         }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      stopPolling();
-    };
-  }, [load, startPolling, stopPolling, t]);
+      },
+      { intervalMs: STORAGE_POLL_MS },
+    );
+  }, [accessToken, applyConfig, companyId, startPoll, stopPolling]);
+
+  const { loading, error, setError } = useAsyncData(
+    load,
+    (cfg) => {
+      if (shouldPoll(cfg.migration?.state)) startPolling();
+    },
+    [load, startPolling],
+    {
+      errorMessage: (err) =>
+        err instanceof Error ? mapApiError(err.message, t) : t("settings.storage.loadFailed"),
+    },
+  );
+
+  // Stop polling when leaving the panel or switching company.
+  useEffect(() => () => stopPolling(), [stopPolling, companyId]);
 
   const migration = config?.migration ?? null;
   const state = migration?.state;
@@ -197,7 +184,6 @@ export function StoragePanel({ companyId }: StoragePanelProps) {
       const cfg = await apiPutStorageConfig(accessToken, companyId, updateBody(form));
       applyConfig(cfg);
       setFlash("saved");
-      window.setTimeout(() => setFlash(null), 2500);
     } catch (err) {
       setError(
         err instanceof Error ? mapApiError(err.message, t) : t("settings.storage.saveFailed"),
@@ -216,7 +202,6 @@ export function StoragePanel({ companyId }: StoragePanelProps) {
       const result = await apiTestStorageConnection(accessToken, companyId, updateBody(form));
       if (result.ok) {
         setFlash("tested");
-        window.setTimeout(() => setFlash(null), 2500);
       } else {
         setError(result.error || t("settings.storage.saveFailed"));
       }

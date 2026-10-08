@@ -10,6 +10,7 @@ import { useAuth } from "@/context/auth-context";
 import { useSetup } from "@/context/setup-context";
 import { useToast } from "@/context/toast-context";
 import { useInvitePreview } from "@/features/company-settings/use-invite-preview";
+import { useFieldErrors } from "@/hooks/use-field-errors";
 import { inviteTokenFromPath } from "@/lib/invite-path";
 import { mapApiError } from "@/lib/map-api-error";
 import { safeInternalPath } from "@/lib/safe-internal-path";
@@ -33,7 +34,7 @@ export function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const { fieldErrors, clearFieldError, applyFieldErrors } = useFieldErrors();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -49,15 +50,6 @@ export function RegisterPage() {
     return <Navigate to="/login" replace />;
   }
 
-  function clearFieldError(id: string) {
-    setFieldErrors((prev) => {
-      if (!(id in prev)) return prev;
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  }
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (invitePending) return;
@@ -71,12 +63,7 @@ export function RegisterPage() {
     if (!confirmPassword) errors.confirmPassword = t("errors.confirmPasswordRequired");
     else if (password && confirmPassword !== password)
       errors.confirmPassword = t("errors.passwordMismatch");
-    setFieldErrors(errors);
-    const firstId = Object.keys(errors)[0];
-    if (firstId) {
-      document.getElementById(firstId)?.focus();
-      return;
-    }
+    if (!applyFieldErrors(errors)) return;
 
     setSubmitting(true);
     try {

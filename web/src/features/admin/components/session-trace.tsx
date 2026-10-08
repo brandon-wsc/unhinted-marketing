@@ -6,10 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/auth-context";
 import { apiAdminGetSessionTrace, type SessionTrace } from "@/features/admin/api";
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-HK", { hour12: false });
-}
+import { formatTime } from "@/features/admin/components/shared";
+import { errorMessage } from "@/lib/utils";
 
 type Props = {
   initialSessionId?: string;
@@ -48,7 +46,7 @@ export function SessionTracePanel({ initialSessionId = "", onOpenTurn, onOpenRes
       setSelectedRevision(data.draft_revisions[0]?.revision ?? null);
     } catch (err) {
       setTrace(null);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }

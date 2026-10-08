@@ -1782,7 +1782,7 @@ export function useSession(companyId: string | undefined) {
   }, [chooseAngle]);
 
   const resumeImage = useCallback(
-    async (imageFormat?: "single" | "comic_4panel") => {
+    async (imageFormat?: ImageFormat) => {
       if (
         !accessToken ||
         !sessionId ||
@@ -1920,7 +1920,7 @@ export function useSession(companyId: string | undefined) {
   );
 
   const addImage = useCallback(
-    async (format: "single" | "comic_4panel" = "single") => {
+    async (format: ImageFormat = "single") => {
       if (!accessToken || !sessionId || draftSaving) return null;
       const boundId = sessionId;
       setDraftSaving(true);

@@ -1,5 +1,5 @@
 import { CircleX } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
 import { IconButton } from "@/components/icon-button";
@@ -15,7 +15,9 @@ import {
   apiPatchCompanyVoice,
   type CompanyVoiceSettings,
 } from "@/features/company-settings/api";
-import { cn } from "@/lib/utils";
+import { useAsyncData } from "@/hooks/use-async-data";
+import { useFlash } from "@/hooks/use-flash";
+import { cn, errorMessage } from "@/lib/utils";
 
 const ROAST_LEVELS = [0, 1, 2, 3] as const;
 const MAX_EXEMPLARS = 3;
@@ -37,10 +39,8 @@ function captionsFromRows(rows: ExemplarRow[]): string[] {
 export function VoiceForm({ companyId }: VoiceFormProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [savedFlash, setSavedFlash] = useState(false);
+  const [savedFlash, setSavedFlash] = useFlash<boolean>();
   const [canEdit, setCanEdit] = useState(false);
   const [roastLevel, setRoastLevel] = useState(1);
   const [locale, setLocale] = useState("zh-HK");
@@ -57,27 +57,15 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
     }));
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    void (async () => {
-      try {
-        const data = await apiGetCompanyVoice(accessToken, companyId);
-        if (cancelled) return;
-        applySettings(data);
-        setBaseline(data);
-        setCanEdit(data.can_edit);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, companyId]);
+  const { loading, error, setError } = useAsyncData(
+    () => apiGetCompanyVoice(accessToken, companyId),
+    (data) => {
+      applySettings(data);
+      setBaseline(data);
+      setCanEdit(data.can_edit);
+    },
+    [accessToken, companyId],
+  );
 
   function applySettings(data: CompanyVoiceSettings) {
     setRoastLevel(data.roast_level);
@@ -137,9 +125,8 @@ export function VoiceForm({ companyId }: VoiceFormProps) {
       setBaseline(updated);
       setCanEdit(updated.can_edit);
       setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setSaving(false);
     }

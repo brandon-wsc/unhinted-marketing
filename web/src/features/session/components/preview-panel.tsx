@@ -18,6 +18,7 @@ import {
 } from "@/features/session/components/ig-preview-mock";
 import { ImagePlanFields } from "@/features/session/components/image-plan-fields";
 import {
+  type ImageFormat,
   imagePlanSummary,
   isConfirmSuccessStatus,
   primaryMediaItem,
@@ -28,6 +29,8 @@ import type {
   PreviewDraft,
   SourceSignal,
 } from "@/features/session/types";
+import { useFlash } from "@/hooks/use-flash";
+import { errorMessage } from "@/lib/utils";
 
 type PreviewPhase = "accepted" | "pending" | "generating";
 
@@ -47,7 +50,7 @@ type Props = {
     plan: Record<string, unknown>,
   ) => Promise<PreviewDraft | null | unknown>;
   onRegenImage: (imageId: string) => Promise<unknown>;
-  onAddImage: (format?: "single" | "comic_4panel") => Promise<PreviewDraft | null | unknown>;
+  onAddImage: (format?: ImageFormat) => Promise<PreviewDraft | null | unknown>;
   onRemoveImage: (imageId: string) => Promise<PreviewDraft | null | unknown>;
   onUploadImage: (imageId: string, file: File) => Promise<PreviewDraft | null | unknown>;
   /** When true, show back affordance (paged shell); split shell hides it. */
@@ -89,7 +92,7 @@ export function PreviewPanel({
   const [editImageOpen, setEditImageOpen] = useState(false);
   const [editCopyOpen, setEditCopyOpen] = useState(false);
   const [promoting, setPromoting] = useState(false);
-  const [promoteFlash, setPromoteFlash] = useState<"ok" | "dup" | "err" | null>(null);
+  const [promoteFlash, setPromoteFlash] = useFlash<"ok" | "dup" | "err">(3000);
   const [promoteError, setPromoteError] = useState<string | null>(null);
 
   // Server wins on SSE / AI revise — reset local dirty state.
@@ -166,10 +169,9 @@ export function PreviewPanel({
     try {
       const res = await apiPromoteVoiceExemplar(accessToken, companyId, local.caption);
       setPromoteFlash(res.added ? "ok" : "dup");
-      window.setTimeout(() => setPromoteFlash(null), 3000);
     } catch (err) {
-      setPromoteFlash("err");
-      setPromoteError(err instanceof Error ? err.message : String(err));
+      setPromoteFlash("err", false);
+      setPromoteError(errorMessage(err));
     } finally {
       setPromoting(false);
     }

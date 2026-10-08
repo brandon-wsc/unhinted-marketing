@@ -1,5 +1,6 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CopyField } from "@/components/copy-field";
 import { FormField } from "@/components/form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
   type MetaOAuthMode,
   type SetupEmailBackend,
 } from "@/features/setup/api";
+import { useAsyncData } from "@/hooks/use-async-data";
 import { copyText } from "@/lib/copy-text";
 import { mapApiError } from "@/lib/map-api-error";
 import { isSuperAdmin } from "@/lib/platform-level";
@@ -37,23 +39,9 @@ function CopyUrlField({
   value: string;
   hint: string;
 }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
   return (
     <FormField id={id} label={label}>
-      <div className="flex gap-2">
-        <Input id={id} value={value} readOnly className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          className={copied ? "text-success" : undefined}
-          onClick={() => {
-            void copyText(value).then(setCopied);
-          }}
-        >
-          {copied ? t("common.copied") : t("common.copy")}
-        </Button>
-      </div>
+      <CopyField id={id} value={value} className="flex-row" />
       <p className="text-xs text-muted-foreground">{hint}</p>
     </FormField>
   );
@@ -67,7 +55,6 @@ export function InstancePanel() {
   const canEdit = isSuperAdmin(user?.platform_level);
 
   const [settings, setSettings] = useState<InstanceSettings | null>(null);
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [webBaseUrl, setWebBaseUrl] = useState("");
@@ -84,29 +71,25 @@ export function InstancePanel() {
   const [relaySecret, setRelaySecret] = useState("");
   const [instanceIdCopied, setInstanceIdCopied] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    apiGetInstanceSettings(accessToken)
-      .then((row) => {
-        if (cancelled) return;
-        setSettings(row);
-        setWebBaseUrl(row.web_base_url);
-        setEmailBackend(row.email_backend);
-        setEmailFrom(row.email_from);
-        setSmtpHost(row.smtp_host);
-        setSmtpPort(String(row.smtp_port));
-        setSmtpUser(row.smtp_user);
-        setSmtpTls(row.smtp_tls);
-        setMetaAppId(row.meta_app_id);
-        setMetaMode(row.meta_oauth_mode);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(mapApiError(err instanceof Error ? err.message : "", t));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, t]);
+  const { error, setError } = useAsyncData(
+    () => apiGetInstanceSettings(accessToken),
+    (row) => {
+      setSettings(row);
+      setWebBaseUrl(row.web_base_url);
+      setEmailBackend(row.email_backend);
+      setEmailFrom(row.email_from);
+      setSmtpHost(row.smtp_host);
+      setSmtpPort(String(row.smtp_port));
+      setSmtpUser(row.smtp_user);
+      setSmtpTls(row.smtp_tls);
+      setMetaAppId(row.meta_app_id);
+      setMetaMode(row.meta_oauth_mode);
+    },
+    [accessToken],
+    {
+      errorMessage: (err) => mapApiError(err instanceof Error ? err.message : "", t),
+    },
+  );
 
   async function onSave(e: FormEvent) {
     e.preventDefault();

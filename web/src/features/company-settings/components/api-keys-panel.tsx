@@ -1,8 +1,8 @@
 import { CirclePlay, Pencil, Trash2 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
-import { IconButton } from "@/components/icon-button";
+import { RowIconAction } from "@/components/row-icon-action";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -37,7 +37,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import {
   apiCreateByokProvider,
@@ -69,6 +68,7 @@ import {
 import { AddModelDialog } from "@/features/company-settings/components/add-model-dialog";
 import { KeyFormFields } from "@/features/company-settings/components/key-form-fields";
 import { mapApiError } from "@/lib/map-api-error";
+import { errorMessage } from "@/lib/utils";
 
 const ROUTING_SLOTS: ByokRoutingSlotName[] = ["cheap", "medium", "strong", "image"];
 const POLL_ATTEMPTS = 4;
@@ -106,38 +106,6 @@ function VerifiedBadge({
     return <Badge variant="destructive">{t("settings.apiKeys.status.error")}</Badge>;
   }
   return <Badge variant="secondary">{t("settings.apiKeys.status.pending")}</Badge>;
-}
-
-function RowIconAction({
-  label,
-  onClick,
-  disabled,
-  loading,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  loading?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <IconButton
-          type="button"
-          className="size-8"
-          disabled={disabled}
-          loading={loading}
-          aria-label={label}
-          onClick={onClick}
-        >
-          {loading ? null : children}
-        </IconButton>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
-  );
 }
 
 function dependentsSummary(
@@ -235,7 +203,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
         }
       } catch (err) {
         if (cancelled) return;
-        setError(mapApiError(err instanceof Error ? err.message : String(err), tRef.current));
+        setError(mapApiError(errorMessage(err), tRef.current));
         setLoading(false);
       }
     })();
@@ -251,7 +219,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       await apiTestByokProvider(accessToken, companyId, item.id);
       await refresh();
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -265,7 +233,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       setImageTest(null);
       await refresh();
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -300,7 +268,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       setAddKey(null);
       await refresh({ poll: true });
     } catch (err) {
-      setDialogError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setDialogError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -327,7 +295,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       setEditKey(null);
       await refresh({ poll: true });
     } catch (err) {
-      setDialogError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setDialogError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -350,7 +318,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       if (err instanceof ByokDependentsError) {
         setPendingDelete({ ...pendingDelete, conflict: err.conflict });
       } else {
-        setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+        setError(mapApiError(errorMessage(err), t));
         setPendingDelete(null);
       }
     } finally {
@@ -367,7 +335,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
       const next = await apiPutByokRouting(accessToken, companyId, update);
       setRouting(next.slots);
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusyId(null);
     }
@@ -630,7 +598,7 @@ export function ApiKeysPanel({ companyId }: ApiKeysPanelProps) {
           try {
             await refresh({ poll: true });
           } catch (err) {
-            setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+            setError(mapApiError(errorMessage(err), t));
             throw err;
           }
         }}

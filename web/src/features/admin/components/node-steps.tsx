@@ -32,7 +32,10 @@ import {
   Meta,
   shortId,
 } from "@/features/admin/components/shared";
+import { useAsyncData } from "@/hooks/use-async-data";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { useDebouncedEffect } from "@/hooks/use-debounced-effect";
+import { usePageOffset } from "@/hooks/use-page-offset";
 
 function StepDetailContent({
   detail,
@@ -183,13 +186,11 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
   const [filters, setFilters] = useState<NodeStepFilters>({
     turnId: initialTurnId || undefined,
   });
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = usePageOffset(filters);
+
   const [items, setItems] = useState<NodeStepSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<NodeStepDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     if (initialTurnId) {
@@ -198,62 +199,34 @@ export function NodeStepsPanel({ initialTurnId = "", onOpenSession }: Props) {
     }
   }, [initialTurnId]);
 
-  useEffect(() => {
-    const handle = setTimeout(() => {
+  useDebouncedEffect(
+    () => {
       setFilters({
         node: nodeInput.trim() || undefined,
         sessionId: sessionInput.trim() || undefined,
         turnId: turnInput.trim() || undefined,
       });
-    }, 350);
-    return () => clearTimeout(handle);
-  }, [nodeInput, sessionInput, turnInput]);
+    },
+    350,
+    [nodeInput, sessionInput, turnInput],
+  );
 
-  // Reset to the first page whenever the applied filters change.
-  const [appliedFilters, setAppliedFilters] = useState(filters);
-  if (appliedFilters !== filters) {
-    setAppliedFilters(filters);
-    setOffset(0);
-  }
+  const {
+    loading,
+    error,
+    reload: load,
+  } = useAsyncData(
+    () => apiAdminListNodeSteps(accessToken, filters, offset),
+    (data) => setItems(data.items),
+    [accessToken, filters, offset],
+  );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiAdminListNodeSteps(accessToken, filters, offset);
-      setItems(data.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken, filters, offset]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      return;
-    }
-    let cancelled = false;
-    setDetailLoading(true);
-    apiAdminGetNodeStep(accessToken, selectedId)
-      .then((data) => {
-        if (!cancelled) setDetail(data);
-      })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, selectedId]);
+  const { loading: detailLoading } = useAsyncData(
+    () => (selectedId ? apiAdminGetNodeStep(accessToken, selectedId) : Promise.resolve(null)),
+    setDetail,
+    [accessToken, selectedId],
+    { onError: () => setDetail(null) },
+  );
 
   const selectRow = useCallback((id: string) => {
     setSelectedId((cur) => (cur === id ? null : id));

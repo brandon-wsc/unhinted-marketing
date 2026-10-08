@@ -30,6 +30,7 @@ import {
 } from "@/features/company-settings/api";
 import { capabilityFromListedModel } from "@/features/company-settings/byok-helpers";
 import { mapApiError } from "@/lib/map-api-error";
+import { errorMessage } from "@/lib/utils";
 
 type AddModelDialogProps = {
   open: boolean;
@@ -126,7 +127,7 @@ export function AddModelDialog({
       await onChanged();
       onOpenChange(false);
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusy(false);
     }

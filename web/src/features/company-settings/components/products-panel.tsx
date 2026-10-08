@@ -49,8 +49,10 @@ import {
   type ProductScope,
   ProductSkuConflictError,
 } from "@/features/company-settings/api";
+import { useAsyncData } from "@/hooks/use-async-data";
 import { mapApiError } from "@/lib/map-api-error";
 import type { ProductSkuConflict } from "@/lib/parse-api-error";
+import { errorMessage } from "@/lib/utils";
 
 type ProductsPanelProps = {
   companyId: string;
@@ -75,9 +77,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
   const { accessToken } = useAuth();
   const fileInputId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ProductItem[]>([]);
   const [canEdit, setCanEdit] = useState(false);
   const [importResult, setImportResult] = useState<ProductImportResponse | null>(null);
@@ -128,41 +128,25 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
     resetForm();
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setImportResult(null);
-    void (async () => {
-      try {
-        const data = await apiListProducts(accessToken, companyId, toApiScope(scope));
-        if (cancelled) return;
-        setItems(data.items);
-        setCanEdit(data.can_edit);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, companyId, scope]);
-
-  async function refresh() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiListProducts(accessToken, companyId, toApiScope(scope));
+  const {
+    loading,
+    error,
+    setError,
+    reload: refresh,
+  } = useAsyncData(
+    () => apiListProducts(accessToken, companyId, toApiScope(scope)),
+    (data) => {
       setItems(data.items);
       setCanEdit(data.can_edit);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+    [accessToken, companyId, scope],
+  );
+
+  // A scope switch restarts the flow — drop any stale import summary, but
+  // keep it across post-import refreshes.
+  useEffect(() => {
+    setImportResult(null);
+  }, [accessToken, companyId, scope]);
 
   async function onImportFile(file: File | undefined) {
     if (!file || !canEdit) return;
@@ -173,7 +157,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
       setImportResult(result);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -187,7 +171,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
       await apiProposeProduct(accessToken, companyId, productId);
       await refresh();
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusy(false);
     }
@@ -200,7 +184,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
       await apiCancelProposal(accessToken, companyId, proposalId);
       await refresh();
     } catch (err) {
-      setError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setError(mapApiError(errorMessage(err), t));
     } finally {
       setBusy(false);
     }
@@ -214,7 +198,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
       await apiArchiveProduct(accessToken, companyId, productId);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -237,7 +221,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
         setSkuConflict(err.conflict);
         return;
       }
-      setFormError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setFormError(mapApiError(errorMessage(err), t));
     } finally {
       setBusy(false);
     }
@@ -260,7 +244,7 @@ export function ProductsPanel({ companyId, scope, onScopeChange }: ProductsPanel
         setSkuConflict(err.conflict);
         return;
       }
-      setFormError(mapApiError(err instanceof Error ? err.message : String(err), t));
+      setFormError(mapApiError(errorMessage(err), t));
     } finally {
       setBusy(false);
     }

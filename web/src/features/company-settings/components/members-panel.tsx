@@ -1,8 +1,9 @@
 import { MailX, UserMinus } from "lucide-react";
-import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CopyField } from "@/components/copy-field";
 import { FormField } from "@/components/form-field";
-import { IconButton } from "@/components/icon-button";
+import { RowIconAction } from "@/components/row-icon-action";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -33,7 +34,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import {
   ApiStatusError,
@@ -48,9 +48,11 @@ import {
   type InviteRole,
   type OrgInviteItem,
 } from "@/features/company-settings/api";
-import { copyText } from "@/lib/copy-text";
+import { useAsyncData } from "@/hooks/use-async-data";
+import { useFlash } from "@/hooks/use-flash";
 import { mapApiError } from "@/lib/map-api-error";
 import { isValidEmail } from "@/lib/simple-email";
+import { errorMessage } from "@/lib/utils";
 
 type MembersPanelProps = {
   companyId: string;
@@ -69,27 +71,6 @@ function roleBadgeVariant(role: CompanyMember["role"]): "default" | "secondary" 
   return "outline";
 }
 
-function RowIconAction({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <IconButton type="button" className="size-8" aria-label={label} onClick={onClick}>
-          {children}
-        </IconButton>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 export function MembersPanel({
   companyId,
   companyName,
@@ -98,9 +79,7 @@ export function MembersPanel({
 }: MembersPanelProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [savedFlash, setSavedFlash] = useState(false);
+  const [savedFlash, setSavedFlash] = useFlash<boolean>();
   const [name, setName] = useState(companyName);
   const [savingName, setSavingName] = useState(false);
   const [members, setMembers] = useState<CompanyMember[]>([]);
@@ -110,41 +89,28 @@ export function MembersPanel({
   const [inviteEmailError, setInviteEmailError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<CompanyMember | null>(null);
 
   useEffect(() => {
     setName(companyName);
   }, [companyName]);
 
-  const reload = useCallback(async () => {
-    const [memberRes, inviteRes] = await Promise.all([
-      apiListMembers(accessToken, companyId),
-      canManageTeam
-        ? apiListInvites(accessToken, companyId)
-        : Promise.resolve({ items: [] as OrgInviteItem[] }),
-    ]);
-    setMembers(memberRes.items);
-    setInvites(inviteRes.items);
-  }, [accessToken, companyId, canManageTeam]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    void (async () => {
-      try {
-        await reload();
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reload]);
+  const { loading, error, setError, reload } = useAsyncData(
+    async () => {
+      const [memberRes, inviteRes] = await Promise.all([
+        apiListMembers(accessToken, companyId),
+        canManageTeam
+          ? apiListInvites(accessToken, companyId)
+          : Promise.resolve({ items: [] as OrgInviteItem[] }),
+      ]);
+      return { members: memberRes.items, invites: inviteRes.items };
+    },
+    ({ members, invites }) => {
+      setMembers(members);
+      setInvites(invites);
+    },
+    [accessToken, companyId, canManageTeam],
+  );
 
   async function onSaveName() {
     const next = name.trim();
@@ -155,9 +121,8 @@ export function MembersPanel({
       await apiPatchCompanyName(accessToken, companyId, next);
       await onCompanyRenamed?.();
       setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setSavingName(false);
     }
@@ -169,7 +134,7 @@ export function MembersPanel({
       const updated = await apiPatchMemberRole(accessToken, companyId, member.user_id, role);
       setMembers((rows) => rows.map((row) => (row.user_id === updated.user_id ? updated : row)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   }
 
@@ -181,7 +146,7 @@ export function MembersPanel({
       setMembers((rows) => rows.filter((row) => row.user_id !== removeTarget.user_id));
       setRemoveTarget(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   }
 
@@ -191,7 +156,6 @@ export function MembersPanel({
     const trimmed = inviteEmail.trim();
     setError(null);
     setInviteEmailError(null);
-    setCopied(false);
     if (!isValidEmail(trimmed)) {
       setInviteEmailError(t("settings.members.invite.invalidEmail"));
       return;
@@ -214,7 +178,7 @@ export function MembersPanel({
       await reload();
     } catch (err) {
       setInviteUrl(null);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       if (
         err instanceof ApiStatusError &&
         (err.status === 422 || err.status === 409 || /email/i.test(message))
@@ -228,18 +192,13 @@ export function MembersPanel({
     }
   }
 
-  async function onCopyLink() {
-    if (!inviteUrl) return;
-    setCopied(await copyText(inviteUrl));
-  }
-
   async function onRevoke(invite: OrgInviteItem) {
     setError(null);
     try {
       await apiRevokeInvite(accessToken, companyId, invite.id);
       setInvites((rows) => rows.filter((row) => row.id !== invite.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   }
 
@@ -317,7 +276,7 @@ export function MembersPanel({
           </TableHeader>
           <TableBody>
             {members.map((member) => (
-              <TableRow key={member.user_id} className="hover:bg-accent">
+              <TableRow key={member.user_id}>
                 <TableCell>{member.display_name}</TableCell>
                 <TableCell>{member.email}</TableCell>
                 <TableCell>
@@ -417,17 +376,12 @@ export function MembersPanel({
           </form>
           {inviteUrl && (
             <div className="space-y-2">
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input value={inviteUrl} readOnly className="flex-1" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={copied ? "text-success" : undefined}
-                  onClick={() => void onCopyLink()}
-                >
-                  {copied ? t("settings.members.invite.copied") : t("settings.members.invite.copy")}
-                </Button>
-              </div>
+              <CopyField
+                key={inviteUrl}
+                value={inviteUrl}
+                copyLabel={t("settings.members.invite.copy")}
+                copiedLabel={t("settings.members.invite.copied")}
+              />
               <p className="text-xs text-muted-foreground">
                 {t("settings.members.invite.pasteHint")}
               </p>
@@ -452,7 +406,7 @@ export function MembersPanel({
             </TableHeader>
             <TableBody>
               {invites.map((invite) => (
-                <TableRow key={invite.id} className="hover:bg-accent">
+                <TableRow key={invite.id}>
                   <TableCell>{invite.email}</TableCell>
                   <TableCell>
                     <Badge variant={invite.role === "admin" ? "secondary" : "outline"}>

@@ -21,9 +21,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { MediaSlotStrip } from "@/features/session/components/media-slot-strip";
+import type { ImageFormat } from "@/features/session/session-helpers";
 import type { PreviewDraft, PreviewMediaItem } from "@/features/session/types";
 
-type PlanFormat = "single" | "comic_4panel";
+type PlanFormat = ImageFormat;
 
 type PlanFields = {
   prompt: string;
@@ -134,7 +135,7 @@ type Props = {
     plan: Record<string, unknown>,
   ) => Promise<PreviewDraft | null | unknown>;
   onRegenImage: (imageId: string) => Promise<unknown>;
-  onAddImage: (format?: "single" | "comic_4panel") => Promise<PreviewDraft | null | unknown>;
+  onAddImage: (format?: ImageFormat) => Promise<PreviewDraft | null | unknown>;
   onRemoveImage: (imageId: string) => Promise<PreviewDraft | null | unknown>;
   onUploadImage: (imageId: string, file: File) => Promise<PreviewDraft | null | unknown>;
 };

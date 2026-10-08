@@ -28,6 +28,7 @@ import {
   shortId,
 } from "@/features/admin/components/shared";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import { errorMessage } from "@/lib/utils";
 
 function flag(v: boolean | null | undefined): string {
   if (v === true) return "true";
@@ -243,7 +244,7 @@ export function ResearchPanel({ initialSessionId = "", onOpenTurn }: Props) {
     } catch (err) {
       setData(null);
       setSelected(null);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }

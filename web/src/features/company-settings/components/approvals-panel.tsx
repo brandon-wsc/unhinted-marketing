@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ import {
   apiRejectProposal,
   type ProductProposalItem,
 } from "@/features/company-settings/api";
+import { useAsyncData } from "@/hooks/use-async-data";
+import { errorMessage } from "@/lib/utils";
 
 type ApprovalsPanelProps = {
   companyId: string;
@@ -37,35 +39,25 @@ function proposalNote(item: ProductProposalItem): string {
 export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
-  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ProductProposalItem[]>([]);
   const [detail, setDetail] = useState<ProductProposalItem | null>(null);
 
+  const fetchProposals = useCallback(
+    () => apiListProposals(accessToken, companyId),
+    [accessToken, companyId],
+  );
+  const { loading, error, setError } = useAsyncData(
+    fetchProposals,
+    (data) => setItems(data.items),
+    [fetchProposals],
+  );
+
+  // Silent refresh after approve/reject — keeps the list visible (no loading flip).
   async function refresh() {
-    const data = await apiListProposals(accessToken, companyId);
+    const data = await fetchProposals();
     setItems(data.items);
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    void (async () => {
-      try {
-        const data = await apiListProposals(accessToken, companyId);
-        if (!cancelled) setItems(data.items);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, companyId]);
 
   async function onApprove(id: string) {
     setBusyId(id);
@@ -75,7 +67,7 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
       setDetail(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -89,7 +81,7 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
       setDetail(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusyId(null);
     }

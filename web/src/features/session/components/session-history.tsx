@@ -28,6 +28,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SESSION_PANE } from "@/features/session/session-layout";
 import type { SessionListItem } from "@/features/session/types";
+import { useDebouncedEffect } from "@/hooks/use-debounced-effect";
 
 type Props = {
   collapsed: boolean;
@@ -114,14 +115,17 @@ export function SessionHistorySidebar({
 
   const searchMode = query.trim().length > 0;
   const skipInitialSearch = useRef(true);
-  useEffect(() => {
-    if (skipInitialSearch.current) {
-      skipInitialSearch.current = false;
-      return;
-    }
-    const handle = setTimeout(() => onSearch(query), 300);
-    return () => clearTimeout(handle);
-  }, [query, onSearch]);
+  useDebouncedEffect(
+    () => {
+      if (skipInitialSearch.current) {
+        skipInitialSearch.current = false;
+        return;
+      }
+      onSearch(query);
+    },
+    300,
+    [query, onSearch],
+  );
 
   const pinned = useMemo(() => sessions.filter((s) => !!s.pinned), [sessions]);
   const unpinned = useMemo(() => sessions.filter((s) => !s.pinned), [sessions]);
