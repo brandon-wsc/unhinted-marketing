@@ -120,6 +120,43 @@ async def test_member_over_limit_gets_403_structured(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("suffix", "payload"),
+    [
+        ("/choose-angle", {"angle_index": 0}),
+        ("/resume-image", {}),
+        ("/media/{image_id}/regen", None),
+    ],
+)
+async def test_member_over_limit_blocked_at_other_turn_boundaries(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    suffix: str,
+    payload: dict | None,
+) -> None:
+    """choose-angle / resume-image / image regen also burn platform-key spend."""
+    owner = await register_user(client, email=f"own-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = uuid.UUID(owner["user"]["organizations"][0]["id"])
+    member = await register_user(client, email=f"mem-{uuid.uuid4().hex[:8]}@example.com")
+    member_id = uuid.UUID(member["user"]["id"])
+    await _join(db_session, member["user"]["id"], company_id, monthly_token_limit=100)
+
+    db_session.add(_llm_record(member_id, company_id, total_tokens=150))
+    await db_session.commit()
+
+    session_id = await seed_preview_session(
+        db_session, user_id=member_id, company_id=company_id, with_media=False
+    )
+    res = await client.post(
+        f"/api/sessions/{session_id}{suffix.format(image_id=uuid.uuid4())}",
+        headers=auth_header(member["access_token"]),
+        json=payload,
+    )
+    assert res.status_code == 403, res.text
+    assert res.json()["detail"]["reason"] == "usage_limit_exceeded"
+
+
+@pytest.mark.asyncio
 async def test_org_key_usage_does_not_count(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

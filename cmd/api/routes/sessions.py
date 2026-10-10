@@ -475,6 +475,7 @@ async def resume_image(
 ) -> ResumeImageResponse:
     """Resume parked interrupt_before executor_image_gen (ADR 0004 / 0036)."""
     session = await _require_owned_session(db, session_id, user)
+    await _enforce_member_token_limit(db, session, user)
     try:
         result = await resume_image_turn(
             db,
@@ -520,6 +521,7 @@ async def choose_angle(
 ) -> ChooseAngleResponse:
     """Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0029)."""
     session = await _require_owned_session(db, session_id, user)
+    await _enforce_member_token_limit(db, session, user)
     if body.angle_index is None and not (body.angle or "").strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -896,6 +898,7 @@ async def post_session_image_regen(
     from internal.llm.router import LlmProviderError
 
     session = await _require_owned_session(db, session_id, user)
+    await _enforce_member_token_limit(db, session, user)
     try:
         result = await regen_session_image(db, session, image_id=image_id)
     except ValueError as exc:
