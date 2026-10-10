@@ -223,10 +223,6 @@
         "week": "Previous 7 Days",
         "older": "Older"
       }
-    },
-    "usage": {
-      "line": "This month: {{used}} / {{limit}}",
-      "exhausted": "Monthly usage limit reached — ask an owner/admin to adjust it."
     }
   },
   "preview": {

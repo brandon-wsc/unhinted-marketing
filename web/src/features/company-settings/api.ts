@@ -454,29 +454,6 @@ export async function apiPatchGovernance(
     statusErrorMapper,
   );
 }
-
-export type MemberUsage = {
-  company_id: string;
-  user_id: string;
-  monthly_token_limit: number | null;
-  used_tokens: number;
-  remaining_tokens: number | null;
-  period_start: string;
-  period_end: string;
-};
-
-export async function apiGetMemberUsage(
-  accessToken: string | null,
-  companyId: string,
-): Promise<MemberUsage> {
-  return apiJson(
-    accessToken,
-    `${API_BASE}/companies/${companyId}/usage`,
-    undefined,
-    statusErrorMapper,
-  );
-}
-
 export type PublishApprovalMediaItem = {
   id: string;
   url: string | null;
