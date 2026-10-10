@@ -1,4 +1,4 @@
-import { MailX, Pencil, UserMinus } from "lucide-react";
+import { MailX } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CopyField } from "@/components/copy-field";
@@ -17,9 +17,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -95,10 +102,12 @@ export function MembersPanel({
   const [sending, setSending] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<CompanyMember | null>(null);
-  const [limitTarget, setLimitTarget] = useState<CompanyMember | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [draftRole, setDraftRole] = useState<InviteRole>("member");
   const [limitInput, setLimitInput] = useState("");
   const [limitError, setLimitError] = useState<string | null>(null);
-  const [savingLimit, setSavingLimit] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [savingDetail, setSavingDetail] = useState(false);
   const [governance, setGovernance] = useState<CompanyGovernanceSettings | null>(null);
   const [savingPolicy, setSavingPolicy] = useState(false);
 
@@ -143,41 +152,41 @@ export function MembersPanel({
     }
   }
 
-  async function onRoleChange(member: CompanyMember, role: InviteRole) {
-    setError(null);
-    try {
-      const updated = await apiPatchMember(accessToken, companyId, member.user_id, { role });
-      setMembers((rows) => rows.map((row) => (row.user_id === updated.user_id ? updated : row)));
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-  }
+  const detailMember = detailId ? (members.find((m) => m.user_id === detailId) ?? null) : null;
+  const detailEditable = detailMember != null && canManageTeam && detailMember.role !== "owner";
+  const trimmedLimit = limitInput.trim();
+  const parsedLimit = trimmedLimit === "" ? null : Number(trimmedLimit);
+  const detailDirty =
+    detailMember != null &&
+    (draftRole !== detailMember.role || parsedLimit !== detailMember.monthly_token_limit);
 
-  function openLimitEditor(member: CompanyMember) {
-    setLimitTarget(member);
+  function openMemberDetail(member: CompanyMember) {
+    setDetailId(member.user_id);
+    setDraftRole(member.role === "owner" ? "member" : member.role);
     setLimitInput(member.monthly_token_limit != null ? String(member.monthly_token_limit) : "");
     setLimitError(null);
+    setDetailError(null);
   }
 
-  async function onSaveLimit(clear: boolean) {
-    if (!limitTarget) return;
-    const parsed = clear ? null : Number(limitInput.trim());
-    if (!clear && (!limitInput.trim() || !Number.isInteger(parsed) || (parsed ?? 0) < 1)) {
+  async function onSaveDetail() {
+    if (!detailMember) return;
+    if (trimmedLimit !== "" && (!Number.isInteger(parsedLimit) || (parsedLimit ?? 0) < 1)) {
       setLimitError(t("settings.members.limit.invalid"));
       return;
     }
-    setSavingLimit(true);
-    setLimitError(null);
+    setSavingDetail(true);
+    setDetailError(null);
     try {
-      const updated = await apiPatchMember(accessToken, companyId, limitTarget.user_id, {
-        monthly_token_limit: parsed,
+      const updated = await apiPatchMember(accessToken, companyId, detailMember.user_id, {
+        role: draftRole,
+        monthly_token_limit: parsedLimit,
       });
       setMembers((rows) => rows.map((row) => (row.user_id === updated.user_id ? updated : row)));
-      setLimitTarget(null);
+      setDetailId(null);
     } catch (err) {
-      setLimitError(errorMessage(err));
+      setDetailError(errorMessage(err));
     } finally {
-      setSavingLimit(false);
+      setSavingDetail(false);
     }
   }
 
@@ -333,144 +342,34 @@ export function MembersPanel({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("settings.members.columns.name")}</TableHead>
-              <TableHead>{t("settings.members.columns.email")}</TableHead>
+              <TableHead>{t("settings.members.columns.member")}</TableHead>
               <TableHead>{t("settings.members.columns.role")}</TableHead>
               <TableHead>{t("settings.members.columns.usage")}</TableHead>
-              <TableHead>{t("settings.members.columns.joined")}</TableHead>
-              {canManageTeam && (
-                <TableHead className="text-right">
-                  <span className="sr-only">{t("settings.members.columns.actions")}</span>
-                </TableHead>
-              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {members.map((member) => (
               <TableRow key={member.user_id}>
-                <TableCell className="max-w-48">
-                  <span className="block truncate">{member.display_name}</span>
-                </TableCell>
-                <TableCell className="max-w-64">
-                  <span className="block truncate">{member.email}</span>
+                <TableCell className="max-w-72">
+                  <button
+                    type="button"
+                    onClick={() => openMemberDetail(member)}
+                    className="w-full cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="block truncate font-medium">{member.display_name}</span>
+                    <span className="block truncate text-sm text-muted-foreground">
+                      {member.email}
+                    </span>
+                  </button>
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
-                  {canManageTeam && member.role !== "owner" ? (
-                    <Select
-                      value={member.role}
-                      onValueChange={(value) => void onRoleChange(member, value as InviteRole)}
-                    >
-                      <SelectTrigger size="sm" aria-label={t("settings.members.columns.role")}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">{t("settings.members.roles.admin")}</SelectItem>
-                        <SelectItem value="member">{t("settings.members.roles.member")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge variant={roleBadgeVariant(member.role)}>
-                      {t(`settings.members.roles.${member.role}`)}
-                    </Badge>
-                  )}
+                  <Badge variant={roleBadgeVariant(member.role)}>
+                    {t(`settings.members.roles.${member.role}`)}
+                  </Badge>
                 </TableCell>
                 <TableCell className="whitespace-nowrap tabular-nums">
-                  {canManageTeam && member.role !== "owner" ? (
-                    <Popover
-                      open={limitTarget?.user_id === member.user_id}
-                      onOpenChange={(open) => {
-                        if (open) {
-                          openLimitEditor(member);
-                        } else if (limitTarget?.user_id === member.user_id) {
-                          setLimitTarget(null);
-                        }
-                      }}
-                    >
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label={t("settings.members.limit.title")}
-                          className="inline-flex items-center gap-1.5 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <span>{usageLabel(member)}</span>
-                          <Pencil className="size-3 text-muted-foreground" />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent align="start" className="w-80 space-y-3 p-3">
-                        <form
-                          noValidate
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            void onSaveLimit(false);
-                          }}
-                          className="space-y-3"
-                        >
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">
-                              {t("settings.members.limit.title")}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {t("settings.members.limit.hint", {
-                                name: member.display_name,
-                                used: member.used_tokens.toLocaleString(),
-                              })}
-                            </p>
-                          </div>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min={1}
-                            step={1}
-                            value={limitInput}
-                            aria-label={t("settings.members.limit.field")}
-                            aria-invalid={Boolean(limitError)}
-                            onChange={(e) => {
-                              setLimitInput(e.target.value);
-                              if (limitError) setLimitError(null);
-                            }}
-                          />
-                          {limitError && <p className="text-xs text-destructive">{limitError}</p>}
-                          <div className="flex items-center justify-end gap-2">
-                            {member.monthly_token_limit != null && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={savingLimit}
-                                onClick={() => void onSaveLimit(true)}
-                              >
-                                {t("settings.members.limit.clear")}
-                              </Button>
-                            )}
-                            <Button
-                              type="submit"
-                              size="sm"
-                              loading={savingLimit}
-                              disabled={!limitInput.trim()}
-                            >
-                              {t("common.save")}
-                            </Button>
-                          </div>
-                        </form>
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    <span>{usageLabel(member)}</span>
-                  )}
+                  {usageLabel(member)}
                 </TableCell>
-                <TableCell className="whitespace-nowrap">{formatDay(member.joined_at)}</TableCell>
-                {canManageTeam && (
-                  <TableCell className="whitespace-nowrap text-right">
-                    {member.role === "owner" ? null : (
-                      <RowIconAction
-                        label={t("settings.members.removeTitle")}
-                        onClick={() => setRemoveTarget(member)}
-                      >
-                        <UserMinus />
-                      </RowIconAction>
-                    )}
-                  </TableCell>
-                )}
               </TableRow>
             ))}
           </TableBody>
@@ -612,6 +511,118 @@ export function MembersPanel({
           </Table>
         </div>
       )}
+
+      <Dialog open={detailMember !== null} onOpenChange={(open) => !open && setDetailId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{detailMember?.display_name}</DialogTitle>
+            <DialogDescription>{detailMember?.email}</DialogDescription>
+          </DialogHeader>
+          {detailMember && (
+            <form
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                void onSaveDetail();
+              }}
+              className="space-y-5"
+            >
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t("settings.members.columns.role")}
+                </p>
+                {detailEditable ? (
+                  <Select
+                    value={draftRole}
+                    onValueChange={(value) => setDraftRole(value as InviteRole)}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="w-40"
+                      aria-label={t("settings.members.columns.role")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">{t("settings.members.roles.admin")}</SelectItem>
+                      <SelectItem value="member">{t("settings.members.roles.member")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant={roleBadgeVariant(detailMember.role)}>
+                    {t(`settings.members.roles.${detailMember.role}`)}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t("settings.members.limit.title")}
+                </p>
+                {detailEditable ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.members.limit.hint", {
+                        name: detailMember.display_name,
+                        used: detailMember.used_tokens.toLocaleString(),
+                      })}
+                    </p>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      value={limitInput}
+                      aria-label={t("settings.members.limit.field")}
+                      aria-invalid={Boolean(limitError)}
+                      aria-describedby={limitError ? "member-limit-error" : undefined}
+                      onChange={(e) => {
+                        setLimitInput(e.target.value);
+                        if (limitError) setLimitError(null);
+                      }}
+                    />
+                    {limitError && (
+                      <p id="member-limit-error" className="text-xs text-destructive">
+                        {limitError}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm tabular-nums">{usageLabel(detailMember)}</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t("settings.members.columns.joined")}
+                </p>
+                <p className="text-sm">{formatDay(detailMember.joined_at)}</p>
+              </div>
+
+              {detailError && <p className="text-xs text-destructive">{detailError}</p>}
+
+              {detailEditable && (
+                <DialogFooter className="sm:justify-between">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={savingDetail}
+                    onClick={() => {
+                      setRemoveTarget(detailMember);
+                      setDetailId(null);
+                    }}
+                  >
+                    {t("settings.members.removeTitle")}
+                  </Button>
+                  <Button type="submit" loading={savingDetail} disabled={!detailDirty}>
+                    {t("common.save")}
+                  </Button>
+                </DialogFooter>
+              )}
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={removeTarget !== null}

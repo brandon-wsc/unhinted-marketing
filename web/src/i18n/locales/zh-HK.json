@@ -378,6 +378,7 @@
       },
       "columns": {
         "name": "姓名",
+        "member": "成員",
         "email": "電郵",
         "role": "角色",
         "joined": "加入日期",

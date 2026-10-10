@@ -378,6 +378,7 @@
       },
       "columns": {
         "name": "Name",
+        "member": "Member",
         "email": "Email",
         "role": "Role",
         "joined": "Joined",
