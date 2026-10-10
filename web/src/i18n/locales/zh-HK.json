@@ -530,6 +530,8 @@
         "empty": "暫時未有待審批嘅發佈請求",
         "detailTitle": "發佈審批",
         "hashtags": "標籤",
+        "cta": "CTA",
+        "imageAlt": "帖子圖片",
         "meta": "{{platform}} · 第 {{revision}} 版",
         "approvePublish": "批准發佈",
         "approveFailed": "發佈失敗（{{kind}}）。呢個請求已離開隊列，同事可以改完再送審。",

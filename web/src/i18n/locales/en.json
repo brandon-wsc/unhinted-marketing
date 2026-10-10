@@ -530,6 +530,8 @@
         "empty": "No publish requests waiting for approval",
         "detailTitle": "Publish approval",
         "hashtags": "Hashtags",
+        "cta": "CTA",
+        "imageAlt": "Post image",
         "meta": "{{platform}} · revision {{revision}}",
         "approvePublish": "Approve & publish",
         "approveFailed": "Publish failed ({{kind}}). The request left the queue — the member can edit and send it again.",

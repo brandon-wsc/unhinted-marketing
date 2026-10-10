@@ -366,7 +366,7 @@ export function MembersPanel({
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="tabular-nums">
                   {member.monthly_token_limit != null
                     ? t("settings.members.usage.ofLimit", {
                         used: member.used_tokens.toLocaleString(),

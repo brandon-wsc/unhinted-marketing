@@ -740,7 +740,7 @@ export function ChatPanel() {
               className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
             >
               {memberUsage != null && memberUsage.monthly_token_limit != null && (
-                <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
+                <div className="space-y-0.5 px-1 text-[11px] leading-snug tabular-nums text-muted-foreground">
                   <p>
                     {memberUsage.remaining_tokens != null && memberUsage.remaining_tokens <= 0
                       ? t("chat.usage.exhausted")

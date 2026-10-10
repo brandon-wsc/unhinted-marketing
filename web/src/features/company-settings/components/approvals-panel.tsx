@@ -42,7 +42,7 @@ function proposalNote(item: ProductProposalItem): string {
 }
 
 function requesterLabel(item: PublishApprovalItem): string {
-  return item.requested_by_email || item.requested_by_name || "—";
+  return item.requested_by_name || item.requested_by_email || "—";
 }
 
 export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
@@ -167,6 +167,15 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
 
       {loading ? (
         <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+      ) : empty ? (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card px-8 py-16 text-center">
+          <p className="text-base font-medium text-foreground">
+            {t("settings.approvals.emptyTitle")}
+          </p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            {t("settings.approvals.emptyBody")}
+          </p>
+        </div>
       ) : (
         <div className="space-y-8">
           <section className="space-y-3">
@@ -312,17 +321,6 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
               </div>
             )}
           </section>
-
-          {empty && (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card px-8 py-16 text-center">
-              <p className="text-base font-medium text-foreground">
-                {t("settings.approvals.emptyTitle")}
-              </p>
-              <p className="max-w-sm text-sm text-muted-foreground">
-                {t("settings.approvals.emptyBody")}
-              </p>
-            </div>
-          )}
         </div>
       )}
 
@@ -382,7 +380,7 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
             {publishDetail?.image_url && (
               <img
                 src={publishDetail.image_url}
-                alt=""
+                alt={t("settings.approvals.publish.imageAlt")}
                 className="w-full rounded-lg border border-border object-cover"
               />
             )}
@@ -406,7 +404,9 @@ export function ApprovalsPanel({ companyId }: ApprovalsPanelProps) {
             )}
             {publishDetail?.draft_copy.cta.trim() && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">CTA</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t("settings.approvals.publish.cta")}
+                </p>
                 <p className="text-sm text-foreground">{publishDetail.draft_copy.cta}</p>
               </div>
             )}
