@@ -514,7 +514,7 @@
       "title": "Approvals",
       "subtitle": "Review personal product details teammates want on the company list.",
       "emptyTitle": "Nothing waiting for review",
-      "emptyBody": "When a teammate asks to add a product to the company catalog, the changes show up here.",
+      "emptyBody": "Product proposals and member publish requests show up here when a teammate sends them for review.",
       "proposedBy": "From {{email}}",
       "approve": "Approve",
       "reject": "Decline",

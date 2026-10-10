@@ -514,7 +514,7 @@
       "title": "審批",
       "subtitle": "審批成員想加入公司清單嘅個人產品資料。",
       "emptyTitle": "暫時未有待審批項目",
-      "emptyBody": "有成員申請加入公司產品清單時，變更會喺度顯示。",
+      "emptyBody": "有成員提交產品提案或者發佈審批請求嗰陣，會喺度顯示。",
       "proposedBy": "由 {{email}} 提出",
       "approve": "批准",
       "reject": "拒絕",
