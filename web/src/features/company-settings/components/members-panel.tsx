@@ -1,4 +1,4 @@
-import { MailX, UserMinus } from "lucide-react";
+import { MailX, Pencil, UserMinus } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CopyField } from "@/components/copy-field";
@@ -17,6 +17,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -38,12 +47,15 @@ import { useAuth } from "@/context/auth-context";
 import {
   ApiStatusError,
   apiCreateInvite,
+  apiGetGovernance,
   apiListInvites,
   apiListMembers,
   apiPatchCompanyName,
-  apiPatchMemberRole,
+  apiPatchGovernance,
+  apiPatchMember,
   apiRemoveMember,
   apiRevokeInvite,
+  type CompanyGovernanceSettings,
   type CompanyMember,
   type InviteRole,
   type OrgInviteItem,
@@ -90,6 +102,12 @@ export function MembersPanel({
   const [sending, setSending] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<CompanyMember | null>(null);
+  const [limitTarget, setLimitTarget] = useState<CompanyMember | null>(null);
+  const [limitInput, setLimitInput] = useState("");
+  const [limitError, setLimitError] = useState<string | null>(null);
+  const [savingLimit, setSavingLimit] = useState(false);
+  const [governance, setGovernance] = useState<CompanyGovernanceSettings | null>(null);
+  const [savingPolicy, setSavingPolicy] = useState(false);
 
   useEffect(() => {
     setName(companyName);
@@ -97,17 +115,21 @@ export function MembersPanel({
 
   const { loading, error, setError, reload } = useAsyncData(
     async () => {
-      const [memberRes, inviteRes] = await Promise.all([
+      const [memberRes, inviteRes, governanceRes] = await Promise.all([
         apiListMembers(accessToken, companyId),
         canManageTeam
           ? apiListInvites(accessToken, companyId)
           : Promise.resolve({ items: [] as OrgInviteItem[] }),
+        canManageTeam
+          ? apiGetGovernance(accessToken, companyId)
+          : Promise.resolve(null as CompanyGovernanceSettings | null),
       ]);
-      return { members: memberRes.items, invites: inviteRes.items };
+      return { members: memberRes.items, invites: inviteRes.items, governance: governanceRes };
     },
-    ({ members, invites }) => {
+    ({ members, invites, governance }) => {
       setMembers(members);
       setInvites(invites);
+      setGovernance(governance);
     },
     [accessToken, companyId, canManageTeam],
   );
@@ -131,10 +153,54 @@ export function MembersPanel({
   async function onRoleChange(member: CompanyMember, role: InviteRole) {
     setError(null);
     try {
-      const updated = await apiPatchMemberRole(accessToken, companyId, member.user_id, role);
+      const updated = await apiPatchMember(accessToken, companyId, member.user_id, { role });
       setMembers((rows) => rows.map((row) => (row.user_id === updated.user_id ? updated : row)));
     } catch (err) {
       setError(errorMessage(err));
+    }
+  }
+
+  function openLimitEditor(member: CompanyMember) {
+    setLimitTarget(member);
+    setLimitInput(member.monthly_token_limit != null ? String(member.monthly_token_limit) : "");
+    setLimitError(null);
+  }
+
+  async function onSaveLimit(clear: boolean) {
+    if (!limitTarget) return;
+    const parsed = clear ? null : Number(limitInput.trim());
+    if (!clear && (!limitInput.trim() || !Number.isInteger(parsed) || (parsed ?? 0) < 1)) {
+      setLimitError(t("settings.members.limit.invalid"));
+      return;
+    }
+    setSavingLimit(true);
+    setLimitError(null);
+    try {
+      const updated = await apiPatchMember(accessToken, companyId, limitTarget.user_id, {
+        monthly_token_limit: parsed,
+      });
+      setMembers((rows) => rows.map((row) => (row.user_id === updated.user_id ? updated : row)));
+      setLimitTarget(null);
+    } catch (err) {
+      setLimitError(errorMessage(err));
+    } finally {
+      setSavingLimit(false);
+    }
+  }
+
+  async function onTogglePublishApproval(checked: boolean) {
+    if (!governance) return;
+    setSavingPolicy(true);
+    setError(null);
+    try {
+      const updated = await apiPatchGovernance(accessToken, companyId, {
+        member_publish_requires_approval: checked,
+      });
+      setGovernance(updated);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSavingPolicy(false);
     }
   }
 
@@ -266,6 +332,7 @@ export function MembersPanel({
               <TableHead>{t("settings.members.columns.name")}</TableHead>
               <TableHead>{t("settings.members.columns.email")}</TableHead>
               <TableHead>{t("settings.members.columns.role")}</TableHead>
+              <TableHead>{t("settings.members.columns.usage")}</TableHead>
               <TableHead>{t("settings.members.columns.joined")}</TableHead>
               {canManageTeam && (
                 <TableHead className="text-right">
@@ -299,16 +366,34 @@ export function MembersPanel({
                     </Badge>
                   )}
                 </TableCell>
+                <TableCell>
+                  {member.monthly_token_limit != null
+                    ? t("settings.members.usage.ofLimit", {
+                        used: member.used_tokens.toLocaleString(),
+                        limit: member.monthly_token_limit.toLocaleString(),
+                      })
+                    : t("settings.members.usage.unlimited", {
+                        used: member.used_tokens.toLocaleString(),
+                      })}
+                </TableCell>
                 <TableCell>{formatDay(member.joined_at)}</TableCell>
                 {canManageTeam && (
                   <TableCell className="text-right">
                     {member.role === "owner" ? null : (
-                      <RowIconAction
-                        label={t("settings.members.removeTitle")}
-                        onClick={() => setRemoveTarget(member)}
-                      >
-                        <UserMinus />
-                      </RowIconAction>
+                      <div className="flex items-center justify-end gap-0.5">
+                        <RowIconAction
+                          label={t("settings.members.limit.title")}
+                          onClick={() => openLimitEditor(member)}
+                        >
+                          <Pencil />
+                        </RowIconAction>
+                        <RowIconAction
+                          label={t("settings.members.removeTitle")}
+                          onClick={() => setRemoveTarget(member)}
+                        >
+                          <UserMinus />
+                        </RowIconAction>
+                      </div>
                     )}
                   </TableCell>
                 )}
@@ -317,6 +402,27 @@ export function MembersPanel({
           </TableBody>
         </Table>
       </div>
+
+      {canManageTeam && governance && (
+        <div className="space-y-4 rounded-xl border border-border bg-card p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold">
+                {t("settings.members.publishApproval.title")}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("settings.members.publishApproval.hint")}
+              </p>
+            </div>
+            <Switch
+              checked={governance.member_publish_requires_approval}
+              disabled={savingPolicy}
+              onCheckedChange={(checked) => void onTogglePublishApproval(checked)}
+              aria-label={t("settings.members.publishApproval.title")}
+            />
+          </div>
+        </div>
+      )}
 
       {canManageTeam && (
         <div className="space-y-4 rounded-xl border border-border bg-card p-6">
@@ -428,6 +534,59 @@ export function MembersPanel({
           </Table>
         </div>
       )}
+
+      <Dialog open={limitTarget !== null} onOpenChange={(open) => !open && setLimitTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("settings.members.limit.title")}</DialogTitle>
+            <DialogDescription>
+              {t("settings.members.limit.hint", {
+                name: limitTarget?.display_name ?? "",
+                used: (limitTarget?.used_tokens ?? 0).toLocaleString(),
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <FormField
+            id="member-token-limit"
+            label={t("settings.members.limit.field")}
+            error={limitError}
+          >
+            <Input
+              id="member-token-limit"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              value={limitInput}
+              aria-invalid={Boolean(limitError)}
+              onChange={(e) => {
+                setLimitInput(e.target.value);
+                if (limitError) setLimitError(null);
+              }}
+            />
+          </FormField>
+          <DialogFooter>
+            {limitTarget?.monthly_token_limit != null && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savingLimit}
+                onClick={() => void onSaveLimit(true)}
+              >
+                {t("settings.members.limit.clear")}
+              </Button>
+            )}
+            <Button
+              type="button"
+              loading={savingLimit}
+              disabled={!limitInput.trim()}
+              onClick={() => void onSaveLimit(false)}
+            >
+              {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={removeTarget !== null}

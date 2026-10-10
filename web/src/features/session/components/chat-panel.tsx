@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
+import { apiGetMemberUsage, type MemberUsage } from "@/features/company-settings/api";
 import { AnglePickCard } from "@/features/session/components/angle-pick-card";
 import { InterruptCard } from "@/features/session/components/interrupt-card";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
@@ -93,11 +94,12 @@ function overlayStackHeight(el: HTMLElement): number {
 
 export function ChatPanel() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const { showError, showInfo } = useToast();
   const companyId = user?.organizations[0]?.id;
   const canPromoteExemplar =
     user?.organizations[0]?.role === "owner" || user?.organizations[0]?.role === "admin";
+  const isOrgMember = user?.organizations[0]?.role === "member";
   const {
     session,
     messages,
@@ -163,6 +165,20 @@ export function ChatPanel() {
     failed: questionsFailed,
     refresh: refreshQuestions,
   } = useRecommendedQuestions(companyId);
+  // ADR 0041: member platform-key budget meter — re-read after each turn ends.
+  const [memberUsage, setMemberUsage] = useState<MemberUsage | null>(null);
+  useEffect(() => {
+    if (!isOrgMember || !companyId || sending) return;
+    let cancelled = false;
+    apiGetMemberUsage(accessToken, companyId)
+      .then((u) => {
+        if (!cancelled) setMemberUsage(u);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, companyId, isOrgMember, sending]);
   const now = useNow();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [historyCollapsed, setHistoryCollapsed] = useState(() => {
@@ -303,10 +319,13 @@ export function ChatPanel() {
     setEditInsertAt(null);
     try {
       await sendMessage(text, queueIndex != null ? { queueIndex } : undefined);
-    } catch {
+    } catch (err) {
       setComposerInput(text);
       setEditInsertAt(queueIndex);
-      showError(t("chat.error.sendFailed"));
+      const reason = err instanceof Error ? err.message : "";
+      showError(
+        reason === "usage_limit_exceeded" ? t("chat.error.usageLimit") : t("chat.error.sendFailed"),
+      );
     }
   }
 
@@ -720,6 +739,18 @@ export function ChatPanel() {
               onSubmit={onSubmit}
               className={`pointer-events-auto flex flex-col gap-1.5 ${composerCol}`}
             >
+              {memberUsage != null && memberUsage.monthly_token_limit != null && (
+                <div className="space-y-0.5 px-1 text-[11px] leading-snug text-muted-foreground">
+                  <p>
+                    {memberUsage.remaining_tokens != null && memberUsage.remaining_tokens <= 0
+                      ? t("chat.usage.exhausted")
+                      : t("chat.usage.line", {
+                          used: memberUsage.used_tokens.toLocaleString(),
+                          limit: memberUsage.monthly_token_limit.toLocaleString(),
+                        })}
+                  </p>
+                </div>
+              )}
               {interruptOnEmptyEnter ||
               ((awaitingImageOk || awaitingAnglePick) && queuedMessages.length > 0) ||
               queueFull ? (

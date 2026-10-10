@@ -270,6 +270,8 @@ export type CompanyMember = {
   display_name: string;
   role: CompanyMemberRole;
   joined_at: string;
+  monthly_token_limit: number | null;
+  used_tokens: number;
 };
 
 export type CompanySummary = {
@@ -336,16 +338,16 @@ export async function apiListMembers(
   );
 }
 
-export async function apiPatchMemberRole(
+export async function apiPatchMember(
   accessToken: string | null,
   companyId: string,
   userId: string,
-  role: InviteRole,
+  patch: { role?: InviteRole; monthly_token_limit?: number | null },
 ): Promise<CompanyMember> {
   return apiJson<CompanyMember>(
     accessToken,
     `${API_BASE}/companies/${companyId}/members/${userId}`,
-    { method: "PATCH", json: { role } },
+    { method: "PATCH", json: patch },
     statusErrorMapper,
   );
 }
@@ -417,6 +419,127 @@ export async function apiAcceptInvite(
   return apiJson<OrgInviteAcceptResponse>(
     accessToken,
     `${API_BASE}/invites/${token}/accept`,
+    { method: "POST" },
+    statusErrorMapper,
+  );
+}
+
+export type CompanyGovernanceSettings = {
+  company_id: string;
+  member_publish_requires_approval: boolean;
+  can_edit: boolean;
+};
+
+export async function apiGetGovernance(
+  accessToken: string | null,
+  companyId: string,
+): Promise<CompanyGovernanceSettings> {
+  return apiJson(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/governance`,
+    undefined,
+    statusErrorMapper,
+  );
+}
+
+export async function apiPatchGovernance(
+  accessToken: string | null,
+  companyId: string,
+  patch: { member_publish_requires_approval: boolean },
+): Promise<CompanyGovernanceSettings> {
+  return apiJson<CompanyGovernanceSettings>(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/governance`,
+    { method: "PATCH", json: patch },
+    statusErrorMapper,
+  );
+}
+
+export type MemberUsage = {
+  company_id: string;
+  user_id: string;
+  monthly_token_limit: number | null;
+  used_tokens: number;
+  remaining_tokens: number | null;
+  period_start: string;
+  period_end: string;
+};
+
+export async function apiGetMemberUsage(
+  accessToken: string | null,
+  companyId: string,
+): Promise<MemberUsage> {
+  return apiJson(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/usage`,
+    undefined,
+    statusErrorMapper,
+  );
+}
+
+export type PublishApprovalMediaItem = {
+  id: string;
+  url: string | null;
+  plan: Record<string, unknown>;
+  format: string;
+  role: string;
+  seq: number;
+  status: string;
+};
+
+export type PublishApprovalItem = {
+  id: string;
+  session_id: string;
+  user_id: string;
+  requested_by_email: string | null;
+  requested_by_name: string | null;
+  platform: string;
+  revision: number;
+  draft_copy: { caption: string; hashtags: string[]; cta: string };
+  media: PublishApprovalMediaItem[];
+  image_url: string | null;
+  status: string;
+  idempotency_key: string;
+  permalink: string | null;
+  error_kind: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by_email: string | null;
+};
+
+export async function apiListPublishApprovals(
+  accessToken: string | null,
+  companyId: string,
+): Promise<{ company_id: string; items: PublishApprovalItem[] }> {
+  return apiJson(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/publish-approvals`,
+    undefined,
+    statusErrorMapper,
+  );
+}
+
+export async function apiApprovePublishRequest(
+  accessToken: string | null,
+  companyId: string,
+  receiptId: string,
+): Promise<PublishApprovalItem> {
+  return apiJson<PublishApprovalItem>(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/publish-approvals/${receiptId}/approve`,
+    { method: "POST" },
+    statusErrorMapper,
+  );
+}
+
+export async function apiRejectPublishRequest(
+  accessToken: string | null,
+  companyId: string,
+  receiptId: string,
+): Promise<PublishApprovalItem> {
+  return apiJson<PublishApprovalItem>(
+    accessToken,
+    `${API_BASE}/companies/${companyId}/publish-approvals/${receiptId}/reject`,
     { method: "POST" },
     statusErrorMapper,
   );
