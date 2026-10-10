@@ -157,11 +157,10 @@ async def test_member_over_limit_blocked_at_other_turn_boundaries(
 
 
 @pytest.mark.asyncio
-async def test_org_key_usage_does_not_count(
-    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+async def test_org_key_usage_counts_toward_cap(
+    client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """BYOK spend (key_source='org') never counts against the member cap."""
-    _stub_turn(monkeypatch)
+    """BYOK spend (key_source='org') counts — it is the org's bill too."""
     owner = await register_user(client, email=f"own-{uuid.uuid4().hex[:8]}@example.com")
     company_id = uuid.UUID(owner["user"]["organizations"][0]["id"])
     member = await register_user(client, email=f"mem-{uuid.uuid4().hex[:8]}@example.com")
@@ -169,8 +168,39 @@ async def test_org_key_usage_does_not_count(
     await _join(db_session, member["user"]["id"], company_id, monthly_token_limit=100)
 
     db_session.add(_llm_record(member_id, company_id, total_tokens=10_000, key_source="org"))
-    # Another user's env spend in the same org must not count either.
-    db_session.add(_llm_record(uuid.UUID(owner["user"]["id"]), company_id, total_tokens=10_000))
+    await db_session.commit()
+
+    session_id = await seed_preview_session(
+        db_session, user_id=member_id, company_id=company_id, with_media=False
+    )
+    res = await client.post(
+        f"/api/sessions/{session_id}/messages",
+        headers=auth_header(member["access_token"]),
+        json={"content": "draft a post"},
+    )
+    assert res.status_code == 403, res.text
+
+
+@pytest.mark.asyncio
+async def test_other_user_spend_does_not_count(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Usage is per-member — another user's spend in the same org is ignored."""
+    _stub_turn(monkeypatch)
+    owner = await register_user(client, email=f"own-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = uuid.UUID(owner["user"]["organizations"][0]["id"])
+    member = await register_user(client, email=f"mem-{uuid.uuid4().hex[:8]}@example.com")
+    member_id = uuid.UUID(member["user"]["id"])
+    await _join(db_session, member["user"]["id"], company_id, monthly_token_limit=100)
+
+    db_session.add(
+        _llm_record(uuid.UUID(owner["user"]["id"]), company_id, total_tokens=10_000)
+    )
+    db_session.add(
+        _llm_record(
+            uuid.UUID(owner["user"]["id"]), company_id, total_tokens=10_000, key_source="org"
+        )
+    )
     await db_session.commit()
 
     session_id = await seed_preview_session(
@@ -258,8 +288,10 @@ async def test_member_usage_meter(client: AsyncClient, db_session: AsyncSession)
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["monthly_token_limit"] == 500
-    assert body["used_tokens"] == 200
-    assert body["remaining_tokens"] == 300
+    assert body["used_tokens"] == 5_200
+    assert body["used_platform_tokens"] == 200
+    assert body["used_byok_tokens"] == 5_000
+    assert body["remaining_tokens"] == 0
     assert body["period_start"] and body["period_end"]
 
     # Unlimited member → null remaining.

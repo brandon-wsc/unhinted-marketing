@@ -113,9 +113,11 @@ class CompanyMember(BaseModel):
     display_name: str
     role: Literal["owner", "admin", "member"]
     joined_at: datetime
-    # ADR 0041: platform-key spend cap + current UTC month usage.
+    # ADR 0041: monthly org-spend cap + current UTC month usage breakdown.
     monthly_token_limit: int | None = None
     used_tokens: int = 0
+    used_platform_tokens: int = 0
+    used_byok_tokens: int = 0
 
 
 class CompanyMemberListResponse(BaseModel):
@@ -272,22 +274,25 @@ class CompanyGovernanceUpdate(BaseModel):
 
 
 class MemberUsageResponse(BaseModel):
-    """Caller's own platform-key usage for the current UTC month (ADR 0041).
+    """Caller's own org-token usage for the current UTC month (ADR 0041).
 
-    ``monthly_token_limit = null`` means unlimited; ``remaining_tokens`` is
-    ``null`` in that case too."""
+    ``used_tokens`` counts all key sources — platform ('env') and org BYOK
+    ('org') are both the org's bill. ``monthly_token_limit = null`` means
+    unlimited; ``remaining_tokens`` is ``null`` in that case too."""
 
     company_id: uuid.UUID
     user_id: uuid.UUID
     monthly_token_limit: int | None = None
     used_tokens: int = 0
+    used_platform_tokens: int = 0
+    used_byok_tokens: int = 0
     remaining_tokens: int | None = None
     period_start: datetime
     period_end: datetime
 
 
 class UsageLimitExceededDetail(BaseModel):
-    """403 detail payload when a member is over their platform-key cap."""
+    """403 detail payload when a member is over their monthly cap."""
 
     reason: Literal["usage_limit_exceeded"] = "usage_limit_exceeded"
     limit: int

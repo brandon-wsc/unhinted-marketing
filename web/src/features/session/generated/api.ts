@@ -232,7 +232,7 @@ export type paths = {
         };
         /**
          * Get Member Usage
-         * @description Caller's own platform-key usage meter for the current UTC month (ADR 0041).
+         * @description Caller's own org-token usage meter for the current UTC month (ADR 0041).
          */
         get: operations["get_member_usage_api_companies__company_id__usage_get"];
         put?: never;
@@ -1973,6 +1973,16 @@ export type components = {
              * @default 0
              */
             used_tokens: number;
+            /**
+             * Used Platform Tokens
+             * @default 0
+             */
+            used_platform_tokens: number;
+            /**
+             * Used Byok Tokens
+             * @default 0
+             */
+            used_byok_tokens: number;
         };
         /** CompanyMemberListResponse */
         CompanyMemberListResponse: {
@@ -2425,10 +2435,11 @@ export type components = {
         };
         /**
          * MemberUsageResponse
-         * @description Caller's own platform-key usage for the current UTC month (ADR 0041).
+         * @description Caller's own org-token usage for the current UTC month (ADR 0041).
          *
-         *     ``monthly_token_limit = null`` means unlimited; ``remaining_tokens`` is
-         *     ``null`` in that case too.
+         *     ``used_tokens`` counts all key sources — platform ('env') and org BYOK
+         *     ('org') are both the org's bill. ``monthly_token_limit = null`` means
+         *     unlimited; ``remaining_tokens`` is ``null`` in that case too.
          */
         MemberUsageResponse: {
             /**
@@ -2448,6 +2459,16 @@ export type components = {
              * @default 0
              */
             used_tokens: number;
+            /**
+             * Used Platform Tokens
+             * @default 0
+             */
+            used_platform_tokens: number;
+            /**
+             * Used Byok Tokens
+             * @default 0
+             */
+            used_byok_tokens: number;
             /** Remaining Tokens */
             remaining_tokens?: number | null;
             /**

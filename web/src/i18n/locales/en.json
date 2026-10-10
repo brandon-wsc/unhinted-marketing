@@ -400,7 +400,8 @@
       },
       "usage": {
         "ofLimit": "{{used}} / {{limit}}",
-        "unlimited": "{{used}} / unlimited"
+        "unlimited": "{{used}} / unlimited",
+        "breakdown": "Platform {{platform}} · BYOK {{byok}}"
       },
       "limit": {
         "title": "Monthly token limit",

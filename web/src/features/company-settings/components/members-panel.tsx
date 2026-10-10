@@ -590,6 +590,14 @@ export function MembersPanel({
                 ) : (
                   <p className="text-sm tabular-nums">{usageLabel(detailMember)}</p>
                 )}
+                {detailMember.used_byok_tokens > 0 && (
+                  <p className="text-xs tabular-nums text-muted-foreground">
+                    {t("settings.members.usage.breakdown", {
+                      platform: detailMember.used_platform_tokens.toLocaleString(),
+                      byok: detailMember.used_byok_tokens.toLocaleString(),
+                    })}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">

@@ -400,7 +400,8 @@
       },
       "usage": {
         "ofLimit": "{{used}} / {{limit}}",
-        "unlimited": "{{used}} / 無限"
+        "unlimited": "{{used}} / 無限",
+        "breakdown": "平台 {{platform}} · BYOK {{byok}}"
       },
       "limit": {
         "title": "每月用量上限",

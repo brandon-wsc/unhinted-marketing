@@ -39,8 +39,8 @@ from internal.memory.repos import (
     list_pending_org_invites,
     member_month_bounds,
     revoke_org_invite,
-    sum_member_platform_tokens,
-    sum_org_platform_tokens_by_member,
+    sum_member_tokens_by_source,
+    sum_org_tokens_by_source,
     update_company_name,
     update_company_profile,
     update_org_member_limit,
@@ -105,8 +105,9 @@ def _voice_from_company(
 
 
 def _member_item(
-    membership: OrganizationMember, user: User, *, used_tokens: int = 0
+    membership: OrganizationMember, user: User, *, used: dict[str, int] | None = None
 ) -> CompanyMember:
+    by_source = used or {}
     return CompanyMember(
         user_id=user.id,
         email=user.email,
@@ -114,7 +115,9 @@ def _member_item(
         role=membership.role,
         joined_at=membership.created_at,
         monthly_token_limit=membership.monthly_token_limit,
-        used_tokens=used_tokens,
+        used_tokens=sum(by_source.values()),
+        used_platform_tokens=by_source.get("env", 0),
+        used_byok_tokens=by_source.get("org", 0),
     )
 
 
@@ -140,12 +143,10 @@ async def list_company_members(
 ) -> CompanyMemberListResponse:
     rows = await list_org_members(db, company_id)
     period_start, _ = member_month_bounds()
-    usage = await sum_org_platform_tokens_by_member(
-        db, company_id=company_id, since=period_start
-    )
+    usage = await sum_org_tokens_by_source(db, company_id=company_id, since=period_start)
     return CompanyMemberListResponse(
         company_id=company_id,
-        items=[_member_item(m, u, used_tokens=usage.get(u.id, 0)) for m, u in rows],
+        items=[_member_item(m, u, used=usage.get(u.id)) for m, u in rows],
     )
 
 
@@ -192,10 +193,10 @@ async def patch_company_member(
     await db.commit()
     await db.refresh(target)
     period_start, _ = member_month_bounds()
-    used = await sum_member_platform_tokens(
+    used = await sum_member_tokens_by_source(
         db, user_id=user_id, company_id=company_id, since=period_start
     )
-    return _member_item(target, user, used_tokens=used)
+    return _member_item(target, user, used=used)
 
 
 @router.delete("/{company_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -279,19 +280,22 @@ async def get_member_usage(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MemberUsageResponse:
-    """Caller's own platform-key usage meter for the current UTC month (ADR 0041)."""
+    """Caller's own org-token usage meter for the current UTC month (ADR 0041)."""
     membership = await get_org_membership(db, user.id, company_id)
     assert membership is not None  # require_company_access already checked
     period_start, period_end = member_month_bounds()
-    used = await sum_member_platform_tokens(
+    by_source = await sum_member_tokens_by_source(
         db, user_id=user.id, company_id=company_id, since=period_start
     )
+    used = sum(by_source.values())
     limit = membership.monthly_token_limit
     return MemberUsageResponse(
         company_id=company_id,
         user_id=user.id,
         monthly_token_limit=limit,
         used_tokens=used,
+        used_platform_tokens=by_source.get("env", 0),
+        used_byok_tokens=by_source.get("org", 0),
         remaining_tokens=(max(limit - used, 0) if limit is not None else None),
         period_start=period_start,
         period_end=period_end,

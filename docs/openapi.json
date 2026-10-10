@@ -657,7 +657,7 @@
           "companies"
         ],
         "summary": "Get Member Usage",
-        "description": "Caller's own platform-key usage meter for the current UTC month (ADR 0041).",
+        "description": "Caller's own org-token usage meter for the current UTC month (ADR 0041).",
         "operationId": "get_member_usage_api_companies__company_id__usage_get",
         "security": [
           {
@@ -6506,6 +6506,16 @@
             "type": "integer",
             "title": "Used Tokens",
             "default": 0
+          },
+          "used_platform_tokens": {
+            "type": "integer",
+            "title": "Used Platform Tokens",
+            "default": 0
+          },
+          "used_byok_tokens": {
+            "type": "integer",
+            "title": "Used Byok Tokens",
+            "default": 0
           }
         },
         "type": "object",
@@ -7917,6 +7927,16 @@
             "title": "Used Tokens",
             "default": 0
           },
+          "used_platform_tokens": {
+            "type": "integer",
+            "title": "Used Platform Tokens",
+            "default": 0
+          },
+          "used_byok_tokens": {
+            "type": "integer",
+            "title": "Used Byok Tokens",
+            "default": 0
+          },
           "remaining_tokens": {
             "anyOf": [
               {
@@ -7947,7 +7967,7 @@
           "period_end"
         ],
         "title": "MemberUsageResponse",
-        "description": "Caller's own platform-key usage for the current UTC month (ADR 0041).\n\n``monthly_token_limit = null`` means unlimited; ``remaining_tokens`` is\n``null`` in that case too."
+        "description": "Caller's own org-token usage for the current UTC month (ADR 0041).\n\n``used_tokens`` counts all key sources — platform ('env') and org BYOK\n('org') are both the org's bill. ``monthly_token_limit = null`` means\nunlimited; ``remaining_tokens`` is ``null`` in that case too."
       },
       "MetaDataDeletionResponse": {
         "properties": {

@@ -261,43 +261,51 @@ def member_month_bounds(now: datetime | None = None) -> tuple[datetime, datetime
     return start, end
 
 
-async def sum_member_platform_tokens(
+async def sum_member_tokens_by_source(
     db: AsyncSession, *, user_id: uuid.UUID, company_id: uuid.UUID, since: datetime
-) -> int:
-    """Platform-key tokens (key_source='env') spent by one member in one org since ``since``.
+) -> dict[str, int]:
+    """Tokens per key_source spent by one member in one org since ``since`` (ADR 0041).
 
-    Org BYOK spend ('org') is the org's own bill and never counts (ADR 0041).
-    Records flush asynchronously after the call, so this lags in-flight turns slightly.
+    The cap counts the member's whole spend — platform key ('env') and org BYOK
+    ('org') are both the org's bill. Records flush asynchronously after the call,
+    so this lags in-flight turns slightly.
     """
-    total = await db.scalar(
-        select(func.coalesce(func.sum(LlmCallRecord.total_tokens), 0)).where(
+    rows = await db.execute(
+        select(
+            LlmCallRecord.key_source,
+            func.coalesce(func.sum(LlmCallRecord.total_tokens), 0),
+        )
+        .where(
             LlmCallRecord.user_id == user_id,
             LlmCallRecord.company_id == company_id,
-            LlmCallRecord.key_source == "env",
             LlmCallRecord.created_at >= since,
         )
+        .group_by(LlmCallRecord.key_source)
     )
-    return int(total or 0)
+    return {src or "": int(total or 0) for src, total in rows.all()}
 
 
-async def sum_org_platform_tokens_by_member(
+async def sum_org_tokens_by_source(
     db: AsyncSession, *, company_id: uuid.UUID, since: datetime
-) -> dict[uuid.UUID, int]:
-    """Platform-key tokens per member in the org since ``since`` (one grouped scan)."""
+) -> dict[uuid.UUID, dict[str, int]]:
+    """Tokens per member × key_source for the org since ``since`` (one grouped scan)."""
     rows = await db.execute(
         select(
             LlmCallRecord.user_id,
+            LlmCallRecord.key_source,
             func.coalesce(func.sum(LlmCallRecord.total_tokens), 0),
         )
         .where(
             LlmCallRecord.company_id == company_id,
-            LlmCallRecord.key_source == "env",
             LlmCallRecord.created_at >= since,
             LlmCallRecord.user_id.is_not(None),
         )
-        .group_by(LlmCallRecord.user_id)
+        .group_by(LlmCallRecord.user_id, LlmCallRecord.key_source)
     )
-    return {user_id: int(total or 0) for user_id, total in rows.all()}
+    out: dict[uuid.UUID, dict[str, int]] = {}
+    for user_id, source, total in rows.all():
+        out.setdefault(user_id, {})[source or ""] = int(total or 0)
+    return out
 
 
 async def delete_org_member(db: AsyncSession, membership: OrganizationMember) -> None:

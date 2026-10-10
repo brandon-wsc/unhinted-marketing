@@ -272,6 +272,8 @@ export type CompanyMember = {
   joined_at: string;
   monthly_token_limit: number | null;
   used_tokens: number;
+  used_platform_tokens: number;
+  used_byok_tokens: number;
 };
 
 export type CompanySummary = {

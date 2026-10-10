@@ -165,10 +165,11 @@ async def _require_owned_session(
 async def _enforce_member_token_limit(
     db: AsyncSession, session: Session, user: User
 ) -> None:
-    """ADR 0041: cap org `member` platform-key spend at the turn boundary.
+    """ADR 0041: cap org `member` token spend at the turn boundary.
 
-    Owner/admin bypass the cap entirely; org BYOK spend (key_source='org')
-    never counts. llm_call_records flush asynchronously after each call, so
+    Owner/admin bypass the cap entirely. The cap counts the member's whole
+    spend — platform key ('env') and org BYOK ('org') are both the org's
+    bill. llm_call_records flush asynchronously after each call, so
     in-flight turns can overshoot slightly — an accepted guardrail lag, not
     a hard rate limiter.
     """
@@ -180,9 +181,10 @@ async def _enforce_member_token_limit(
     ):
         return
     period_start, period_end = repos.member_month_bounds()
-    used = await repos.sum_member_platform_tokens(
+    by_source = await repos.sum_member_tokens_by_source(
         db, user_id=user.id, company_id=session.company_id, since=period_start
     )
+    used = sum(by_source.values())
     if used >= membership.monthly_token_limit:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
