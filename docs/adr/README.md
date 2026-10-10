@@ -42,6 +42,8 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0037](./0037-demo-local-cd.md) | Demo / local CD tracks `main`; customer installs stay on Releases | Accepted |
 | [0038](./0038-preview-source-signals.md) | Resolved source signals on preview payloads | Accepted |
 | [0039](./0039-postgres-job-queue.md) | Postgres-backed job queue; `worker` as a service | Accepted |
+| [0040](./0040-signal-keyed-product-retrieve.md) | Signal-keyed product retrieve for draft grounding | Accepted |
+| [0041](./0041-member-usage-limits-and-publish-approval.md) | Member platform-key usage limits + member publish approval queue | Accepted |
 
 ## Format
 

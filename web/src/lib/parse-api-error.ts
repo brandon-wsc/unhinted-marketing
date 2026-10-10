@@ -47,6 +47,15 @@ export function parseApiErrorBody(body: unknown, status: number): string {
     return parsed.detail.message;
   }
 
+  if (
+    parsed.detail &&
+    typeof parsed.detail === "object" &&
+    "reason" in parsed.detail &&
+    typeof parsed.detail.reason === "string"
+  ) {
+    return parsed.detail.reason;
+  }
+
   return `Request failed (${status})`;
 }
 

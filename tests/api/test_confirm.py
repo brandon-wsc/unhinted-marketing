@@ -282,7 +282,7 @@ async def test_confirm_failed_publish_leaves_session_active(
             message="Graph 500",
         )
 
-    monkeypatch.setattr("cmd.api.routes.sessions.publish_social_post", _fail)
+    monkeypatch.setattr("internal.tools.publish.publish_social_post", _fail)
     data = await register_user(client)
     user_id = uuid.UUID(data["user"]["id"])
     company_id = uuid.UUID(data["user"]["organizations"][0]["id"])

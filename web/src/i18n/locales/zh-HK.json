@@ -184,7 +184,8 @@
       "sendFailed": "送唔出去喎，再試一次啦。",
       "stopFailed": "停唔到喎，再試一次。",
       "llmFailed": "AI 服務出事",
-      "retry": "再試"
+      "retry": "再試",
+      "usageLimit": "你今個月嘅用量已達上限，呢個訊息冇送出。請搵 owner / admin 調整上限。"
     },
     "history": {
       "open": "開啟紀錄",
@@ -329,6 +330,13 @@
       "addFailed": "加圖失敗，再試一次。",
       "removeFailed": "刪圖失敗，再試一次。",
       "uploadFailed": "上載失敗，再試一次。"
+    },
+    "sendForApproval": "送審",
+    "approval": {
+      "parkedTitle": "等待審批",
+      "parkedHint": "已經送咗俾 owner / admin 審批。仲想改就直接改完再送審，新嘅會取代呢個。",
+      "rejectedTitle": "已被拒絕",
+      "rejectedHint": "呢個發佈請求俾人拒絕咗。改完內容可以再送審。"
     }
   },
   "settings": {
@@ -366,10 +374,12 @@
       },
       "columns": {
         "name": "姓名",
+        "member": "成員",
         "email": "電郵",
         "role": "角色",
         "joined": "加入日期",
-        "actions": "操作"
+        "actions": "操作",
+        "usage": "本月用量"
       },
       "invite": {
         "title": "邀請同事",
@@ -387,6 +397,22 @@
         "title": "待處理嘅邀請",
         "expires": "到期日",
         "revoke": "撤銷邀請"
+      },
+      "usage": {
+        "ofLimit": "{{used}} / {{limit}}",
+        "unlimited": "{{used}} / 無限",
+        "breakdown": "平台 {{platform}} · BYOK {{byok}}"
+      },
+      "limit": {
+        "title": "每月用量上限",
+        "field": "Token 上限",
+        "hint": "{{name}} 今個月用咗 {{used}} token（只計平台 key，BYOK 唔計）。留空即無上限。",
+        "clear": "移除上限",
+        "invalid": "入一個大過 0 嘅整數"
+      },
+      "publishApproval": {
+        "title": "發佈前要審批",
+        "hint": "開啟之後 member 確認出帖會先入審批隊列，owner / admin 批准咗先會真係發佈。"
       }
     },
     "voice": {
@@ -485,7 +511,7 @@
       "title": "審批",
       "subtitle": "審批成員想加入公司清單嘅個人產品資料。",
       "emptyTitle": "暫時未有待審批項目",
-      "emptyBody": "有成員申請加入公司產品清單時，變更會喺度顯示。",
+      "emptyBody": "有成員提交產品提案或者發佈審批請求嗰陣，會喺度顯示。",
       "proposedBy": "由 {{email}} 提出",
       "approve": "批准",
       "reject": "拒絕",
@@ -494,6 +520,24 @@
         "product": "產品",
         "sku": "SKU",
         "note": "備註"
+      },
+      "products": "產品審批",
+      "productsEmpty": "暫時未有產品申請",
+      "publish": {
+        "title": "發佈審批",
+        "empty": "暫時未有待審批嘅發佈請求",
+        "detailTitle": "發佈審批",
+        "hashtags": "標籤",
+        "cta": "CTA",
+        "imageAlt": "帖子圖片",
+        "meta": "{{platform}} · 第 {{revision}} 版",
+        "approvePublish": "批准發佈",
+        "approveFailed": "發佈失敗（{{kind}}）。呢個請求已離開隊列，同事可以改完再送審。",
+        "columns": {
+          "caption": "內容",
+          "requester": "成員",
+          "platform": "平台"
+        }
       }
     },
     "instagram": {

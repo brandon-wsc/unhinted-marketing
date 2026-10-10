@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
 from internal.auth.invites import hash_invite_token, normalize_invite_email
+from internal.config import settings
 from internal.memory.database import get_db
 from internal.memory.models import OrgInvite, User
 from internal.memory.repos import (
@@ -67,6 +68,10 @@ async def accept_company_invite(
         user_id=user.id,
         company_id=invite.organization_id,
         role=invite.role,
+        # ADR 0041: the platform-key default cap seeds member invites only.
+        monthly_token_limit=(
+            settings.member_default_monthly_token_limit if invite.role == "member" else None
+        ),
     )
     await db.commit()
     return OrgInviteAcceptResponse(company_id=invite.organization_id, role=invite.role)

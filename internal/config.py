@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     invite_rate_limit_max: int = 20
     invite_rate_limit_window_seconds: int = 60
 
+    # ADR 0041: platform-key monthly token cap seeded on newly accepted `member`
+    # invites. Unset = NULL (unlimited). Owner/admin can override per member.
+    member_default_monthly_token_limit: int | None = None
+
     # BYOK probe / model-list proxy (per editor; Redis later)
     byok_probe_rate_limit_enabled: bool = True
     byok_probe_rate_limit_max: int = 20

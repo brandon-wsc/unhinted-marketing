@@ -15,8 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.config import settings
 from internal.llm.keys import ByokEncryptionError, decrypt_key
+from internal.media.storage import resolve_external_url
 from internal.memory import repos
-from internal.memory.models import SocialAccount
+from internal.memory.models import Session, SocialAccount, ToolReceipt
 from schemas.contracts import DraftCopy
 from schemas.tools import PublishSocialPostRequest
 
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 STUB_STATUS = "stubbed"
 PUBLISHED_STATUS = "published"
 FAILED_STATUS = "failed"
+PUBLISH_SUCCESS_STATUSES = frozenset({STUB_STATUS, PUBLISHED_STATUS})
 
 ERROR_TOKEN_EXPIRED = "token_expired"
 ERROR_PERMISSION = "permission"
@@ -137,6 +139,76 @@ def _publish_stub() -> PublishOutcome:
         platform="stub",
         message="Platform adapter stub — no publish performed",
     )
+
+
+async def resolve_publish_image_url(
+    db: AsyncSession,
+    media_ids: list,
+    stored_image_url: str | None,
+) -> str | None:
+    """External publish URL from a draft's media refs (ADR 0008 / 0024).
+
+    Shared by Confirm and the owner/admin approve path (ADR 0041): the first
+    media_id wins, else the legacy ``image_url`` stored ref.
+    """
+    ids = list(media_ids or [])
+    if ids:
+        images = await repos.get_preview_images_by_ids(db, [ids[0]])
+        if images:
+            url = (images[0].url or "").strip()
+            if url:
+                return resolve_external_url(url)
+    url = (stored_image_url or "").strip()
+    return resolve_external_url(url) if url else None
+
+
+async def execute_publish(
+    db: AsyncSession,
+    *,
+    session: Session,
+    user_id: uuid.UUID,
+    req: PublishSocialPostRequest,
+    receipt: ToolReceipt | None = None,
+) -> tuple[PublishOutcome, ToolReceipt]:
+    """Single publish execution path for Confirm and owner/admin approve (ADR 0041).
+
+    Same adapter call, same ``publish_social_post`` receipt write. When a parked
+    ``pending_approval`` receipt is passed it is updated in place — the
+    requesting member's ``user_id`` and the original ``idempotency_key`` never
+    change, so approve stays idempotent end to end.
+    """
+    outcome = await publish_social_post(db, req, company_id=session.company_id)
+    response = {
+        "message": outcome.message,
+        "platform": outcome.platform,
+        "permalink": outcome.permalink,
+        "error_kind": outcome.error_kind,
+        "media_id": outcome.media_id,
+    }
+    if receipt is None:
+        receipt = await repos.create_tool_receipt(
+            db,
+            session_id=session.id,
+            user_id=user_id,
+            tool_name=repos.PUBLISH_TOOL_NAME,
+            idempotency_key=req.idempotency_key,
+            status=outcome.status,
+            request={
+                "platform": req.platform,
+                "approval_token": req.approval_token,
+                "revision": req.revision,
+            },
+            response=response,
+        )
+    else:
+        receipt.status = outcome.status
+        merged = dict(receipt.response or {})
+        merged.update(response)
+        receipt.response = merged
+        await db.flush()
+    if outcome.status in PUBLISH_SUCCESS_STATUSES:
+        session.status = "confirmed"
+    return outcome, receipt
 
 
 async def _publish_instagram(

@@ -184,7 +184,8 @@
       "sendFailed": "Failed to send the message. Please try again.",
       "stopFailed": "Could not stop the turn. Please try again.",
       "llmFailed": "AI service error",
-      "retry": "Retry"
+      "retry": "Retry",
+      "usageLimit": "Monthly usage limit reached — the message was not sent. Ask an owner/admin to raise the limit."
     },
     "history": {
       "open": "Open history",
@@ -329,6 +330,13 @@
       "addFailed": "Failed to add an image. Please try again.",
       "removeFailed": "Failed to remove the image. Please try again.",
       "uploadFailed": "Failed to upload the image. Please try again."
+    },
+    "sendForApproval": "Send for approval",
+    "approval": {
+      "parkedTitle": "Waiting for approval",
+      "parkedHint": "Sent to an owner/admin for approval. You can still edit and send again — the newer request replaces this one.",
+      "rejectedTitle": "Rejected",
+      "rejectedHint": "This publish request was rejected. Edit the draft and send it again."
     }
   },
   "settings": {
@@ -366,10 +374,12 @@
       },
       "columns": {
         "name": "Name",
+        "member": "Member",
         "email": "Email",
         "role": "Role",
         "joined": "Joined",
-        "actions": "Actions"
+        "actions": "Actions",
+        "usage": "This month"
       },
       "invite": {
         "title": "Invite a colleague",
@@ -387,6 +397,22 @@
         "title": "Pending invites",
         "expires": "Expires",
         "revoke": "Revoke invite"
+      },
+      "usage": {
+        "ofLimit": "{{used}} / {{limit}}",
+        "unlimited": "{{used}} / unlimited",
+        "breakdown": "Platform {{platform}} · BYOK {{byok}}"
+      },
+      "limit": {
+        "title": "Monthly token limit",
+        "field": "Token limit",
+        "hint": "{{name}} used {{used}} tokens this month (platform key only — BYOK doesn't count). Leave empty for unlimited.",
+        "clear": "Remove limit",
+        "invalid": "Enter a whole number above 0"
+      },
+      "publishApproval": {
+        "title": "Approval before publish",
+        "hint": "When on, a member's Confirm parks in the approval queue and an owner or admin must approve before it publishes."
       }
     },
     "voice": {
@@ -485,7 +511,7 @@
       "title": "Approvals",
       "subtitle": "Review personal product details teammates want on the company list.",
       "emptyTitle": "Nothing waiting for review",
-      "emptyBody": "When a teammate asks to add a product to the company catalog, the changes show up here.",
+      "emptyBody": "Product proposals and member publish requests show up here when a teammate sends them for review.",
       "proposedBy": "From {{email}}",
       "approve": "Approve",
       "reject": "Decline",
@@ -494,6 +520,24 @@
         "product": "Product",
         "sku": "SKU",
         "note": "Note"
+      },
+      "products": "Product approvals",
+      "productsEmpty": "No product proposals right now",
+      "publish": {
+        "title": "Publish approvals",
+        "empty": "No publish requests waiting for approval",
+        "detailTitle": "Publish approval",
+        "hashtags": "Hashtags",
+        "cta": "CTA",
+        "imageAlt": "Post image",
+        "meta": "{{platform}} · revision {{revision}}",
+        "approvePublish": "Approve & publish",
+        "approveFailed": "Publish failed ({{kind}}). The request left the queue — the member can edit and send it again.",
+        "columns": {
+          "caption": "Caption",
+          "requester": "Member",
+          "platform": "Platform"
+        }
       }
     },
     "instagram": {

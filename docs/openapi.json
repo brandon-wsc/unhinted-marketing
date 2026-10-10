@@ -433,8 +433,9 @@
         "tags": [
           "companies"
         ],
-        "summary": "Patch Company Member Role",
-        "operationId": "patch_company_member_role_api_companies__company_id__members__user_id__patch",
+        "summary": "Patch Company Member",
+        "description": "ADR 0010 role changes + ADR 0041 monthly platform-key limit.\n\n``monthly_token_limit`` has explicit-null semantics: ``null`` clears the\ncap (unlimited); omitting the key leaves it unchanged.",
+        "operationId": "patch_company_member_api_companies__company_id__members__user_id__patch",
         "security": [
           {
             "HTTPBearer": []
@@ -467,7 +468,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CompanyMemberRoleUpdate"
+                "$ref": "#/components/schemas/CompanyMemberUpdate"
               }
             }
           }
@@ -531,6 +532,160 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/governance": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Get Company Governance",
+        "description": "Org governance policy (ADR 0041). Members may read — they need the\npublish-approval flag to render the right Confirm affordance.",
+        "operationId": "get_company_governance_api_companies__company_id__governance_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyGovernanceSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Patch Company Governance",
+        "operationId": "patch_company_governance_api_companies__company_id__governance_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyGovernanceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyGovernanceSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/usage": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Get Member Usage",
+        "description": "Caller's own org-token usage meter for the current UTC month (ADR 0041).",
+        "operationId": "get_member_usage_api_companies__company_id__usage_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberUsageResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -3279,6 +3434,173 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProductProposalItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/publish-approvals": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "List Publish Approvals",
+        "description": "Owner/admin queue: member publish requests parked by the org policy.",
+        "operationId": "list_publish_approvals_api_companies__company_id__publish_approvals_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishApprovalListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/publish-approvals/{receipt_id}/approve": {
+      "post": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Approve Publish Request",
+        "description": "Execute the parked publish through the Confirm code path (ADR 0041).\n\nThe parked draft's ``approval_token`` executes as-is — approve neither\nmints a token nor bypasses token validation. The member's ``user_id``\nand original ``idempotency_key`` stay on the receipt, so a repeat\napprove replays the same row instead of publishing twice.",
+        "operationId": "approve_publish_request_api_companies__company_id__publish_approvals__receipt_id__approve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Receipt Id"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishApprovalItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{company_id}/publish-approvals/{receipt_id}/reject": {
+      "post": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Reject Publish Request",
+        "description": "Reject → member can edit the draft and Confirm again (re-parks).",
+        "operationId": "reject_publish_request_api_companies__company_id__publish_approvals__receipt_id__reject_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Receipt Id"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishApprovalItem"
                 }
               }
             }
@@ -6101,6 +6423,44 @@
         ],
         "title": "ChooseAngleResponse"
       },
+      "CompanyGovernanceSettings": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "member_publish_requires_approval": {
+            "type": "boolean",
+            "title": "Member Publish Requires Approval",
+            "default": false
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "CompanyGovernanceSettings",
+        "description": "Org governance policy surface (ADR 0041). Readable by every member —\nmembers need ``member_publish_requires_approval`` to render the right\nConfirm affordance; only owner/admin may PATCH."
+      },
+      "CompanyGovernanceUpdate": {
+        "properties": {
+          "member_publish_requires_approval": {
+            "type": "boolean",
+            "title": "Member Publish Requires Approval"
+          }
+        },
+        "type": "object",
+        "required": [
+          "member_publish_requires_approval"
+        ],
+        "title": "CompanyGovernanceUpdate"
+      },
       "CompanyMember": {
         "properties": {
           "user_id": {
@@ -6130,6 +6490,32 @@
             "type": "string",
             "format": "date-time",
             "title": "Joined At"
+          },
+          "monthly_token_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Token Limit"
+          },
+          "used_tokens": {
+            "type": "integer",
+            "title": "Used Tokens",
+            "default": 0
+          },
+          "used_platform_tokens": {
+            "type": "integer",
+            "title": "Used Platform Tokens",
+            "default": 0
+          },
+          "used_byok_tokens": {
+            "type": "integer",
+            "title": "Used Byok Tokens",
+            "default": 0
           }
         },
         "type": "object",
@@ -6164,22 +6550,39 @@
         ],
         "title": "CompanyMemberListResponse"
       },
-      "CompanyMemberRoleUpdate": {
+      "CompanyMemberUpdate": {
         "properties": {
           "role": {
-            "type": "string",
-            "enum": [
-              "admin",
-              "member"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "admin",
+                  "member"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Role"
+          },
+          "monthly_token_limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Token Limit"
           }
         },
         "type": "object",
-        "required": [
-          "role"
-        ],
-        "title": "CompanyMemberRoleUpdate"
+        "title": "CompanyMemberUpdate",
+        "description": "Owner/admin member management; at least one field must be set.\n\n``monthly_token_limit`` uses explicit-null semantics: sending ``null``\nclears the cap (unlimited), omitting the key leaves it unchanged."
       },
       "CompanySummary": {
         "properties": {
@@ -7496,6 +7899,76 @@
         ],
         "title": "LoginRequest"
       },
+      "MemberUsageResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "monthly_token_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Token Limit"
+          },
+          "used_tokens": {
+            "type": "integer",
+            "title": "Used Tokens",
+            "default": 0
+          },
+          "used_platform_tokens": {
+            "type": "integer",
+            "title": "Used Platform Tokens",
+            "default": 0
+          },
+          "used_byok_tokens": {
+            "type": "integer",
+            "title": "Used Byok Tokens",
+            "default": 0
+          },
+          "remaining_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Tokens"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period Start"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "user_id",
+          "period_start",
+          "period_end"
+        ],
+        "title": "MemberUsageResponse",
+        "description": "Caller's own org-token usage for the current UTC month (ADR 0041).\n\n``used_tokens`` counts all key sources — platform ('env') and org BYOK\n('org') are both the org's bill. ``monthly_token_limit = null`` means\nunlimited; ``remaining_tokens`` is ``null`` in that case too."
+      },
       "MetaDataDeletionResponse": {
         "properties": {
           "url": {
@@ -8732,6 +9205,169 @@
           "items"
         ],
         "title": "ProductProposalListResponse"
+      },
+      "PublishApprovalItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "requested_by_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By Email"
+          },
+          "requested_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By Name"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "draft_copy": {
+            "$ref": "#/components/schemas/DraftCopy"
+          },
+          "media": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMediaItem"
+            },
+            "type": "array",
+            "title": "Media"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "title": "Idempotency Key"
+          },
+          "permalink": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permalink"
+          },
+          "error_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Kind"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewed_by_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "user_id",
+          "platform",
+          "revision",
+          "status",
+          "idempotency_key",
+          "created_at"
+        ],
+        "title": "PublishApprovalItem",
+        "description": "One queued/decided publish request — enough to render the card without\nopening the member's user-scoped session (ADR 0041)."
+      },
+      "PublishApprovalListResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublishApprovalItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "items"
+        ],
+        "title": "PublishApprovalListResponse"
       },
       "QuestionNodeStepList": {
         "properties": {

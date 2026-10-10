@@ -191,8 +191,56 @@ export type paths = {
         delete: operations["remove_company_member_api_companies__company_id__members__user_id__delete"];
         options?: never;
         head?: never;
-        /** Patch Company Member Role */
-        patch: operations["patch_company_member_role_api_companies__company_id__members__user_id__patch"];
+        /**
+         * Patch Company Member
+         * @description ADR 0010 role changes + ADR 0041 monthly platform-key limit.
+         *
+         *     ``monthly_token_limit`` has explicit-null semantics: ``null`` clears the
+         *     cap (unlimited); omitting the key leaves it unchanged.
+         */
+        patch: operations["patch_company_member_api_companies__company_id__members__user_id__patch"];
+        trace?: never;
+    };
+    "/api/companies/{company_id}/governance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Company Governance
+         * @description Org governance policy (ADR 0041). Members may read — they need the
+         *     publish-approval flag to render the right Confirm affordance.
+         */
+        get: operations["get_company_governance_api_companies__company_id__governance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Company Governance */
+        patch: operations["patch_company_governance_api_companies__company_id__governance_patch"];
+        trace?: never;
+    };
+    "/api/companies/{company_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Member Usage
+         * @description Caller's own org-token usage meter for the current UTC month (ADR 0041).
+         */
+        get: operations["get_member_usage_api_companies__company_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/companies/{company_id}/invites": {
@@ -940,6 +988,71 @@ export type paths = {
         put?: never;
         /** Cancel Product Proposal */
         post: operations["cancel_product_proposal_api_companies__company_id__proposals__proposal_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/publish-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Publish Approvals
+         * @description Owner/admin queue: member publish requests parked by the org policy.
+         */
+        get: operations["list_publish_approvals_api_companies__company_id__publish_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/publish-approvals/{receipt_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Publish Request
+         * @description Execute the parked publish through the Confirm code path (ADR 0041).
+         *
+         *     The parked draft's ``approval_token`` executes as-is — approve neither
+         *     mints a token nor bypasses token validation. The member's ``user_id``
+         *     and original ``idempotency_key`` stay on the receipt, so a repeat
+         *     approve replays the same row instead of publishing twice.
+         */
+        post: operations["approve_publish_request_api_companies__company_id__publish_approvals__receipt_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/publish-approvals/{receipt_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Publish Request
+         * @description Reject → member can edit the draft and Confirm again (re-parks).
+         */
+        post: operations["reject_publish_request_api_companies__company_id__publish_approvals__receipt_id__reject_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1801,6 +1914,34 @@ export type components = {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * CompanyGovernanceSettings
+         * @description Org governance policy surface (ADR 0041). Readable by every member —
+         *     members need ``member_publish_requires_approval`` to render the right
+         *     Confirm affordance; only owner/admin may PATCH.
+         */
+        CompanyGovernanceSettings: {
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /**
+             * Member Publish Requires Approval
+             * @default false
+             */
+            member_publish_requires_approval: boolean;
+            /**
+             * Can Edit
+             * @default false
+             */
+            can_edit: boolean;
+        };
+        /** CompanyGovernanceUpdate */
+        CompanyGovernanceUpdate: {
+            /** Member Publish Requires Approval */
+            member_publish_requires_approval: boolean;
+        };
         /** CompanyMember */
         CompanyMember: {
             /**
@@ -1825,6 +1966,23 @@ export type components = {
              * Format: date-time
              */
             joined_at: string;
+            /** Monthly Token Limit */
+            monthly_token_limit?: number | null;
+            /**
+             * Used Tokens
+             * @default 0
+             */
+            used_tokens: number;
+            /**
+             * Used Platform Tokens
+             * @default 0
+             */
+            used_platform_tokens: number;
+            /**
+             * Used Byok Tokens
+             * @default 0
+             */
+            used_byok_tokens: number;
         };
         /** CompanyMemberListResponse */
         CompanyMemberListResponse: {
@@ -1836,13 +1994,18 @@ export type components = {
             /** Items */
             items: components["schemas"]["CompanyMember"][];
         };
-        /** CompanyMemberRoleUpdate */
-        CompanyMemberRoleUpdate: {
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "admin" | "member";
+        /**
+         * CompanyMemberUpdate
+         * @description Owner/admin member management; at least one field must be set.
+         *
+         *     ``monthly_token_limit`` uses explicit-null semantics: sending ``null``
+         *     clears the cap (unlimited), omitting the key leaves it unchanged.
+         */
+        CompanyMemberUpdate: {
+            /** Role */
+            role?: ("admin" | "member") | null;
+            /** Monthly Token Limit */
+            monthly_token_limit?: number | null;
         };
         /** CompanySummary */
         CompanySummary: {
@@ -2269,6 +2432,55 @@ export type components = {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * MemberUsageResponse
+         * @description Caller's own org-token usage for the current UTC month (ADR 0041).
+         *
+         *     ``used_tokens`` counts all key sources — platform ('env') and org BYOK
+         *     ('org') are both the org's bill. ``monthly_token_limit = null`` means
+         *     unlimited; ``remaining_tokens`` is ``null`` in that case too.
+         */
+        MemberUsageResponse: {
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Monthly Token Limit */
+            monthly_token_limit?: number | null;
+            /**
+             * Used Tokens
+             * @default 0
+             */
+            used_tokens: number;
+            /**
+             * Used Platform Tokens
+             * @default 0
+             */
+            used_platform_tokens: number;
+            /**
+             * Used Byok Tokens
+             * @default 0
+             */
+            used_byok_tokens: number;
+            /** Remaining Tokens */
+            remaining_tokens?: number | null;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
         };
         /**
          * MetaDataDeletionResponse
@@ -2788,6 +3000,68 @@ export type components = {
             company_id: string;
             /** Items */
             items: components["schemas"]["ProductProposalItem"][];
+        };
+        /**
+         * PublishApprovalItem
+         * @description One queued/decided publish request — enough to render the card without
+         *     opening the member's user-scoped session (ADR 0041).
+         */
+        PublishApprovalItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Requested By Email */
+            requested_by_email?: string | null;
+            /** Requested By Name */
+            requested_by_name?: string | null;
+            /** Platform */
+            platform: string;
+            /** Revision */
+            revision: number;
+            draft_copy?: components["schemas"]["DraftCopy"];
+            /** Media */
+            media?: components["schemas"]["PreviewMediaItem"][];
+            /** Image Url */
+            image_url?: string | null;
+            /** Status */
+            status: string;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Permalink */
+            permalink?: string | null;
+            /** Error Kind */
+            error_kind?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By Email */
+            reviewed_by_email?: string | null;
+        };
+        /** PublishApprovalListResponse */
+        PublishApprovalListResponse: {
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /** Items */
+            items: components["schemas"]["PublishApprovalItem"][];
         };
         /** QuestionNodeStepList */
         QuestionNodeStepList: {
@@ -4113,7 +4387,7 @@ export interface operations {
             };
         };
     };
-    patch_company_member_role_api_companies__company_id__members__user_id__patch: {
+    patch_company_member_api_companies__company_id__members__user_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -4125,7 +4399,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CompanyMemberRoleUpdate"];
+                "application/json": components["schemas"]["CompanyMemberUpdate"];
             };
         };
         responses: {
@@ -4136,6 +4410,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompanyMember"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_company_governance_api_companies__company_id__governance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyGovernanceSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_company_governance_api_companies__company_id__governance_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanyGovernanceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyGovernanceSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_member_usage_api_companies__company_id__usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberUsageResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5750,6 +6121,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductProposalItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_publish_approvals_api_companies__company_id__publish_approvals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishApprovalListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_publish_request_api_companies__company_id__publish_approvals__receipt_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                receipt_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishApprovalItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_publish_request_api_companies__company_id__publish_approvals__receipt_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                receipt_id: string;
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishApprovalItem"];
                 };
             };
             /** @description Validation Error */

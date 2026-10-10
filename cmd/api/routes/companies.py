@@ -20,6 +20,8 @@ from internal.auth.invites import (
 from internal.auth.org import (
     COMPANY_SETTINGS_EDITOR_ROLES,
     MANAGEABLE_MEMBER_ROLES,
+    MEMBER_PUBLISH_APPROVAL_KEY,
+    member_publish_requires_approval,
     require_company_access,
     require_company_settings_editor,
 )
@@ -35,9 +37,13 @@ from internal.memory.repos import (
     get_org_membership,
     list_org_members,
     list_pending_org_invites,
+    member_month_bounds,
     revoke_org_invite,
+    sum_member_tokens_by_source,
+    sum_org_tokens_by_source,
     update_company_name,
     update_company_profile,
+    update_org_member_limit,
     update_org_member_role,
     user_has_org_access,
 )
@@ -49,15 +55,18 @@ from internal.session.voice import (
     roast_level_from_profile,
 )
 from schemas.company import (
+    CompanyGovernanceSettings,
+    CompanyGovernanceUpdate,
     CompanyMember,
     CompanyMemberListResponse,
-    CompanyMemberRoleUpdate,
+    CompanyMemberUpdate,
     CompanySummary,
     CompanyUpdate,
     CompanyVoiceSettings,
     CompanyVoiceUpdate,
     ExemplarPromoteRequest,
     ExemplarPromoteResponse,
+    MemberUsageResponse,
     OrgInviteCreate,
     OrgInviteItem,
     OrgInviteListResponse,
@@ -95,13 +104,20 @@ def _voice_from_company(
     )
 
 
-def _member_item(membership: OrganizationMember, user: User) -> CompanyMember:
+def _member_item(
+    membership: OrganizationMember, user: User, *, used: dict[str, int] | None = None
+) -> CompanyMember:
+    by_source = used or {}
     return CompanyMember(
         user_id=user.id,
         email=user.email,
         display_name=user.display_name,
         role=membership.role,
         joined_at=membership.created_at,
+        monthly_token_limit=membership.monthly_token_limit,
+        used_tokens=sum(by_source.values()),
+        used_platform_tokens=by_source.get("env", 0),
+        used_byok_tokens=by_source.get("org", 0),
     )
 
 
@@ -126,28 +142,41 @@ async def list_company_members(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CompanyMemberListResponse:
     rows = await list_org_members(db, company_id)
+    period_start, _ = member_month_bounds()
+    usage = await sum_org_tokens_by_source(db, company_id=company_id, since=period_start)
     return CompanyMemberListResponse(
         company_id=company_id,
-        items=[_member_item(m, u) for m, u in rows],
+        items=[_member_item(m, u, used=usage.get(u.id)) for m, u in rows],
     )
 
 
 @router.patch("/{company_id}/members/{user_id}", response_model=CompanyMember)
-async def patch_company_member_role(
-    body: CompanyMemberRoleUpdate,
+async def patch_company_member(
+    body: CompanyMemberUpdate,
     company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
     user_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CompanyMember:
+    """ADR 0010 role changes + ADR 0041 monthly platform-key limit.
+
+    ``monthly_token_limit`` has explicit-null semantics: ``null`` clears the
+    cap (unlimited); omitting the key leaves it unchanged.
+    """
+    fields_set = body.model_fields_set
+    if not fields_set:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide role and/or monthly_token_limit",
+        )
     target = await get_org_membership(db, user_id, company_id)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
     if target.role == "owner":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot change the owner's role",
+            detail="Cannot change the owner",
         )
-    if body.role not in MANAGEABLE_MEMBER_ROLES:
+    if body.role is not None and body.role not in MANAGEABLE_MEMBER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Role must be admin or member",
@@ -157,10 +186,17 @@ async def patch_company_member_role(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
 
-    await update_org_member_role(db, target, body.role)
+    if body.role is not None:
+        await update_org_member_role(db, target, body.role)
+    if "monthly_token_limit" in fields_set:
+        await update_org_member_limit(db, target, body.monthly_token_limit)
     await db.commit()
     await db.refresh(target)
-    return _member_item(target, user)
+    period_start, _ = member_month_bounds()
+    used = await sum_member_tokens_by_source(
+        db, user_id=user_id, company_id=company_id, since=period_start
+    )
+    return _member_item(target, user, used=used)
 
 
 @router.delete("/{company_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -196,6 +232,74 @@ async def remove_company_member(
 
     await delete_org_member(db, target)
     await db.commit(    )
+
+
+@router.get("/{company_id}/governance", response_model=CompanyGovernanceSettings)
+async def get_company_governance(
+    company_id: Annotated[uuid.UUID, Depends(require_company_access)],
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CompanyGovernanceSettings:
+    """Org governance policy (ADR 0041). Members may read — they need the
+    publish-approval flag to render the right Confirm affordance."""
+    company = await get_company(db, company_id)
+    assert company is not None
+    membership = await get_org_membership(db, user.id, company_id)
+    return CompanyGovernanceSettings(
+        company_id=company_id,
+        member_publish_requires_approval=member_publish_requires_approval(company.profile),
+        can_edit=bool(membership and membership.role in COMPANY_SETTINGS_EDITOR_ROLES),
+    )
+
+
+@router.patch("/{company_id}/governance", response_model=CompanyGovernanceSettings)
+async def patch_company_governance(
+    body: CompanyGovernanceUpdate,
+    company_id: Annotated[uuid.UUID, Depends(require_company_settings_editor)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CompanyGovernanceSettings:
+    company = await get_company(db, company_id)
+    assert company is not None
+    await update_company_profile(
+        db,
+        company,
+        patch={MEMBER_PUBLISH_APPROVAL_KEY: body.member_publish_requires_approval},
+    )
+    await db.commit()
+    await db.refresh(company)
+    return CompanyGovernanceSettings(
+        company_id=company_id,
+        member_publish_requires_approval=member_publish_requires_approval(company.profile),
+        can_edit=True,
+    )
+
+
+@router.get("/{company_id}/usage", response_model=MemberUsageResponse)
+async def get_member_usage(
+    company_id: Annotated[uuid.UUID, Depends(require_company_access)],
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MemberUsageResponse:
+    """Caller's own org-token usage meter for the current UTC month (ADR 0041)."""
+    membership = await get_org_membership(db, user.id, company_id)
+    assert membership is not None  # require_company_access already checked
+    period_start, period_end = member_month_bounds()
+    by_source = await sum_member_tokens_by_source(
+        db, user_id=user.id, company_id=company_id, since=period_start
+    )
+    used = sum(by_source.values())
+    limit = membership.monthly_token_limit
+    return MemberUsageResponse(
+        company_id=company_id,
+        user_id=user.id,
+        monthly_token_limit=limit,
+        used_tokens=used,
+        used_platform_tokens=by_source.get("env", 0),
+        used_byok_tokens=by_source.get("org", 0),
+        remaining_tokens=(max(limit - used, 0) if limit is not None else None),
+        period_start=period_start,
+        period_end=period_end,
+    )
 
 
 def _invite_item(invite: OrgInvite, *, invite_url: str | None = None) -> OrgInviteItem:

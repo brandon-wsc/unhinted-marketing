@@ -303,10 +303,13 @@ export function ChatPanel() {
     setEditInsertAt(null);
     try {
       await sendMessage(text, queueIndex != null ? { queueIndex } : undefined);
-    } catch {
+    } catch (err) {
       setComposerInput(text);
       setEditInsertAt(queueIndex);
-      showError(t("chat.error.sendFailed"));
+      const reason = err instanceof Error ? err.message : "";
+      showError(
+        reason === "usage_limit_exceeded" ? t("chat.error.usageLimit") : t("chat.error.sendFailed"),
+      );
     }
   }
 

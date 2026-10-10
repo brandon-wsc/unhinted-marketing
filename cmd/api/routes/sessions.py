@@ -21,10 +21,10 @@ from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import bearer_scheme, get_current_user, resolve_current_user
+from internal.auth.org import member_publish_requires_approval
 from internal.media.gc import collect_session_store_keys, reclaim_unreferenced_keys
 from internal.media.storage import (
     MediaStorageError,
-    resolve_external_url,
     resolve_stored_url,
     stored_ref_is_image,
 )
@@ -53,11 +53,11 @@ from internal.session.service import (
     upload_session_image,
 )
 from internal.tools.publish import (
-    PUBLISHED_STATUS,
-    STUB_STATUS,
     PublishPreconditionError,
-    publish_social_post,
+    execute_publish,
+    resolve_publish_image_url,
 )
+from schemas.company import UsageLimitExceededDetail
 from schemas.contracts import (
     DraftCopy,
     PreviewMediaItem,
@@ -98,8 +98,6 @@ from schemas.session import (
 from schemas.tools import PublishSocialPostRequest
 
 logger = logging.getLogger(__name__)
-
-_CONFIRM_SUCCESS = frozenset({STUB_STATUS, PUBLISHED_STATUS})
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -162,6 +160,40 @@ async def _require_owned_session(
     if session.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     return session
+
+
+async def _enforce_member_token_limit(
+    db: AsyncSession, session: Session, user: User
+) -> None:
+    """ADR 0041: cap org `member` token spend at the turn boundary.
+
+    Owner/admin bypass the cap entirely. The cap counts the member's whole
+    spend — platform key ('env') and org BYOK ('org') are both the org's
+    bill. llm_call_records flush asynchronously after each call, so
+    in-flight turns can overshoot slightly — an accepted guardrail lag, not
+    a hard rate limiter.
+    """
+    membership = await repos.get_org_membership(db, user.id, session.company_id)
+    if (
+        membership is None
+        or membership.role != "member"
+        or membership.monthly_token_limit is None
+    ):
+        return
+    period_start, period_end = repos.member_month_bounds()
+    by_source = await repos.sum_member_tokens_by_source(
+        db, user_id=user.id, company_id=session.company_id, since=period_start
+    )
+    used = sum(by_source.values())
+    if used >= membership.monthly_token_limit:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=UsageLimitExceededDetail(
+                limit=membership.monthly_token_limit,
+                used=used,
+                period_end=period_end,
+            ).model_dump(mode="json"),
+        )
 
 
 @router.get("", response_model=SessionListResponse)
@@ -322,6 +354,7 @@ async def create_session(
 
     session = await repos.create_session(db, user_id=user.id, company_id=body.company_id)
     if body.initial_message:
+        await _enforce_member_token_limit(db, session, user)
         try:
             await run_session_turn(db, session, user_content=body.initial_message)
         except SessionTurnConflict as exc:
@@ -401,6 +434,7 @@ async def post_message(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PostMessageResponse:
     session = await _require_owned_session(db, session_id, user)
+    await _enforce_member_token_limit(db, session, user)
     try:
         result = await run_session_turn(
             db,
@@ -443,6 +477,7 @@ async def resume_image(
 ) -> ResumeImageResponse:
     """Resume parked interrupt_before executor_image_gen (ADR 0004 / 0036)."""
     session = await _require_owned_session(db, session_id, user)
+    await _enforce_member_token_limit(db, session, user)
     try:
         result = await resume_image_turn(
             db,
@@ -488,6 +523,7 @@ async def choose_angle(
 ) -> ChooseAngleResponse:
     """Pick a brainstormed angle — resume parked interrupt_before angle_gate (ADR 0029)."""
     session = await _require_owned_session(db, session_id, user)
+    await _enforce_member_token_limit(db, session, user)
     if body.angle_index is None and not (body.angle or "").strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -864,6 +900,7 @@ async def post_session_image_regen(
     from internal.llm.router import LlmProviderError
 
     session = await _require_owned_session(db, session_id, user)
+    await _enforce_member_token_limit(db, session, user)
     try:
         result = await regen_session_image(db, session, image_id=image_id)
     except ValueError as exc:
@@ -974,18 +1011,6 @@ def _draft_has_image(draft) -> bool:
     return stored_ref_is_image(draft.image_url)
 
 
-async def _publish_image_url(db: AsyncSession, draft) -> str | None:
-    ids = list(draft.media_ids or [])
-    if ids:
-        images = await repos.get_preview_images_by_ids(db, [ids[0]])
-        if images:
-            url = (images[0].url or "").strip()
-            if url:
-                return resolve_external_url(url)
-    url = (draft.image_url or "").strip()
-    return resolve_external_url(url) if url else None
-
-
 def _optional_str(payload: dict, key: str) -> str | None:
     value = payload.get(key)
     return value if isinstance(value, str) and value.strip() else None
@@ -1035,7 +1060,49 @@ async def confirm_session(
             detail="image_required",
         )
 
-    image_url = await _publish_image_url(db, draft)
+    # ADR 0041: org policy can park a member's Confirm for owner/admin approval.
+    # Owner/admin always publish directly; the policy defaults off.
+    membership = await repos.get_org_membership(db, user.id, session.company_id)
+    if membership is not None and membership.role == "member":
+        company = await repos.get_company(db, session.company_id)
+        if member_publish_requires_approval(company.profile if company else None):
+            receipt = await repos.create_tool_receipt(
+                db,
+                session_id=session.id,
+                user_id=user.id,
+                tool_name=repos.PUBLISH_TOOL_NAME,
+                idempotency_key=body.idempotency_key,
+                status=repos.PUBLISH_PENDING_APPROVAL,
+                request={
+                    "platform": body.platform,
+                    "approval_token": body.approval_token,
+                    "revision": draft.revision,
+                    "copy": normalize_draft_copy(draft.copy),
+                    "media_ids": [str(i) for i in (draft.media_ids or [])],
+                    "image_url": draft.image_url,
+                },
+                response={},
+            )
+            # Only the latest parked revision stays in the queue.
+            await repos.supersede_pending_publish_approvals(
+                db, session_id=session.id, exclude_receipt_id=receipt.id
+            )
+            await db.commit()
+            await session_event_bus.publish(
+                session.id,
+                "confirm.completed",
+                {
+                    "receipt_id": str(receipt.id),
+                    "status": receipt.status,
+                    "tool_name": receipt.tool_name,
+                    "idempotency_key": receipt.idempotency_key,
+                    "permalink": None,
+                    "error_kind": None,
+                },
+            )
+            return _confirm_response(receipt)
+
+    image_url = await resolve_publish_image_url(db, draft.media_ids, draft.image_url)
     req = PublishSocialPostRequest(
         session_id=session.id,
         approval_token=body.approval_token,
@@ -1046,35 +1113,14 @@ async def confirm_session(
         revision=draft.revision,
     )
     try:
-        outcome = await publish_social_post(db, req, company_id=session.company_id)
+        outcome, receipt = await execute_publish(
+            db, session=session, user_id=user.id, req=req
+        )
     except PublishPreconditionError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exc.detail,
         ) from exc
-
-    receipt = await repos.create_tool_receipt(
-        db,
-        session_id=session.id,
-        user_id=user.id,
-        tool_name="publish_social_post",
-        idempotency_key=body.idempotency_key,
-        status=outcome.status,
-        request={
-            "platform": body.platform,
-            "approval_token": body.approval_token,
-            "revision": draft.revision,
-        },
-        response={
-            "message": outcome.message,
-            "platform": outcome.platform,
-            "permalink": outcome.permalink,
-            "error_kind": outcome.error_kind,
-            "media_id": outcome.media_id,
-        },
-    )
-    if outcome.status in _CONFIRM_SUCCESS:
-        session.status = "confirmed"
     await db.commit()
     await session_event_bus.publish(
         session.id,

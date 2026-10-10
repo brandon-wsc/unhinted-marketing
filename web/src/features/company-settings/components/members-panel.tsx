@@ -1,4 +1,4 @@
-import { MailX, UserMinus } from "lucide-react";
+import { MailX } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CopyField } from "@/components/copy-field";
@@ -17,6 +17,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -38,12 +47,15 @@ import { useAuth } from "@/context/auth-context";
 import {
   ApiStatusError,
   apiCreateInvite,
+  apiGetGovernance,
   apiListInvites,
   apiListMembers,
   apiPatchCompanyName,
-  apiPatchMemberRole,
+  apiPatchGovernance,
+  apiPatchMember,
   apiRemoveMember,
   apiRevokeInvite,
+  type CompanyGovernanceSettings,
   type CompanyMember,
   type InviteRole,
   type OrgInviteItem,
@@ -90,6 +102,14 @@ export function MembersPanel({
   const [sending, setSending] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<CompanyMember | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [draftRole, setDraftRole] = useState<InviteRole>("member");
+  const [limitInput, setLimitInput] = useState("");
+  const [limitError, setLimitError] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [savingDetail, setSavingDetail] = useState(false);
+  const [governance, setGovernance] = useState<CompanyGovernanceSettings | null>(null);
+  const [savingPolicy, setSavingPolicy] = useState(false);
 
   useEffect(() => {
     setName(companyName);
@@ -97,17 +117,21 @@ export function MembersPanel({
 
   const { loading, error, setError, reload } = useAsyncData(
     async () => {
-      const [memberRes, inviteRes] = await Promise.all([
+      const [memberRes, inviteRes, governanceRes] = await Promise.all([
         apiListMembers(accessToken, companyId),
         canManageTeam
           ? apiListInvites(accessToken, companyId)
           : Promise.resolve({ items: [] as OrgInviteItem[] }),
+        canManageTeam
+          ? apiGetGovernance(accessToken, companyId)
+          : Promise.resolve(null as CompanyGovernanceSettings | null),
       ]);
-      return { members: memberRes.items, invites: inviteRes.items };
+      return { members: memberRes.items, invites: inviteRes.items, governance: governanceRes };
     },
-    ({ members, invites }) => {
+    ({ members, invites, governance }) => {
       setMembers(members);
       setInvites(invites);
+      setGovernance(governance);
     },
     [accessToken, companyId, canManageTeam],
   );
@@ -128,13 +152,68 @@ export function MembersPanel({
     }
   }
 
-  async function onRoleChange(member: CompanyMember, role: InviteRole) {
+  const detailMember = detailId ? (members.find((m) => m.user_id === detailId) ?? null) : null;
+  const detailEditable = detailMember != null && canManageTeam && detailMember.role !== "owner";
+  const trimmedLimit = limitInput.trim();
+  const parsedLimit = trimmedLimit === "" ? null : Number(trimmedLimit);
+  const detailDirty =
+    detailMember != null &&
+    (draftRole !== detailMember.role || parsedLimit !== detailMember.monthly_token_limit);
+
+  function openMemberDetail(member: CompanyMember) {
+    setDetailId(member.user_id);
+    setDraftRole(member.role === "owner" ? "member" : member.role);
+    setLimitInput(member.monthly_token_limit != null ? String(member.monthly_token_limit) : "");
+    setLimitError(null);
+    setDetailError(null);
+  }
+
+  async function onSaveDetail() {
+    if (!detailMember) return;
+    if (trimmedLimit !== "" && (!Number.isInteger(parsedLimit) || (parsedLimit ?? 0) < 1)) {
+      setLimitError(t("settings.members.limit.invalid"));
+      return;
+    }
+    setSavingDetail(true);
+    setDetailError(null);
+    try {
+      const updated = await apiPatchMember(accessToken, companyId, detailMember.user_id, {
+        role: draftRole,
+        monthly_token_limit: parsedLimit,
+      });
+      setMembers((rows) => rows.map((row) => (row.user_id === updated.user_id ? updated : row)));
+      setDetailId(null);
+    } catch (err) {
+      setDetailError(errorMessage(err));
+    } finally {
+      setSavingDetail(false);
+    }
+  }
+
+  function usageLabel(member: CompanyMember): string {
+    return member.monthly_token_limit != null
+      ? t("settings.members.usage.ofLimit", {
+          used: member.used_tokens.toLocaleString(),
+          limit: member.monthly_token_limit.toLocaleString(),
+        })
+      : t("settings.members.usage.unlimited", {
+          used: member.used_tokens.toLocaleString(),
+        });
+  }
+
+  async function onTogglePublishApproval(checked: boolean) {
+    if (!governance) return;
+    setSavingPolicy(true);
     setError(null);
     try {
-      const updated = await apiPatchMemberRole(accessToken, companyId, member.user_id, role);
-      setMembers((rows) => rows.map((row) => (row.user_id === updated.user_id ? updated : row)));
+      const updated = await apiPatchGovernance(accessToken, companyId, {
+        member_publish_requires_approval: checked,
+      });
+      setGovernance(updated);
     } catch (err) {
       setError(errorMessage(err));
+    } finally {
+      setSavingPolicy(false);
     }
   }
 
@@ -263,60 +342,60 @@ export function MembersPanel({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("settings.members.columns.name")}</TableHead>
-              <TableHead>{t("settings.members.columns.email")}</TableHead>
+              <TableHead>{t("settings.members.columns.member")}</TableHead>
               <TableHead>{t("settings.members.columns.role")}</TableHead>
-              <TableHead>{t("settings.members.columns.joined")}</TableHead>
-              {canManageTeam && (
-                <TableHead className="text-right">
-                  <span className="sr-only">{t("settings.members.columns.actions")}</span>
-                </TableHead>
-              )}
+              <TableHead>{t("settings.members.columns.usage")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {members.map((member) => (
               <TableRow key={member.user_id}>
-                <TableCell>{member.display_name}</TableCell>
-                <TableCell>{member.email}</TableCell>
-                <TableCell>
-                  {canManageTeam && member.role !== "owner" ? (
-                    <Select
-                      value={member.role}
-                      onValueChange={(value) => void onRoleChange(member, value as InviteRole)}
-                    >
-                      <SelectTrigger size="sm" aria-label={t("settings.members.columns.role")}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">{t("settings.members.roles.admin")}</SelectItem>
-                        <SelectItem value="member">{t("settings.members.roles.member")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge variant={roleBadgeVariant(member.role)}>
-                      {t(`settings.members.roles.${member.role}`)}
-                    </Badge>
-                  )}
+                <TableCell className="max-w-72">
+                  <button
+                    type="button"
+                    onClick={() => openMemberDetail(member)}
+                    className="w-full cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="block truncate font-medium">{member.display_name}</span>
+                    <span className="block truncate text-sm text-muted-foreground">
+                      {member.email}
+                    </span>
+                  </button>
                 </TableCell>
-                <TableCell>{formatDay(member.joined_at)}</TableCell>
-                {canManageTeam && (
-                  <TableCell className="text-right">
-                    {member.role === "owner" ? null : (
-                      <RowIconAction
-                        label={t("settings.members.removeTitle")}
-                        onClick={() => setRemoveTarget(member)}
-                      >
-                        <UserMinus />
-                      </RowIconAction>
-                    )}
-                  </TableCell>
-                )}
+                <TableCell className="whitespace-nowrap">
+                  <Badge variant={roleBadgeVariant(member.role)}>
+                    {t(`settings.members.roles.${member.role}`)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">
+                  {usageLabel(member)}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      {canManageTeam && governance && (
+        <div className="space-y-4 rounded-xl border border-border bg-card p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold">
+                {t("settings.members.publishApproval.title")}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("settings.members.publishApproval.hint")}
+              </p>
+            </div>
+            <Switch
+              checked={governance.member_publish_requires_approval}
+              disabled={savingPolicy}
+              onCheckedChange={(checked) => void onTogglePublishApproval(checked)}
+              aria-label={t("settings.members.publishApproval.title")}
+            />
+          </div>
+        </div>
+      )}
 
       {canManageTeam && (
         <div className="space-y-4 rounded-xl border border-border bg-card p-6">
@@ -407,13 +486,17 @@ export function MembersPanel({
             <TableBody>
               {invites.map((invite) => (
                 <TableRow key={invite.id}>
-                  <TableCell>{invite.email}</TableCell>
-                  <TableCell>
+                  <TableCell className="max-w-64">
+                    <span className="block truncate">{invite.email}</span>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Badge variant={invite.role === "admin" ? "secondary" : "outline"}>
                       {t(`settings.members.roles.${invite.role}`)}
                     </Badge>
                   </TableCell>
-                  <TableCell>{formatDay(invite.expires_at)}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {formatDay(invite.expires_at)}
+                  </TableCell>
                   <TableCell className="text-right">
                     <RowIconAction
                       label={t("settings.members.pending.revoke")}
@@ -428,6 +511,126 @@ export function MembersPanel({
           </Table>
         </div>
       )}
+
+      <Dialog open={detailMember !== null} onOpenChange={(open) => !open && setDetailId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{detailMember?.display_name}</DialogTitle>
+            <DialogDescription>{detailMember?.email}</DialogDescription>
+          </DialogHeader>
+          {detailMember && (
+            <form
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                void onSaveDetail();
+              }}
+              className="space-y-5"
+            >
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t("settings.members.columns.role")}
+                </p>
+                {detailEditable ? (
+                  <Select
+                    value={draftRole}
+                    onValueChange={(value) => setDraftRole(value as InviteRole)}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="w-40"
+                      aria-label={t("settings.members.columns.role")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">{t("settings.members.roles.admin")}</SelectItem>
+                      <SelectItem value="member">{t("settings.members.roles.member")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant={roleBadgeVariant(detailMember.role)}>
+                    {t(`settings.members.roles.${detailMember.role}`)}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t("settings.members.limit.title")}
+                </p>
+                {detailEditable ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.members.limit.hint", {
+                        name: detailMember.display_name,
+                        used: detailMember.used_tokens.toLocaleString(),
+                      })}
+                    </p>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      value={limitInput}
+                      aria-label={t("settings.members.limit.field")}
+                      aria-invalid={Boolean(limitError)}
+                      aria-describedby={limitError ? "member-limit-error" : undefined}
+                      onChange={(e) => {
+                        setLimitInput(e.target.value);
+                        if (limitError) setLimitError(null);
+                      }}
+                    />
+                    {limitError && (
+                      <p id="member-limit-error" className="text-xs text-destructive">
+                        {limitError}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm tabular-nums">{usageLabel(detailMember)}</p>
+                )}
+                {detailMember.used_byok_tokens > 0 && (
+                  <p className="text-xs tabular-nums text-muted-foreground">
+                    {t("settings.members.usage.breakdown", {
+                      platform: detailMember.used_platform_tokens.toLocaleString(),
+                      byok: detailMember.used_byok_tokens.toLocaleString(),
+                    })}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t("settings.members.columns.joined")}
+                </p>
+                <p className="text-sm">{formatDay(detailMember.joined_at)}</p>
+              </div>
+
+              {detailError && <p className="text-xs text-destructive">{detailError}</p>}
+
+              {detailEditable && (
+                <DialogFooter className="sm:justify-between">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={savingDetail}
+                    onClick={() => {
+                      setRemoveTarget(detailMember);
+                      setDetailId(null);
+                    }}
+                  >
+                    {t("settings.members.removeTitle")}
+                  </Button>
+                  <Button type="submit" loading={savingDetail} disabled={!detailDirty}>
+                    {t("common.save")}
+                  </Button>
+                </DialogFooter>
+              )}
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={removeTarget !== null}

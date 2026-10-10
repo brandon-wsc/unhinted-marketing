@@ -7,7 +7,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
-import { apiPromoteVoiceExemplar } from "@/features/company-settings/api";
+import {
+  apiGetGovernance,
+  apiPromoteVoiceExemplar,
+  type CompanyGovernanceSettings,
+} from "@/features/company-settings/api";
 import { EditCopyDialog } from "@/features/session/components/edit-copy-dialog";
 import { EditImageDialog } from "@/features/session/components/edit-image-dialog";
 import {
@@ -29,6 +33,7 @@ import type {
   PreviewDraft,
   SourceSignal,
 } from "@/features/session/types";
+import { useAsyncData } from "@/hooks/use-async-data";
 import { useFlash } from "@/hooks/use-flash";
 import { errorMessage } from "@/lib/utils";
 
@@ -87,13 +92,24 @@ export function PreviewPanel({
   imageGenerating = false,
 }: Props) {
   const { t } = useTranslation();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [local, setLocal] = useState<DraftCopy>(() => toEditableCopy(draft));
   const [editImageOpen, setEditImageOpen] = useState(false);
   const [editCopyOpen, setEditCopyOpen] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [promoteFlash, setPromoteFlash] = useFlash<"ok" | "dup" | "err">(3000);
   const [promoteError, setPromoteError] = useState<string | null>(null);
+  const [governance, setGovernance] = useState<CompanyGovernanceSettings | null>(null);
+
+  // ADR 0041: members under the approval policy send drafts for sign-off.
+  const isOrgMember = user?.organizations[0]?.role === "member";
+  useAsyncData(
+    async () =>
+      companyId && isOrgMember ? apiGetGovernance(accessToken, companyId) : Promise.resolve(null),
+    (data) => setGovernance(data),
+    [accessToken, companyId, isOrgMember],
+  );
+  const needsApproval = isOrgMember && !!governance?.member_publish_requires_approval;
 
   // Server wins on SSE / AI revise — reset local dirty state.
   useEffect(() => {
@@ -133,6 +149,8 @@ export function PreviewPanel({
   const canConfirm =
     !!draft.approval_token && !confirmed && local.caption.trim().length > 0 && hasImage;
   const failedReceipt = confirmReceipt?.status === "failed";
+  const parkedApproval = confirmReceipt?.status === "pending_approval";
+  const rejectedApproval = confirmReceipt?.status === "rejected";
   const showReceipt =
     confirmed || (!!confirmReceipt && isConfirmSuccessStatus(confirmReceipt.status));
   const showFailed = failedReceipt && !confirmed;
@@ -190,6 +208,11 @@ export function PreviewPanel({
       : phase === "pending"
         ? t("preview.awaiting.title")
         : t("preview.title");
+  const confirmLabel = confirming
+    ? t("preview.confirmWorking")
+    : needsApproval
+      ? t("preview.sendForApproval")
+      : t("preview.confirm");
 
   return (
     <aside className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -318,6 +341,22 @@ export function PreviewPanel({
                 </AlertDescription>
               </Alert>
             )}
+            {parkedApproval && (
+              <Alert variant="info">
+                <AlertTitle>{t("preview.approval.parkedTitle")}</AlertTitle>
+                <AlertDescription>
+                  <p>{t("preview.approval.parkedHint")}</p>
+                </AlertDescription>
+              </Alert>
+            )}
+            {rejectedApproval && (
+              <Alert variant="destructive" className="border-destructive/30 bg-destructive-soft">
+                <AlertTitle>{t("preview.approval.rejectedTitle")}</AlertTitle>
+                <AlertDescription>
+                  <p>{t("preview.approval.rejectedHint")}</p>
+                </AlertDescription>
+              </Alert>
+            )}
             {!actionsLocked && (
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button
@@ -333,21 +372,24 @@ export function PreviewPanel({
                   disabled={!canConfirm || busy}
                   onClick={() => void handleConfirm()}
                 >
-                  {confirming ? t("preview.confirmWorking") : t("preview.confirm")}
+                  {confirmLabel}
                 </Button>
               </div>
             )}
           </div>
         )}
-        {!showReceipt && confirmError !== "social_account_not_connected" && (
-          <p
-            className={`text-[11px] leading-relaxed text-muted-foreground${
-              actionsLocked ? "" : " mt-2"
-            }`}
-          >
-            {hint}
-          </p>
-        )}
+        {!showReceipt &&
+          !parkedApproval &&
+          !rejectedApproval &&
+          confirmError !== "social_account_not_connected" && (
+            <p
+              className={`text-[11px] leading-relaxed text-muted-foreground${
+                actionsLocked ? "" : " mt-2"
+              }`}
+            >
+              {hint}
+            </p>
+          )}
       </div>
 
       {!confirmed && (
