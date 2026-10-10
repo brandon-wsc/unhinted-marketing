@@ -797,6 +797,7 @@ async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
             kind="image", tier=None, model=model, temperature=None, system=None, user=prompt
         ) as rec:
             response = await _vertex_generate_image(resolved=resolved, prompt=prompt)
+            rec.set_usage(getattr(response, "usage_metadata", None))
             url = image_result_to_url(response)
             if url:
                 rec.response_text = url
@@ -849,6 +850,8 @@ async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
                     payload = response.json()
                 except ValueError:
                     payload = None
+                if isinstance(payload, dict):
+                    rec.set_usage(payload.get("usage"))
                 url = image_result_to_url(payload)
                 if url:
                     rec.response_text = url
@@ -879,6 +882,7 @@ async def generate_image(*, prompt: str, size: str = "1024x1024") -> str:
                 raise _wrap_provider_error(exc, model=model) from exc
             raise
 
+        rec.set_usage(getattr(response, "usage", None))
         url = image_result_to_url(response)
         if url:
             rec.response_text = url
