@@ -17,16 +17,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -188,6 +181,17 @@ export function MembersPanel({
     }
   }
 
+  function usageLabel(member: CompanyMember): string {
+    return member.monthly_token_limit != null
+      ? t("settings.members.usage.ofLimit", {
+          used: member.used_tokens.toLocaleString(),
+          limit: member.monthly_token_limit.toLocaleString(),
+        })
+      : t("settings.members.usage.unlimited", {
+          used: member.used_tokens.toLocaleString(),
+        });
+  }
+
   async function onTogglePublishApproval(checked: boolean) {
     if (!governance) return;
     setSavingPolicy(true);
@@ -344,9 +348,13 @@ export function MembersPanel({
           <TableBody>
             {members.map((member) => (
               <TableRow key={member.user_id}>
-                <TableCell>{member.display_name}</TableCell>
-                <TableCell>{member.email}</TableCell>
-                <TableCell>
+                <TableCell className="max-w-48">
+                  <span className="block truncate">{member.display_name}</span>
+                </TableCell>
+                <TableCell className="max-w-64">
+                  <span className="block truncate">{member.email}</span>
+                </TableCell>
+                <TableCell className="whitespace-nowrap">
                   {canManageTeam && member.role !== "owner" ? (
                     <Select
                       value={member.role}
@@ -366,34 +374,100 @@ export function MembersPanel({
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="tabular-nums">
-                  {member.monthly_token_limit != null
-                    ? t("settings.members.usage.ofLimit", {
-                        used: member.used_tokens.toLocaleString(),
-                        limit: member.monthly_token_limit.toLocaleString(),
-                      })
-                    : t("settings.members.usage.unlimited", {
-                        used: member.used_tokens.toLocaleString(),
-                      })}
+                <TableCell className="whitespace-nowrap tabular-nums">
+                  {canManageTeam && member.role !== "owner" ? (
+                    <Popover
+                      open={limitTarget?.user_id === member.user_id}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          openLimitEditor(member);
+                        } else if (limitTarget?.user_id === member.user_id) {
+                          setLimitTarget(null);
+                        }
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={t("settings.members.limit.title")}
+                          className="inline-flex items-center gap-1.5 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <span>{usageLabel(member)}</span>
+                          <Pencil className="size-3 text-muted-foreground" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-80 space-y-3 p-3">
+                        <form
+                          noValidate
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            void onSaveLimit(false);
+                          }}
+                          className="space-y-3"
+                        >
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">
+                              {t("settings.members.limit.title")}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {t("settings.members.limit.hint", {
+                                name: member.display_name,
+                                used: member.used_tokens.toLocaleString(),
+                              })}
+                            </p>
+                          </div>
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            step={1}
+                            value={limitInput}
+                            aria-label={t("settings.members.limit.field")}
+                            aria-invalid={Boolean(limitError)}
+                            onChange={(e) => {
+                              setLimitInput(e.target.value);
+                              if (limitError) setLimitError(null);
+                            }}
+                          />
+                          {limitError && <p className="text-xs text-destructive">{limitError}</p>}
+                          <div className="flex items-center justify-end gap-2">
+                            {member.monthly_token_limit != null && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={savingLimit}
+                                onClick={() => void onSaveLimit(true)}
+                              >
+                                {t("settings.members.limit.clear")}
+                              </Button>
+                            )}
+                            <Button
+                              type="submit"
+                              size="sm"
+                              loading={savingLimit}
+                              disabled={!limitInput.trim()}
+                            >
+                              {t("common.save")}
+                            </Button>
+                          </div>
+                        </form>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <span>{usageLabel(member)}</span>
+                  )}
                 </TableCell>
-                <TableCell>{formatDay(member.joined_at)}</TableCell>
+                <TableCell className="whitespace-nowrap">{formatDay(member.joined_at)}</TableCell>
                 {canManageTeam && (
-                  <TableCell className="text-right">
+                  <TableCell className="whitespace-nowrap text-right">
                     {member.role === "owner" ? null : (
-                      <div className="flex items-center justify-end gap-0.5">
-                        <RowIconAction
-                          label={t("settings.members.limit.title")}
-                          onClick={() => openLimitEditor(member)}
-                        >
-                          <Pencil />
-                        </RowIconAction>
-                        <RowIconAction
-                          label={t("settings.members.removeTitle")}
-                          onClick={() => setRemoveTarget(member)}
-                        >
-                          <UserMinus />
-                        </RowIconAction>
-                      </div>
+                      <RowIconAction
+                        label={t("settings.members.removeTitle")}
+                        onClick={() => setRemoveTarget(member)}
+                      >
+                        <UserMinus />
+                      </RowIconAction>
                     )}
                   </TableCell>
                 )}
@@ -513,13 +587,17 @@ export function MembersPanel({
             <TableBody>
               {invites.map((invite) => (
                 <TableRow key={invite.id}>
-                  <TableCell>{invite.email}</TableCell>
-                  <TableCell>
+                  <TableCell className="max-w-64">
+                    <span className="block truncate">{invite.email}</span>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Badge variant={invite.role === "admin" ? "secondary" : "outline"}>
                       {t(`settings.members.roles.${invite.role}`)}
                     </Badge>
                   </TableCell>
-                  <TableCell>{formatDay(invite.expires_at)}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {formatDay(invite.expires_at)}
+                  </TableCell>
                   <TableCell className="text-right">
                     <RowIconAction
                       label={t("settings.members.pending.revoke")}
@@ -534,59 +612,6 @@ export function MembersPanel({
           </Table>
         </div>
       )}
-
-      <Dialog open={limitTarget !== null} onOpenChange={(open) => !open && setLimitTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("settings.members.limit.title")}</DialogTitle>
-            <DialogDescription>
-              {t("settings.members.limit.hint", {
-                name: limitTarget?.display_name ?? "",
-                used: (limitTarget?.used_tokens ?? 0).toLocaleString(),
-              })}
-            </DialogDescription>
-          </DialogHeader>
-          <FormField
-            id="member-token-limit"
-            label={t("settings.members.limit.field")}
-            error={limitError}
-          >
-            <Input
-              id="member-token-limit"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              step={1}
-              value={limitInput}
-              aria-invalid={Boolean(limitError)}
-              onChange={(e) => {
-                setLimitInput(e.target.value);
-                if (limitError) setLimitError(null);
-              }}
-            />
-          </FormField>
-          <DialogFooter>
-            {limitTarget?.monthly_token_limit != null && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={savingLimit}
-                onClick={() => void onSaveLimit(true)}
-              >
-                {t("settings.members.limit.clear")}
-              </Button>
-            )}
-            <Button
-              type="button"
-              loading={savingLimit}
-              disabled={!limitInput.trim()}
-              onClick={() => void onSaveLimit(false)}
-            >
-              {t("common.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog
         open={removeTarget !== null}
