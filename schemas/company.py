@@ -139,6 +139,8 @@ class CompanyMemberUpdate(BaseModel):
 class OrgInviteCreate(BaseModel):
     email: EmailStr
     role: Literal["admin", "member"] = "member"
+    # ADR 0042: optional spend cap preset; None = env default / unlimited.
+    monthly_token_limit: int | None = Field(default=None, ge=1)
 
     @field_validator("email")
     @classmethod
@@ -150,6 +152,7 @@ class OrgInviteItem(BaseModel):
     id: uuid.UUID
     email: EmailStr
     role: Literal["admin", "member"]
+    monthly_token_limit: int | None = None
     invite_url: str | None = None
     expires_at: datetime
     accepted_at: datetime | None = None

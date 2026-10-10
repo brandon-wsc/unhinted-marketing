@@ -30,11 +30,12 @@ async def _create_invite(
     headers: dict[str, str],
     email: str,
     role: str = "member",
+    monthly_token_limit: int | None = None,
 ) -> dict:
     res = await client.post(
         f"/api/companies/{company_id}/invites",
         headers=headers,
-        json={"email": email, "role": role},
+        json={"email": email, "role": role, "monthly_token_limit": monthly_token_limit},
     )
     assert res.status_code == 201, res.text
     return res.json()
@@ -593,6 +594,128 @@ async def test_accept_single_use(client: AsyncClient, db_session: AsyncSession) 
 
     second = await client.post(f"/api/invites/{token}/accept", headers=invitee_headers)
     assert second.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_invite_with_monthly_token_limit(client: AsyncClient) -> None:
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    owner_headers = auth_header(owner["access_token"])
+
+    body = await _create_invite(
+        client,
+        company_id=company_id,
+        headers=owner_headers,
+        email=f"capped-{uuid.uuid4().hex[:8]}@example.com",
+        monthly_token_limit=5000,
+    )
+    assert body["monthly_token_limit"] == 5000
+
+    res = await client.get(f"/api/companies/{company_id}/invites", headers=owner_headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["items"][0]["monthly_token_limit"] == 5000
+
+
+@pytest.mark.asyncio
+async def test_create_invite_rejects_nonpositive_limit(client: AsyncClient) -> None:
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+
+    for bad in (0, -100):
+        res = await client.post(
+            f"/api/companies/{company_id}/invites",
+            headers=auth_header(owner["access_token"]),
+            json={
+                "email": f"bad-{uuid.uuid4().hex[:8]}@example.com",
+                "role": "member",
+                "monthly_token_limit": bad,
+            },
+        )
+        assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
+async def test_accept_invite_applies_preset_limit(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    owner_headers = auth_header(owner["access_token"])
+    invite_email = f"capped-{uuid.uuid4().hex[:8]}@example.com"
+
+    created = await _create_invite(
+        client,
+        company_id=company_id,
+        headers=owner_headers,
+        email=invite_email,
+        monthly_token_limit=5000,
+    )
+    token = invite_token_from_url(created["invite_url"])
+
+    invitee = await register_user(client, email=invite_email)
+    await strip_org_membership(db_session, uuid.UUID(invitee["user"]["id"]))
+
+    accept_res = await client.post(
+        f"/api/invites/{token}/accept",
+        headers=auth_header(invitee["access_token"]),
+    )
+    assert accept_res.status_code == 200, accept_res.text
+
+    members = await client.get(f"/api/companies/{company_id}/members", headers=owner_headers)
+    assert members.status_code == 200, members.text
+    row = next(m for m in members.json()["items"] if m["email"] == invite_email)
+    assert row["monthly_token_limit"] == 5000
+
+
+@pytest.mark.asyncio
+async def test_invite_limit_overrides_env_default(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from internal.config import settings
+
+    monkeypatch.setattr(settings, "member_default_monthly_token_limit", 42)
+
+    owner = await register_user(client, email=f"owner-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = owner["user"]["organizations"][0]["id"]
+    owner_headers = auth_header(owner["access_token"])
+
+    # Explicit preset wins over the env default.
+    explicit_email = f"explicit-{uuid.uuid4().hex[:8]}@example.com"
+    created = await _create_invite(
+        client,
+        company_id=company_id,
+        headers=owner_headers,
+        email=explicit_email,
+        monthly_token_limit=5000,
+    )
+    token = invite_token_from_url(created["invite_url"])
+    invitee = await register_user(client, email=explicit_email)
+    await strip_org_membership(db_session, uuid.UUID(invitee["user"]["id"]))
+    res = await client.post(
+        f"/api/invites/{token}/accept", headers=auth_header(invitee["access_token"])
+    )
+    assert res.status_code == 200, res.text
+
+    # No preset falls back to the env default for member invites.
+    default_email = f"default-{uuid.uuid4().hex[:8]}@example.com"
+    created = await _create_invite(
+        client,
+        company_id=company_id,
+        headers=owner_headers,
+        email=default_email,
+    )
+    token = invite_token_from_url(created["invite_url"])
+    invitee = await register_user(client, email=default_email)
+    await strip_org_membership(db_session, uuid.UUID(invitee["user"]["id"]))
+    res = await client.post(
+        f"/api/invites/{token}/accept", headers=auth_header(invitee["access_token"])
+    )
+    assert res.status_code == 200, res.text
+
+    members = await client.get(f"/api/companies/{company_id}/members", headers=owner_headers)
+    by_email = {m["email"]: m for m in members.json()["items"]}
+    assert by_email[explicit_email]["monthly_token_limit"] == 5000
+    assert by_email[default_email]["monthly_token_limit"] == 42
 
 
 @pytest.mark.asyncio

@@ -379,11 +379,13 @@
         "role": "Role",
         "joined": "Joined",
         "actions": "Actions",
-        "usage": "This month"
+        "usage": "This month",
+        "limit": "Limit"
       },
       "invite": {
         "title": "Invite a colleague",
         "hint": "Send a link. They must register or log in with the invited email before joining.",
+        "limitPlaceholder": "Unlimited",
         "send": "Send invite",
         "sending": "Sending…",
         "copy": "Copy link",

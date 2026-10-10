@@ -98,7 +98,9 @@ export function MembersPanel({
   const [invites, setInvites] = useState<OrgInviteItem[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<InviteRole>("member");
+  const [inviteLimit, setInviteLimit] = useState("");
   const [inviteEmailError, setInviteEmailError] = useState<string | null>(null);
+  const [inviteLimitError, setInviteLimitError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<CompanyMember | null>(null);
@@ -233,8 +235,18 @@ export function MembersPanel({
     e.preventDefault();
     if (!canManageTeam) return;
     const trimmed = inviteEmail.trim();
+    const inviteLimitTrimmed = inviteLimit.trim();
+    const parsedInviteLimit = inviteLimitTrimmed === "" ? null : Number(inviteLimitTrimmed);
     setError(null);
     setInviteEmailError(null);
+    setInviteLimitError(null);
+    if (
+      inviteLimitTrimmed !== "" &&
+      (!Number.isInteger(parsedInviteLimit) || (parsedInviteLimit ?? 0) < 1)
+    ) {
+      setInviteLimitError(t("settings.members.limit.invalid"));
+      return;
+    }
     if (!isValidEmail(trimmed)) {
       setInviteEmailError(t("settings.members.invite.invalidEmail"));
       return;
@@ -251,9 +263,11 @@ export function MembersPanel({
       const created = await apiCreateInvite(accessToken, companyId, {
         email: trimmed,
         role: inviteRole,
+        monthly_token_limit: parsedInviteLimit,
       });
       setInviteUrl(created.invite_url);
       setInviteEmail("");
+      setInviteLimit("");
       await reload();
     } catch (err) {
       setInviteUrl(null);
@@ -444,6 +458,28 @@ export function MembersPanel({
                 </SelectContent>
               </Select>
             </FormField>
+            <FormField
+              id="invite-limit"
+              label={t("settings.members.limit.field")}
+              className="sm:w-40"
+              error={inviteLimitError}
+            >
+              <Input
+                id="invite-limit"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                placeholder={t("settings.members.invite.limitPlaceholder")}
+                value={inviteLimit}
+                aria-invalid={Boolean(inviteLimitError)}
+                aria-describedby={inviteLimitError ? "invite-limit-error" : undefined}
+                onChange={(e) => {
+                  setInviteLimit(e.target.value);
+                  if (inviteLimitError) setInviteLimitError(null);
+                }}
+              />
+            </FormField>
             <div className="space-y-2">
               <Label className="invisible hidden sm:flex" aria-hidden="true">
                 &nbsp;
@@ -477,6 +513,7 @@ export function MembersPanel({
               <TableRow>
                 <TableHead>{t("settings.members.columns.email")}</TableHead>
                 <TableHead>{t("settings.members.columns.role")}</TableHead>
+                <TableHead>{t("settings.members.columns.limit")}</TableHead>
                 <TableHead>{t("settings.members.pending.expires")}</TableHead>
                 <TableHead className="text-right">
                   <span className="sr-only">{t("settings.members.columns.actions")}</span>
@@ -493,6 +530,11 @@ export function MembersPanel({
                     <Badge variant={invite.role === "admin" ? "secondary" : "outline"}>
                       {t(`settings.members.roles.${invite.role}`)}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">
+                    {invite.monthly_token_limit != null
+                      ? invite.monthly_token_limit.toLocaleString()
+                      : "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {formatDay(invite.expires_at)}

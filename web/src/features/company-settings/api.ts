@@ -286,6 +286,7 @@ export type OrgInviteItem = {
   id: string;
   email: string;
   role: InviteRole;
+  monthly_token_limit: number | null;
   invite_url: string | null;
   expires_at: string;
   accepted_at: string | null;
@@ -382,7 +383,7 @@ export async function apiListInvites(
 export async function apiCreateInvite(
   accessToken: string | null,
   companyId: string,
-  body: { email: string; role: InviteRole },
+  body: { email: string; role: InviteRole; monthly_token_limit?: number | null },
 ): Promise<OrgInviteItem> {
   return apiJson<OrgInviteItem>(
     accessToken,
