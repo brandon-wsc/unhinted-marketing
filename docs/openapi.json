@@ -8410,6 +8410,18 @@
             ],
             "title": "Role",
             "default": "member"
+          },
+          "monthly_token_limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Token Limit"
           }
         },
         "type": "object",
@@ -8437,6 +8449,17 @@
               "member"
             ],
             "title": "Role"
+          },
+          "monthly_token_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Token Limit"
           },
           "invite_url": {
             "anyOf": [

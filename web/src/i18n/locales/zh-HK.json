@@ -379,11 +379,13 @@
         "role": "角色",
         "joined": "加入日期",
         "actions": "操作",
-        "usage": "本月用量"
+        "usage": "本月用量",
+        "limit": "上限"
       },
       "invite": {
         "title": "邀請同事",
         "hint": "出條連結俾同事；對方要用受邀電郵註冊或登入先入到。",
+        "limitPlaceholder": "無上限",
         "send": "發送邀請",
         "sending": "發送緊邀請…",
         "copy": "複製連結",

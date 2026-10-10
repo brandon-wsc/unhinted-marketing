@@ -90,6 +90,8 @@ class OrgInvite(Base):
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
+    # ADR 0042: optional spend cap preset, copied to the membership on accept.
+    monthly_token_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     invited_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

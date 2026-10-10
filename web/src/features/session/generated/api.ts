@@ -2668,6 +2668,8 @@ export type components = {
              * @enum {string}
              */
             role: "admin" | "member";
+            /** Monthly Token Limit */
+            monthly_token_limit?: number | null;
         };
         /** OrgInviteItem */
         OrgInviteItem: {
@@ -2686,6 +2688,8 @@ export type components = {
              * @enum {string}
              */
             role: "admin" | "member";
+            /** Monthly Token Limit */
+            monthly_token_limit?: number | null;
             /** Invite Url */
             invite_url?: string | null;
             /**

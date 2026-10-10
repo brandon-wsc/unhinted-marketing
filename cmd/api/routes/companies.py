@@ -307,6 +307,7 @@ def _invite_item(invite: OrgInvite, *, invite_url: str | None = None) -> OrgInvi
         id=invite.id,
         email=invite.email,
         role=invite.role,
+        monthly_token_limit=invite.monthly_token_limit,
         invite_url=invite_url,
         expires_at=invite.expires_at,
         accepted_at=invite.accepted_at,
@@ -345,6 +346,7 @@ async def create_company_invite(
             token_hash=hash_invite_token(raw_token),
             invited_by=user.id,
             expires_at=invite_expires_at(),
+            monthly_token_limit=body.monthly_token_limit,
         )
         await db.commit()
         await db.refresh(invite)

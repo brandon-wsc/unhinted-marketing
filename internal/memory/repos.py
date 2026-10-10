@@ -438,6 +438,7 @@ async def create_org_invite(
     token_hash: str,
     invited_by: uuid.UUID,
     expires_at: datetime,
+    monthly_token_limit: int | None = None,
 ) -> OrgInvite:
     invite = OrgInvite(
         organization_id=organization_id,
@@ -446,6 +447,7 @@ async def create_org_invite(
         token_hash=token_hash,
         invited_by=invited_by,
         expires_at=expires_at,
+        monthly_token_limit=monthly_token_limit,
     )
     db.add(invite)
     await db.flush()

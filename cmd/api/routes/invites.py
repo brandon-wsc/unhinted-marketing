@@ -63,15 +63,17 @@ async def accept_company_invite(
         )
 
     await accept_org_invite(db, invite)
+    # ADR 0042: an explicit invite preset wins; otherwise the ADR 0041 env
+    # default seeds member invites only.
+    limit = invite.monthly_token_limit
+    if limit is None and invite.role == "member":
+        limit = settings.member_default_monthly_token_limit
     await create_org_member(
         db,
         user_id=user.id,
         company_id=invite.organization_id,
         role=invite.role,
-        # ADR 0041: the platform-key default cap seeds member invites only.
-        monthly_token_limit=(
-            settings.member_default_monthly_token_limit if invite.role == "member" else None
-        ),
+        monthly_token_limit=limit,
     )
     await db.commit()
     return OrgInviteAcceptResponse(company_id=invite.organization_id, role=invite.role)
