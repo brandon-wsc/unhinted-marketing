@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from schemas.contracts import DraftCopy, PreviewMediaItem
+
 
 class CompanyVoiceSettings(BaseModel):
     company_id: uuid.UUID
@@ -111,6 +113,9 @@ class CompanyMember(BaseModel):
     display_name: str
     role: Literal["owner", "admin", "member"]
     joined_at: datetime
+    # ADR 0041: platform-key spend cap + current UTC month usage.
+    monthly_token_limit: int | None = None
+    used_tokens: int = 0
 
 
 class CompanyMemberListResponse(BaseModel):
@@ -118,8 +123,15 @@ class CompanyMemberListResponse(BaseModel):
     items: list[CompanyMember]
 
 
-class CompanyMemberRoleUpdate(BaseModel):
-    role: Literal["admin", "member"]
+class CompanyMemberUpdate(BaseModel):
+    """Owner/admin member management; at least one field must be set.
+
+    ``monthly_token_limit`` uses explicit-null semantics: sending ``null``
+    clears the cap (unlimited), omitting the key leaves it unchanged.
+    """
+
+    role: Literal["admin", "member"] | None = None
+    monthly_token_limit: int | None = Field(default=None, ge=1)
 
 
 class OrgInviteCreate(BaseModel):
@@ -243,3 +255,69 @@ class ProductProposalItem(BaseModel):
 class ProductProposalListResponse(BaseModel):
     company_id: uuid.UUID
     items: list[ProductProposalItem]
+
+
+class CompanyGovernanceSettings(BaseModel):
+    """Org governance policy surface (ADR 0041). Readable by every member —
+    members need ``member_publish_requires_approval`` to render the right
+    Confirm affordance; only owner/admin may PATCH."""
+
+    company_id: uuid.UUID
+    member_publish_requires_approval: bool = False
+    can_edit: bool = False
+
+
+class CompanyGovernanceUpdate(BaseModel):
+    member_publish_requires_approval: bool
+
+
+class MemberUsageResponse(BaseModel):
+    """Caller's own platform-key usage for the current UTC month (ADR 0041).
+
+    ``monthly_token_limit = null`` means unlimited; ``remaining_tokens`` is
+    ``null`` in that case too."""
+
+    company_id: uuid.UUID
+    user_id: uuid.UUID
+    monthly_token_limit: int | None = None
+    used_tokens: int = 0
+    remaining_tokens: int | None = None
+    period_start: datetime
+    period_end: datetime
+
+
+class UsageLimitExceededDetail(BaseModel):
+    """403 detail payload when a member is over their platform-key cap."""
+
+    reason: Literal["usage_limit_exceeded"] = "usage_limit_exceeded"
+    limit: int
+    used: int
+    period_end: datetime
+
+
+class PublishApprovalItem(BaseModel):
+    """One queued/decided publish request — enough to render the card without
+    opening the member's user-scoped session (ADR 0041)."""
+
+    id: uuid.UUID
+    session_id: uuid.UUID
+    user_id: uuid.UUID
+    requested_by_email: str | None = None
+    requested_by_name: str | None = None
+    platform: str
+    revision: int
+    draft_copy: DraftCopy = Field(default_factory=DraftCopy)
+    media: list[PreviewMediaItem] = Field(default_factory=list)
+    image_url: str | None = None
+    status: str
+    idempotency_key: str
+    permalink: str | None = None
+    error_kind: str | None = None
+    created_at: datetime
+    reviewed_at: datetime | None = None
+    reviewed_by_email: str | None = None
+
+
+class PublishApprovalListResponse(BaseModel):
+    company_id: uuid.UUID
+    items: list[PublishApprovalItem]

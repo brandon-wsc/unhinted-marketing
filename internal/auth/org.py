@@ -16,6 +16,17 @@ COMPANY_SETTINGS_EDITOR_ROLES = frozenset({"owner", "admin"})
 INVITABLE_MEMBER_ROLES = frozenset({"admin", "member"})
 MANAGEABLE_MEMBER_ROLES = frozenset({"admin", "member"})
 
+# ADR 0041 — company.profile key gating member Confirm behind owner/admin approval.
+MEMBER_PUBLISH_APPROVAL_KEY = "member_publish_requires_approval"
+
+
+def member_publish_requires_approval(profile: dict | None) -> bool:
+    """Org policy: member Confirm parks for approval instead of publishing.
+
+    Absent key = off, so existing installs keep direct publish.
+    """
+    return bool((profile or {}).get(MEMBER_PUBLISH_APPROVAL_KEY))
+
 
 async def require_company_access(
     company_id: uuid.UUID,

@@ -73,6 +73,8 @@ class OrganizationMember(Base):
         UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
+    # ADR 0041: platform-key spend cap per UTC month for role=member; NULL = unlimited.
+    monthly_token_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="memberships")
@@ -314,7 +316,7 @@ class ToolReceipt(Base):
     )
     tool_name: Mapped[str] = mapped_column(String(80), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
-    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     request: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     response: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

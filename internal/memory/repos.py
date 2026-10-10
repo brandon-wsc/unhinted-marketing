@@ -18,6 +18,7 @@ from internal.memory.models import (
     Entity,
     InstanceSettings,
     Job,
+    LlmCallRecord,
     MigrationDoneKey,
     OrganizationMember,
     OrgInvite,
@@ -243,6 +244,62 @@ async def update_org_member_role(
     return membership
 
 
+async def update_org_member_limit(
+    db: AsyncSession, membership: OrganizationMember, monthly_token_limit: int | None
+) -> OrganizationMember:
+    """ADR 0041: set/clear a member's platform-key monthly cap (None = unlimited)."""
+    membership.monthly_token_limit = monthly_token_limit
+    await db.flush()
+    return membership
+
+
+def member_month_bounds(now: datetime | None = None) -> tuple[datetime, datetime]:
+    """Current UTC calendar month as [start, end) — the ADR 0041 usage period."""
+    now = now or datetime.now(UTC)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end = (start.replace(day=28) + timedelta(days=7)).replace(day=1)
+    return start, end
+
+
+async def sum_member_platform_tokens(
+    db: AsyncSession, *, user_id: uuid.UUID, company_id: uuid.UUID, since: datetime
+) -> int:
+    """Platform-key tokens (key_source='env') spent by one member in one org since ``since``.
+
+    Org BYOK spend ('org') is the org's own bill and never counts (ADR 0041).
+    Records flush asynchronously after the call, so this lags in-flight turns slightly.
+    """
+    total = await db.scalar(
+        select(func.coalesce(func.sum(LlmCallRecord.total_tokens), 0)).where(
+            LlmCallRecord.user_id == user_id,
+            LlmCallRecord.company_id == company_id,
+            LlmCallRecord.key_source == "env",
+            LlmCallRecord.created_at >= since,
+        )
+    )
+    return int(total or 0)
+
+
+async def sum_org_platform_tokens_by_member(
+    db: AsyncSession, *, company_id: uuid.UUID, since: datetime
+) -> dict[uuid.UUID, int]:
+    """Platform-key tokens per member in the org since ``since`` (one grouped scan)."""
+    rows = await db.execute(
+        select(
+            LlmCallRecord.user_id,
+            func.coalesce(func.sum(LlmCallRecord.total_tokens), 0),
+        )
+        .where(
+            LlmCallRecord.company_id == company_id,
+            LlmCallRecord.key_source == "env",
+            LlmCallRecord.created_at >= since,
+            LlmCallRecord.user_id.is_not(None),
+        )
+        .group_by(LlmCallRecord.user_id)
+    )
+    return {user_id: int(total or 0) for user_id, total in rows.all()}
+
+
 async def delete_org_member(db: AsyncSession, membership: OrganizationMember) -> None:
     await db.delete(membership)
     await db.flush()
@@ -351,11 +408,13 @@ async def create_org_member(
     user_id: uuid.UUID,
     company_id: uuid.UUID,
     role: str,
+    monthly_token_limit: int | None = None,
 ) -> OrganizationMember:
     membership = OrganizationMember(
         user_id=user_id,
         organization_id=company_id,
         role=role,
+        monthly_token_limit=monthly_token_limit,
     )
     db.add(membership)
     await db.flush()
@@ -1094,6 +1153,13 @@ async def create_tool_receipt(
     return row
 
 
+# ADR 0041: publish-approval queue lifecycle on tool_receipts.status.
+PUBLISH_TOOL_NAME = "publish_social_post"
+PUBLISH_PENDING_APPROVAL = "pending_approval"
+PUBLISH_REJECTED = "rejected"
+PUBLISH_SUPERSEDED = "superseded"
+
+
 async def get_latest_publish_receipt(
     db: AsyncSession, session_id: uuid.UUID
 ) -> ToolReceipt | None:
@@ -1101,11 +1167,71 @@ async def get_latest_publish_receipt(
         select(ToolReceipt)
         .where(
             ToolReceipt.session_id == session_id,
-            ToolReceipt.tool_name == "publish_social_post",
+            ToolReceipt.tool_name == PUBLISH_TOOL_NAME,
         )
         .order_by(ToolReceipt.created_at.desc())
         .limit(1)
     )
+
+
+async def list_pending_publish_approvals(
+    db: AsyncSession, company_id: uuid.UUID
+) -> list[tuple[ToolReceipt, Session, User]]:
+    """Org publish-approval queue: parked receipts + session + requester."""
+    result = await db.execute(
+        select(ToolReceipt, Session, User)
+        .join(Session, ToolReceipt.session_id == Session.id)
+        .join(User, ToolReceipt.user_id == User.id)
+        .where(
+            Session.company_id == company_id,
+            ToolReceipt.tool_name == PUBLISH_TOOL_NAME,
+            ToolReceipt.status == PUBLISH_PENDING_APPROVAL,
+        )
+        .order_by(ToolReceipt.created_at.asc())
+    )
+    return [(receipt, session, user) for receipt, session, user in result.all()]
+
+
+async def get_publish_approval_receipt(
+    db: AsyncSession,
+    company_id: uuid.UUID,
+    receipt_id: uuid.UUID,
+    *,
+    for_update: bool = False,
+) -> tuple[ToolReceipt, Session] | None:
+    """Org-scoped publish receipt lookup for approve/reject (ADR 0041)."""
+    stmt = (
+        select(ToolReceipt, Session)
+        .join(Session, ToolReceipt.session_id == Session.id)
+        .where(
+            ToolReceipt.id == receipt_id,
+            Session.company_id == company_id,
+            ToolReceipt.tool_name == PUBLISH_TOOL_NAME,
+        )
+    )
+    if for_update:
+        stmt = stmt.with_for_update(of=ToolReceipt)
+    row = (await db.execute(stmt)).first()
+    return (row[0], row[1]) if row else None
+
+
+async def supersede_pending_publish_approvals(
+    db: AsyncSession, *, session_id: uuid.UUID, exclude_receipt_id: uuid.UUID | None = None
+) -> int:
+    """Park a newer request → older parked receipts for the session go 'superseded'."""
+    stmt = (
+        update(ToolReceipt)
+        .where(
+            ToolReceipt.session_id == session_id,
+            ToolReceipt.tool_name == PUBLISH_TOOL_NAME,
+            ToolReceipt.status == PUBLISH_PENDING_APPROVAL,
+        )
+        .values(status=PUBLISH_SUPERSEDED)
+    )
+    if exclude_receipt_id is not None:
+        stmt = stmt.where(ToolReceipt.id != exclude_receipt_id)
+    result = await db.execute(stmt)
+    return result.rowcount or 0
 
 
 async def list_products(
