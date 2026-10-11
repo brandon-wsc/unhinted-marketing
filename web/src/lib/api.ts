@@ -53,7 +53,20 @@ export async function apiLogin(input: { email: string; password: string }): Prom
   return res.json();
 }
 
-export async function apiRefresh(): Promise<TokenResponse> {
+let refreshInflight: Promise<TokenResponse> | null = null;
+
+export function apiRefresh(): Promise<TokenResponse> {
+  // Refresh tokens are single-use — the backend revokes each on use, so
+  // concurrent refreshes race (e.g. a panel firing parallel calls that all
+  // 401 on a stale access token): the loser's token is already revoked and
+  // the user sees a spurious "Invalid or expired token". Share one flight.
+  refreshInflight ??= doRefresh().finally(() => {
+    refreshInflight = null;
+  });
+  return refreshInflight;
+}
+
+async function doRefresh(): Promise<TokenResponse> {
   const res = await fetch(`${API_BASE}/auth/refresh`, {
     method: "POST",
     credentials: "include",
