@@ -1,0 +1,28 @@
+# ACA variant of web/nginx.conf (ADR 0044). The stock GHCR web image's nginx
+# entrypoint envsubsts /etc/nginx/templates/*.template into /etc/nginx/conf.d/
+# at container start, so no image rebuild is needed. The Bicep deploy mounts
+# the Azure Files share `nginx-conf` (this file uploaded by postprovision.sh)
+# at /etc/nginx/templates and sets API_UPSTREAM to the api app's internal FQDN
+# (port 80 → api ingress targetPort 8000).
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://${API_UPSTREAM};
+        # ACA internal ingress routes by Host — it must see the api app's own
+        # internal FQDN, not the public web hostname (or it 404s "app does not
+        # exist"). The public host is preserved for the app via X-Forwarded-Host.
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+    }
+
+    location / {
+        try_files $uri /index.html;
+    }
+}

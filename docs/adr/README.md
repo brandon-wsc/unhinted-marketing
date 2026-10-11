@@ -46,6 +46,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0041](./0041-member-usage-limits-and-publish-approval.md) | Member platform-key usage limits + member publish approval queue | Accepted |
 | [0042](./0042-invite-monthly-token-limit.md) | Per-invite monthly token limit preset at invite create | Accepted |
 | [0043](./0043-publish-image-public-url.md) | Publish image public URL: precondition gate, admin surface, provider-URL persist | Accepted |
+| [0044](./0044-azure-aca-demo.md) | Hosted Azure demo: azd + Container Apps + external Postgres | Accepted |
 
 ## Format
 

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "${AZURE_ENV_NAME}" },
+    "location": { "value": "${AZURE_LOCATION}" },
+    "databaseUrl": { "value": "${DATABASE_URL}" },
+    "jwtSecret": { "value": "${JWT_SECRET}" },
+    "byokEncryptionKey": { "value": "${BYOK_ENCRYPTION_KEY}" },
+    "webBaseUrl": { "value": "${WEB_BASE_URL}" },
+    "corsOrigins": { "value": "${CORS_ORIGINS=}" },
+    "publishAdapter": { "value": "${PUBLISH_ADAPTER=stub}" },
+    "openAiApiKey": { "value": "${OPENAI_API_KEY=}" },
+    "tavilyApiKey": { "value": "${TAVILY_API_KEY=}" },
+    "llmImageModel": { "value": "${LLM_IMAGE_MODEL=placeholder}" },
+    "imagePrefix": { "value": "${IMAGE_PREFIX=ghcr.io/brandon-wsc}" },
+    "imageTag": { "value": "${IMAGE_TAG=onprem}" }
+  }
+}
