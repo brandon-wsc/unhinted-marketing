@@ -35,9 +35,17 @@ import type {
 } from "@/features/session/types";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { useFlash } from "@/hooks/use-flash";
+import { mapApiError } from "@/lib/map-api-error";
 import { errorMessage } from "@/lib/utils";
 
 type PreviewPhase = "accepted" | "pending" | "generating";
+
+// ADR 0043 §1 — publish precondition codes rendered as a gate alert
+const MEDIA_URL_ERRORS = new Set([
+  "media_url_no_base_url",
+  "media_url_not_public",
+  "media_url_not_https",
+]);
 
 type Props = {
   draft: PreviewDraft;
@@ -195,13 +203,16 @@ export function PreviewPanel({
     }
   }
 
+  const isMediaUrlError = confirmError != null && MEDIA_URL_ERRORS.has(confirmError);
   const hint = actionsLocked
     ? t("preview.awaiting.status")
     : !hasImage
       ? t("preview.gate.imageRequired")
       : confirmError === "social_account_not_connected"
         ? t("preview.gate.notConnected")
-        : t("preview.confirmHint");
+        : isMediaUrlError
+          ? mapApiError(confirmError ?? "", t)
+          : t("preview.confirmHint");
   const title =
     phase === "generating"
       ? t("preview.awaiting.generatingTitle")
@@ -326,7 +337,9 @@ export function PreviewPanel({
               </Button>
             </div>
           </div>
-        ) : actionsLocked && confirmError !== "social_account_not_connected" ? null : (
+        ) : actionsLocked &&
+          confirmError !== "social_account_not_connected" &&
+          !isMediaUrlError ? null : (
           <div className="space-y-2">
             {confirmError === "social_account_not_connected" && (
               <Alert variant="destructive" className="border-destructive/30 bg-destructive-soft">
@@ -339,6 +352,11 @@ export function PreviewPanel({
                     {t("preview.gate.openSettings")}
                   </Link>
                 </AlertDescription>
+              </Alert>
+            )}
+            {isMediaUrlError && (
+              <Alert variant="destructive" className="border-destructive/30 bg-destructive-soft">
+                <AlertDescription>{mapApiError(confirmError ?? "", t)}</AlertDescription>
               </Alert>
             )}
             {parkedApproval && (
@@ -381,7 +399,8 @@ export function PreviewPanel({
         {!showReceipt &&
           !parkedApproval &&
           !rejectedApproval &&
-          confirmError !== "social_account_not_connected" && (
+          confirmError !== "social_account_not_connected" &&
+          !isMediaUrlError && (
             <p
               className={`text-[11px] leading-relaxed text-muted-foreground${
                 actionsLocked ? "" : " mt-2"
