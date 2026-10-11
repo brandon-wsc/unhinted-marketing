@@ -291,6 +291,9 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
           {t("settings.instagram.title")}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">{t("settings.instagram.subtitle")}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("settings.instagram.publishUrlHint")}
+        </p>
       </div>
 
       <div className="space-y-5 rounded-xl border border-border bg-card p-6">

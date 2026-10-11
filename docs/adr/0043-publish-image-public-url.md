@@ -21,7 +21,7 @@ A review of the publish image URL surface found four gaps:
 
 - Before the Instagram adapter calls Meta — on the shared path used by Confirm and by owner/admin approve ([ADR 0041](0041-member-usage-limits-and-publish-approval.md)) — the resolved `image_url` is classified. Obviously-unreachable shapes raise `PublishPreconditionError("media_url_not_public")`, the same plane as `social_account_not_connected`: fail fast, no `failed` receipt written, `approval_token` / idempotency semantics untouched, and the member can retry once an admin fixes config.
 - Flagged shapes: empty/relative (`web_base_url` unset), private host (localhost, loopback, RFC-1918, link-local, `.local` / `.internal` hostnames), and non-TLS `http://` on a non-localhost host. Each variant carries a message naming the fix surface — Platform → Instance for `web_base_url`, Settings → Storage for the S3 public URL.
-- Reachability is classified, not proven. A public-shaped URL behind a dead tunnel still reaches Meta and lands as `platform_error`; container-status and transport errors name reachability as a suspect in their message copy. Consistent with PUBLISH_PLAN §4 — the residual is documented, not coded around.
+- Reachability is classified, not proven. A public-shaped URL behind a dead tunnel still reaches Meta and lands as `platform_error`; container-status failures name reachability as a suspect in their message copy (transport errors are our own egress to Graph, not the image fetch). Consistent with PUBLISH_PLAN §4 — the residual is documented, not coded around.
 - The stub adapter is unaffected: it never fetches the image.
 
 ### 2. Provider `https://` image refs persist into the store at generation time

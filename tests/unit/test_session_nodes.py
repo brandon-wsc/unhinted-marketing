@@ -1029,10 +1029,16 @@ async def test_executor_image_gen_success(
         "generate_image",
         AsyncMock(return_value="https://cdn.example/img.png"),
     )
+    # ADR 0043 §2 — persist fetches provider refs into the store; mock the
+    # boundary so the node test stays hermetic (storage covered in test_media_storage).
+    persist = AsyncMock(return_value="sessions/s1/r1-deadbeef.png")
+    monkeypatch.setattr(N, "persist_generated_image", persist)
     out = await N.executor_image_gen(
         _base_state(image_plan={"prompt": "bright HK cafe"})
     )
-    assert out["image_url"] == "https://cdn.example/img.png"
+    assert out["image_url"] == "sessions/s1/r1-deadbeef.png"
+    persist.assert_awaited_once()
+    assert persist.await_args.args[0] == "https://cdn.example/img.png"
 
 
 @pytest.mark.asyncio

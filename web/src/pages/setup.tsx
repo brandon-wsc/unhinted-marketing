@@ -28,6 +28,7 @@ import { BYOK_PROVIDER_TYPES } from "@/features/company-settings/byok-helpers";
 import { apiRunSetup, type SetupEmailBackend } from "@/features/setup/api";
 import { useFieldErrors } from "@/hooks/use-field-errors";
 import { mapApiError } from "@/lib/map-api-error";
+import { looksNonPublicBaseUrl } from "@/lib/public-base-url";
 import { isValidEmail } from "@/lib/simple-email";
 import { cn } from "@/lib/utils";
 
@@ -359,6 +360,10 @@ export function SetupPage() {
               placeholder="https://"
               autoComplete="off"
             />
+            <p className="text-xs text-muted-foreground">{t("setup.instance.baseUrlHint")}</p>
+            {looksNonPublicBaseUrl(effectiveBaseUrl) && (
+              <p className="text-xs text-info">{t("system.instance.baseUrlPrivateWarning")}</p>
+            )}
           </FormField>
           <FormField id="setup-email-backend" label={t("setup.instance.emailBackend")}>
             <Select

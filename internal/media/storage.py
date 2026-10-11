@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import ipaddress
 import logging
 import re
 import secrets
@@ -11,8 +12,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 import boto3
+import httpx
 from botocore.client import BaseClient
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -222,6 +225,59 @@ def resolve_external_url(stored: str | None) -> str | None:
     return value
 
 
+_PRIVATE_HOST_SUFFIXES = (
+    ".local",
+    ".internal",
+    ".lan",
+    ".home.arpa",
+    ".corp",
+    ".localhost",
+)
+
+
+def _host_looks_private(host: str) -> bool:
+    """Literal non-global IP, localhost-style name, or dot-less intranet host."""
+    try:
+        ip: ipaddress.IPv4Address | ipaddress.IPv6Address | None = ipaddress.ip_address(
+            host.strip("[]")
+        )
+    except ValueError:
+        ip = None
+    if ip is not None:
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        return not ip.is_global
+    if host == "localhost" or host.endswith(_PRIVATE_HOST_SUFFIXES):
+        return True
+    return "." not in host
+
+
+def publish_url_reachability(url: str | None) -> str | None:
+    """Classify a resolved publish image URL (ADR 0043 §1).
+
+    Returns a reason code — ``missing`` / ``not_absolute`` / ``private_host``
+    / ``non_tls`` — or ``None`` when the URL shape looks publicly fetchable.
+    Classification only: DNS is never resolved (Meta resolves from the
+    internet, not from our network) and reachability is never proven.
+    """
+    value = (url or "").strip()
+    if not value:
+        return "missing"
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return "not_absolute"
+    scheme = parts.scheme.lower()
+    host = (parts.hostname or "").strip().rstrip(".").lower()
+    if scheme not in {"http", "https"} or not host:
+        return "not_absolute"
+    if _host_looks_private(host):
+        return "private_host"
+    if scheme == "http":
+        return "non_tls"
+    return None
+
+
 def stored_ref_is_image(stored: str | None) -> bool:
     """Confirm copy-only gate: http(s) / data:image / valid key count; placeholder does not."""
     if stored is None:
@@ -412,15 +468,53 @@ def _replace_key_ext(key: str, ext: str) -> str:
     return key
 
 
-async def persist_generated_image(image_ref: str, *, key: str) -> str:
-    """Persist a provider image result.
+_PROVIDER_IMAGE_TIMEOUT = 20.0
+_PROVIDER_IMAGE_MAX_BYTES = 20 * 1024 * 1024
 
-    - ``https://`` / ``http://`` — returned as-is (provider-hosted).
-    - ``data:`` — always written; returns the object key.
+
+async def _fetch_provider_image(url: str) -> tuple[bytes, tuple[str, str]]:
+    """Download a provider-hosted image (ADR 0043 §2).
+
+    SSRF-guarded (DNS-pinned, redirects re-validated); returns the bytes and
+    the sniffed ``(content_type, ext)``. Raises ``MediaStorageError`` on any
+    failure — a dead external URL is never stored.
+    """
+    from internal.llm.ssrf import UnsafeUrlError, guarded_request
+
+    try:
+        response = await guarded_request("GET", url, timeout=_PROVIDER_IMAGE_TIMEOUT)
+    except UnsafeUrlError as exc:
+        raise MediaStorageError("Provider image URL is not fetchable.") from exc
+    except httpx.HTTPError as exc:
+        raise MediaStorageError("Could not fetch the provider image.") from exc
+    if response.status_code != 200:
+        raise MediaStorageError(
+            f"Provider image fetch returned HTTP {response.status_code}."
+        )
+    raw = response.content
+    if not raw:
+        raise MediaStorageError("Provider image fetch returned an empty body.")
+    if len(raw) > _PROVIDER_IMAGE_MAX_BYTES:
+        raise MediaStorageError("Provider image exceeds the size limit.")
+    sniffed = sniff_image_bytes(raw)
+    if sniffed is None:
+        raise MediaStorageError("Provider image fetch did not return image bytes.")
+    return raw, sniffed
+
+
+async def persist_generated_image(image_ref: str, *, key: str) -> str:
+    """Persist a provider image result; returns the stored object key.
+
+    - ``https://`` / ``http://`` — fetched server-side and written to the
+      store (provider-signed URLs expire; ADR 0043 §2).
+    - ``data:`` — always written.
     - anything else — rejected.
     """
     if image_ref.startswith("http://") or image_ref.startswith("https://"):
-        return image_ref
+        raw, (content_type, ext) = await _fetch_provider_image(image_ref)
+        key = _replace_key_ext(key, ext)
+        await put_bytes(key=key, data=raw, content_type=content_type)
+        return key
     if image_ref.startswith("data:"):
         raw, content_type = parse_data_url(image_ref)
         sniffed = sniff_image_bytes(raw)

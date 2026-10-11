@@ -349,22 +349,39 @@ async def test_instagram_expired_token_skips_graph(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.asyncio
-async def test_instagram_non_http_image_is_platform_error(
+@pytest.mark.parametrize(
+    ("image_url", "detail"),
+    [
+        ("placeholder://seed", "media_url_no_base_url"),
+        ("/api/media/sessions/s1/r1-ab.png", "media_url_no_base_url"),
+        ("", "media_url_no_base_url"),
+        ("http://192.168.1.10:8484/api/media/x.png", "media_url_not_public"),
+        ("http://localhost:8000/api/media/x.png", "media_url_not_public"),
+        ("https://nas.local/media/x.png", "media_url_not_public"),
+        ("http://media.example.com/x.png", "media_url_not_https"),
+    ],
+)
+async def test_instagram_unreachable_image_url_is_precondition(
     monkeypatch: pytest.MonkeyPatch,
+    image_url: str,
+    detail: str,
 ) -> None:
+    """ADR 0043 §1 — obviously-unreachable image URLs fail fast as a publish
+    precondition (no failed receipt, Graph never called)."""
     account = _account(monkeypatch)
     _patch_account(monkeypatch, account)
     monkeypatch.setattr(
         "internal.tools.publish.httpx.AsyncClient",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("placeholder URL must not call Graph")),
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("unreachable image URL must not call Graph")
+        ),
     )
-    outcome = await publish_social_post(
-        AsyncMock(),
-        _req(image_url="placeholder://seed"),
-        company_id=account.company_id,
-    )
-    assert outcome.status == FAILED_STATUS
-    assert outcome.error_kind == ERROR_PLATFORM
+    with pytest.raises(PublishPreconditionError, match=detail):
+        await publish_social_post(
+            AsyncMock(),
+            _req(image_url=image_url),
+            company_id=account.company_id,
+        )
 
 
 @pytest.mark.asyncio
