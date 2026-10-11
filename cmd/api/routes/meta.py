@@ -14,7 +14,7 @@ from schemas.meta import MetaResponse
 router = APIRouter(tags=["meta"])
 
 # Keep in sync with pyproject.toml [project] version / FastAPI app version.
-API_VERSION = "0.1.0"
+API_VERSION = "1.0.0-beta"
 
 
 @router.get("/meta", response_model=MetaResponse)

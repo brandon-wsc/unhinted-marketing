@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Unhinted Marketing API",
-    "version": "0.1.0"
+    "version": "1.0.0-beta"
   },
   "paths": {
     "/api/auth/register": {
