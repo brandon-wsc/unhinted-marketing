@@ -9,5 +9,4 @@ state:
   source_signal_ids: []
 expect:
   grounding_ok: true
-  feedback_contains:
-    - template-only
+  kept_signal_ids: []
