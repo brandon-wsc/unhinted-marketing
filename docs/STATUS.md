@@ -97,6 +97,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-10-04) — Preview payloads carry resolved source signals:** → [ADR 0038](./adr/0038-preview-source-signals.md). `PreviewUpdatedData`, `UpdateDraftResponse`, `PreviewMediaMutationResponse`, and `session.snapshot` emit `source_signals` (`{signal_id, source, title, url, excerpt}`, draft order, missing rows dropped); `signals.updated` stays ids-only. Preview pane renders a read-only Sources block; grounding itself is unchanged ([ADR 0009](./adr/0009-research-gate-and-tavily-ingest.md)).
 
+**Decision (2026-10-11) — Hosted Azure demo track (azd + Container Apps + Neon):** → [ADR 0044](./adr/0044-azure-aca-demo.md). `azure.yaml` + `infra/main.bicep` provision a Consumption ACA environment — `web` (external ingress) → `api` (internal) + singleton `scheduler`/`worker` + Manual `migrate` job — against an external Postgres (`DATABASE_URL`, e.g. Neon free tier) with media on a shared Azure Files volume. Stock GHCR `:onprem` images via `imagePassthrough` (no rebuild); the stock nginx envsubst hook carries the ACA upstream conf. Secrets are ACA secrets, not `AUTO_SECRETS`. Guide: [deploy/azure/README.md](../deploy/azure/README.md). Customer install tracks unchanged (ADR 0027/0037).
+
 **Decision (2026-09-26) — Demo / local CD tracks `main`, separate from customer releases:** → [ADR 0037](./adr/0037-demo-local-cd.md)
 
 - **Demo / local hosts** fast-forward a dedicated checkout to `origin/main` and `docker compose up -d --build` from `deploy/` (`deploy/demo-sync.sh`). Images are built from that commit with `DEPLOYMENT_MODE=onprem` — the same compose shape as a customer install (SPA + API + migrate)

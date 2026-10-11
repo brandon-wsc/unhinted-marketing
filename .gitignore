@@ -33,6 +33,9 @@ web/coverage-*/
 .dev.vars
 *.local
 
+# Azure Developer CLI (azd) env state — holds per-env config + secrets refs
+.azure/
+
 # IDE
 .idea/
 .vscode/
@@ -66,3 +69,6 @@ pgdata/
 scripts/typescript_gen/node_modules
 scripts/dev-certs.sh
 .playwright-mcp/
+
+# az bicep build artifacts
+infra/main.json
