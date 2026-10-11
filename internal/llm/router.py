@@ -747,15 +747,16 @@ def _gemini_inline_b64(response: Any) -> str | None:
 
 
 def image_result_to_url(response: Any) -> str | None:
-    """Normalize OpenAI Images or Gemini inline-b64 responses to a hostable URL."""
+    """Normalize OpenAI Images or Gemini inline-b64 responses to a hostable ref.
+
+    Inline bytes win over a provider ``url`` — they persist without a fetch
+    (ADR 0043 §2); the URL path is only for providers that return no bytes.
+    """
     data = getattr(response, "data", None)
     if data is None and isinstance(response, dict):
         data = response.get("data")
     if data:
         first = data[0]
-        url = first.get("url") if isinstance(first, dict) else getattr(first, "url", None)
-        if url:
-            return str(url)
         b64 = (
             first.get("b64_json") if isinstance(first, dict) else getattr(first, "b64_json", None)
         )
@@ -764,6 +765,9 @@ def image_result_to_url(response: Any) -> str | None:
         inline = _inline_b64(first)
         if inline:
             return _b64_data_url(inline)
+        url = first.get("url") if isinstance(first, dict) else getattr(first, "url", None)
+        if url:
+            return str(url)
     gemini = _gemini_inline_b64(response)
     if gemini:
         return _b64_data_url(gemini)

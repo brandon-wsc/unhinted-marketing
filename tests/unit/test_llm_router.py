@@ -92,9 +92,8 @@ async def test_generate_image_rejects_chat_only_model(
 async def test_generate_image_returns_url(monkeypatch: pytest.MonkeyPatch) -> None:
     _stub_image(monkeypatch, _openai_image("dall-e-3"))
 
-    item = MagicMock()
-    item.url = "https://cdn.example/a.png"
-    item.b64_json = None
+    # dict item: MagicMock auto-attrs would fake inline-b64 presence (ADR 0043 §2)
+    item = {"url": "https://cdn.example/a.png", "b64_json": None}
     response = MagicMock()
     response.data = [item]
     monkeypatch.setattr(
@@ -136,14 +135,19 @@ async def test_generate_image_normalizes_gemini_inline_b64(
 
 
 def test_image_result_to_url_openai_and_gemini() -> None:
-    item = MagicMock()
-    item.url = "https://cdn.example/a.png"
-    item.b64_json = None
+    # dict item: MagicMock auto-attrs would fake inline-b64 presence (ADR 0043 §2)
+    item = {"url": "https://cdn.example/a.png", "b64_json": None}
     response = MagicMock()
     response.data = [item]
     response.candidates = None
     response.images = None
     assert R.image_result_to_url(response) == "https://cdn.example/a.png"
+    both = {"url": "https://cdn.example/a.png", "b64_json": "aGk="}
+    both_response = MagicMock()
+    both_response.data = [both]
+    both_response.candidates = None
+    both_response.images = None
+    assert R.image_result_to_url(both_response) == "data:image/png;base64,aGk="
     assert R.image_result_to_url({"data": [{"b64_json": "/9j/xxxx"}]}) == (
         "data:image/jpeg;base64,/9j/xxxx"
     )
@@ -597,9 +601,7 @@ async def test_generate_image_compat_without_catalog_uses_litellm(
     )
     monkeypatch.setattr(R, "resolve_compat_image_api", AsyncMock(return_value="generations"))
 
-    item = MagicMock()
-    item.url = "https://cdn.example/a.png"
-    item.b64_json = None
+    item = {"url": "https://cdn.example/a.png", "b64_json": None}
     response = MagicMock()
     response.data = [item]
     monkeypatch.setattr(R.litellm, "aimage_generation", AsyncMock(return_value=response))

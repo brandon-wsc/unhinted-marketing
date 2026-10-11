@@ -246,13 +246,113 @@ async def test_persist_generated_image_sniffs_jpeg_mislabeled_png(
     assert (local_media / out).read_bytes() == TINY_JPEG
 
 
+def _patch_provider_fetch(monkeypatch: pytest.MonkeyPatch, result) -> list[str]:
+    """Stub the SSRF-guarded provider fetch; ``result`` is a Response or raises."""
+    calls: list[str] = []
+
+    async def _fake(method: str, url: str, **kwargs):
+        calls.append(url)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    monkeypatch.setattr("internal.llm.ssrf.guarded_request", _fake)
+    return calls
+
+
 @pytest.mark.asyncio
-async def test_persist_generated_image_passes_through_https() -> None:
+async def test_persist_generated_image_fetches_provider_https(
+    local_media: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0043 §2 — provider https refs are fetched into the store (signed
+    URLs expire); the stored ref is always our object key."""
+    import httpx
+
+    calls = _patch_provider_fetch(monkeypatch, httpx.Response(200, content=TINY_PNG))
+    out = await S.persist_generated_image("https://cdn.example/already.png", key=KEY)
+    assert calls == ["https://cdn.example/already.png"]
+    assert out == KEY
+    assert (local_media / KEY).read_bytes() == TINY_PNG
+
+
+@pytest.mark.asyncio
+async def test_persist_generated_image_sniffs_provider_bytes(
+    local_media: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    _patch_provider_fetch(monkeypatch, httpx.Response(200, content=TINY_JPEG))
     out = await S.persist_generated_image(
-        "https://cdn.example/already.png",
-        key=KEY,
+        "https://cdn.example/already", key="sessions/s1/r1-aaaa.png"
     )
-    assert out == "https://cdn.example/already.png"
+    assert out.endswith(".jpg")
+    assert (local_media / out).read_bytes() == TINY_JPEG
+
+
+@pytest.mark.asyncio
+async def test_persist_generated_image_provider_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    _patch_provider_fetch(monkeypatch, httpx.Response(404, content=b""))
+    with pytest.raises(S.MediaStorageError, match="404"):
+        await S.persist_generated_image("https://cdn.example/gone.png", key=KEY)
+
+
+@pytest.mark.asyncio
+async def test_persist_generated_image_provider_unsafe_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from internal.llm.ssrf import UnsafeUrlError
+
+    _patch_provider_fetch(monkeypatch, UnsafeUrlError("private"))
+    with pytest.raises(S.MediaStorageError, match="fetchable"):
+        await S.persist_generated_image("https://cdn.example/x.png", key=KEY)
+
+
+@pytest.mark.asyncio
+async def test_persist_generated_image_provider_non_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    _patch_provider_fetch(monkeypatch, httpx.Response(200, content=b"<html>oops</html>"))
+    with pytest.raises(S.MediaStorageError, match="image bytes"):
+        await S.persist_generated_image("https://cdn.example/x.png", key=KEY)
+
+
+def test_publish_url_reachability_flags_missing_and_relative() -> None:
+    assert S.publish_url_reachability(None) == "missing"
+    assert S.publish_url_reachability("  ") == "missing"
+    assert S.publish_url_reachability("/api/media/sessions/a/r1-x.png") == "not_absolute"
+    assert S.publish_url_reachability("placeholder://seed") == "not_absolute"
+    assert S.publish_url_reachability("data:image/png;base64,xx") == "not_absolute"
+
+
+def test_publish_url_reachability_flags_private_hosts() -> None:
+    assert (
+        S.publish_url_reachability("http://192.168.1.5:8484/api/media/x.png")
+        == "private_host"
+    )
+    assert S.publish_url_reachability("http://localhost:8000/x.png") == "private_host"
+    assert S.publish_url_reachability("https://nas.local/x.png") == "private_host"
+    assert S.publish_url_reachability("https://minio.internal/x.png") == "private_host"
+    assert S.publish_url_reachability("https://nas/x.png") == "private_host"
+    assert S.publish_url_reachability("http://10.0.0.4/x.png") == "private_host"
+    assert S.publish_url_reachability("https://[::1]/x.png") == "private_host"
+
+
+def test_publish_url_reachability_flags_non_tls_public() -> None:
+    assert S.publish_url_reachability("http://media.example.com/x.png") == "non_tls"
+
+
+def test_publish_url_reachability_accepts_public_https() -> None:
+    assert S.publish_url_reachability("https://market.example.com/api/media/x.png") is None
+    assert S.publish_url_reachability("https://8.8.8.8/x.png") is None
+    assert S.publish_url_reachability("https://cdn.example.test/media/x.png") is None
 
 
 @pytest.mark.asyncio

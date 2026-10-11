@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.config import settings
 from internal.llm.keys import ByokEncryptionError, decrypt_key
-from internal.media.storage import resolve_external_url
+from internal.media.storage import publish_url_reachability, resolve_external_url
 from internal.memory import repos
 from internal.memory.models import Session, SocialAccount, ToolReceipt
 from schemas.contracts import DraftCopy
@@ -31,6 +31,14 @@ PUBLISH_SUCCESS_STATUSES = frozenset({STUB_STATUS, PUBLISHED_STATUS})
 ERROR_TOKEN_EXPIRED = "token_expired"
 ERROR_PERMISSION = "permission"
 ERROR_PLATFORM = "platform_error"
+
+# ADR 0043 §1 — reachability reason → precondition detail (fail fast, no receipt)
+_REACHABILITY_DETAIL = {
+    "missing": "media_url_no_base_url",
+    "not_absolute": "media_url_no_base_url",
+    "private_host": "media_url_not_public",
+    "non_tls": "media_url_not_https",
+}
 
 _TOKEN_EXPIRED_CODES = frozenset({102, 190})
 _PERMISSION_CODES = frozenset({4, 10, 200})
@@ -229,13 +237,10 @@ async def _publish_instagram(
             message="Instagram token expired",
         )
     image_url = (req.image_url or "").strip()
-    if not image_url.startswith("http://") and not image_url.startswith("https://"):
-        return PublishOutcome(
-            status=FAILED_STATUS,
-            platform="instagram",
-            error_kind=ERROR_PLATFORM,
-            message="Publish image URL is not publicly reachable",
-        )
+    reason = publish_url_reachability(image_url)
+    if reason is not None:
+        logger.warning("Publish image URL rejected pre-flight: reason=%s", reason)
+        raise PublishPreconditionError(_REACHABILITY_DETAIL[reason])
     try:
         token = decrypt_key(account.access_token_encrypted)
     except ByokEncryptionError:
@@ -385,11 +390,16 @@ async def _await_container_ready(
             if state in _CONTAINER_READY_STATES:
                 return None
             if state in _CONTAINER_FAILED_STATES:
+                # Meta could not fetch/process the image — reachability of the
+                # publish URL is the prime suspect (ADR 0043 §4 residual).
                 return PublishOutcome(
                     status=FAILED_STATUS,
                     platform="instagram",
                     error_kind=ERROR_PLATFORM,
-                    message=f"Instagram media container processing {state.lower()}",
+                    message=(
+                        f"Instagram media container processing {state.lower()} — "
+                        "check the publish image URL is publicly reachable"
+                    ),
                 )
             if not state and not response.is_success:
                 return PublishOutcome(

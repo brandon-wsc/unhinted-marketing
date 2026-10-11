@@ -118,7 +118,11 @@ async def publish_social_post(
   `resolve_stored_url`.
 - On-prem local disk is unreachable by Meta unless `WEB_BASE_URL` is public
   (tunnel). On-prem S3-compatible behind `S3_PUBLIC_BASE_URL`, or cloud S3/CDN,
-  satisfies it. Unit tests mock httpx; this constraint is documented, not coded around.
+  satisfies it. Unit tests mock httpx. **Update ([ADR 0043](./adr/0043-publish-image-public-url.md)):**
+  the resolved URL is pre-flight classified — missing/relative, private-host,
+  and non-TLS shapes raise `PublishPreconditionError("media_url_*")` before
+  Meta is called; genuinely public-shaped-but-dead URLs still surface as
+  `platform_error` (documented residual).
 - Multi-image carousels deferred (IG supports `CAROUSEL` containers; separate slice).
 
 ---

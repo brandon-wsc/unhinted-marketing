@@ -27,6 +27,7 @@ import { useAsyncData } from "@/hooks/use-async-data";
 import { copyText } from "@/lib/copy-text";
 import { mapApiError } from "@/lib/map-api-error";
 import { isSuperAdmin } from "@/lib/platform-level";
+import { looksNonPublicBaseUrl } from "@/lib/public-base-url";
 
 function CopyUrlField({
   id,
@@ -168,6 +169,9 @@ export function InstancePanel() {
           placeholder="https://"
         />
         <p className="text-xs text-muted-foreground">{t("system.instance.baseUrlHint")}</p>
+        {looksNonPublicBaseUrl(webBaseUrl) && (
+          <p className="text-xs text-info">{t("system.instance.baseUrlPrivateWarning")}</p>
+        )}
       </FormField>
       <FormField id="inst-email-backend" label={t("system.instance.emailBackend")}>
         <Select

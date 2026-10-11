@@ -29,6 +29,9 @@ describe("mapApiError", () => {
     );
     expect(mapApiError("image_required", t)).toBe("i18n:preview.error.imageRequired");
     expect(mapApiError("social_account_not_connected", t)).toBe("i18n:preview.error.notConnected");
+    expect(mapApiError("media_url_no_base_url", t)).toBe("i18n:preview.error.mediaUrlNoBase");
+    expect(mapApiError("media_url_not_public", t)).toBe("i18n:preview.error.mediaUrlNotPublic");
+    expect(mapApiError("media_url_not_https", t)).toBe("i18n:preview.error.mediaUrlNotHttps");
     expect(mapApiError("meta_oauth_not_professional", t)).toBe(
       "i18n:settings.instagram.oauthNotProfessional",
     );
