@@ -154,3 +154,6 @@ jobs:
             out/compose.external-db.yaml
             out/env.example
           generate_release_notes: true
+          # Tag suffix marks the channel: v1.0.0-beta / -rc → pre-release,
+          # plain v1.0.0 → full release.
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
