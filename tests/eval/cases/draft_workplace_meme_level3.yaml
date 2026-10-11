@@ -1,0 +1,28 @@
+id: draft_workplace_meme_level3
+suites: [regression]
+node: executor_post
+state:
+  mode: AGENT
+  research_rule_pass: false
+  company_context:
+    name: FlowWork Automation
+    voice:
+      roast_level: 3
+  brief:
+    summary: 職場荒謬抽水：老細一句「呢個需求好簡單」背後暗藏無限 OT，推廣自動化辦公工具，極致港式 meme 幽默。
+  source_signal_ids:
+    - cassette:ot
+  ranked_signals:
+    - signal_id: cassette:ot
+      source: tavily
+      title: Hong Kong overtime culture
+      excerpt: Office workers talk about weekday OT and late MTR rides home.
+      metrics: {}
+  messages:
+    - role: user
+      content: 幫我寫一則超好笑嘅抽水 IG post，寸下老細話需求簡單點知要 OT 兩日，soft sell 我哋嘅自動化工具
+expect:
+  caption_nonempty: true
+  forbid_simplified: true
+  forbid_mainland_slang: true
+  min_voice: 0.6

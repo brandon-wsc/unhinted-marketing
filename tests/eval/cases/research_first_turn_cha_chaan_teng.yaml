@@ -18,4 +18,5 @@ expect:
   queries_forbid_substrings:
     - "而家有咩新搞作"
   queries_require_any:
-    - ["cha chaan teng", 茶餐廳, "afternoon tea", 下午茶]
+    - ["cha chaan teng", 茶餐廳]
+    - ["afternoon tea", 下午茶, "tea set"]

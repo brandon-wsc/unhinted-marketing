@@ -1,0 +1,28 @@
+id: draft_soup_pack_level0
+suites: [regression]
+node: executor_post
+state:
+  mode: AGENT
+  research_rule_pass: false
+  company_context:
+    name: 靚湯坊
+    voice:
+      roast_level: 0
+  brief:
+    summary: OT 到夜深返屋企暖心快煮湯包，溫和體貼，口吻親切有同理心，無刻薄抽水，生活日常共鳴。
+  source_signal_ids:
+    - cassette:ot
+  ranked_signals:
+    - signal_id: cassette:ot
+      source: tavily
+      title: Hong Kong overtime culture
+      excerpt: Office workers talk about weekday OT and late MTR rides home.
+      metrics: {}
+  messages:
+    - role: user
+      content: 幫我寫一則快煮湯包 IG post，想溫馨同理打工仔 OT 辛苦，唔好刻薄
+expect:
+  caption_nonempty: true
+  forbid_simplified: true
+  forbid_mainland_slang: true
+  min_voice: 0.5

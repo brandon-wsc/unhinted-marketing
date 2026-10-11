@@ -1,0 +1,31 @@
+id: draft_footrest_brake_pun
+suites: [regression]
+node: executor_post
+state:
+  mode: AGENT
+  research_rule_pass: false
+  company_context:
+    name: IKEA HK
+    voice:
+      roast_level: 2
+  brief:
+    summary: 熱話抽水：借網民熱議新車急煞踩斷踏板事件，推廣辦公室減壓腳踏板。主打抗壓耐踩、人要休息（Take a break）但踏板絕不 Break，幽默貼地，嚴禁直接點名攻擊個別汽車品牌。
+  source_signal_ids:
+    - cassette:pedal_break
+  ranked_signals:
+    - signal_id: cassette:pedal_break
+      source: web
+      title: 新車急煞踩斷踏板引熱議 網民戲稱Take a break
+      excerpt: 近日網民熱議新車百公里急煞測試中踏板支架斷裂，引發大量「人想Break定踏板Break」二次創作。
+      metrics: {}
+  messages:
+    - role: user
+      content: 幫我寫一則抽水 IG post，借踩斷踏板熱話，soft sell 我哋嘅 office 減壓腳踏板，唔好直接開名鬧人
+expect:
+  caption_nonempty: true
+  forbid_simplified: true
+  forbid_mainland_slang: true
+  forbid_substrings:
+    - 華為
+    - 尊界
+  min_voice: 0.55
