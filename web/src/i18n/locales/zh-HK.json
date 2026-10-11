@@ -77,10 +77,10 @@
     "stop": "停止",
     "stopping": "停緊…",
     "shell": {
-      "resize": "調對話同預覽闊度"
+      "resize": "調整對話同預覽闊度"
     },
     "queue": {
-      "badge": "排隊緊",
+      "badge": "排緊隊",
       "remove": "唔好排呢條",
       "edit": "改訊息",
       "more": "更多",
@@ -152,20 +152,20 @@
       },
       "brief": {
         "title": "內容大綱",
-        "canDo": "得做",
+        "canDo": "可以做",
         "cannotDo": "唔會做",
         "angles": "角度"
       },
       "interrupt": {
-        "title": "稿同圖計劃得喇",
+        "title": "稿同出圖計劃搞掂喇",
         "subtitle": "格式已經鎖死。可以棄置，或者出圖。想轉格式要先寫過一篇稿。",
         "confirm": "出圖",
         "working": "出緊圖…",
         "discard": "棄置",
-        "plan": "出圖plan",
+        "plan": "出圖計劃",
         "formatLabel": "圖片格式",
         "formatSingle": "單圖",
-        "formatComic": "4格漫畫"
+        "formatComic": "四格漫畫"
       },
       "anglePick": {
         "title": "先揀角度、語氣同圖",
@@ -236,7 +236,7 @@
     "confirm": "確認出街",
     "confirmWorking": "處理緊…",
     "confirmDone": "出咗",
-    "confirmReceipt": "回執：{{status}}",
+    "confirmReceipt": "發佈狀態：{{status}}",
     "confirmHint": "Chat 入面講「可以出」唔會真係出。確認會用已儲存修訂（有未儲存改動會先自動儲存）。",
     "gate": {
       "imageRequired": "Instagram 出帖要有圖",
@@ -245,7 +245,7 @@
     },
     "receipt": {
       "publishedTitle": "出咗",
-      "publishedBody": "已發到 Instagram",
+      "publishedBody": "已發佈到 Instagram",
       "publishedBadge": "已出",
       "viewOnInstagram": "喺 Instagram 睇",
       "failedTitle": "發佈唔到",
@@ -311,8 +311,8 @@
       "title": "待出圖",
       "slotEmpty": "圖未出",
       "slotGenerating": "出緊圖…",
-      "status": "棄置｜出圖喺對話。",
-      "plan": "出圖plan",
+      "status": "喺對話棄置或出圖。",
+      "plan": "出圖計劃",
       "formatSingle": "單圖",
       "formatComic": "四格漫畫",
       "generatingTitle": "出緊圖"
@@ -428,7 +428,7 @@
       "saved": "儲存咗。",
       "roast": {
         "label": "語氣力度",
-        "hint": "愈高愈抽水、愈有梗；平常用預設就得。",
+        "hint": "愈高愈抽水、愈多笑位；平常用預設就得。",
         "levels": {
           "0": "0 穩陣",
           "1": "1 輕鬆小編",
@@ -533,9 +533,9 @@
         "title": "發佈審批",
         "empty": "暫時未有待審批嘅發佈請求",
         "detailTitle": "發佈審批",
-        "hashtags": "標籤",
+        "hashtags": "Hashtags",
         "cta": "CTA",
-        "imageAlt": "帖子圖片",
+        "imageAlt": "帖文圖片",
         "meta": "{{platform}} · 第 {{revision}} 版",
         "approvePublish": "批准發佈",
         "approveFailed": "發佈失敗（{{kind}}）。呢個請求已離開隊列，同事可以改完再送審。",
@@ -707,7 +707,7 @@
         "modelId": "模型 ID",
         "modelFetching": "攞緊模型清單…",
         "modelFreeText": "呢個金鑰唔支援自動清單，輸入模型 ID 就得。",
-        "modelTypedOk": "清單係參考。冇格都可以自己打模型 ID。",
+        "modelTypedOk": "清單只供參考。搵唔到都可以自己輸入模型 ID。",
         "capability": "用途"
       },
       "edit": {
@@ -889,7 +889,7 @@
     "detail": {
       "title": "呼叫詳情",
       "close": "關閉",
-      "resize": "調列表同詳情闊度",
+      "resize": "調整列表同詳情闊度",
       "session": "Session",
       "user": "User",
       "temperature": "Temperature",
@@ -984,11 +984,11 @@
     "chatModelRequired": "要填預設模型。",
     "loginFailed": "登入失敗",
     "registrationFailed": "註冊失敗",
-    "invalidEmail": "電郵格式不正確",
+    "invalidEmail": "電郵格式唔啱",
     "passwordTooShort": "密碼最少需要 8 個字",
-    "passwordMismatch": "兩次輸入嘅密碼不一致",
+    "passwordMismatch": "兩次輸入嘅密碼唔同",
     "emailAlreadyRegistered": "呢個電郵已經註冊過",
-    "invalidCredentials": "電郵或密碼不正確",
+    "invalidCredentials": "電郵或者密碼唔啱",
     "accountDisabled": "呢個帳戶已被停用",
     "invalidRefreshToken": "登入已過期，請重新登入",
     "setupFailed": "設定失敗，請再試一次",
