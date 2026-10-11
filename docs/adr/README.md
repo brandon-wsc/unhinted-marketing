@@ -24,9 +24,9 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0019](./0019-pydantic-ai-inner-harness.md) | Pydantic AI inner harness; session graph narrows to mode/lifecycle | Accepted |
 | [0020](./0020-org-byok-keys-models-routing.md) | Org BYOK: provider keys, model registry, per-tier routing | Accepted (enum + Completions-only surface amended by 0021; compat image path 2026-09-12) |
 | [0021](./0021-org-byok-native-gemini.md) | Org BYOK: native Gemini + Vertex Express | Accepted |
-| [0022](./0022-real-publish-instagram.md) | Real publish: Instagram adapter, org social accounts, receipt status | Accepted (Confirm image URL amended by 0024; external URL 2026-09-18; OAuth callback from `web_base_url` 2026-09-19) |
+| [0022](./0022-real-publish-instagram.md) | Real publish: Instagram adapter, org social accounts, receipt status | Accepted (Confirm image URL amended by 0024; external URL 2026-09-18; OAuth callback from `web_base_url` 2026-09-19; public-URL precondition gate 0043 §1) |
 | [0023](./0023-deployment-mode-flag.md) | Deployment mode flag (cloud vs on-prem) | Accepted (first behavior branch: 0024) |
-| [0024](./0024-media-storage-local-and-s3.md) | Media storage: local default on-prem (optional S3-compatible), AWS S3 in cloud | Accepted (§1 superseded by 0025; local browser URLs relative 2026-09-18) |
+| [0024](./0024-media-storage-local-and-s3.md) | Media storage: local default on-prem (optional S3-compatible), AWS S3 in cloud | Accepted (§1 superseded by 0025; local browser URLs relative 2026-09-18; provider URL pass-through superseded by 0043 §2) |
 | [0025](./0025-db-storage-config-and-portal-migration.md) | DB-backed storage config + portal local→S3 migration | Accepted |
 | [0026](./0026-onprem-first-run-setup.md) | On-prem first-run setup, invite-only register, DB instance settings | Accepted |
 | [0027](./0027-docker-deploy-packages.md) | Docker deployment packages (all-in-one vs external-DB) | Accepted |
@@ -45,6 +45,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0040](./0040-signal-keyed-product-retrieve.md) | Signal-keyed product retrieve for draft grounding | Accepted |
 | [0041](./0041-member-usage-limits-and-publish-approval.md) | Member platform-key usage limits + member publish approval queue | Accepted |
 | [0042](./0042-invite-monthly-token-limit.md) | Per-invite monthly token limit preset at invite create | Accepted |
+| [0043](./0043-publish-image-public-url.md) | Publish image public URL: precondition gate, admin surface, provider-URL persist | Accepted |
 
 ## Format
 
