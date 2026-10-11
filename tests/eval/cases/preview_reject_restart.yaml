@@ -1,0 +1,15 @@
+id: preview_reject_restart
+suites: [regression]
+node: route_intent
+state:
+  mode: PREVIEW
+  research_rule_pass: false
+  draft:
+    caption: 星期五 OT 完飲罐嘢先走。
+  messages:
+    - role: user
+      content: 完全唔啱 feel，成個角度由頭再諗過
+expect:
+  parse_ok: true
+  intent: revise
+  intent_not: confirm_intent

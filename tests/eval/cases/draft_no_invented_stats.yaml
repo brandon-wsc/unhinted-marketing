@@ -30,4 +30,4 @@ expect:
     - 研究顯示
     - 臨床實證
     - 數據證明
-  min_voice: 0.4
+  min_voice: 0.5
