@@ -698,6 +698,35 @@ async def test_executor_post_filters_citations(
 
 
 @pytest.mark.asyncio
+async def test_executor_post_empty_citations_stay_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A draft that relied on no signal must not be stuffed with ranked ids."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    EH.set_execute_model_override(
+        TestModel(
+            call_tools=[],
+            custom_output_args={
+                "caption": "純創作 caption",
+                "hashtags": ["#HK"],
+                "cta": "了解更多",
+                "source_signal_ids": [],
+            },
+        )
+    )
+    out = await N.executor_post(
+        _base_state(
+            source_signal_ids=["sig_a", "sig_b"],
+            company_context={"name": "Acme"},
+            ranked_signals=[],
+            brief={"summary": "x"},
+        )
+    )
+    DraftCopy.model_validate(out["draft"])
+    assert out["source_signal_ids"] == []
+
+
+@pytest.mark.asyncio
 async def test_executor_post_fallback_without_llm(no_llm: None) -> None:
     out = await N.executor_post(
         _base_state(
@@ -811,12 +840,36 @@ async def test_grounding_check_missing_ids(mock_db, monkeypatch: pytest.MonkeyPa
 async def test_grounding_check_empty_ids_when_signals_exist(
     mock_db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Empty refs are honest "no market sources used" — not a citation fail."""
     monkeypatch.setattr(
         N, "list_top_signals", AsyncMock(return_value=[fake_signal("sig_a")])
     )
     with session_db(mock_db):
         out = await N.grounding_check(_base_state(source_signal_ids=[]))
+    assert out["grounding_ok"] is True
+    assert out["source_signal_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_grounding_check_empty_ids_still_catches_invented_product_numbers(
+    mock_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        N, "list_top_signals", AsyncMock(return_value=[fake_signal("sig_a")])
+    )
+    with session_db(mock_db):
+        out = await N.grounding_check(
+            _base_state(
+                source_signal_ids=[],
+                draft={"caption": "只需 $999 入手燕麥拿鐵"},
+                primary_product={
+                    "product_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    "search_document": "燕麥拿鐵 | DRK-OL-12 | 48",
+                },
+            )
+        )
     assert out["grounding_ok"] is False
+    assert "999" in out["reviewer_feedback"]
 
 
 @pytest.mark.asyncio

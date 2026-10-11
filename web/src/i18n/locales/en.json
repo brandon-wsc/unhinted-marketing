@@ -318,7 +318,8 @@
       "generatingTitle": "Generating"
     },
     "sources": {
-      "title": "Sources"
+      "title": "Sources",
+      "empty": "No market sources used this time"
     },
     "error": {
       "saveFailed": "Failed to save the draft. Please try again.",

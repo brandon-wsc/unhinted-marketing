@@ -11,7 +11,12 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/context/auth-context", () => ({
-  useAuth: () => ({ accessToken: "tok" }),
+  useAuth: () => ({
+    accessToken: "tok",
+    user: {
+      organizations: [{ id: "co-1", name: "港護康", slug: "hongcare", role: "owner" }],
+    },
+  }),
 }));
 
 vi.mock("@/features/session/components/edit-copy-dialog", () => ({
@@ -53,6 +58,7 @@ function renderPanel(opts: {
   confirmError?: string | null;
   awaitingImage?: boolean;
   imageGenerating?: boolean;
+  companyId?: string;
 }) {
   return render(
     <MemoryRouter>
@@ -60,6 +66,7 @@ function renderPanel(opts: {
         <PreviewPanel
           draft={opts.draft}
           confirmed={opts.confirmed ?? false}
+          companyId={opts.companyId}
           confirmReceipt={opts.confirmReceipt ?? null}
           draftSaving={false}
           confirming={false}
@@ -288,6 +295,47 @@ describe("PreviewPanel receipts", () => {
     expect(body.tagName).toBe("SPAN");
     expect(body).toHaveClass("whitespace-pre-wrap");
     expect(body.textContent).not.toMatch(/unhinted/i);
+  });
+
+  it("labels the IG account with the session org name instead of the default handle", () => {
+    renderPanel({
+      draft: draft(),
+      companyId: "co-1",
+    });
+    const names = screen.getAllByText("港護康");
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.some((el) => el.tagName === "SPAN" && el.className.includes("font-bold"))).toBe(
+      true,
+    );
+    expect(screen.queryByText("unhinted")).not.toBeInTheDocument();
+  });
+
+  it("shows the honest empty state when the draft used no market sources", () => {
+    renderPanel({
+      draft: draft({ source_signals: [] }),
+    });
+    const empty = screen.getByText(/preview\.sources\.empty/);
+    expect(empty).toBeInTheDocument();
+    expect(empty.textContent).toContain("preview.sources.title");
+  });
+
+  it("lists the signals the draft actually used", () => {
+    renderPanel({
+      draft: draft({
+        source_signals: [
+          {
+            signal_id: "sig-1",
+            source: "yahoo_hk",
+            title: "流感高峰殺到",
+            url: "https://example.com/flu",
+            excerpt: null,
+          },
+        ],
+      }),
+    });
+    const link = screen.getByRole("link", { name: "流感高峰殺到" });
+    expect(link).toHaveAttribute("href", "https://example.com/flu");
+    expect(screen.queryByText("preview.sources.empty")).not.toBeInTheDocument();
   });
 
   it("links to Instagram settings when the account is not connected", () => {

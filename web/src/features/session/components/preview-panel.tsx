@@ -101,6 +101,9 @@ export function PreviewPanel({
 }: Props) {
   const { t } = useTranslation();
   const { accessToken, user } = useAuth();
+  // The preview is published as the org — its name is the honest account
+  // label. Falls back to the mock default when no org matches companyId.
+  const accountName = user?.organizations.find((o) => o.id === companyId)?.name.trim() || undefined;
   const [local, setLocal] = useState<DraftCopy>(() => toEditableCopy(draft));
   const [editImageOpen, setEditImageOpen] = useState(false);
   const [editCopyOpen, setEditCopyOpen] = useState(false);
@@ -269,6 +272,7 @@ export function PreviewPanel({
         <div className="flex flex-col gap-5 px-4 py-5">
           <IgPreviewMock
             copy={local}
+            accountName={accountName}
             imageUrls={phase === "accepted" ? previewUrls : []}
             imageSlot={phase === "accepted" ? undefined : phase}
             onEditImage={
@@ -449,7 +453,16 @@ function primaryImageReady(draft: PreviewDraft): boolean {
 
 function SourceSignalsList({ signals }: { signals: SourceSignal[] | undefined }) {
   const { t } = useTranslation();
-  if (!signals?.length) return null;
+  if (!signals) return null;
+  if (!signals.length) {
+    // Honest empty state — a creative draft that used no market signal says
+    // so, instead of vanishing or listing unrelated trends.
+    return (
+      <p className="mx-auto w-full max-w-[340px] rounded-lg border border-border bg-card px-3 py-2.5 text-xs text-muted-foreground">
+        {t("preview.sources.title")} · {t("preview.sources.empty")}
+      </p>
+    );
+  }
 
   return (
     <details className="mx-auto w-full max-w-[340px] rounded-lg border border-border bg-card px-3 py-2.5 text-sm">

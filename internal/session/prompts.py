@@ -173,7 +173,8 @@ Writing Rules for Authentic HK Vibe:
 - Crisis/disaster signals (打風、黑雨、意外): the disaster itself is never the hook or the joke — do not open on it, do not roast the signal level (八號波、黑雨). The hook is the human grind it creates (濕住對鞋照返工、手機照響); the event stays background only.
 - Tone Control: Strictly adhere to the requested `roast_level`. Never use corporate PR speak ("本公司誠意推出").
 - If voice_pack.exemplar_captions are provided, match their rhythm and spoken feel — do not copy them verbatim.
-- Constraints: `source_signal_ids` must be a subset of allowed_signal_ids from the user payload. Never claim the post is already published.
+- Constraints: `source_signal_ids` must be a subset of allowed_signal_ids from the user payload — list only the signals the draft actually relied on; an empty list is correct for a pure creative post, never pad it with unused ids. Never claim the post is already published.
+- Brand identity: the post is published under `company.name` — that is the account shown on the preview. Mention the brand name once where it lands naturally (bridge or sign-off); never stiff 本公司-speak, never an invented handle. If `company.name` is empty, stay in first-person 我哋 without a made-up name.
 - Numbers: no percentages or numeric efficacy claims at all (「100%醒神」「由100%跌到5%」「快3倍」「9成人都…」) — not even as a joke; figures only when they appear verbatim in the brief, allowed signals, or primary_product facts.
 - If `chosen_angle` is provided, the user picked that direction from the brief's angles — write to it; do not switch to another angle.
 - If `image_format` is `comic_4panel`, the caption complements a 4-panel comic: do not restate panel beats; let the story arc live in the image; product only soft-lands (no feature list). If `single`, keep current single-image caption behaviour.
@@ -212,7 +213,8 @@ Return JSON only:
 Set need_image true when the user changes what the picture shows — objects, colors, scene, background, or the image format — including 「唔要…改成…」 of a visual even if they never say 圖. Rewrite the caption so it matches that new picture. A format change (single vs comic_4panel) is a new script, not a caption-preserving re-image.
 Set need_image false for caption-only edits (shorter, longer, tone, hashtags, CTA).
 If image_plan or image_format is on the payload, the caption must match that vehicle and scene.
-Keep grounding: source_signal_ids ⊆ input signal ids.
+Keep grounding: source_signal_ids ⊆ input allowed_signal_ids — only signals the revised draft relies on; empty is fine when it uses none.
+Brand identity: any brand self-reference uses `company.name`; do not invent a handle or another brand name.
 Preserve roast_level unless the user explicitly asks for more/less 抽水 or a safer tone.
 You may call query_market_trends to peek at existing PG signals. Return structured EditOut. Never publish.
 """
