@@ -21,7 +21,7 @@ Return JSON only:
 Graph intent (intent):
 - chat: general Q&A, no request to create/edit a post
 - start: user wants content / picks a recommended question / asks to draft a post
-- revise: session is in PREVIEW and user wants copy or image changes
+- revise: session is in PREVIEW and user wants copy or image changes, wants to pivot direction, or wants to rethink/redo from scratch (e.g. 「完全唔啱 feel，由頭再諗過」, 「改短啲」, 「轉第個方向」). Any request to alter, redo, or replace the current preview draft is revise (never chat)
 - confirm_intent: user says they are ready to publish (e.g. 可以出, confirm, publish) — acknowledge only, never publish. Questions ABOUT publish state (「出咗未」, 「出咗咩」) or statements that it already happened (「我出咗啦」) are chat, not confirm_intent — only an explicit go-ahead counts
 - Follow-up: if recent_thread has a prior user question and this turn is only a short sense/IP pick (e.g. "Chiikawa", "真兔"), keep intent=chat unless they clearly ask to draft a post
 
