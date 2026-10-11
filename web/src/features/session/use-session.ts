@@ -205,6 +205,9 @@ export function useSession(companyId: string | undefined) {
   const lastImageFormatPickRef = useRef<ImageFormat | null>(null);
   const queuedRef = useRef<QueuedChatMessage[]>([]);
   const drainQueueRef = useRef<() => void>(() => {});
+  // resyncCurrentSession is defined after the SSE effect; same ref pattern
+  // as drainQueueRef so onOpen can call it on a post-failure reconnect.
+  const resyncRef = useRef<() => void>(() => {});
   queuedRef.current = queuedMessages;
   sendingRef.current = sending;
   stoppingRef.current = stopping;
@@ -728,9 +731,13 @@ export function useSession(companyId: string | undefined) {
       signal: abort.signal,
       onOpen: () => {
         if (!abort.signal.aborted && sessionIdRef.current === sessionId) {
+          const wasRetry = sseRetryCountRef.current > 0;
           sseRetryCountRef.current = 0;
           markSseConnected(true);
           resolveReady();
+          // Reconnect after a dead stream: the snapshot carries no messages,
+          // so turns committed while disconnected need a REST catch-up.
+          if (wasRetry) resyncRef.current();
         }
       },
       onEvent: (type, data) => {
@@ -1015,8 +1022,27 @@ export function useSession(companyId: string | undefined) {
       const res = await apiGetSessionMessages(accessToken, id);
       if (seq !== resyncSeq.current || sessionIdRef.current !== id) return;
       if (stoppingRef.current || inFlightBySessionRef.current.has(id)) {
-        // An in-flight POST / stopTurn owns the transcript — refreshing the
-        // session row only, so the optimistic message + live actions survive.
+        // A stopTurn in flight owns the transcript — refresh the row only.
+        if (stoppingRef.current) {
+          setSession(res.session);
+          setMode(res.session.mode);
+          return;
+        }
+        // A new assistant row means the turn committed server-side while its
+        // POST response never landed (wedged stream / protocol reset). That
+        // in-flight request is a zombie — abort it and hydrate from REST so
+        // running agent pills finish instead of pinning 寫緊稿 forever.
+        const freshAssistant = res.messages.some(
+          (m) => m.role === "assistant" && !messagesRef.current.some((k) => k.id === m.id),
+        );
+        if (freshAssistant) {
+          inFlightBySessionRef.current.get(id)?.abort();
+          inFlightBySessionRef.current.delete(id);
+          hydrateTranscript(res);
+          return;
+        }
+        // In-flight POST owns the transcript — refreshing the session row
+        // only, so the optimistic message + live actions survive.
         setSession(res.session);
         setMode(res.session.mode);
         return;
@@ -1027,6 +1053,8 @@ export function useSession(companyId: string | undefined) {
       // until the next resync — no worse than before.
     }
   }, [accessToken, hydrateTranscript]);
+
+  resyncRef.current = () => void resyncCurrentSession();
 
   // Tab returns to foreground / network comes back: if the stream is dead,
   // reconnect immediately and resync — SSE does not replay missed events.

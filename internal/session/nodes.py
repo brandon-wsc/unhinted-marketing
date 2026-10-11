@@ -1059,7 +1059,9 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
         )
     allowed = set(signal_ids)
     if parsed:
-        refs = [sid for sid in parsed.source_signal_ids if sid in allowed] or signal_ids[:3]
+        # Only ids the draft actually relied on — an empty list is an honest
+        # "no market sources used", not a reason to attach unrelated signals.
+        refs = [sid for sid in parsed.source_signal_ids if sid in allowed]
         draft = {
             "caption": parsed.caption,
             "hashtags": parsed.hashtags or ["#HongKong", "#Marketing"],
@@ -1076,7 +1078,8 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
             "hashtags": ["#HongKong", "#熱話"],
             "cta": "留言話我哋知",
         }
-        refs = signal_ids[:3]
+        # The fallback caption references only the top ranked signal.
+        refs = signal_ids[:1]
 
     return {
         "draft": draft,
@@ -1094,24 +1097,18 @@ async def grounding_check(state: SessionState) -> dict[str, Any]:
     db = get_db()
     ids = list(state.get("source_signal_ids") or [])
     if not ids:
-        # Allow empty only if there are truly no signals in the system.
-        signals = await list_top_signals(db, limit=1, region="HK")
-        if not signals:
-            product_ok, product_feedback = _product_claim_ok(state)
-            if not product_ok:
-                return {
-                    "grounding_ok": False,
-                    "reviewer_feedback": product_feedback,
-                }
+        # Empty refs are honest: the draft leaned on no market signal, so
+        # there is nothing to cite. Whether its claims still need citations
+        # is the reviewer's judgement — this check only enforces that any
+        # ids the draft did claim resolve, and that product numbers match.
+        product_ok, product_feedback = _product_claim_ok(state)
+        if not product_ok:
             return {
-                "grounding_ok": True,
-                "reviewer_feedback": "No HK signals in DB — draft is template-only",
+                "source_signal_ids": [],
+                "grounding_ok": False,
+                "reviewer_feedback": product_feedback,
             }
-        return {
-            "grounding_ok": False,
-            "reviewer_feedback": "Draft has no source_signal_ids but signals exist in DB",
-            "source_signal_ids": [],
-        }
+        return {"source_signal_ids": [], "grounding_ok": True, "reviewer_feedback": ""}
 
     found = await get_signals_by_ids(db, ids)
     found_ids = {s.signal_id for s in found}
@@ -1202,13 +1199,22 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     user = _last_user_text(state)
     feedback = state.get("reviewer_feedback") or ""
     signal_ids = list(state.get("source_signal_ids") or [])
+    # The cited set may legitimately be empty; a reviewer ask for a citation
+    # can only be satisfied from the ranked pool, so allow that pool too.
+    ranked_ids = [
+        str(s["signal_id"])
+        for s in _ranked_signals(state)[:8]
+        if s.get("signal_id")
+    ]
+    allowed_ids = list(dict.fromkeys([*signal_ids, *ranked_ids]))
     payload = {
         "draft": state.get("draft") or {},
+        "company": _slim_company(state),
         "user_feedback": user,
         "reviewer_feedback": feedback,
         "voice_pack": _voice_pack(state),
         "signals": _ranked_signals(state)[:8],
-        "allowed_signal_ids": signal_ids,
+        "allowed_signal_ids": allowed_ids,
     }
     parsed: EditOut | None = None
     if has_llm_credentials():
@@ -1216,7 +1222,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
             json.dumps(payload, ensure_ascii=False),
             EH.ExecuteDeps(),
         )
-    allowed = set(signal_ids)
+    allowed = set(allowed_ids)
     if parsed:
         refs = [sid for sid in parsed.source_signal_ids if sid in allowed] or signal_ids
         out: dict[str, Any] = {

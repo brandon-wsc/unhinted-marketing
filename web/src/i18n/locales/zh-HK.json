@@ -318,7 +318,8 @@
       "generatingTitle": "出緊圖"
     },
     "sources": {
-      "title": "出處"
+      "title": "出處",
+      "empty": "今次未用市場出處"
     },
     "error": {
       "saveFailed": "草稿儲存唔到喎，再試一次。",

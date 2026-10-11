@@ -787,7 +787,10 @@ async def session_events(
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
+            # No `Connection` header — hop-by-hop headers are a protocol
+            # violation on HTTP/2 (RFC 9113 §8.2.2) and ACA ingress serves
+            # h2 to browsers; a leaked `keep-alive` resets the stream with
+            # ERR_HTTP2_PROTOCOL_ERROR.
             "X-Accel-Buffering": "no",
         },
     )

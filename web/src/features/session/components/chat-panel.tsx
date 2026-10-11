@@ -105,6 +105,7 @@ export function ChatPanel() {
     sending,
     imageGenerating,
     stopping,
+    sseConnected,
     queueFull,
     queuedMessages,
     streamingText,
@@ -577,6 +578,12 @@ export function ChatPanel() {
             </svg>
           </button>
         </div>
+      )}
+
+      {session && !sseConnected && (
+        <span className="absolute right-4 top-3 z-20 rounded-full border border-border bg-card/90 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">
+          {t("chat.offline")}
+        </span>
       )}
 
       <div className="relative grid min-h-0 flex-1 grid-cols-1 grid-rows-1">

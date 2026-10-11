@@ -2594,6 +2594,93 @@ describe("useSession", () => {
     expect(result.current.messages).toEqual([msgA]);
   });
 
+  it("resyncs the transcript when a retried stream reconnects", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    const lateAssistant = {
+      id: "a-late",
+      session_id: "sess-1",
+      role: "assistant",
+      content: "late reply",
+      created_at: "2026-01-01T00:00:02Z",
+    };
+    apiGetSessionMessages
+      .mockResolvedValueOnce({ session: sessionFixture, messages: [msgA] })
+      .mockResolvedValue({ session: sessionFixture, messages: [msgA, lateAssistant] });
+    subscribeSessionEvents
+      .mockRejectedValueOnce(new Error("h2 reset"))
+      .mockImplementation(({ onOpen }: { onOpen?: () => void }) => {
+        onOpen?.();
+        return new Promise<void>(() => {});
+      });
+
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSession("co-1"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(result.current.session?.id).toBe("sess-1");
+      expect(subscribeSessionEvents).toHaveBeenCalledTimes(1);
+
+      // First failure backs off ~2s; the reconnect resyncs missed turns.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
+      });
+      expect(subscribeSessionEvents).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(apiGetSessionMessages).toHaveBeenCalledTimes(2);
+      expect(result.current.messages.some((m) => m.id === "a-late")).toBe(true);
+      expect(result.current.sseConnected).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("finishes a stuck turn when resync shows it committed server-side", async () => {
+    getRememberedSessionId.mockReturnValue("sess-1");
+    const committedAssistant = {
+      id: "a-committed",
+      session_id: "sess-1",
+      role: "assistant",
+      content: "drafted",
+      created_at: "2026-01-01T00:00:02Z",
+    };
+    apiGetSessionMessages
+      .mockResolvedValueOnce({ session: sessionFixture, messages: [msgA] })
+      .mockResolvedValue({ session: sessionFixture, messages: [msgA, committedAssistant] });
+    const rejects: ((err: unknown) => void)[] = [];
+    subscribeSessionEvents.mockImplementation(({ onOpen }: { onOpen?: () => void }) => {
+      onOpen?.();
+      return new Promise<void>((_res, rej) => rejects.push(rej));
+    });
+    // The turn POST never resolves — the wedge this guards against.
+    apiPostSessionMessage.mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useSession("co-1"));
+    await waitFor(() => expect(result.current.session?.id).toBe("sess-1"));
+
+    act(() => {
+      void result.current.sendMessage("寫個帖");
+    });
+    await waitFor(() => expect(result.current.sending).toBe(true));
+
+    await act(async () => {
+      rejects[0]?.(new Error("h2 reset"));
+      await Promise.resolve();
+    });
+    expect(result.current.sseConnected).toBe(false);
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(subscribeSessionEvents).toHaveBeenCalledTimes(2));
+    // REST shows the turn committed — zombie POST aborted, state healed.
+    await waitFor(() => expect(result.current.sending).toBe(false));
+    expect(result.current.messages.some((m) => m.id === "a-committed")).toBe(true);
+  });
+
   describe("angle pick gate (ADR 0028)", () => {
     it("sendMessage response parked at angle_gate sets awaitingAnglePick", async () => {
       getRememberedSessionId.mockReturnValue("sess-1");
