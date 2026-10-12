@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FormField } from "@/components/form-field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,8 @@ export function ProfilePanel() {
   const [name, setName] = useState(user?.display_name ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useFlash<boolean>();
-  const [error, setError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   if (!user) return null;
 
@@ -33,17 +35,17 @@ export function ProfilePanel() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!trimmed) {
-      setError(t("errors.displayNameRequired"));
+      setFieldError(t("errors.displayNameRequired"));
       return;
     }
     if (!canSave) return;
     setSaving(true);
-    setError(null);
+    setApiError(null);
     try {
       await updateDisplayName(trimmed);
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setApiError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
@@ -53,11 +55,21 @@ export function ProfilePanel() {
     <section className="space-y-6">
       <h2 className="text-base font-semibold text-foreground">{t("account.profile.title")}</h2>
       <form noValidate onSubmit={(e) => void submit(e)} className="space-y-5">
+        {apiError && (
+          <Alert variant="destructive">
+            <AlertDescription>{apiError}</AlertDescription>
+          </Alert>
+        )}
+        {saved && (
+          <Alert variant="success">
+            <AlertDescription>{t("account.profile.saved")}</AlertDescription>
+          </Alert>
+        )}
         <FormField
           id="profile-display-name"
           label={t("auth.register.displayName")}
           required
-          error={error}
+          error={fieldError}
         >
           <div className="flex gap-2">
             <Input
@@ -65,11 +77,11 @@ export function ProfilePanel() {
               value={name}
               required
               maxLength={120}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? "profile-display-name-error" : undefined}
+              aria-invalid={Boolean(fieldError)}
+              aria-describedby={fieldError ? "profile-display-name-error" : undefined}
               onChange={(e) => {
                 setName(e.target.value);
-                if (error) setError(null);
+                if (fieldError) setFieldError(null);
                 setSaved(null);
               }}
             />
@@ -78,7 +90,6 @@ export function ProfilePanel() {
             </Button>
           </div>
         </FormField>
-        {saved && <p className="text-sm text-success">{t("account.profile.saved")}</p>}
         <FormField id="profile-email" label={t("common.email")}>
           <Input id="profile-email" value={user.email} readOnly />
         </FormField>
