@@ -86,7 +86,11 @@ export type paths = {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Patch Me
+         * @description ADR 0046 — self-service display-name update; email stays immutable.
+         */
+        patch: operations["patch_me_api_auth_me_patch"];
         trace?: never;
     };
     "/api/signals/top": {
@@ -4011,6 +4015,11 @@ export type components = {
             /** Organizations */
             organizations: components["schemas"]["OrganizationSummary"][];
         };
+        /** UserUpdate */
+        UserUpdate: {
+            /** Display Name */
+            display_name: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -4188,6 +4197,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+        };
+    };
+    patch_me_api_auth_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
