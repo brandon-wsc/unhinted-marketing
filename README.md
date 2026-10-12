@@ -1,6 +1,27 @@
 # Unhinted Marketing Agent
 
+[**unhinted.hk**](https://unhinted.hk) · [**Live Demo**](https://demo.unhinted.hk) · [**Docs**](docs/GETTING_STARTED.md)
+
 AI marketing assistant for the Hong Kong market — background signal ingestion plus user-guided content preview and publish. The LLM owns the recommend/draft loop only; publishing is a traditional Confirm → HTTP flow.
+
+> **你有生意要忙，唔使日日由零諗出咩。**  
+> Unhinted 幫你由香港熱話搵切入點，結合產品賣點，寫成地道廣東話社交內容。你揀方向、改稿，確認先發佈。
+
+![Unhinted Workspace](docs/images/workspace-preview.png)
+
+## Why Unhinted?
+
+- **HK-Native Voice**: Local Cantonese phrasing tailored to your brand tone — from corporate safe to sarcastic (港式抽水).
+- **Trend-to-Post Ingestion**: Matches real-time Hong Kong market signals (news, Google Trends, social feeds) with your catalog.
+- **Confirm ≠ Chat ([ADR 0003](docs/adr/0003-confirm-without-llm.md))**: Zero risk of AI hallucinations publishing directly. Saying "可以出" in chat will never publish; only an explicit user click on the Confirm button triggers the HTTP publish endpoint.
+- **Self-Hosted & Private**: Single-command Docker deployment with PostgreSQL (pgvector). Your product catalog, brand settings, and credentials stay in your own infrastructure.
+
+## How it works
+
+1. **Signal Ingestion**: Monitors Hong Kong market trends and pairs relevant talking points with your products.
+2. **Angle Picking**: Presents multiple editorial directions before drafting — you stay in control of the angle.
+3. **Interactive Workspace**: Co-pilot copywriting and visual plans with real-time Instagram layout preview.
+4. **Human-in-the-Loop Confirmation**: Posts are only published when you review and click Confirm.
 
 ## Self-host (Docker)
 
