@@ -48,6 +48,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0043](./0043-publish-image-public-url.md) | Publish image public URL: precondition gate, admin surface, provider-URL persist | Accepted |
 | [0044](./0044-azure-aca-demo.md) | Hosted Azure demo: azd + Container Apps + external Postgres | Accepted |
 | [0045](./0045-honest-citations-preview-identity-sse-h2.md) | Honest citations, org preview identity, SSE HTTP/2 hardening | Accepted |
+| [0046](./0046-account-settings-profile.md) | Account settings page (`/account`) + self-service profile (`PATCH /api/auth/me`) | Accepted |
 
 ## Format
 

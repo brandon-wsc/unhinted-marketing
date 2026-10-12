@@ -128,6 +128,17 @@ async def logout_user(db: AsyncSession, *, raw_refresh_token: str) -> None:
         await db.commit()
 
 
+async def update_display_name(db: AsyncSession, user: User, display_name: str) -> User:
+    """ADR 0046 — self-service rename; name is global across orgs."""
+    name = display_name.strip()
+    if not name:
+        raise AuthError("Display name is required", status_code=422)
+    user.display_name = name
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 async def get_user_with_memberships(db: AsyncSession, user_id: uuid.UUID) -> User | None:
     return await db.scalar(
         select(User)

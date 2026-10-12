@@ -106,6 +106,14 @@ function UserMenuBody({ surface, close }: { surface: Surface; close: () => void 
           <Item
             onSelect={() => {
               close();
+              navigate("/account");
+            }}
+          >
+            {t("account.menuEntry")}
+          </Item>
+          <Item
+            onSelect={() => {
+              close();
               navigate("/settings");
             }}
           >

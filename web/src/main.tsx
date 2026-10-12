@@ -6,6 +6,7 @@ import { AuthProvider } from "@/context/auth-context";
 import { SetupProvider } from "@/context/setup-context";
 import { ThemeProvider } from "@/context/theme-context";
 import { ToastProvider } from "@/context/toast-context";
+import { AccountPage } from "@/pages/account";
 import { CompanySettingsPage } from "@/pages/company-settings";
 import { DashboardPage } from "@/pages/dashboard";
 import { InviteAcceptPage } from "@/pages/invite-accept";
@@ -32,6 +33,7 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/setup" element={<SetupPage />} />
                   <Route path="/invite/:token" element={<InviteAcceptPage />} />
                   <Route path="/" element={<DashboardPage />} />
+                  <Route path="/account" element={<AccountPage />} />
                   <Route path="/settings" element={<CompanySettingsPage />} />
                   <Route path="/system" element={<SystemPage />} />
                   <Route path="/admin" element={<LegacyAdminRedirect />} />
