@@ -54,6 +54,7 @@ users ──< organization_members >── entities (type=company)
 | POST | `/api/auth/refresh` | Rotate refresh token; new access token |
 | POST | `/api/auth/logout` | Revoke refresh token family |
 | GET | `/api/auth/me` | Current user + org memberships |
+| PATCH | `/api/auth/me` | Update own display name ([ADR 0046](./adr/0046-self-service-display-name-update.md)) |
 
 Access token: **15 min** (Bearer header). Refresh token: **7 days** (httpOnly cookie in browser; body for CLI).
 

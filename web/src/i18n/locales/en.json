@@ -26,7 +26,13 @@
       "guest": "Guest",
       "language": "Language",
       "theme": "Theme",
-      "close": "Close"
+      "close": "Close",
+      "rename": "Edit display name"
+    },
+    "rename": {
+      "title": "Edit display name",
+      "save": "Save",
+      "saving": "Saving…"
     }
   },
   "auth": {

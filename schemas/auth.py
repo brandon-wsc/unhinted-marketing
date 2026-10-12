@@ -18,6 +18,11 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class UserUpdate(BaseModel):
+    # ADR 0046: self-service rename via PATCH /auth/me.
+    display_name: str = Field(min_length=1, max_length=120)
+
+
 class OrganizationSummary(BaseModel):
     id: uuid.UUID
     name: str

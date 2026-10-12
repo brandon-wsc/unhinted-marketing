@@ -3,11 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UserMenu } from "@/components/user-menu";
 
-const { changeLanguage, setMode, logout, navigate } = vi.hoisted(() => ({
+const { changeLanguage, setMode, logout, navigate, updateDisplayName } = vi.hoisted(() => ({
   changeLanguage: vi.fn(),
   setMode: vi.fn(),
   logout: vi.fn().mockResolvedValue(undefined),
   navigate: vi.fn(),
+  updateDisplayName: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -41,6 +42,7 @@ vi.mock("@/context/auth-context", () => ({
   useAuth: () => ({
     user: mockUser,
     logout,
+    updateDisplayName,
   }),
 }));
 
@@ -67,6 +69,7 @@ describe("UserMenu (desktop dropdown)", () => {
     setMode.mockClear();
     logout.mockClear();
     navigate.mockClear();
+    updateDisplayName.mockClear();
     mockUser.platform_level = 3;
   });
 
@@ -135,6 +138,38 @@ describe("UserMenu (desktop dropdown)", () => {
 
     expect(navigate).toHaveBeenCalledWith("/system");
   });
+
+  it("renames via the menu dialog", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(screen.getByRole("button", { name: /Ada/i }));
+    await user.click(screen.getByRole("menuitem", { name: "header.menu.rename" }));
+
+    const input = screen.getByLabelText("auth.register.displayName");
+    expect(input).toHaveValue("Ada");
+
+    await user.clear(input);
+    await user.type(input, "Ada Lovelace");
+    await user.click(screen.getByRole("button", { name: "header.rename.save" }));
+
+    expect(updateDisplayName).toHaveBeenCalledWith("Ada Lovelace");
+  });
+
+  it("blocks a blank rename before calling the API", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(screen.getByRole("button", { name: /Ada/i }));
+    await user.click(screen.getByRole("menuitem", { name: "header.menu.rename" }));
+
+    const input = screen.getByLabelText("auth.register.displayName");
+    await user.clear(input);
+    await user.click(screen.getByRole("button", { name: "header.rename.save" }));
+
+    expect(updateDisplayName).not.toHaveBeenCalled();
+    expect(screen.getByText("errors.displayNameRequired")).toBeInTheDocument();
+  });
 });
 
 describe("UserMenu (mobile dialog)", () => {
@@ -144,6 +179,7 @@ describe("UserMenu (mobile dialog)", () => {
     setMode.mockClear();
     logout.mockClear();
     navigate.mockClear();
+    updateDisplayName.mockClear();
     mockUser.platform_level = 3;
   });
 

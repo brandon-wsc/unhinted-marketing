@@ -1,13 +1,16 @@
 import { CheckIcon, ChevronDown, Moon, Sun, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { FormField } from "@/components/form-field";
 import { IconButton } from "@/components/icon-button";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -21,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/auth-context";
 import { useTheme } from "@/context/theme-context";
@@ -39,6 +43,7 @@ export function UserMenu() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
 
   const triggerLabel = user?.display_name ?? t("header.menu.guest");
   const trigger = (
@@ -55,35 +60,55 @@ export function UserMenu() {
     </Button>
   );
 
+  const openRename = () => setRenameOpen(true);
+
   if (isMobile) {
     return (
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogTrigger asChild>{trigger}</DialogTrigger>
-        <DialogContent
-          showCloseButton={false}
-          aria-describedby={undefined}
-          className="max-w-xs gap-1 p-3"
-        >
-          <DialogTitle className="sr-only">{triggerLabel}</DialogTitle>
-          <UserMenuBody surface="dialog" close={() => setDialogOpen(false)} />
-        </DialogContent>
-      </Dialog>
+      <>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>{trigger}</DialogTrigger>
+          <DialogContent
+            showCloseButton={false}
+            aria-describedby={undefined}
+            className="max-w-xs gap-1 p-3"
+          >
+            <DialogTitle className="sr-only">{triggerLabel}</DialogTitle>
+            <UserMenuBody
+              surface="dialog"
+              close={() => setDialogOpen(false)}
+              onRename={openRename}
+            />
+          </DialogContent>
+        </Dialog>
+        <RenameDialog open={renameOpen} onOpenChange={setRenameOpen} />
+      </>
     );
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <UserMenuBody surface="dropdown" close={() => undefined} />
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <UserMenuBody surface="dropdown" close={() => undefined} onRename={openRename} />
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <RenameDialog open={renameOpen} onOpenChange={setRenameOpen} />
+    </>
   );
 }
 
 type Surface = "dropdown" | "dialog";
 
-function UserMenuBody({ surface, close }: { surface: Surface; close: () => void }) {
+function UserMenuBody({
+  surface,
+  close,
+  onRename,
+}: {
+  surface: Surface;
+  close: () => void;
+  onRename: () => void;
+}) {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -95,6 +120,19 @@ function UserMenuBody({ surface, close }: { surface: Surface; close: () => void 
   return (
     <>
       <UserIdentityBlock surface={surface} />
+      {user && (
+        <>
+          <Sep />
+          <Item
+            onSelect={() => {
+              close();
+              onRename();
+            }}
+          >
+            {t("header.menu.rename")}
+          </Item>
+        </>
+      )}
       <Sep />
       <LanguageSection surface={surface} />
       <Sep />
@@ -224,6 +262,82 @@ function ThemeSwitchRow() {
         <Moon className="size-4 text-muted-foreground" aria-hidden />
       </span>
     </div>
+  );
+}
+
+function RenameDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const { user, updateDisplayName } = useAuth();
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setName(user?.display_name ?? "");
+      setError(null);
+    }
+  }, [open, user]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError(t("errors.displayNameRequired"));
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateDisplayName(trimmed);
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent aria-describedby={undefined} className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{t("header.rename.title")}</DialogTitle>
+        </DialogHeader>
+        <form noValidate onSubmit={(e) => void submit(e)} className="space-y-5">
+          <FormField
+            id="rename-display-name"
+            label={t("auth.register.displayName")}
+            required
+            error={error}
+          >
+            <Input
+              id="rename-display-name"
+              value={name}
+              required
+              maxLength={120}
+              autoFocus
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "rename-display-name-error" : undefined}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (error) setError(null);
+              }}
+            />
+          </FormField>
+          <DialogFooter>
+            <Button type="submit" disabled={saving}>
+              {saving ? t("header.rename.saving") : t("header.rename.save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

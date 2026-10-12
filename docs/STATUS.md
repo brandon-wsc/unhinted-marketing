@@ -320,7 +320,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | `docs/STATUS.md` | ✅ | This file |
 | `.env.example` | ✅ | Includes LLM keys / `LLM_API_BASE` |
 | `pyproject.toml` + Python skeleton | ✅ | FastAPI, SQLAlchemy, Alembic, JWT, LangGraph |
-| Auth API | ✅ | `/api/auth/register`, `/login`, `/refresh`, `/logout`, `/me` |
+| Auth API | ✅ | `/api/auth/register`, `/login`, `/refresh`, `/logout`, `GET/PATCH /me` (rename: [ADR 0046](./adr/0046-self-service-display-name-update.md)) |
 | Alembic `8791b607d5bc` (auth) | ✅ | `users`, `entities`, `organization_members`, `refresh_tokens` |
 | React web app | ✅ | Vite + React 19 + Tailwind v4 |
 | README | ✅ | Project intro; setup in GETTING_STARTED |

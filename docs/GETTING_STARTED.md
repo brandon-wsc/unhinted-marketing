@@ -103,6 +103,7 @@ All public JSON/SSE routes are under `/api` ([ADR 0006](./adr/0006-api-path-pref
 | POST | `/api/auth/refresh` | Rotate tokens (httpOnly cookie) |
 | POST | `/api/auth/logout` | Revoke refresh token |
 | GET | `/api/auth/me` | Current user (Bearer access token) |
+| PATCH | `/api/auth/me` | Update own display name |
 
 ### Signals & questions (Phase 1)
 

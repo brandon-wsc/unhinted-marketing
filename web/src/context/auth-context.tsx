@@ -8,6 +8,8 @@ import {
   type TokenResponse,
   type User,
 } from "@/lib/api";
+import { API_BASE } from "@/lib/api-base";
+import { parseApiErrorResponse } from "@/lib/parse-api-error";
 import { rememberFromAuthUser } from "@/lib/remembered-user";
 
 type AuthContextValue = {
@@ -24,6 +26,7 @@ type AuthContextValue = {
   }) => Promise<void>;
   logout: () => Promise<void>;
   refreshAccessToken: () => Promise<string | null>;
+  updateDisplayName: (displayName: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -79,6 +82,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateDisplayName = useCallback(
+    async (displayName: string) => {
+      const res = await fetchWithAuth(accessToken, `${API_BASE}/auth/me`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_name: displayName }),
+      });
+      if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+      const updated = (await res.json()) as User;
+      setUser(updated);
+      rememberFromAuthUser(updated);
+    },
+    [accessToken],
+  );
+
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     try {
       const data = await apiRefresh();
@@ -90,8 +108,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, accessToken, loading, login, register, logout, refreshAccessToken }),
-    [user, accessToken, loading, login, register, logout, refreshAccessToken],
+    () => ({
+      user,
+      accessToken,
+      loading,
+      login,
+      register,
+      logout,
+      refreshAccessToken,
+      updateDisplayName,
+    }),
+    [user, accessToken, loading, login, register, logout, refreshAccessToken, updateDisplayName],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

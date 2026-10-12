@@ -26,7 +26,13 @@
       "guest": "訪客",
       "language": "語言",
       "theme": "主題",
-      "close": "關閉"
+      "close": "關閉",
+      "rename": "更改暱稱"
+    },
+    "rename": {
+      "title": "更改暱稱",
+      "save": "儲存",
+      "saving": "儲存緊…"
     }
   },
   "auth": {
