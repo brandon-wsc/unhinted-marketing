@@ -14,6 +14,7 @@ from internal.auth.service import (
     logout_user,
     refresh_session,
     register_user,
+    update_display_name,
 )
 from internal.config import settings
 from internal.memory import repos
@@ -26,6 +27,7 @@ from schemas.auth import (
     RegisterRequest,
     TokenResponse,
     UserResponse,
+    UserUpdate,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -181,4 +183,18 @@ async def logout(
 
 @router.get("/me", response_model=UserResponse)
 async def me(user: Annotated[User, Depends(get_current_user)]) -> UserResponse:
+    return _user_response(user)
+
+
+@router.patch("/me", response_model=UserResponse)
+async def patch_me(
+    body: UserUpdate,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserResponse:
+    """ADR 0046 — self-service display-name update; email stays immutable."""
+    try:
+        await update_display_name(db, user, body.display_name)
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return _user_response(user)

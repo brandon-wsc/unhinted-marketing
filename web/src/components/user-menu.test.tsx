@@ -115,6 +115,16 @@ describe("UserMenu (desktop dropdown)", () => {
     expect(screen.queryByRole("menuitem", { name: "system.menuEntry" })).not.toBeInTheDocument();
   });
 
+  it("navigates to /account from the account entry", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(screen.getByRole("button", { name: /Ada/i }));
+    await user.click(screen.getByRole("menuitem", { name: "account.menuEntry" }));
+
+    expect(navigate).toHaveBeenCalledWith("/account");
+  });
+
   it("navigates to /settings from company settings", async () => {
     const user = userEvent.setup();
     render(<UserMenu />);

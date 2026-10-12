@@ -55,6 +55,18 @@
     },
     "logout": "Sign out"
   },
+  "account": {
+    "menuEntry": "Account",
+    "title": "Account",
+    "profile": {
+      "title": "Profile",
+      "joined": "Joined",
+      "organizations": "Organizations",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Saved"
+    }
+  },
   "chat": {
     "mobile": {
       "back": "Back"

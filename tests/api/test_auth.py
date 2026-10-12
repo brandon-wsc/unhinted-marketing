@@ -87,3 +87,40 @@ async def test_login_bad_password(client) -> None:
 async def test_me_missing_bearer(client) -> None:
     res = await client.get("/api/auth/me")
     assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_patch_me_updates_display_name(client) -> None:
+    data = await register_user(client, display_name="Old Name")
+    access = data["access_token"]
+
+    res = await client.patch(
+        "/api/auth/me",
+        headers=auth_header(access),
+        json={"display_name": "  New Name  "},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["display_name"] == "New Name"
+    assert res.json()["email"] == data["user"]["email"]
+
+    me = await client.get("/api/auth/me", headers=auth_header(access))
+    assert me.status_code == 200
+    assert me.json()["display_name"] == "New Name"
+
+
+@pytest.mark.asyncio
+async def test_patch_me_rejects_blank_name(client) -> None:
+    data = await register_user(client)
+    res = await client.patch(
+        "/api/auth/me",
+        headers=auth_header(data["access_token"]),
+        json={"display_name": "   "},
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"] == "Display name is required"
+
+
+@pytest.mark.asyncio
+async def test_patch_me_requires_auth(client) -> None:
+    res = await client.patch("/api/auth/me", json={"display_name": "Nope"})
+    assert res.status_code == 401
