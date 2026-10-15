@@ -2,6 +2,11 @@ name = "unhinted-oauth-relay"
 main = "src/index.ts"
 compatibility_date = "2026-09-20"
 
+# Custom domain. workers_dev = true keeps the workers.dev URL live alongside
+# (Meta whitelist + already-seeded installs still point at it).
+workers_dev = true
+routes = [{ pattern = "connect.unhinted.hk", custom_domain = true }]
+
 # Non-secret config. Same Instagram App ID as the app's .env META_APP_ID.
 [vars]
 META_APP_ID = "1381157764130031"
@@ -18,8 +23,5 @@ id = "fcb5053c60f1416ea93d08d02ae93f20"
 [[kv_namespaces]]
 binding = "TICKETS"
 id = "03b6f9135c274b7e9baad129ea49e227"
-
-# Custom domain (recommended — workers.dev works without it):
-# routes = [{ pattern = "connect.example.com", custom_domain = true }]
 
 # Secret (set via `wrangler secret put`, never here): META_APP_SECRET
