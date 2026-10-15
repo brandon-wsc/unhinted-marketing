@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ADR 0032 §3 — hosted vendor relay shared by every relay-mode install.
 # Product surface (a fixed service endpoint), not user input; override via
 # OAUTH_RELAY_URL only for a self-hosted/dev relay.
-HOSTED_OAUTH_RELAY_URL = "https://unhinted-oauth-relay.unhinted.workers.dev"
+HOSTED_OAUTH_RELAY_URL = "https://connect.unhinted.hk"
 
 
 class Settings(BaseSettings):
