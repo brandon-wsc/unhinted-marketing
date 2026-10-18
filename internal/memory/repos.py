@@ -11,6 +11,8 @@ from sqlalchemy.orm import selectinload
 
 from internal.memory.embeddings import embed_texts
 from internal.memory.models import (
+    Attachment,
+    AttachmentSession,
     ByokModel,
     ByokProvider,
     ByokRouting,
@@ -883,6 +885,76 @@ async def update_session_meta(
 async def delete_session(db: AsyncSession, session: Session) -> None:
     await db.delete(session)
     await db.flush()
+
+
+async def list_session_attachments(
+    db: AsyncSession, session_id: uuid.UUID
+) -> list[Attachment]:
+    """Attachments this session references via the attachment_sessions join
+    (ADR 0047 §13) — hydration reads the join, never ``session_id`` alone."""
+    stmt = (
+        select(Attachment)
+        .join(AttachmentSession, AttachmentSession.attachment_id == Attachment.id)
+        .where(AttachmentSession.session_id == session_id)
+        .order_by(Attachment.created_at)
+    )
+    return list((await db.scalars(stmt)).all())
+
+
+async def release_session_attachments(
+    db: AsyncSession, session_id: uuid.UUID
+) -> list[str]:
+    """ADR 0047 §13 GC — run BEFORE the session row is deleted.
+
+    Scratch rows (``owner_scope='session'``) die only when this session's join
+    was the last reference; shared survivors and saved/library rows get
+    ``session_id`` cleared so the session-delete FK cascade cannot kill them.
+    Deletes attachment rows (chunks + join rows cascade) and returns the
+    object keys whose bytes must be deleted after commit.
+    """
+    attachment_ids = set(
+        (
+            await db.scalars(
+                select(AttachmentSession.attachment_id).where(
+                    AttachmentSession.session_id == session_id
+                )
+            )
+        ).all()
+    )
+    attachment_ids.update(
+        (
+            await db.scalars(
+                select(Attachment.id).where(Attachment.session_id == session_id)
+            )
+        ).all()
+    )
+    if not attachment_ids:
+        return []
+    rows = await db.scalars(select(Attachment).where(Attachment.id.in_(attachment_ids)))
+    keys: list[str] = []
+    for row in rows:
+        if row.owner_scope != "session":
+            # Saved/library rows survive; detach so the FK cascade spares them.
+            if row.session_id == session_id:
+                row.session_id = None
+            continue
+        other_refs = await db.scalar(
+            select(func.count())
+            .select_from(AttachmentSession)
+            .where(
+                AttachmentSession.attachment_id == row.id,
+                AttachmentSession.session_id != session_id,
+            )
+        )
+        if other_refs:
+            # Shared by fork(s) — detach so the session FK cascade spares it.
+            if row.session_id == session_id:
+                row.session_id = None
+        else:
+            keys.append(row.object_key)
+            await db.delete(row)
+    await db.flush()
+    return keys
 
 
 async def add_session_message(

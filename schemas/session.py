@@ -56,6 +56,8 @@ class UpdateSessionRequest(BaseModel):
 class PostMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
     source_question_id: str | None = Field(default=None, max_length=80)
+    # ADR 0047 §3 — attach this session's scratch or the member's library docs.
+    attachment_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
 
 
 class ForkSessionRequest(BaseModel):
@@ -80,6 +82,14 @@ class ForkOrigin(BaseModel):
     title: str | None = None
 
 
+class AttachmentDigest(BaseModel):
+    """ADR 0047 §5 digest chip on a message that references attachments."""
+
+    id: uuid.UUID
+    filename: str
+    status: str  # pending | ready_lexical | ready | failed
+
+
 class MessageResponse(BaseModel):
     id: uuid.UUID
     session_id: uuid.UUID
@@ -89,6 +99,8 @@ class MessageResponse(BaseModel):
     metadata: dict = Field(default_factory=dict)
     # Chats forked from this message (ADR 0017). Empty for most messages.
     forks: list[ForkRef] = Field(default_factory=list)
+    # ADR 0047 — digest chips for metadata.attachment_ids refs.
+    attachments: list[AttachmentDigest] = Field(default_factory=list)
 
 
 class SessionMessagesResponse(BaseModel):

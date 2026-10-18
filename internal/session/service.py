@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -21,7 +22,13 @@ from internal.llm.resolve import company_llm_scope
 from internal.llm.router import LlmProviderError
 from internal.media.storage import resolve_stored_url, sniff_image_bytes
 from internal.memory import repos
-from internal.memory.models import PreviewImage, Session, SessionMessage
+from internal.memory.models import (
+    Attachment,
+    AttachmentSession,
+    PreviewImage,
+    Session,
+    SessionMessage,
+)
 from internal.session.context import session_db
 from internal.session.events import session_event_bus
 from internal.session.graph import (
@@ -412,7 +419,54 @@ def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str,
         "chosen_persona": state.get("chosen_persona"),
         "image_format": state.get("image_format"),
         "chosen_image_format": state.get("chosen_image_format"),
+        # ADR 0047 — last persisted digests carry over; run_session_turn
+        # refreshes them from the attachment_sessions join each message turn.
+        "attachments": list(state.get("attachments") or []),
     }
+
+
+# ADR 0047 §5 — the doc_profile subset carried on a hydrated digest.
+_ATTACHMENT_PROFILE_FIELDS = ("title", "pages", "outline", "kind_guess", "preview", "partial")
+
+
+def _attachment_digest(row: Attachment) -> dict[str, Any]:
+    """Digest for one attachment: {id, filename, status} + doc_profile subset."""
+    profile = row.doc_profile if isinstance(row.doc_profile, dict) else {}
+    digest: dict[str, Any] = {
+        "id": str(row.id),
+        "filename": row.filename,
+        "status": row.status,
+        "owner_scope": row.owner_scope,
+        "doc_profile": dict(profile),
+    }
+    for key in _ATTACHMENT_PROFILE_FIELDS:
+        if key in profile:
+            digest[key] = profile[key]
+    return digest
+
+
+async def _hydrate_session_attachments(
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    *,
+    referenced_ids: list[uuid.UUID],
+) -> list[dict[str, Any]]:
+    """ADR 0047 §13 — hydrate per-turn digests from the attachment_sessions join.
+
+    A library attachment referenced by this message may have no join row yet;
+    the first message reference inserts one so the join stays the source of
+    truth for hydration and last-session GC.
+    """
+    for attachment_id in dict.fromkeys(referenced_ids):
+        if await db.get(AttachmentSession, (attachment_id, session_id)) is None:
+            db.add(AttachmentSession(attachment_id=attachment_id, session_id=session_id))
+    rows = await db.scalars(
+        select(Attachment)
+        .join(AttachmentSession, AttachmentSession.attachment_id == Attachment.id)
+        .where(AttachmentSession.session_id == session_id)
+        .order_by(Attachment.created_at)
+    )
+    return [_attachment_digest(row) for row in rows]
 
 
 def _strip_discard_meta(state: dict[str, Any] | None) -> dict[str, Any]:
@@ -906,6 +960,11 @@ async def _persist_after_invoke(
         "chosen_persona": values.get("chosen_persona"),
         "image_format": values.get("image_format"),
         "chosen_image_format": values.get("chosen_image_format"),
+        # ADR 0047 — digest list hydrated this turn; resume paths without a
+        # fresh hydration fall back to the persisted digests.
+        "attachments": values.get("attachments")
+        or (session.state or {}).get("attachments")
+        or [],
         # UI hydrate: interrupt_before angle_gate / executor_image_gen
         "awaiting_image_ok": parked_node == IMAGE_PARK_NODE,
         "awaiting_angle_pick": parked_node == ANGLE_GATE_NODE,
@@ -1229,12 +1288,19 @@ async def run_session_turn(
     *,
     user_content: str,
     source_question_id: str | None = None,
+    attachment_ids: list[uuid.UUID] | None = None,
     discard_pre_state: dict[str, Any] | None = None,
     pre_mode: str | None = None,
     skip_park_check: bool = False,
     hold_image_park: bool = False,
 ) -> dict[str, Any]:
-    """Append user message, invoke graph (never blind-resume), persist side-effects."""
+    """Append user message, invoke graph (never blind-resume), persist side-effects.
+
+    ``attachment_ids`` comes pre-validated from POST /messages (ADR 0047 §3/§14).
+    ``None`` marks a non-message entry point (initial message, parked resumes)
+    — hydration is skipped and the persisted digests carry over via
+    ``_graph_values``. A list (even empty) re-hydrates from the join.
+    """
     session_id = session.id
     if session_turn_registry.is_busy(session_id):
         raise SessionTurnConflict("busy", "Session turn already in progress")
@@ -1264,12 +1330,26 @@ async def run_session_turn(
         else _strip_discard_meta(session.state)
     )
     user_msg = await repos.add_session_message(
-        db, session_id=session_id, role="user", content=user_content
+        db,
+        session_id=session_id,
+        role="user",
+        content=user_content,
+        metadata=(
+            {"attachment_ids": [str(aid) for aid in attachment_ids]}
+            if attachment_ids
+            else None
+        ),
     )
     repos.touch_session(session)
     existing = await repos.list_session_messages(db, session_id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
     graph_input = _graph_values(session, message_dicts)
+    if attachment_ids is not None:
+        # ADR 0047 §5/§13 — message turns hydrate digests fresh from the
+        # attachment_sessions join; this message's refs land join rows first.
+        graph_input["attachments"] = await _hydrate_session_attachments(
+            db, session_id, referenced_ids=attachment_ids
+        )
     # Always overwrite. A previous parked turn can leave the flag on the
     # checkpoint; a normal revise must be allowed to accept the caption.
     graph_input["hold_image_park"] = hold_image_park

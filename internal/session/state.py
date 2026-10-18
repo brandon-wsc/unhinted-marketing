@@ -74,3 +74,6 @@ class SessionState(TypedDict, total=False):
     # ADR 0029 — optional persona slug submitted with the bundled card; sticky
     # across re-brief cycles. Omitted typed picks fall back to brief.persona.
     chosen_persona: NotRequired[str | None]
+    # ADR 0047 §5/§13 — attachment digests hydrated per turn from the
+    # attachment_sessions join: {id, filename, status, doc_profile subset}.
+    attachments: NotRequired[list[dict[str, Any]]]

@@ -4701,6 +4701,65 @@
         }
       }
     },
+    "/api/sessions/{session_id}/attachments": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Post Session Attachment",
+        "description": "Upload a scratch document (ADR 0047 §3).\n\nBytes land under ``attachments/{id}/{filename}``; parse/chunk/embed run on\nthe ADR 0039 job queue — never in this request (§7, no embedder warmup\nhere either). The unauthenticated ``GET /api/media/{key}`` route never\nserves these keys; original bytes are behind\n``GET /api/attachments/{id}/download``.",
+        "operationId": "post_session_attachment_api_sessions__session_id__attachments_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_session_attachment_api_sessions__session_id__attachments_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/{session_id}/confirm": {
       "post": {
         "tags": [
@@ -4743,6 +4802,102 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConfirmSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/attachments/{attachment_id}/download": {
+      "get": {
+        "tags": [
+          "attachments"
+        ],
+        "summary": "Download Attachment",
+        "description": "Return the original file bytes to a member of the attachment's company.",
+        "operationId": "download_attachment_api_attachments__attachment_id__download_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/attachments/{attachment_id}/save": {
+      "post": {
+        "tags": [
+          "attachments"
+        ],
+        "summary": "Save Attachment",
+        "description": "「存入我嘅庫」(ADR 0047 §2) — flip the caller's own scratch row to Mine.\n\nOwner-only: ``session``/``user`` rows save for their uploader alone —\na same-company member cannot save another member's scratch, and every\nrefusal is a uniform 404 so existence never leaks. Re-saving an\nalready-user-scope row is a 200 no-op (idempotent).",
+        "operationId": "save_attachment_api_attachments__attachment_id__save_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentOut"
                 }
               }
             }
@@ -5672,6 +5827,85 @@
         "type": "object",
         "title": "AddSessionImageRequest"
       },
+      "AttachmentDigest": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "status"
+        ],
+        "title": "AttachmentDigest",
+        "description": "ADR 0047 §5 digest chip on a message that references attachments."
+      },
+      "AttachmentOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "owner_scope": {
+            "type": "string",
+            "title": "Owner Scope"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "filename",
+          "content_type",
+          "status",
+          "owner_scope",
+          "created_at"
+        ],
+        "title": "AttachmentOut",
+        "description": "ADR 0047 §3 upload response — ingest flips status async via the job queue."
+      },
       "AudiencePersonaOption": {
         "properties": {
           "slug": {
@@ -5709,6 +5943,20 @@
           "file"
         ],
         "title": "Body_import_company_products_api_companies__company_id__products_import_post"
+      },
+      "Body_post_session_attachment_api_sessions__session_id__attachments_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_post_session_attachment_api_sessions__session_id__attachments_post"
       },
       "Body_post_session_image_upload_api_sessions__session_id__media__image_id__upload_post": {
         "properties": {
@@ -8651,6 +8899,15 @@
               }
             ],
             "title": "Source Question Id"
+          },
+          "attachment_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Attachment Ids"
           }
         },
         "type": "object",
@@ -11942,6 +12199,13 @@
             },
             "type": "array",
             "title": "Forks"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentDigest"
+            },
+            "type": "array",
+            "title": "Attachments"
           }
         },
         "type": "object",

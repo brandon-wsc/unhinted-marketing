@@ -27,13 +27,20 @@ from internal.auth.org import member_publish_requires_approval
 from internal.media.gc import collect_session_store_keys, reclaim_unreferenced_keys
 from internal.media.storage import (
     MediaStorageError,
+    delete_key,
     put_bytes,
     resolve_stored_url,
     stored_ref_is_image,
 )
 from internal.memory import repos
 from internal.memory.database import get_db, open_session
-from internal.memory.models import Attachment, AttachmentSession, Session, User
+from internal.memory.models import (
+    Attachment,
+    AttachmentSession,
+    Session,
+    SessionMessage,
+    User,
+)
 from internal.session.events import format_sse, session_event_bus
 from internal.session.graph import ANGLE_GATE_NODE, IMAGE_PARK_NODE
 from internal.session.nodes import angle_pick_payload, recommended_image_format
@@ -70,6 +77,7 @@ from schemas.contracts import (
 )
 from schemas.session import (
     AddSessionImageRequest,
+    AttachmentDigest,
     AttachmentOut,
     ChooseAngleRequest,
     ChooseAngleResponse,
@@ -118,7 +126,9 @@ def _session_response(session: Session) -> SessionResponse:
     )
 
 
-def _message_response(msg) -> MessageResponse:
+def _message_response(
+    msg, attachments: list[AttachmentDigest] | None = None
+) -> MessageResponse:
     return MessageResponse(
         id=msg.id,
         session_id=msg.session_id,
@@ -126,7 +136,47 @@ def _message_response(msg) -> MessageResponse:
         content=msg.content,
         created_at=msg.created_at,
         metadata=dict(msg.metadata_ or {}),
+        attachments=attachments or [],
     )
+
+
+async def _message_attachment_map(
+    db: AsyncSession, msgs: list[SessionMessage]
+) -> dict[uuid.UUID, list[AttachmentDigest]]:
+    """Digest chips for messages carrying ``metadata.attachment_ids``.
+
+    ADR 0047 §5 — one batched lookup; ids that no longer resolve are dropped
+    so the transcript never fails on a GC'd attachment.
+    """
+    wanted: dict[uuid.UUID, list[uuid.UUID]] = {}
+    all_ids: set[uuid.UUID] = set()
+    for m in msgs:
+        ids: list[uuid.UUID] = []
+        for raw in (m.metadata_ or {}).get("attachment_ids") or []:
+            try:
+                aid = uuid.UUID(str(raw))
+            except (ValueError, TypeError, AttributeError):
+                continue
+            ids.append(aid)
+            all_ids.add(aid)
+        if ids:
+            wanted[m.id] = ids
+    if not all_ids:
+        return {}
+    rows = await db.scalars(select(Attachment).where(Attachment.id.in_(all_ids)))
+    by_id = {r.id: r for r in rows}
+    return {
+        mid: [
+            AttachmentDigest(
+                id=by_id[aid].id,
+                filename=by_id[aid].filename,
+                status=by_id[aid].status,
+            )
+            for aid in ids
+            if aid in by_id
+        ]
+        for mid, ids in wanted.items()
+    }
 
 
 def _brief_from_state(state: dict | None) -> SessionBriefData | None:
@@ -424,10 +474,67 @@ async def delete_session(
             "media GC collect failed session=%s", session_id, exc_info=True
         )
         keys = None
+    # ADR 0047 §13 — scratch attachments die with their last referencing
+    # session; shared/saved rows are detached before the FK cascade runs.
+    attachment_keys = await repos.release_session_attachments(db, session.id)
     await repos.delete_session(db, session)
     await db.commit()
     if keys:
         await reclaim_unreferenced_keys(db, keys)
+    for key in attachment_keys:
+        try:
+            await delete_key(key)
+        except Exception:
+            logger.warning("attachment GC failed for key=%s", key, exc_info=True)
+
+
+async def _message_attachment_reachable(
+    db: AsyncSession,
+    attachment: Attachment | None,
+    *,
+    session: Session,
+    user: User,
+) -> bool:
+    """ADR 0047 §3/§14 owner matrix for ``PostMessageRequest.attachment_ids``.
+
+    Reachable = this session's scratch (``attachment_sessions`` join row, or
+    ``session_id`` + uploader match) or the member's library row
+    (``owner_scope='user'`` + ``user_id`` match, ``owner_scope='org'`` in the
+    same company). Everything else refuses identically — unknown, cross-tenant
+    and other-session scratch ids all map to the same 404 so existence never
+    leaks.
+    """
+    if attachment is None or attachment.company_id != session.company_id:
+        return False
+    if attachment.owner_scope == "org":
+        return True
+    if attachment.owner_scope == "user":
+        return attachment.user_id == user.id
+    if attachment.owner_scope == "session":
+        if attachment.session_id == session.id and attachment.user_id == user.id:
+            return True
+        return (
+            await db.get(AttachmentSession, (attachment.id, session.id)) is not None
+        )
+    return False
+
+
+async def _resolve_message_attachments(
+    db: AsyncSession,
+    session: Session,
+    user: User,
+    attachment_ids: list[uuid.UUID],
+) -> None:
+    """Validate every ``attachment_ids`` entry before the turn runs — one bad
+    id fails the whole message with a uniform 404."""
+    for attachment_id in dict.fromkeys(attachment_ids):
+        attachment = await db.get(Attachment, attachment_id)
+        if not await _message_attachment_reachable(
+            db, attachment, session=session, user=user
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
+            )
 
 
 @router.post("/{session_id}/messages", response_model=PostMessageResponse)
@@ -438,6 +545,7 @@ async def post_message(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PostMessageResponse:
     session = await _require_owned_session(db, session_id, user)
+    await _resolve_message_attachments(db, session, user, body.attachment_ids)
     await _enforce_member_token_limit(db, session, user)
     try:
         result = await run_session_turn(
@@ -445,6 +553,7 @@ async def post_message(
             session,
             user_content=body.content,
             source_question_id=body.source_question_id,
+            attachment_ids=body.attachment_ids,
         )
     except SessionTurnConflict as exc:
         raise HTTPException(
@@ -459,10 +568,13 @@ async def post_message(
     await db.refresh(session)
 
     all_msgs = await repos.list_session_messages(db, session.id)
+    chips = await _message_attachment_map(db, all_msgs)
     values = result["values"]
     return PostMessageResponse(
         session=_session_response(session),
-        messages=[_message_response(m) for m in all_msgs],
+        messages=[
+            _message_response(m, attachments=chips.get(m.id)) for m in all_msgs
+        ],
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -505,10 +617,13 @@ async def resume_image(
     await db.refresh(session)
 
     all_msgs = await repos.list_session_messages(db, session.id)
+    chips = await _message_attachment_map(db, all_msgs)
     values = result["values"]
     return ResumeImageResponse(
         session=_session_response(session),
-        messages=[_message_response(m) for m in all_msgs],
+        messages=[
+            _message_response(m, attachments=chips.get(m.id)) for m in all_msgs
+        ],
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -558,10 +673,13 @@ async def choose_angle(
     await db.refresh(session)
 
     all_msgs = await repos.list_session_messages(db, session.id)
+    chips = await _message_attachment_map(db, all_msgs)
     values = result["values"]
     return ChooseAngleResponse(
         session=_session_response(session),
-        messages=[_message_response(m) for m in all_msgs],
+        messages=[
+            _message_response(m, attachments=chips.get(m.id)) for m in all_msgs
+        ],
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -645,6 +763,30 @@ async def fork_session(
             created_at=m.created_at,
         )
 
+    # ADR 0047 §13 — fork shares attachments by reference: a join row for
+    # every attachment the copied messages reference keeps digests hydrating
+    # and tells GC the file is still in use.
+    referenced_ids: set[uuid.UUID] = set()
+    for m in copied:
+        for raw in (m.metadata_ or {}).get("attachment_ids") or []:
+            try:
+                referenced_ids.add(uuid.UUID(str(raw)))
+            except (ValueError, TypeError, AttributeError):
+                continue
+    if referenced_ids:
+        live_ids = set(
+            (
+                await db.scalars(
+                    select(Attachment.id).where(Attachment.id.in_(referenced_ids))
+                )
+            ).all()
+        )
+        for attachment_id in live_ids:
+            if await db.get(AttachmentSession, (attachment_id, fork.id)) is None:
+                db.add(
+                    AttachmentSession(attachment_id=attachment_id, session_id=fork.id)
+                )
+
     fork_msg = msgs[fork_idx]
     preview = await copy_session_preview(db, session, fork, as_of=fork_msg.created_at)
     await db.commit()
@@ -657,9 +799,10 @@ async def fork_session(
         preview_note = "not_carried_later"
 
     new_msgs = await repos.list_session_messages(db, fork.id)
+    chips = await _message_attachment_map(db, new_msgs)
     return ForkSessionResponse(
         session=_session_response(fork),
-        messages=[_message_response(m) for m in new_msgs],
+        messages=[_message_response(m, attachments=chips.get(m.id)) for m in new_msgs],
         forked_from=ForkOrigin(
             session_id=session.id,
             message_id=body.message_id,
@@ -685,9 +828,10 @@ async def get_session_messages(
     for f in forks:
         if f.forked_from_message_id is not None:
             forks_by_message.setdefault(f.forked_from_message_id, []).append(f)
+    chips = await _message_attachment_map(db, msgs)
     messages: list[MessageResponse] = []
     for m in msgs:
-        resp = _message_response(m)
+        resp = _message_response(m, attachments=chips.get(m.id))
         resp.forks = [
             ForkRef(session_id=f.id, title=f.title, created_at=f.created_at)
             for f in forks_by_message.get(m.id, [])
