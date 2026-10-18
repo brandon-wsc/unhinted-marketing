@@ -426,6 +426,21 @@ def _put_bytes_sync(*, key: str, data: bytes, content_type: str) -> _PutOutcome:
     return _PutOutcome(url=public_url_for(key, snap), dual_s3_copied=dual_s3_copied)
 
 
+def _get_bytes_sync(key: str) -> bytes:
+    """Read object bytes back. Prefers the local file (local backend or
+    dual-write copy); falls back to S3 get_object under an S3/dual snapshot."""
+    snap = get_snapshot()
+    if snap.backend == "local" or snap.dual_write:
+        path = local_abs_path(key)
+        if path.is_file():
+            return path.read_bytes()
+    target = snap if snap.backend == "s3" else snap.dual_s3()
+    if _strip(target.bucket):
+        resp = s3_client_for(target).get_object(Bucket=_strip(target.bucket), Key=key)
+        return resp["Body"].read()
+    raise MediaStorageError(f"Object not readable: {key}")
+
+
 def _delete_key_sync(key: str) -> None:
     snap = get_snapshot()
     write_local = snap.backend == "local" or snap.dual_write
@@ -459,6 +474,11 @@ async def put_bytes(*, key: str, data: bytes, content_type: str) -> str:
 async def delete_key(key: str) -> None:
     """Idempotent object delete (local unlink or S3 delete_object)."""
     await asyncio.to_thread(_delete_key_sync, key)
+
+
+async def get_bytes(key: str) -> bytes:
+    """Read object bytes back (local file or S3 get_object)."""
+    return await asyncio.to_thread(_get_bytes_sync, key)
 
 
 def _replace_key_ext(key: str, ext: str) -> str:

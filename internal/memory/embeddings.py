@@ -28,6 +28,11 @@ def reset_product_embedder_for_tests() -> None:
         _load_started = False
 
 
+def embedding_model_name() -> str:
+    """Public accessor for the active model id (stamped on document chunks, ADR 0047)."""
+    return _model_name()
+
+
 def _model_name() -> str:
     return (settings.product_embedding_model or "").strip() or (
         settings.semantic_router_model
