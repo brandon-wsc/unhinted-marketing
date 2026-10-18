@@ -3,6 +3,7 @@ import logging
 import re
 import uuid
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import (
@@ -18,6 +19,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import bearer_scheme, get_current_user, resolve_current_user
@@ -25,12 +27,13 @@ from internal.auth.org import member_publish_requires_approval
 from internal.media.gc import collect_session_store_keys, reclaim_unreferenced_keys
 from internal.media.storage import (
     MediaStorageError,
+    put_bytes,
     resolve_stored_url,
     stored_ref_is_image,
 )
 from internal.memory import repos
 from internal.memory.database import get_db, open_session
-from internal.memory.models import Session, User
+from internal.memory.models import Attachment, AttachmentSession, Session, User
 from internal.session.events import format_sse, session_event_bus
 from internal.session.graph import ANGLE_GATE_NODE, IMAGE_PARK_NODE
 from internal.session.nodes import angle_pick_payload, recommended_image_format
@@ -67,6 +70,7 @@ from schemas.contracts import (
 )
 from schemas.session import (
     AddSessionImageRequest,
+    AttachmentOut,
     ChooseAngleRequest,
     ChooseAngleResponse,
     ConfirmSessionRequest,
@@ -1003,6 +1007,123 @@ async def post_session_image_upload(
         ) from exc
     await db.commit()
     return _media_mutation_response(result)
+
+
+# --- Session scratch attachments (ADR 0047) ------------------------------------
+
+_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # ADR 0047 §4 cap (10–20 MB/file)
+_SESSION_SCRATCH_CAP = 10  # ADR 0047 §14 — bound digest tokens per session
+_ATTACHMENT_ALLOWED_EXTS = {".pdf", ".docx", ".txt", ".md"}
+# ADR 0047 §12 — spreadsheets stay product-path only; steer, never ingest.
+_ATTACHMENT_SPREADSHEET_EXTS = {".csv", ".xlsx"}
+_ATTACHMENT_INGEST_KIND = "attachment_ingest"
+
+
+def _attachment_out(row: Attachment) -> AttachmentOut:
+    return AttachmentOut(
+        id=row.id,
+        session_id=row.session_id,
+        filename=row.filename,
+        content_type=row.content_type,
+        status=row.status,
+        owner_scope=row.owner_scope,
+        created_at=row.created_at,
+    )
+
+
+@router.post(
+    "/{session_id}/attachments",
+    response_model=AttachmentOut,
+    status_code=201,
+)
+async def post_session_attachment(
+    session_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File(...)],
+) -> AttachmentOut:
+    """Upload a scratch document (ADR 0047 §3).
+
+    Bytes land under ``attachments/{id}/{filename}``; parse/chunk/embed run on
+    the ADR 0039 job queue — never in this request (§7, no embedder warmup
+    here either). The unauthenticated ``GET /api/media/{key}`` route never
+    serves these keys; original bytes are behind
+    ``GET /api/attachments/{id}/download``.
+    """
+    session = await _require_owned_session(db, session_id, user)
+
+    # Sniff by filename extension (case-insensitive); content_type is advisory.
+    filename = Path(file.filename or "").name or "attachment"
+    ext = Path(filename).suffix.lower()
+    if ext in _ATTACHMENT_SPREADSHEET_EXTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Spreadsheet files stay on the product import path — use "
+                f"POST /api/companies/{session.company_id}/products/import"
+            ),
+        )
+    if ext not in _ATTACHMENT_ALLOWED_EXTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type — attachments accept pdf, docx, txt, md",
+        )
+
+    raw = await file.read()
+    if len(raw) > _MAX_ATTACHMENT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Attachment exceeds the 20 MB size limit",
+        )
+
+    scratch_count = await db.scalar(
+        select(func.count())
+        .select_from(Attachment)
+        .where(
+            Attachment.session_id == session.id,
+            Attachment.owner_scope == "session",
+        )
+    )
+    if (scratch_count or 0) >= _SESSION_SCRATCH_CAP:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session attachment limit reached",
+        )
+
+    attachment_id = uuid.uuid4()
+    object_key = f"attachments/{attachment_id}/{filename}"
+    content_type = file.content_type or "application/octet-stream"
+    try:
+        await put_bytes(key=object_key, data=raw, content_type=content_type)
+    except MediaStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    attachment = Attachment(
+        id=attachment_id,
+        company_id=session.company_id,
+        owner_scope="session",
+        user_id=user.id,
+        session_id=session.id,
+        filename=filename,
+        content_type=content_type,
+        object_key=object_key,
+        status="pending",
+        doc_profile={},
+    )
+    db.add(attachment)
+    db.add(AttachmentSession(attachment_id=attachment_id, session_id=session.id))
+    await repos.enqueue_job(
+        db,
+        kind=_ATTACHMENT_INGEST_KIND,
+        payload={"attachment_id": str(attachment_id)},
+        dedupe_key=f"{_ATTACHMENT_INGEST_KIND}:{attachment_id}",
+    )
+    await db.commit()
+    await db.refresh(attachment)
+    return _attachment_out(attachment)
 
 
 def _draft_has_image(draft) -> bool:

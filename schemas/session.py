@@ -252,6 +252,18 @@ class PreviewMediaMutationResponse(BaseModel):
     source_signals: list[SourceSignal] = Field(default_factory=list)
 
 
+class AttachmentOut(BaseModel):
+    """ADR 0047 §3 upload response — ingest flips status async via the job queue."""
+
+    id: uuid.UUID
+    session_id: uuid.UUID | None
+    filename: str
+    content_type: str
+    status: str  # pending | ready_lexical | ready | failed
+    owner_scope: str  # session | user | org
+    created_at: datetime
+
+
 class SessionEvent(BaseModel):
     """SSE / turn event envelope. Known `type` values: schemas.contracts.SessionEventType."""
 

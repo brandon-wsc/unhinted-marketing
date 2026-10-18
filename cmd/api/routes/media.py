@@ -1,4 +1,9 @@
-"""Unauthenticated local-store download (ADR 0024). S3 objects use the public/CDN URL."""
+"""Unauthenticated local-store download (ADR 0024). S3 objects use the public/CDN URL.
+
+ADR 0047 §3: this route only serves ``sessions/{id}/r{rev}`` image keys —
+attachment bytes under ``attachments/`` are never public; they download
+through authenticated ``GET /api/attachments/{id}/download`` instead.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,7 @@ from fastapi.responses import FileResponse
 
 from internal.media.storage import (
     MediaStorageError,
+    is_store_key,
     local_abs_path,
     local_read_grace,
     media_backend,
@@ -25,6 +31,8 @@ _EXT_CONTENT_TYPES = {
 
 @router.get("/media/{key:path}")
 async def get_media(key: str) -> FileResponse:
+    if not is_store_key(key):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found")
     try:
         if media_backend() != "local" and not local_read_grace():
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found")
