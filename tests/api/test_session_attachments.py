@@ -60,9 +60,7 @@ PNG = (
     b"\x00IEND\xaeB`\x82"
 )
 
-XLSX_CONTENT_TYPE = (
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 SCRATCH_CAP = 10
 
@@ -74,9 +72,7 @@ async def _member_and_session(
     data = await register_user(client)
     headers = auth_header(data["access_token"])
     company_id = data["user"]["organizations"][0]["id"]
-    res = await client.post(
-        "/api/sessions", json={"company_id": company_id}, headers=headers
-    )
+    res = await client.post("/api/sessions", json={"company_id": company_id}, headers=headers)
     assert res.status_code == 201, res.text
     return data, headers, uuid.UUID(res.json()["id"])
 
@@ -161,7 +157,11 @@ async def test_upload_refuses_spreadsheets_with_product_import_pointer(
     _data, headers, session_id = await _member_and_session(client)
 
     res = await _post_attachment(
-        client, session_id, filename=filename, data=data, content_type=content_type,
+        client,
+        session_id,
+        filename=filename,
+        data=data,
+        content_type=content_type,
         headers=headers,
     )
     assert res.status_code == 400, res.text
@@ -183,7 +183,11 @@ async def test_upload_rejects_unsupported_file_types(
     _data, headers, session_id = await _member_and_session(client)
 
     res = await _post_attachment(
-        client, session_id, filename=filename, data=data, content_type=content_type,
+        client,
+        session_id,
+        filename=filename,
+        data=data,
+        content_type=content_type,
         headers=headers,
     )
     assert res.status_code == 400, res.text
@@ -222,9 +226,7 @@ async def test_upload_other_users_session_is_403(client: AsyncClient) -> None:
     """``_require_owned_session``: existing session owned by someone else → 403."""
     _data, _headers, session_id = await _member_and_session(client)
     other = await register_user(client)
-    res = await _post_attachment(
-        client, session_id, headers=auth_header(other["access_token"])
-    )
+    res = await _post_attachment(client, session_id, headers=auth_header(other["access_token"]))
     assert res.status_code == 403
 
 
@@ -306,12 +308,8 @@ async def _seed_owned_attachment(
 async def test_attachment_download_returns_bytes_to_company_member(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    _data, headers, attachment_id, pdf = await _seed_owned_attachment(
-        client, db_session
-    )
-    res = await client.get(
-        f"/api/attachments/{attachment_id}/download", headers=headers
-    )
+    _data, headers, attachment_id, pdf = await _seed_owned_attachment(client, db_session)
+    res = await client.get(f"/api/attachments/{attachment_id}/download", headers=headers)
     assert res.status_code == 200, res.text
     assert res.content == pdf
 
@@ -320,9 +318,7 @@ async def test_attachment_download_returns_bytes_to_company_member(
 async def test_attachment_download_requires_auth(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    _data, _headers, attachment_id, _pdf = await _seed_owned_attachment(
-        client, db_session
-    )
+    _data, _headers, attachment_id, _pdf = await _seed_owned_attachment(client, db_session)
     res = await client.get(f"/api/attachments/{attachment_id}/download")
     assert res.status_code == 401
 
@@ -334,12 +330,8 @@ async def test_attachment_download_refused_for_other_company(
     """``require_company_access``: a member of another company never reads
     the file — 403 (or 404 if the impl hides the row). The owner's download
     must succeed first so a missing route cannot pass as a refusal."""
-    _data, headers, attachment_id, pdf = await _seed_owned_attachment(
-        client, db_session
-    )
-    own = await client.get(
-        f"/api/attachments/{attachment_id}/download", headers=headers
-    )
+    _data, headers, attachment_id, pdf = await _seed_owned_attachment(client, db_session)
+    own = await client.get(f"/api/attachments/{attachment_id}/download", headers=headers)
     assert own.status_code == 200 and own.content == pdf
 
     outsider = await register_user(client)

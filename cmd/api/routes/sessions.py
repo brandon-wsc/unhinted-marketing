@@ -126,9 +126,7 @@ def _session_response(session: Session) -> SessionResponse:
     )
 
 
-def _message_response(
-    msg, attachments: list[AttachmentDigest] | None = None
-) -> MessageResponse:
+def _message_response(msg, attachments: list[AttachmentDigest] | None = None) -> MessageResponse:
     return MessageResponse(
         id=msg.id,
         session_id=msg.session_id,
@@ -205,9 +203,7 @@ def _parked_node_from_snapshot(state: dict | None, snap_next: object) -> str | N
     return None
 
 
-async def _require_owned_session(
-    db: AsyncSession, session_id: uuid.UUID, user: User
-) -> Session:
+async def _require_owned_session(db: AsyncSession, session_id: uuid.UUID, user: User) -> Session:
     session = await repos.get_session(db, session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
@@ -216,9 +212,7 @@ async def _require_owned_session(
     return session
 
 
-async def _enforce_member_token_limit(
-    db: AsyncSession, session: Session, user: User
-) -> None:
+async def _enforce_member_token_limit(db: AsyncSession, session: Session, user: User) -> None:
     """ADR 0041: cap org `member` token spend at the turn boundary.
 
     Owner/admin bypass the cap entirely. The cap counts the member's whole
@@ -228,11 +222,7 @@ async def _enforce_member_token_limit(
     a hard rate limiter.
     """
     membership = await repos.get_org_membership(db, user.id, session.company_id)
-    if (
-        membership is None
-        or membership.role != "member"
-        or membership.monthly_token_limit is None
-    ):
+    if membership is None or membership.role != "member" or membership.monthly_token_limit is None:
         return
     period_start, period_end = repos.member_month_bounds()
     by_source = await repos.sum_member_tokens_by_source(
@@ -293,9 +283,7 @@ async def list_sessions(
                 for session, preview, match_content, draft_copy in rows
             ]
         )
-    rows = await repos.list_user_sessions(
-        db, user_id=user.id, company_id=company_id, limit=limit
-    )
+    rows = await repos.list_user_sessions(db, user_id=user.id, company_id=company_id, limit=limit)
     return SessionListResponse(
         sessions=[
             SessionListItem(
@@ -470,9 +458,7 @@ async def delete_session(
     try:
         keys = await collect_session_store_keys(db, session.id)
     except Exception:
-        logger.warning(
-            "media GC collect failed session=%s", session_id, exc_info=True
-        )
+        logger.warning("media GC collect failed session=%s", session_id, exc_info=True)
         keys = None
     # ADR 0047 §13 — scratch attachments die with their last referencing
     # session; shared/saved rows are detached before the FK cascade runs.
@@ -513,9 +499,7 @@ async def _message_attachment_reachable(
     if attachment.owner_scope == "session":
         if attachment.session_id == session.id and attachment.user_id == user.id:
             return True
-        return (
-            await db.get(AttachmentSession, (attachment.id, session.id)) is not None
-        )
+        return await db.get(AttachmentSession, (attachment.id, session.id)) is not None
     return False
 
 
@@ -529,9 +513,7 @@ async def _resolve_message_attachments(
     id fails the whole message with a uniform 404."""
     for attachment_id in dict.fromkeys(attachment_ids):
         attachment = await db.get(Attachment, attachment_id)
-        if not await _message_attachment_reachable(
-            db, attachment, session=session, user=user
-        ):
+        if not await _message_attachment_reachable(db, attachment, session=session, user=user):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
             )
@@ -572,9 +554,7 @@ async def post_message(
     values = result["values"]
     return PostMessageResponse(
         session=_session_response(session),
-        messages=[
-            _message_response(m, attachments=chips.get(m.id)) for m in all_msgs
-        ],
+        messages=[_message_response(m, attachments=chips.get(m.id)) for m in all_msgs],
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -621,9 +601,7 @@ async def resume_image(
     values = result["values"]
     return ResumeImageResponse(
         session=_session_response(session),
-        messages=[
-            _message_response(m, attachments=chips.get(m.id)) for m in all_msgs
-        ],
+        messages=[_message_response(m, attachments=chips.get(m.id)) for m in all_msgs],
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -677,9 +655,7 @@ async def choose_angle(
     values = result["values"]
     return ChooseAngleResponse(
         session=_session_response(session),
-        messages=[
-            _message_response(m, attachments=chips.get(m.id)) for m in all_msgs
-        ],
+        messages=[_message_response(m, attachments=chips.get(m.id)) for m in all_msgs],
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -702,9 +678,7 @@ async def stop_session(
     await db.commit()
     raw_preview = result.get("preview")
     preview = (
-        PreviewUpdatedData.model_validate(raw_preview)
-        if isinstance(raw_preview, dict)
-        else None
+        PreviewUpdatedData.model_validate(raw_preview) if isinstance(raw_preview, dict) else None
     )
     return StopSessionResponse(
         status=result["status"],
@@ -775,17 +749,11 @@ async def fork_session(
                 continue
     if referenced_ids:
         live_ids = set(
-            (
-                await db.scalars(
-                    select(Attachment.id).where(Attachment.id.in_(referenced_ids))
-                )
-            ).all()
+            (await db.scalars(select(Attachment.id).where(Attachment.id.in_(referenced_ids)))).all()
         )
         for attachment_id in live_ids:
             if await db.get(AttachmentSession, (attachment_id, fork.id)) is None:
-                db.add(
-                    AttachmentSession(attachment_id=attachment_id, session_id=fork.id)
-                )
+                db.add(AttachmentSession(attachment_id=attachment_id, session_id=fork.id))
 
     fork_msg = msgs[fork_idx]
     preview = await copy_session_preview(db, session, fork, as_of=fork_msg.created_at)
@@ -842,9 +810,7 @@ async def get_session_messages(
     parked_image = bool(state.get("awaiting_image_ok"))
     pick = angle_pick_payload(state) if parked_angle else None
     # Image park returns the locked format so a reload matches this version (ADR 0036).
-    locked_format = (
-        recommended_image_format(state) if parked_angle or parked_image else None
-    )
+    locked_format = recommended_image_format(state) if parked_angle or parked_image else None
     return SessionMessagesResponse(
         session=_session_response(session),
         messages=messages,
@@ -863,9 +829,7 @@ async def get_session_messages(
 async def session_events(
     session_id: uuid.UUID,
     request: Request,
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
-    ],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
 ) -> StreamingResponse:
     """SSE stream: initial snapshot, then live session events + heartbeats.
 
@@ -878,9 +842,7 @@ async def session_events(
         session = await _require_owned_session(db, session_id, user)
         draft = await repos.get_latest_preview_draft(db, session.id)
         state = session.state or {}
-        copy = normalize_draft_copy(
-            (draft.copy if draft else None) or state.get("draft")
-        )
+        copy = normalize_draft_copy((draft.copy if draft else None) or state.get("draft"))
         platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
         media_items = await list_latest_session_media(db, session)
 
@@ -902,9 +864,7 @@ async def session_events(
             "state": state,
             "revision": draft.revision if draft else state.get("revision"),
             "approval_token": draft.approval_token if draft else state.get("approval_token"),
-            "image_url": resolve_stored_url(
-                draft.image_url if draft else state.get("image_url")
-            ),
+            "image_url": resolve_stored_url(draft.image_url if draft else state.get("image_url")),
             "media": media_items,
             "copy": copy,
             "platform": platform,
@@ -1006,9 +966,7 @@ async def get_session_media(
     """List media for the latest preview draft (ADR 0008)."""
     session = await _require_owned_session(db, session_id, user)
     items = await list_latest_session_media(db, session)
-    return SessionMediaListResponse(
-        media=[PreviewMediaItem.model_validate(m) for m in items]
-    )
+    return SessionMediaListResponse(media=[PreviewMediaItem.model_validate(m) for m in items])
 
 
 @router.patch(
@@ -1381,9 +1339,7 @@ async def confirm_session(
         revision=draft.revision,
     )
     try:
-        outcome, receipt = await execute_publish(
-            db, session=session, user_id=user.id, req=req
-        )
+        outcome, receipt = await execute_publish(db, session=session, user_id=user.id, req=req)
     except PublishPreconditionError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -36,7 +36,9 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # ADR 0005 numeric privilege ladder (MEMBER=3 default; see internal/auth/roles.py)
-    platform_level: Mapped[int] = mapped_column(Integer, default=3, server_default="3", nullable=False)
+    platform_level: Mapped[int] = mapped_column(
+        Integer, default=3, server_default="3", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -86,7 +88,10 @@ class OrgInvite(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -132,7 +137,9 @@ class RawNewsEvent(Base):
     url_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     region: Mapped[str] = mapped_column(String(10), nullable=False, default="HK")
     metrics: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -173,13 +180,22 @@ class QuestionRun(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
-    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # running | succeeded | failed
-    trigger: Mapped[str] = mapped_column(String(20), nullable=False)  # get_miss | refresh | scheduler
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True
+    )  # running | succeeded | failed
+    trigger: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # get_miss | refresh | scheduler
     quality_flags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -190,7 +206,10 @@ class QuestionNodeStep(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     run_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("question_runs.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("question_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     node: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
@@ -208,12 +227,17 @@ class Session(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="CHAT")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="active")
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    pinned: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     state: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     # Fork lineage (ADR 0017). forked_from_message_id has no FK: messages
     # cascade-delete with their session, and the lineage label must survive that.
@@ -250,7 +274,10 @@ class SessionMessage(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     role: Mapped[str] = mapped_column(String(40), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -267,7 +294,10 @@ class PreviewImage(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     role: Mapped[str] = mapped_column(String(40), nullable=False, default="primary")
@@ -288,16 +318,17 @@ class PreviewDraft(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     copy: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_plan: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Ordered refs into preview_images (ADR 0008). Empty = no media.
-    media_ids: Mapped[list] = mapped_column(
-        ARRAY(UUID(as_uuid=True)), nullable=False, default=list
-    )
+    media_ids: Mapped[list] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
     platform: Mapped[str | None] = mapped_column(String(40), nullable=True)
     source_signal_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     approval_token: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
@@ -311,7 +342,10 @@ class ToolReceipt(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
@@ -340,7 +374,10 @@ class LlmCallRecord(Base):
     caller: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     node: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     session_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     # One graph.ainvoke / resume turn — joins to session_node_steps.
     turn_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
@@ -366,10 +403,14 @@ class LlmCallRecord(Base):
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cached_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Diagnosis — the "which step went wrong" fields
-    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # ok | provider_error | cancelled | empty_response | error
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True
+    )  # ok | provider_error | cancelled | empty_response | error
     error: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     parse_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    fallback_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    fallback_used: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     # ADR 0020 — which key paid for this call. Never the raw key / ciphertext.
     key_source: Mapped[str | None] = mapped_column(String(8), nullable=True)  # env | org
     key_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
@@ -385,7 +426,10 @@ class SessionNodeStep(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -415,7 +459,10 @@ class Product(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     owner_scope: Mapped[str] = mapped_column(String(10), nullable=False)  # org | user
     user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -440,7 +487,10 @@ class ProductProposal(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     source_product_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL"), nullable=True
@@ -481,14 +531,19 @@ class ByokProvider(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     label: Mapped[str] = mapped_column(String(120), nullable=False)
     provider_type: Mapped[str] = mapped_column(String(32), nullable=False)
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     key_last4: Mapped[str] = mapped_column(String(4), nullable=False)
     api_base: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_error_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -533,13 +588,18 @@ class ByokModel(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     provider_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     model_id: Mapped[str] = mapped_column(String(200), nullable=False)
     capability: Mapped[str] = mapped_column(String(16), nullable=False)
     capability_source: Mapped[str] = mapped_column(String(32), nullable=False)
-    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_error_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -610,14 +670,19 @@ class SocialAccount(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     platform: Mapped[str] = mapped_column(String(32), nullable=False)
     ig_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
     access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     token_last4: Mapped[str] = mapped_column(String(4), nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_error_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -648,7 +713,10 @@ class StorageConfig(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # Unused in v1 (deployment-wide); present so a later ADR can split buckets.
     company_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     backend: Mapped[str] = mapped_column(String(16), nullable=False)
     bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -769,12 +837,8 @@ class InstanceSettings(Base):
     # ADR 0034 — per-install shared secret the relay issues at registration;
     # authenticates ticket redemption + relayed platform events. Fernet at
     # rest, write-only in the portal (last4 for confirmation).
-    meta_oauth_relay_secret_encrypted: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    meta_oauth_relay_secret_last4: Mapped[str | None] = mapped_column(
-        String(4), nullable=True
-    )
+    meta_oauth_relay_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meta_oauth_relay_secret_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

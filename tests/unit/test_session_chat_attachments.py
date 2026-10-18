@@ -41,8 +41,7 @@ ATTACHMENT_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
 ATTACHMENT_FILENAME = "offers.md"
 ATTACHMENT_TITLE = "產品目錄"
 OFFER_REPLY = (
-    "見到你上傳咗 offers.md（產品目錄）。我可以幫你："
-    "①用呢份嘢出 post ②存入我嘅庫 ③講吓重點。想點？"
+    "見到你上傳咗 offers.md（產品目錄）。我可以幫你：①用呢份嘢出 post ②存入我嘅庫 ③講吓重點。想點？"
 )
 FINAL_TEXT = "睇完份嘢，重點係優惠期到三月底。"
 
@@ -115,8 +114,7 @@ async def test_chat_payload_carries_attachment_digests() -> None:
         "prompt leaked a non-digest field (full text) — §5 violation"
     )
     assert reply == OFFER_REPLY, (
-        f"digest never reached the chat prompt: {reply!r} "
-        f"(model saw {seen})"
+        f"digest never reached the chat prompt: {reply!r} (model saw {seen})"
     )
 
 
@@ -142,9 +140,7 @@ async def test_read_attachment_tool_gets_company_and_user_from_state(
             }
         )
         return {
-            "slices": [
-                {"chunk_id": str(uuid.uuid4()), "ref": "p.1", "text": "優惠期由即日起。"}
-            ],
+            "slices": [{"chunk_id": str(uuid.uuid4()), "ref": "p.1", "text": "優惠期由即日起。"}],
             "partial": False,
         }
 
@@ -194,9 +190,9 @@ async def test_read_attachment_untrusted_id_returns_error_not_exception(
 
     assert returns_seen, "tool call never returned — run died inside the agent"
     blob = returns_seen[0]
-    assert (
-        '"slices": []' in blob or "slices': []" in blob or "slices=[]" in blob
-    ), f"refused read must carry empty slices: {blob!r}"
+    assert '"slices": []' in blob or "slices': []" in blob or "slices=[]" in blob, (
+        f"refused read must carry empty slices: {blob!r}"
+    )
     assert '"error"' in blob or "'error'" in blob or "error=" in blob, (
         f"refused read must carry an error string: {blob!r}"
     )
@@ -217,9 +213,7 @@ async def test_read_attachment_budget_enforced_through_agent(
     async def stub(db, *, company_id, user_id, attachment_id, query=None, section=None):
         seam_calls.append({"attachment_id": attachment_id})
         return {
-            "slices": [
-                {"chunk_id": str(uuid.uuid4()), "ref": "p.1", "text": "slice"}
-            ],
+            "slices": [{"chunk_id": str(uuid.uuid4()), "ref": "p.1", "text": "slice"}],
             "partial": False,
         }
 
@@ -244,8 +238,7 @@ async def test_read_attachment_budget_enforced_through_agent(
     )
     budget_return = returns_seen[MAX_ATTACHMENT_READS]
     assert "budget" in budget_return.lower(), (
-        f"call #{MAX_ATTACHMENT_READS + 1} must carry the budget error: "
-        f"{budget_return!r}"
+        f"call #{MAX_ATTACHMENT_READS + 1} must carry the budget error: {budget_return!r}"
     )
     # Within-budget calls reach the seam; the over-budget call must not.
     assert len(seam_calls) == MAX_ATTACHMENT_READS

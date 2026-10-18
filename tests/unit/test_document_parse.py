@@ -96,14 +96,7 @@ def test_parse_markdown_headings_carry_levels_and_order() -> None:
 
 
 def test_parse_markdown_pipe_table_stays_single_block() -> None:
-    md = (
-        "## 價目表\n\n"
-        "| 名稱 | 價格 |\n"
-        "| --- | --- |\n"
-        "| 奶茶 | 48 |\n"
-        "| 咖啡 | 52 |\n\n"
-        "表後文字。\n"
-    )
+    md = "## 價目表\n\n| 名稱 | 價格 |\n| --- | --- |\n| 奶茶 | 48 |\n| 咖啡 | 52 |\n\n表後文字。\n"
     doc = _parse("prices.md", md.encode())
     tables = [b for b in doc.blocks if b.kind == "table"]
     assert len(tables) == 1

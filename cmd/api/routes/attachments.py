@@ -48,9 +48,7 @@ async def download_attachment(
         media_type=attachment.content_type,
         headers={
             # RFC 5987 filename* — filenames are user-controlled.
-            "Content-Disposition": (
-                f"attachment; filename*=UTF-8''{quote(attachment.filename)}"
-            ),
+            "Content-Disposition": (f"attachment; filename*=UTF-8''{quote(attachment.filename)}"),
         },
     )
 

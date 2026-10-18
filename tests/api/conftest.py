@@ -101,9 +101,7 @@ async def session_factory(engine):
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def clean_db(
-    engine, migrated_database: str, monkeypatch: pytest.MonkeyPatch, tmp_path
-):
+async def clean_db(engine, migrated_database: str, monkeypatch: pytest.MonkeyPatch, tmp_path):
     """Truncate app tables before each API test."""
     from cryptography.fernet import Fernet
 

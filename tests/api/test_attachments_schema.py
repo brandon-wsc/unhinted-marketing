@@ -23,59 +23,71 @@ EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 async def _columns(db: AsyncSession, table: str) -> dict[str, dict]:
     rows = (
-        await db.execute(
-            text(
-                "SELECT column_name, data_type, udt_name, is_nullable "
-                "FROM information_schema.columns "
-                "WHERE table_schema = 'public' AND table_name = :table"
-            ),
-            {"table": table},
+        (
+            await db.execute(
+                text(
+                    "SELECT column_name, data_type, udt_name, is_nullable "
+                    "FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = :table"
+                ),
+                {"table": table},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return {r["column_name"]: dict(r) for r in rows}
 
 
 async def _primary_key_columns(db: AsyncSession, table: str) -> set[str]:
     rows = (
-        await db.execute(
-            text(
-                "SELECT kcu.column_name "
-                "FROM information_schema.table_constraints tc "
-                "JOIN information_schema.key_column_usage kcu "
-                "  ON tc.constraint_name = kcu.constraint_name "
-                " AND tc.table_schema = kcu.table_schema "
-                "WHERE tc.table_schema = 'public' AND tc.table_name = :table "
-                "  AND tc.constraint_type = 'PRIMARY KEY'"
-            ),
-            {"table": table},
+        (
+            await db.execute(
+                text(
+                    "SELECT kcu.column_name "
+                    "FROM information_schema.table_constraints tc "
+                    "JOIN information_schema.key_column_usage kcu "
+                    "  ON tc.constraint_name = kcu.constraint_name "
+                    " AND tc.table_schema = kcu.table_schema "
+                    "WHERE tc.table_schema = 'public' AND tc.table_name = :table "
+                    "  AND tc.constraint_type = 'PRIMARY KEY'"
+                ),
+                {"table": table},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return set(rows)
 
 
 async def _foreign_keys(db: AsyncSession, table: str) -> dict[str, tuple[str, str, str]]:
     """column_name -> (referenced table, referenced column, delete rule)."""
     rows = (
-        await db.execute(
-            text(
-                "SELECT kcu.column_name, ccu.table_name AS ref_table, "
-                "ccu.column_name AS ref_column, rc.delete_rule "
-                "FROM information_schema.table_constraints tc "
-                "JOIN information_schema.key_column_usage kcu "
-                "  ON tc.constraint_name = kcu.constraint_name "
-                " AND tc.table_schema = kcu.table_schema "
-                "JOIN information_schema.constraint_column_usage ccu "
-                "  ON tc.constraint_name = ccu.constraint_name "
-                " AND tc.table_schema = ccu.table_schema "
-                "JOIN information_schema.referential_constraints rc "
-                "  ON tc.constraint_name = rc.constraint_name "
-                " AND tc.table_schema = rc.constraint_schema "
-                "WHERE tc.table_schema = 'public' AND tc.table_name = :table "
-                "  AND tc.constraint_type = 'FOREIGN KEY'"
-            ),
-            {"table": table},
+        (
+            await db.execute(
+                text(
+                    "SELECT kcu.column_name, ccu.table_name AS ref_table, "
+                    "ccu.column_name AS ref_column, rc.delete_rule "
+                    "FROM information_schema.table_constraints tc "
+                    "JOIN information_schema.key_column_usage kcu "
+                    "  ON tc.constraint_name = kcu.constraint_name "
+                    " AND tc.table_schema = kcu.table_schema "
+                    "JOIN information_schema.constraint_column_usage ccu "
+                    "  ON tc.constraint_name = ccu.constraint_name "
+                    " AND tc.table_schema = ccu.table_schema "
+                    "JOIN information_schema.referential_constraints rc "
+                    "  ON tc.constraint_name = rc.constraint_name "
+                    " AND tc.table_schema = rc.constraint_schema "
+                    "WHERE tc.table_schema = 'public' AND tc.table_name = :table "
+                    "  AND tc.constraint_type = 'FOREIGN KEY'"
+                ),
+                {"table": table},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return {r["column_name"]: (r["ref_table"], r["ref_column"], r["delete_rule"]) for r in rows}
 
 
@@ -259,9 +271,7 @@ async def test_attachment_chunks_roundtrip_and_cascade(
     links = (
         (
             await db_session.execute(
-                select(AttachmentSession).where(
-                    AttachmentSession.attachment_id == attachment.id
-                )
+                select(AttachmentSession).where(AttachmentSession.attachment_id == attachment.id)
             )
         )
         .scalars()

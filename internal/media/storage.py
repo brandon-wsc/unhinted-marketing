@@ -26,9 +26,7 @@ from internal.media.config import StorageSnapshot, get_snapshot
 logger = logging.getLogger(__name__)
 
 # sessions/{id}/r{revision}-{hex}.{ext} (hex optional for leftover rN.ext keys)
-_STORE_KEY_RE = re.compile(
-    r"^sessions/[A-Za-z0-9_-]+/r\d+(?:-[0-9a-f]+)?\.[A-Za-z0-9]+$"
-)
+_STORE_KEY_RE = re.compile(r"^sessions/[A-Za-z0-9_-]+/r\d+(?:-[0-9a-f]+)?\.[A-Za-z0-9]+$")
 _API_MEDIA_PREFIX = "/api/media/"
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -508,9 +506,7 @@ async def _fetch_provider_image(url: str) -> tuple[bytes, tuple[str, str]]:
     except httpx.HTTPError as exc:
         raise MediaStorageError("Could not fetch the provider image.") from exc
     if response.status_code != 200:
-        raise MediaStorageError(
-            f"Provider image fetch returned HTTP {response.status_code}."
-        )
+        raise MediaStorageError(f"Provider image fetch returned HTTP {response.status_code}.")
     raw = response.content
     if not raw:
         raise MediaStorageError("Provider image fetch returned an empty body.")
@@ -543,9 +539,7 @@ async def persist_generated_image(image_ref: str, *, key: str) -> str:
             key = _replace_key_ext(key, ext)
         await put_bytes(key=key, data=raw, content_type=content_type)
         return key
-    raise MediaStorageError(
-        "Unsupported image scheme (expected http(s) or data:)."
-    )
+    raise MediaStorageError("Unsupported image scheme (expected http(s) or data:).")
 
 
 def media_object_key(*, session_id: str, revision: int, ext: str = "png") -> str:

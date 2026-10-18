@@ -105,13 +105,9 @@ def _guess_kind(blocks: list[DocumentBlock]) -> str:
     return "catalog" if hits / len(lines) >= _CATALOG_HIT_RATIO else "document"
 
 
-def _build_doc_profile(
-    filename: str, parsed: ParsedDocument, *, truncated: bool
-) -> dict:
+def _build_doc_profile(filename: str, parsed: ParsedDocument, *, truncated: bool) -> dict:
     headings = [
-        b.text.strip()
-        for b in parsed.blocks
-        if b.kind == "heading" and b.text and b.text.strip()
+        b.text.strip() for b in parsed.blocks if b.kind == "heading" and b.text and b.text.strip()
     ]
     first_body = next(
         (
@@ -197,14 +193,10 @@ async def run_attachment_ingest(db: AsyncSession, *, attachment_id: uuid.UUID) -
         return
 
     result = chunk_blocks(parsed.blocks, ChunkConfig())
-    profile = _build_doc_profile(
-        attachment.filename, parsed, truncated=result.truncated
-    )
+    profile = _build_doc_profile(attachment.filename, parsed, truncated=result.truncated)
 
     if existing:
-        await db.execute(
-            delete(DocumentChunk).where(DocumentChunk.attachment_id == attachment_id)
-        )
+        await db.execute(delete(DocumentChunk).where(DocumentChunk.attachment_id == attachment_id))
     rows: list[DocumentChunk] = []
     for chunk in result.chunks:
         row = DocumentChunk(

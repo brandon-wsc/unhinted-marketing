@@ -184,9 +184,7 @@ async def list_companies(db: AsyncSession) -> list[Entity]:
     return list(result.all())
 
 
-async def user_has_org_access(
-    db: AsyncSession, user_id: uuid.UUID, company_id: uuid.UUID
-) -> bool:
+async def user_has_org_access(db: AsyncSession, user_id: uuid.UUID, company_id: uuid.UUID) -> bool:
     row = await db.scalar(
         select(OrganizationMember.id).where(
             OrganizationMember.user_id == user_id,
@@ -322,9 +320,7 @@ async def user_has_any_org(db: AsyncSession, user_id: uuid.UUID) -> bool:
     return row is not None
 
 
-async def list_user_memberships(
-    db: AsyncSession, user_id: uuid.UUID
-) -> list[OrganizationMember]:
+async def list_user_memberships(db: AsyncSession, user_id: uuid.UUID) -> list[OrganizationMember]:
     result = await db.scalars(
         select(OrganizationMember).where(OrganizationMember.user_id == user_id)
     )
@@ -354,9 +350,7 @@ async def _rehome_solo_products_to_mine(
 ) -> None:
     """Move all catalog rows onto dest as Mine (ADR 0015). Org SKU wins over Mine dupes."""
     rows = list(
-        (
-            await db.scalars(select(Product).where(Product.company_id == from_company_id))
-        ).all()
+        (await db.scalars(select(Product).where(Product.company_id == from_company_id))).all()
     )
     org_rows = [row for row in rows if row.owner_scope == "org"]
     mine_rows = [row for row in rows if row.owner_scope == "user"]
@@ -456,9 +450,7 @@ async def create_org_invite(
     return invite
 
 
-async def list_pending_org_invites(
-    db: AsyncSession, company_id: uuid.UUID
-) -> list[OrgInvite]:
+async def list_pending_org_invites(db: AsyncSession, company_id: uuid.UUID) -> list[OrgInvite]:
     result = await db.scalars(
         select(OrgInvite)
         .where(
@@ -482,9 +474,7 @@ async def get_org_invite(
     )
 
 
-async def get_org_invite_by_token_hash(
-    db: AsyncSession, token_hash: str
-) -> OrgInvite | None:
+async def get_org_invite_by_token_hash(db: AsyncSession, token_hash: str) -> OrgInvite | None:
     return await db.scalar(
         select(OrgInvite)
         .options(selectinload(OrgInvite.organization))
@@ -504,9 +494,7 @@ async def accept_org_invite(db: AsyncSession, invite: OrgInvite) -> OrgInvite:
     return invite
 
 
-async def update_company_profile(
-    db: AsyncSession, company: Entity, *, patch: dict
-) -> Entity:
+async def update_company_profile(db: AsyncSession, company: Entity, *, patch: dict) -> Entity:
     """Shallow-merge keys into company.profile JSONB (preserves unrelated keys)."""
     from sqlalchemy.orm.attributes import flag_modified
 
@@ -887,9 +875,7 @@ async def delete_session(db: AsyncSession, session: Session) -> None:
     await db.flush()
 
 
-async def list_session_attachments(
-    db: AsyncSession, session_id: uuid.UUID
-) -> list[Attachment]:
+async def list_session_attachments(db: AsyncSession, session_id: uuid.UUID) -> list[Attachment]:
     """Attachments this session references via the attachment_sessions join
     (ADR 0047 §13) — hydration reads the join, never ``session_id`` alone."""
     stmt = (
@@ -901,9 +887,7 @@ async def list_session_attachments(
     return list((await db.scalars(stmt)).all())
 
 
-async def release_session_attachments(
-    db: AsyncSession, session_id: uuid.UUID
-) -> list[str]:
+async def release_session_attachments(db: AsyncSession, session_id: uuid.UUID) -> list[str]:
     """ADR 0047 §13 GC — run BEFORE the session row is deleted.
 
     Scratch rows (``owner_scope='session'``) die only when this session's join
@@ -922,11 +906,7 @@ async def release_session_attachments(
         ).all()
     )
     attachment_ids.update(
-        (
-            await db.scalars(
-                select(Attachment.id).where(Attachment.session_id == session_id)
-            )
-        ).all()
+        (await db.scalars(select(Attachment.id).where(Attachment.session_id == session_id))).all()
     )
     if not attachment_ids:
         return []
@@ -981,9 +961,7 @@ async def add_session_message(
     return row
 
 
-async def list_session_messages(
-    db: AsyncSession, session_id: uuid.UUID
-) -> list[SessionMessage]:
+async def list_session_messages(db: AsyncSession, session_id: uuid.UUID) -> list[SessionMessage]:
     result = await db.scalars(
         select(SessionMessage)
         .where(SessionMessage.session_id == session_id)
@@ -1002,9 +980,7 @@ async def count_session_forks(db: AsyncSession, session_id: uuid.UUID) -> int:
     )
 
 
-async def list_forks_for_messages(
-    db: AsyncSession, message_ids: list[uuid.UUID]
-) -> list[Session]:
+async def list_forks_for_messages(db: AsyncSession, message_ids: list[uuid.UUID]) -> list[Session]:
     """Sessions forked from any of these messages, oldest first (ADR 0017)."""
     if not message_ids:
         return []
@@ -1060,9 +1036,7 @@ async def insert_preview_image(
     return row
 
 
-async def get_preview_image(
-    db: AsyncSession, image_id: uuid.UUID
-) -> PreviewImage | None:
+async def get_preview_image(db: AsyncSession, image_id: uuid.UUID) -> PreviewImage | None:
     return await db.scalar(select(PreviewImage).where(PreviewImage.id == image_id))
 
 
@@ -1071,9 +1045,7 @@ async def get_preview_images_by_ids(
 ) -> list[PreviewImage]:
     if not image_ids:
         return []
-    rows = (
-        await db.scalars(select(PreviewImage).where(PreviewImage.id.in_(image_ids)))
-    ).all()
+    rows = (await db.scalars(select(PreviewImage).where(PreviewImage.id.in_(image_ids)))).all()
     by_id = {r.id: r for r in rows}
     return [by_id[i] for i in image_ids if i in by_id]
 
@@ -1165,9 +1137,7 @@ async def delete_preview_drafts_above(
     return int(result.rowcount or 0)
 
 
-async def get_latest_preview_draft(
-    db: AsyncSession, session_id: uuid.UUID
-) -> PreviewDraft | None:
+async def get_latest_preview_draft(db: AsyncSession, session_id: uuid.UUID) -> PreviewDraft | None:
     return await db.scalar(
         select(PreviewDraft)
         .where(PreviewDraft.session_id == session_id)
@@ -1242,9 +1212,7 @@ PUBLISH_REJECTED = "rejected"
 PUBLISH_SUPERSEDED = "superseded"
 
 
-async def get_latest_publish_receipt(
-    db: AsyncSession, session_id: uuid.UUID
-) -> ToolReceipt | None:
+async def get_latest_publish_receipt(db: AsyncSession, session_id: uuid.UUID) -> ToolReceipt | None:
     return await db.scalar(
         select(ToolReceipt)
         .where(
@@ -1810,23 +1778,13 @@ async def upsert_byok_routing(
 def routing_slots_for_model(routing: ByokRouting | None, model_pk: uuid.UUID) -> list[str]:
     if routing is None:
         return []
-    return [
-        slot
-        for slot, column in ROUTING_SLOT_COLUMNS
-        if getattr(routing, column) == model_pk
-    ]
+    return [slot for slot, column in ROUTING_SLOT_COLUMNS if getattr(routing, column) == model_pk]
 
 
-def routing_slots_for_models(
-    routing: ByokRouting | None, model_pks: set[uuid.UUID]
-) -> list[str]:
+def routing_slots_for_models(routing: ByokRouting | None, model_pks: set[uuid.UUID]) -> list[str]:
     if routing is None or not model_pks:
         return []
-    return [
-        slot
-        for slot, column in ROUTING_SLOT_COLUMNS
-        if getattr(routing, column) in model_pks
-    ]
+    return [slot for slot, column in ROUTING_SLOT_COLUMNS if getattr(routing, column) in model_pks]
 
 
 async def list_byok_models_by_ids(
@@ -1881,9 +1839,7 @@ def social_account_is_connected(row: SocialAccount | None) -> bool:
     return bool((row.ig_user_id or "").strip() and (row.token_last4 or "").strip())
 
 
-async def list_social_accounts(
-    db: AsyncSession, company_id: uuid.UUID
-) -> list[SocialAccount]:
+async def list_social_accounts(db: AsyncSession, company_id: uuid.UUID) -> list[SocialAccount]:
     stmt = (
         select(SocialAccount)
         .where(SocialAccount.company_id == company_id)
@@ -1928,7 +1884,6 @@ async def upsert_social_account(
     return row
 
 
-
 def social_pending_state_clear(row: SocialAccount) -> None:
     """Clear OAuth pending state after the exchange ends (success or failure)."""
     row.oauth_connect_state = None
@@ -1953,9 +1908,7 @@ async def cancel_social_oauth(
     await abort_social_oauth_row(db, row)
 
 
-async def find_social_account_by_oauth_state(
-    db: AsyncSession, state: str
-) -> SocialAccount | None:
+async def find_social_account_by_oauth_state(db: AsyncSession, state: str) -> SocialAccount | None:
     """Resolve the SocialAccount row from a callback state.
 
     BYO state is `{row_id}:{blob}`; relay state prefixes the registry slug —
@@ -1971,9 +1924,7 @@ async def find_social_account_by_oauth_state(
     return None
 
 
-async def clear_social_oauth_state_for_state(
-    db: AsyncSession, state: str | None
-) -> None:
+async def clear_social_oauth_state_for_state(db: AsyncSession, state: str | None) -> None:
     """Clear pending OAuth state after a failed / aborted callback.
 
     First-time connect leaves an empty placeholder — delete it so list /
@@ -2001,9 +1952,7 @@ async def delete_social_accounts_by_ig_user_id(db: AsyncSession, ig_user_id: str
     """Meta platform callbacks (ADR 0033): drop every connection an IG user
     has across orgs — the deauthorize/data-deletion payload only carries the
     user id, not a company."""
-    result = await db.execute(
-        delete(SocialAccount).where(SocialAccount.ig_user_id == ig_user_id)
-    )
+    result = await db.execute(delete(SocialAccount).where(SocialAccount.ig_user_id == ig_user_id))
     return result.rowcount or 0
 
 
@@ -2198,13 +2147,9 @@ async def clear_migration_done_keys(db: AsyncSession) -> None:
 
 async def list_all_media_refs(db: AsyncSession) -> list[str]:
     """All stored preview_images.url + preview_drafts.image_url (ADR 0025 enumerate)."""
-    images = (
-        await db.scalars(select(PreviewImage.url).where(PreviewImage.url.is_not(None)))
-    ).all()
+    images = (await db.scalars(select(PreviewImage.url).where(PreviewImage.url.is_not(None)))).all()
     drafts = (
-        await db.scalars(
-            select(PreviewDraft.image_url).where(PreviewDraft.image_url.is_not(None))
-        )
+        await db.scalars(select(PreviewDraft.image_url).where(PreviewDraft.image_url.is_not(None)))
     ).all()
     return [u for u in (*images, *drafts) if u]
 

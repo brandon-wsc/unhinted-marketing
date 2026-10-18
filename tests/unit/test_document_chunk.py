@@ -40,10 +40,7 @@ def _sentences(text: str) -> list[str]:
 
 
 def test_chunk_never_spans_two_headings() -> None:
-    md = (
-        "## 甲部\n\n甲一句子。甲二句子。甲三句子。甲四句子。\n\n"
-        "## 乙部\n\n乙一句子。乙二句子。\n"
-    )
+    md = "## 甲部\n\n甲一句子。甲二句子。甲三句子。甲四句子。\n\n## 乙部\n\n乙一句子。乙二句子。\n"
     result = _chunk(md, budget=24)
     assert len(result.chunks) >= 3
     assert not any("甲" in c.text and "乙" in c.text for c in result.chunks)

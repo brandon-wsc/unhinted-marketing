@@ -167,9 +167,7 @@ async def _query_chunks(
     qn = _norm(query)
     if not qn:
         return []
-    lexical = _lexical_hits(
-        await _lexical_candidates(db, attachment_id=attachment_id, qn=qn), qn
-    )
+    lexical = _lexical_hits(await _lexical_candidates(db, attachment_id=attachment_id, qn=qn), qn)
     vector = await _vector_candidates(db, attachment_id=attachment_id, query=query)
     return _rrf_merge(lexical, vector)
 
@@ -181,9 +179,7 @@ async def _section_chunks(
         select(DocumentChunk)
         .options(defer(DocumentChunk.embedding))
         .where(DocumentChunk.attachment_id == attachment_id)
-        .where(
-            func.strpos(func.lower(DocumentChunk.heading_path), _norm(section)) > 0
-        )
+        .where(func.strpos(func.lower(DocumentChunk.heading_path), _norm(section)) > 0)
         .order_by(DocumentChunk.chunk_index)
         .limit(SLICE_CAP)
     )
@@ -206,9 +202,7 @@ async def read_document(
     """
     try:
         att_id = (
-            attachment_id
-            if isinstance(attachment_id, uuid.UUID)
-            else uuid.UUID(str(attachment_id))
+            attachment_id if isinstance(attachment_id, uuid.UUID) else uuid.UUID(str(attachment_id))
         )
     except (ValueError, TypeError, AttributeError):
         return None
@@ -227,8 +221,6 @@ async def read_document(
         chunks = await _section_chunks(db, attachment_id=attachment.id, section=s)
 
     return {
-        "slices": [
-            _to_slice(c, filename=attachment.filename) for c in chunks[:SLICE_CAP]
-        ],
+        "slices": [_to_slice(c, filename=attachment.filename) for c in chunks[:SLICE_CAP]],
         "partial": attachment.status != "ready",
     }

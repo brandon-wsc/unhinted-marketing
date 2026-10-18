@@ -101,8 +101,10 @@ def live_harness_model(tier: ModelTier) -> Model:
             ),
         )
     lowered = raw.lower()
-    if resolved.provider_type == "anthropic" or "claude" in lowered or lowered.startswith(
-        "anthropic"
+    if (
+        resolved.provider_type == "anthropic"
+        or "claude" in lowered
+        or lowered.startswith("anthropic")
     ):
         try:
             from pydantic_ai.models.anthropic import AnthropicModel
@@ -218,9 +220,7 @@ async def read_attachment(
     q = (query or "").strip()
     s = (section or "").strip()
     if not q and not s:
-        return ReadAttachmentResponse(
-            error="missing_query_or_section: pass query= or section="
-        )
+        return ReadAttachmentResponse(error="missing_query_or_section: pass query= or section=")
     try:
         att_id = uuid.UUID(str(attachment_id))
     except (ValueError, TypeError, AttributeError):

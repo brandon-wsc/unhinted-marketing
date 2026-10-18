@@ -259,7 +259,9 @@ async def seed_pending_attachment(
 # --- job queue driver -------------------------------------------------------
 
 
-async def run_next_job(db: AsyncSession, *, worker_id: str = "attachment-test-worker") -> Job | None:
+async def run_next_job(
+    db: AsyncSession, *, worker_id: str = "attachment-test-worker"
+) -> Job | None:
     """Claim one pending job and dispatch it the way ``cmd.worker._run_one_job`` does."""
     from cmd.worker.main import _JOB_HANDLERS
 
@@ -529,9 +531,7 @@ async def fetch_join_rows(
 ) -> list[AttachmentSession]:
     """``attachment_sessions`` rows for an attachment (optionally one session)."""
     async with open_session() as db:
-        stmt = select(AttachmentSession).where(
-            AttachmentSession.attachment_id == attachment_id
-        )
+        stmt = select(AttachmentSession).where(AttachmentSession.attachment_id == attachment_id)
         if session_id is not None:
             stmt = stmt.where(AttachmentSession.session_id == session_id)
         return list((await db.scalars(stmt)).all())
@@ -680,10 +680,7 @@ def make_read_attachment_driver(
     def _decide(messages) -> tuple[str, dict | None]:
         for message in messages or []:
             for part in getattr(message, "parts", []) or []:
-                if (
-                    isinstance(part, ToolReturnPart)
-                    and part.tool_call_id not in seen_ids
-                ):
+                if isinstance(part, ToolReturnPart) and part.tool_call_id not in seen_ids:
                     seen_ids.add(part.tool_call_id)
                     returns_seen.append(str(part.content))
         idx = len(returns_seen)

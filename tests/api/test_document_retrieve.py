@@ -127,9 +127,7 @@ async def test_query_returns_needle_slice_with_heading_ref(
     lexical hits must rank above pure vector ties)."""
     patch_embedder(monkeypatch, warm_embedder)
     patch_query_embedder(monkeypatch, lambda _q: uniform_query_vector())
-    _data, user_id, company_id, session_id = await _member_with_session(
-        client, db_session
-    )
+    _data, user_id, company_id, session_id = await _member_with_session(client, db_session)
     attachment_id = await _seed_offer_doc(
         db_session, user_id=user_id, company_id=company_id, session_id=session_id
     )
@@ -168,9 +166,7 @@ async def test_slice_ref_includes_page_for_paged_doc(
     half is pinned here (the heading half in the md query test)."""
     patch_embedder(monkeypatch, warm_embedder)
     patch_query_embedder(monkeypatch, lambda _q: uniform_query_vector())
-    _data, user_id, company_id, session_id = await _member_with_session(
-        client, db_session
-    )
+    _data, user_id, company_id, session_id = await _member_with_session(client, db_session)
     attachment_id = await seed_pending_attachment(
         db_session,
         user_id=user_id,
@@ -208,9 +204,7 @@ async def test_query_vector_path_filters_embedding_model(
     patch_embedder(monkeypatch, warm_embedder)
     query_vec = uniform_query_vector()
     patch_query_embedder(monkeypatch, lambda _q: query_vec)
-    _data, user_id, company_id, session_id = await _member_with_session(
-        client, db_session
-    )
+    _data, user_id, company_id, session_id = await _member_with_session(client, db_session)
     attachment_id = await _seed_offer_doc(
         db_session, user_id=user_id, company_id=company_id, session_id=session_id
     )
@@ -250,9 +244,7 @@ async def test_section_slices_work_without_vectors(
     """ADR 0047 §6/§7: section slices by heading path serve while every
     embedding is still NULL (``ready_lexical``) — and the result says so."""
     patch_embedder(monkeypatch, none_embedder)
-    _data, user_id, company_id, session_id = await _member_with_session(
-        client, db_session
-    )
+    _data, user_id, company_id, session_id = await _member_with_session(client, db_session)
     attachment_id = await _seed_offer_doc(
         db_session, user_id=user_id, company_id=company_id, session_id=session_id
     )
@@ -285,9 +277,7 @@ async def test_partial_flag_tracks_attachment_status(
 ) -> None:
     """ADR 0047 §7: partial=True while vectors fill, False once ``ready``."""
     patch_embedder(monkeypatch, none_embedder)
-    _data, user_id, company_id, session_id = await _member_with_session(
-        client, db_session
-    )
+    _data, user_id, company_id, session_id = await _member_with_session(client, db_session)
     attachment_id = await _seed_offer_doc(
         db_session, user_id=user_id, company_id=company_id, session_id=session_id
     )
@@ -323,9 +313,7 @@ async def test_slices_capped_at_five(
     """ADR 0047 §6: a section with more than 5 matching chunks returns
     exactly 5 slices."""
     patch_embedder(monkeypatch, none_embedder)
-    _data, user_id, company_id, session_id = await _member_with_session(
-        client, db_session
-    )
+    _data, user_id, company_id, session_id = await _member_with_session(client, db_session)
     attachment_id = await seed_pending_attachment(
         db_session,
         user_id=user_id,
@@ -366,9 +354,7 @@ async def test_read_refuses_cross_company_attachment(
     indistinguishable from a missing id under company A credentials — the
     owner's own read succeeds first so a missing seam can't pass as refusal."""
     patch_embedder(monkeypatch, none_embedder)
-    _data_a, user_a, company_a, _session_a = await _member_with_session(
-        client, db_session
-    )
+    _data_a, user_a, company_a, _session_a = await _member_with_session(client, db_session)
     other = await register_user(client)
     user_b = uuid.UUID(other["user"]["id"])
     company_b = uuid.UUID(other["user"]["organizations"][0]["id"])
@@ -410,9 +396,7 @@ async def test_read_refuses_session_scratch_of_other_member(
     """ADR 0047 §14 owner scope: session scratch is the uploader's — another
     member of the same company gets ``None`` for a session-scoped id."""
     patch_embedder(monkeypatch, none_embedder)
-    _data, user_id, company_id, session_id = await _member_with_session(
-        client, db_session
-    )
+    _data, user_id, company_id, session_id = await _member_with_session(client, db_session)
     attachment_id = await _seed_offer_doc(
         db_session, user_id=user_id, company_id=company_id, session_id=session_id
     )
@@ -439,9 +423,7 @@ async def test_org_scope_attachment_readable_by_any_member(
     """Owner matrix (§14 decided): ``org`` scope is shared read-only across
     the company — no ``user_id`` match required."""
     patch_embedder(monkeypatch, none_embedder)
-    _data, _user_id, company_id, _session_id = await _member_with_session(
-        client, db_session
-    )
+    _data, _user_id, company_id, _session_id = await _member_with_session(client, db_session)
     other = await register_user(client)
     other_id = uuid.UUID(other["user"]["id"])
     await join_org(db_session, user_id=other_id, company_id=company_id)
@@ -473,9 +455,7 @@ async def test_read_unknown_attachment_returns_none(
 ) -> None:
     """Refusal shape pin: a well-formed but unknown id returns ``None``,
     not an exception."""
-    _data, user_id, company_id, _session_id = await _member_with_session(
-        client, db_session
-    )
+    _data, user_id, company_id, _session_id = await _member_with_session(client, db_session)
     result = await _read_document(
         db_session,
         company_id=company_id,

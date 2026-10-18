@@ -91,19 +91,13 @@ async def _member_and_session(
     data = await register_user(client)
     headers = auth_header(data["access_token"])
     company_id = data["user"]["organizations"][0]["id"]
-    res = await client.post(
-        "/api/sessions", json={"company_id": company_id}, headers=headers
-    )
+    res = await client.post("/api/sessions", json={"company_id": company_id}, headers=headers)
     assert res.status_code == 201, res.text
     return data, headers, uuid.UUID(res.json()["id"])
 
 
-async def _new_session(
-    client: AsyncClient, headers: dict[str, str], company_id: str
-) -> uuid.UUID:
-    res = await client.post(
-        "/api/sessions", json={"company_id": company_id}, headers=headers
-    )
+async def _new_session(client: AsyncClient, headers: dict[str, str], company_id: str) -> uuid.UUID:
+    res = await client.post("/api/sessions", json={"company_id": company_id}, headers=headers)
     assert res.status_code == 201, res.text
     return uuid.UUID(res.json()["id"])
 
@@ -145,9 +139,7 @@ async def _post_message(
     payload: dict = {"content": content}
     if attachment_ids is not None:
         payload["attachment_ids"] = [str(i) for i in attachment_ids]
-    return await client.post(
-        f"/api/sessions/{session_id}/messages", json=payload, headers=headers
-    )
+    return await client.post(f"/api/sessions/{session_id}/messages", json=payload, headers=headers)
 
 
 def _last_user_message(body: dict) -> dict:
@@ -157,10 +149,7 @@ def _last_user_message(body: dict) -> dict:
 
 
 def _message_attachment_ids(msg: dict) -> list[str]:
-    return [
-        str(i)
-        for i in ((msg.get("metadata") or {}).get(MESSAGE_ATTACHMENT_IDS_KEY) or [])
-    ]
+    return [str(i) for i in ((msg.get("metadata") or {}).get(MESSAGE_ATTACHMENT_IDS_KEY) or [])]
 
 
 def _digest_for(msg: dict, attachment_id: uuid.UUID) -> dict | None:
@@ -182,15 +171,11 @@ def _assert_message_reference(msg: dict, attachment_id: uuid.UUID) -> dict:
     return digest
 
 
-async def _state_digest(
-    session_id: uuid.UUID, attachment_id: uuid.UUID
-) -> dict | None:
+async def _state_digest(session_id: uuid.UUID, attachment_id: uuid.UUID) -> dict | None:
     session = await fetch_session_row(session_id)
     assert session is not None
     digests = (session.state or {}).get(STATE_ATTACHMENTS_KEY) or []
-    return next(
-        (d for d in digests if str(d.get("id")) == str(attachment_id)), None
-    )
+    return next((d for d in digests if str(d.get("id")) == str(attachment_id)), None)
 
 
 def _save_path(attachment_id: uuid.UUID) -> str:
@@ -234,9 +219,7 @@ async def test_post_message_with_session_attachment_carries_reference_and_digest
     assert digest["filename"] == filename
 
     state_digest = await _state_digest(session_id, attachment_id)
-    assert state_digest is not None, (
-        "session.state lacks the hydrated attachment digest"
-    )
+    assert state_digest is not None, "session.state lacks the hydrated attachment digest"
     assert state_digest.get("filename") == filename
     assert state_digest.get("status") in {"ready_lexical", "ready"}
     assert any(k in state_digest for k in DIGEST_PROFILE_KEYS), (
@@ -513,9 +496,7 @@ async def test_save_attachment_other_member_same_company_is_404(
         company_id=uuid.UUID(data["user"]["organizations"][0]["id"]),
         role="member",
     )
-    res = await client.post(
-        _save_path(attachment_id), headers=auth_header(mate["access_token"])
-    )
+    res = await client.post(_save_path(attachment_id), headers=auth_header(mate["access_token"]))
     assert res.status_code == 404, res.text
 
 
@@ -685,7 +666,5 @@ async def test_chat_phrase_cannot_save_attachment(
     # user-scope row materializes for the member.
     row = await fetch_attachment_or_none(attachment_id)
     assert row is not None and row.owner_scope == "session"
-    saved = await list_attachment_rows(
-        user_id=uuid.UUID(data["user"]["id"]), owner_scope="user"
-    )
+    saved = await list_attachment_rows(user_id=uuid.UUID(data["user"]["id"]), owner_scope="user")
     assert saved == []

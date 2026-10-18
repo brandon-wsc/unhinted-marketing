@@ -53,7 +53,11 @@ USER_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 ATTACHMENT_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
 
 SLICES = [
-    {"chunk_id": str(uuid.uuid4()), "ref": "p.1 · 優惠詳情", "text": "優惠期由即日起至三月三十一日。"},
+    {
+        "chunk_id": str(uuid.uuid4()),
+        "ref": "p.1 · 優惠詳情",
+        "text": "優惠期由即日起至三月三十一日。",
+    },
     {"chunk_id": str(uuid.uuid4()), "ref": "p.2", "text": "會員購買指定飲品可享九折優惠。"},
 ]
 
@@ -100,9 +104,7 @@ def test_read_attachment_in_chat_tool_names() -> None:
 
 
 def test_read_attachment_registered_on_chat_agent() -> None:
-    agent = H.build_chat_agent(
-        model=TestModel(call_tools=[], custom_output_text="x")
-    )
+    agent = H.build_chat_agent(model=TestModel(call_tools=[], custom_output_text="x"))
     names = H.registered_function_tool_names(agent)
     assert READ_ATTACHMENT_TOOL in names
     assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
@@ -133,9 +135,7 @@ async def test_read_attachment_passes_slices_and_scope_through(
     patch_read_document_seam(monkeypatch, stub)
     db = AsyncMock()
     with session_db(db):
-        result = await _call_tool(
-            _deps(), attachment_id=str(ATTACHMENT_ID), query="優惠期"
-        )
+        result = await _call_tool(_deps(), attachment_id=str(ATTACHMENT_ID), query="優惠期")
 
     assert len(calls) == 1, "tool must hit the read_document seam once"
     call = calls[0]
@@ -167,9 +167,7 @@ async def test_read_attachment_section_passes_through(
 
     patch_read_document_seam(monkeypatch, stub)
     with session_db(AsyncMock()):
-        result = await _call_tool(
-            _deps(), attachment_id=str(ATTACHMENT_ID), section="優惠詳情"
-        )
+        result = await _call_tool(_deps(), attachment_id=str(ATTACHMENT_ID), section="優惠詳情")
     assert calls == [{"query": None, "section": "優惠詳情"}]
     assert _result_dump(result)["slices"]
 
@@ -189,9 +187,7 @@ async def test_read_attachment_refuses_when_seam_returns_none(
 
     patch_read_document_seam(monkeypatch, stub)
     with session_db(AsyncMock()):
-        result = await _call_tool(
-            _deps(), attachment_id=str(uuid.uuid4()), query="優惠期"
-        )
+        result = await _call_tool(_deps(), attachment_id=str(uuid.uuid4()), query="優惠期")
     dump = _result_dump(result)
     assert dump["slices"] == []
     assert dump["error"]
@@ -227,9 +223,7 @@ async def test_read_attachment_refuses_invalid_attachment_id(
 
     patch_read_document_seam(monkeypatch, stub)
     with session_db(AsyncMock()):
-        result = await _call_tool(
-            _deps(), attachment_id="not-a-uuid", query="優惠期"
-        )
+        result = await _call_tool(_deps(), attachment_id="not-a-uuid", query="優惠期")
     dump = _result_dump(result)
     assert dump["slices"] == []
     assert dump["error"]
@@ -247,9 +241,7 @@ async def test_read_attachment_refuses_without_db_context(
         return {"slices": SLICES, "partial": False}
 
     patch_read_document_seam(monkeypatch, stub)
-    result = await _call_tool(
-        _deps(), attachment_id=str(ATTACHMENT_ID), query="優惠期"
-    )
+    result = await _call_tool(_deps(), attachment_id=str(ATTACHMENT_ID), query="優惠期")
     dump = _result_dump(result)
     assert dump["slices"] == []
     assert dump["error"]
@@ -270,9 +262,7 @@ async def test_read_attachment_fourth_call_hits_budget(
     deps = _deps()
     with session_db(AsyncMock()):
         results = [
-            await _call_tool(
-                deps, attachment_id=str(ATTACHMENT_ID), query="優惠期"
-            )
+            await _call_tool(deps, attachment_id=str(ATTACHMENT_ID), query="優惠期")
             for _ in range(MAX_ATTACHMENT_READS + 1)
         ]
     dumps = [_result_dump(r) for r in results]
@@ -289,6 +279,7 @@ async def test_read_attachment_budget_is_per_deps(
 ) -> None:
     """The counter lives on ``ChatDeps`` (per-turn) — a fresh deps instance
     gets a fresh budget."""
+
     async def stub(db, *, company_id, user_id, attachment_id, query=None, section=None):
         return {"slices": SLICES, "partial": False}
 
@@ -298,9 +289,7 @@ async def test_read_attachment_budget_is_per_deps(
         for _ in range(MAX_ATTACHMENT_READS):
             await _call_tool(first, attachment_id=str(ATTACHMENT_ID), query="q")
         fresh = _deps()
-        result = await _call_tool(
-            fresh, attachment_id=str(ATTACHMENT_ID), query="q"
-        )
+        result = await _call_tool(fresh, attachment_id=str(ATTACHMENT_ID), query="q")
     assert not _result_dump(result)["error"]
 
 
@@ -329,9 +318,7 @@ async def test_read_attachment_result_shape_never_leaks_full_text(
 
     patch_read_document_seam(monkeypatch, stub)
     with session_db(AsyncMock()):
-        result = await _call_tool(
-            _deps(), attachment_id=str(ATTACHMENT_ID), query="優惠期"
-        )
+        result = await _call_tool(_deps(), attachment_id=str(ATTACHMENT_ID), query="優惠期")
     dump = _result_dump(result)
     assert set(dump) == {"slices", "partial", "error"}, (
         f"result exposes unexpected fields: {sorted(dump)}"

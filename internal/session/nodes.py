@@ -91,9 +91,7 @@ T = TypeVar("T", bound=BaseModel)
 QUERY_SOURCE_LLM = "llm"
 QUERY_SOURCE_NORMALIZE = "normalize"
 QUERY_SOURCE_FALLBACK = "fallback"
-REVIEWER_PARSE_MISS_FEEDBACK = (
-    "Review could not be completed — tighten grounding and craft."
-)
+REVIEWER_PARSE_MISS_FEEDBACK = "Review could not be completed — tighten grounding and craft."
 
 
 def _last_user_text(state: SessionState) -> str:
@@ -234,9 +232,7 @@ def _wants_image_change(text: str) -> bool:
 
 def offered_angles(brief: dict[str, Any] | None) -> list[str]:
     """Non-empty angle strings from a brief — the ADR 0028 pick options."""
-    return [
-        a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()
-    ]
+    return [a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()]
 
 
 def offered_personas(catalog: list[dict[str, Any]] | None) -> list[dict[str, str]]:
@@ -463,11 +459,7 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
         IntentRoute,
     )
     intent = parsed.intent if parsed else _heuristic_intent(state)
-    research = (
-        parsed.research.model_dump()
-        if parsed
-        else _heuristic_research()
-    )
+    research = parsed.research.model_dump() if parsed else _heuristic_research()
     if not rule_pass:
         research = {**research, "need_facts": False}
     prior = state.get("research") or {}
@@ -963,9 +955,7 @@ async def product_matcher(state: SessionState) -> dict[str, Any]:
     primary_payload = hit_to_payload(primary)
     return {
         "primary_product": primary_payload,
-        "related_products": _related_payloads(
-            hits[1:], signal_hits, exclude={primary.product.id}
-        ),
+        "related_products": _related_payloads(hits[1:], signal_hits, exclude={primary.product.id}),
         "product_clarify": False,
         "product_context_ids": [primary_payload["product_id"]],
         "product_candidates": [],
@@ -1224,11 +1214,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     signal_ids = list(state.get("source_signal_ids") or [])
     # The cited set may legitimately be empty; a reviewer ask for a citation
     # can only be satisfied from the ranked pool, so allow that pool too.
-    ranked_ids = [
-        str(s["signal_id"])
-        for s in _ranked_signals(state)[:8]
-        if s.get("signal_id")
-    ]
+    ranked_ids = [str(s["signal_id"]) for s in _ranked_signals(state)[:8] if s.get("signal_id")]
     allowed_ids = list(dict.fromkeys([*signal_ids, *ranked_ids]))
     payload = {
         "draft": state.get("draft") or {},
@@ -1290,9 +1276,7 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
         "brief": state.get("brief") or {},
         "company": _slim_company(state),
         "voice_pack": {
-            k: v
-            for k, v in _voice_pack(state).items()
-            if k in ("roast_level", "locale")
+            k: v for k, v in _voice_pack(state).items() if k in ("roast_level", "locale")
         },
         "image_format": fmt,
     }

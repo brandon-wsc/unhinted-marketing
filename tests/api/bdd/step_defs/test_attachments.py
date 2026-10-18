@@ -43,9 +43,7 @@ from tests.api.attachment_helpers import (
 from tests.api.helpers import auth_header, register_user
 
 
-@scenario(
-    "../features/attachments.feature", "upload becomes lexical-ready before vectors"
-)
+@scenario("../features/attachments.feature", "upload becomes lexical-ready before vectors")
 def test_upload_becomes_lexical_ready() -> None:
     pass
 
@@ -55,23 +53,17 @@ def test_scanned_pdf_tells_the_truth() -> None:
     pass
 
 
-@scenario(
-    "../features/attachments.feature", "oversized file ingests a capped prefix and says so"
-)
+@scenario("../features/attachments.feature", "oversized file ingests a capped prefix and says so")
 def test_oversized_file_capped_prefix() -> None:
     pass
 
 
-@scenario(
-    "../features/attachments.feature", "a cold embedder never marks an attachment ready"
-)
+@scenario("../features/attachments.feature", "a cold embedder never marks an attachment ready")
 def test_cold_embedder_never_marks_ready() -> None:
     pass
 
 
-@scenario(
-    "../features/attachments.feature", "spreadsheet upload is steered to product import"
-)
+@scenario("../features/attachments.feature", "spreadsheet upload is steered to product import")
 def test_spreadsheet_steered_to_product_import() -> None:
     pass
 
@@ -89,16 +81,12 @@ def test_section_slices_work_while_embeddings_pending() -> None:
     pass
 
 
-@scenario(
-    "../features/attachments.feature", "documents never leak across companies"
-)
+@scenario("../features/attachments.feature", "documents never leak across companies")
 def test_documents_never_leak_across_companies() -> None:
     pass
 
 
-@scenario(
-    "../features/attachments.feature", "an attached file rides on the next message"
-)
+@scenario("../features/attachments.feature", "an attached file rides on the next message")
 def test_attached_file_rides_on_next_message() -> None:
     pass
 
@@ -147,9 +135,7 @@ def _drain_attachment_jobs(api, *, limit: int = 8) -> None:
     raise AssertionError("attachment job queue did not drain")
 
 
-def _upload_and_ingest(
-    api, bdd_ctx, filename: str, data: bytes, content_type: str
-) -> uuid.UUID:
+def _upload_and_ingest(api, bdd_ctx, filename: str, data: bytes, content_type: str) -> uuid.UUID:
     """Upload over real HTTP, run the worker jobs, return the attachment id."""
     res = _post_attachment(api, bdd_ctx, filename, data, content_type)
     assert res.status_code in (200, 201), res.text
@@ -209,9 +195,7 @@ def upload_attachment_refused(api, bdd_ctx, filename: str) -> None:
     """Upload a file the endpoint is expected to refuse (ADR 0047 §12)."""
     content_type = "text/csv" if filename.endswith(".csv") else "application/octet-stream"
     data = b"sku,name,price\nSKU-1,Milk Tea,48\n"
-    bdd_ctx["upload_response"] = _post_attachment(
-        api, bdd_ctx, filename, data, content_type
-    )
+    bdd_ctx["upload_response"] = _post_attachment(api, bdd_ctx, filename, data, content_type)
 
 
 @then(parsers.parse('the attachment status becomes "{status}"'))
@@ -282,7 +266,7 @@ def _read_document(api, bdd_ctx, *, query=None, section=None, attachment_id=None
 
 @given("the member has a ready attachment with an offer section")
 def member_has_offer_attachment(api, bdd_ctx, monkeypatch) -> None:
-    """"ready" here means retrievable: ``ready_lexical`` counts (ADR 0047 §7 —
+    """ "ready" here means retrievable: ``ready_lexical`` counts (ADR 0047 §7 —
     lexical + section slices already serve before vectors land). The offer
     doc is .md because the pdfium fixtures are ASCII-only."""
     patch_embedder(monkeypatch, none_embedder)
@@ -433,9 +417,7 @@ def _post_session_message(api, bdd_ctx, content: str) -> None:
 
 
 def _last_user_message(bdd_ctx) -> dict:
-    users = [
-        m for m in bdd_ctx["message_response"]["messages"] if m["role"] == "user"
-    ]
+    users = [m for m in bdd_ctx["message_response"]["messages"] if m["role"] == "user"]
     assert users, "no user message in POST /messages response"
     return users[-1]
 
@@ -458,16 +440,11 @@ def message_references_attachment(api, bdd_ctx) -> None:
     response carries the ``attachments`` digest chip ``{id, filename, status}``."""
     msg = _last_user_message(bdd_ctx)
     attachment_id = bdd_ctx["attachment_id"]
-    stored_ids = [
-        str(i)
-        for i in (msg.get("metadata") or {}).get(MESSAGE_ATTACHMENT_IDS_KEY) or []
-    ]
+    stored_ids = [str(i) for i in (msg.get("metadata") or {}).get(MESSAGE_ATTACHMENT_IDS_KEY) or []]
     assert str(attachment_id) in stored_ids, (
         f"user message metadata lacks {MESSAGE_ATTACHMENT_IDS_KEY}: {msg}"
     )
-    digest = _attachment_digest(
-        msg.get(MESSAGE_ATTACHMENTS_FIELD), attachment_id
-    )
+    digest = _attachment_digest(msg.get(MESSAGE_ATTACHMENTS_FIELD), attachment_id)
     assert digest is not None, f"message carries no attachment digest: {msg}"
     assert digest.get("filename")
     assert digest.get("status")
@@ -536,9 +513,7 @@ def no_committed_document_for_member(api, bdd_ctx) -> None:
     user-scope attachment appears for the member."""
     row = _attachment(api, bdd_ctx)
     assert row.owner_scope == "session"
-    saved = api.run(
-        list_attachment_rows(user_id=bdd_ctx["user_id"], owner_scope="user")
-    )
+    saved = api.run(list_attachment_rows(user_id=bdd_ctx["user_id"], owner_scope="user"))
     assert saved == []
 
 
@@ -575,11 +550,7 @@ def attachment_rows_and_object_removed(api, bdd_ctx) -> None:
 
 
 def _last_assistant_message(bdd_ctx) -> dict:
-    assistants = [
-        m
-        for m in bdd_ctx["message_response"]["messages"]
-        if m["role"] == "assistant"
-    ]
+    assistants = [m for m in bdd_ctx["message_response"]["messages"] if m["role"] == "assistant"]
     assert assistants, "no assistant message in POST /messages response"
     return assistants[-1]
 
@@ -640,9 +611,7 @@ def assistant_reply_carries_document_digest(bdd_ctx) -> None:
         f"no attachments digest in the chat prompt; model saw: {seen}"
     )
     content = _last_assistant_message(bdd_ctx)["content"]
-    assert content != "MISSING-DIGEST-SENTINEL", (
-        f"chat prompt carried no digest; model saw: {seen}"
-    )
+    assert content != "MISSING-DIGEST-SENTINEL", f"chat prompt carried no digest; model saw: {seen}"
     assert bdd_ctx["digest_filename"] in content
     assert bdd_ctx["digest_title"] in content
 
@@ -656,6 +625,4 @@ def reply_offers_draft_save_summarize_actions(bdd_ctx) -> None:
         f"no drafting action offered: {content!r}"
     )
     assert "存入" in content, f"no save-to-library action offered: {content!r}"
-    assert "重點" in content or "講吓" in content, (
-        f"no summarize action offered: {content!r}"
-    )
+    assert "重點" in content or "講吓" in content, f"no summarize action offered: {content!r}"
