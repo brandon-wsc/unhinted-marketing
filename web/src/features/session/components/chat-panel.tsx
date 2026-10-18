@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   Paperclip,
   Pencil,
+  RotateCcw,
   Square,
   Trash2,
   TriangleAlert,
@@ -174,6 +175,7 @@ export function ChatPanel() {
     setEditInsertAt,
     stagedAttachments,
     uploadAttachment,
+    retryAttachment,
     unstageAttachment,
     consumeStagedAttachments,
     restoreStagedAttachments,
@@ -927,6 +929,21 @@ export function ChatPanel() {
                               ? s.error
                               : t(`chat.attach.status.${attachmentStatusKey(s.status)}`)}
                           </span>
+                          {s.status === "failed" && s.file ? (
+                            <IconButton
+                              type="button"
+                              className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                              title={t("chat.attach.retry")}
+                              aria-label={t("chat.attach.retry")}
+                              onClick={() =>
+                                void retryAttachment(s.localId).catch(() =>
+                                  showError(t("chat.attach.uploadFailed")),
+                                )
+                              }
+                            >
+                              <RotateCcw className="size-3" />
+                            </IconButton>
+                          ) : null}
                           <IconButton
                             type="button"
                             className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
@@ -1431,7 +1448,10 @@ function AttachmentChips({
             </span>
           </span>
         );
-        if (failed || (!onDownload && !onSave)) return <li key={a.id}>{chip}</li>;
+        // Failed chips still offer the original download; saving broken ingest is hidden.
+        const canSave = !failed && !!onSave;
+        const canDownload = !!onDownload;
+        if (!canDownload && !canSave) return <li key={a.id}>{chip}</li>;
         return (
           <li key={a.id}>
             <DropdownMenu>
@@ -1445,13 +1465,13 @@ function AttachmentChips({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40">
-                {onDownload && (
+                {canDownload && (
                   <DropdownMenuItem onSelect={() => onDownload(a)}>
                     <Download className="size-3.5" />
                     {t("chat.attach.download")}
                   </DropdownMenuItem>
                 )}
-                {onSave && (
+                {canSave && (
                   <DropdownMenuItem onSelect={() => onSave(a)}>
                     <Bookmark className="size-3.5" />
                     {t("chat.attach.save")}

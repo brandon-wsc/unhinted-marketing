@@ -510,6 +510,7 @@ export function newStagedAttachment(file: File): StagedAttachment {
     size: file.size,
     attachmentId: null,
     status: "uploading",
+    file,
   };
 }
 

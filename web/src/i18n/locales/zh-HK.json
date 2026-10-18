@@ -112,6 +112,7 @@
       "save": "存入素材庫",
       "saved": "已存入素材庫",
       "saveFailed": "存入素材庫失敗",
+      "retry": "重試",
       "remove": "移除",
       "status": {
         "processing": "處理中",

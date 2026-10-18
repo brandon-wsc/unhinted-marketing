@@ -112,6 +112,7 @@
       "save": "Save to library",
       "saved": "Saved to library",
       "saveFailed": "Could not save to library",
+      "retry": "Retry",
       "remove": "Remove",
       "status": {
         "processing": "Processing",

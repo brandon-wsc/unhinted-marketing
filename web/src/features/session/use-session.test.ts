@@ -3246,6 +3246,30 @@ describe("useSession", () => {
       );
     });
 
+    it("retryAttachment re-uploads the same file after a failure", async () => {
+      hydrateEmpty();
+      apiUploadSessionAttachment
+        .mockRejectedValueOnce(new Error("boom"))
+        .mockResolvedValueOnce(attachmentOut({ status: "ready" }));
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      const file = new File(["pdf"], "notes.pdf", { type: "application/pdf" });
+      await act(async () => {
+        await expect(result.current.uploadAttachment(file)).rejects.toThrow("boom");
+      });
+      expect(result.current.stagedAttachments[0]?.status).toBe("failed");
+
+      const localId = result.current.stagedAttachments[0]?.localId ?? "";
+      await act(async () => {
+        await result.current.retryAttachment(localId);
+      });
+      expect(apiUploadSessionAttachment).toHaveBeenLastCalledWith("tok", "sess-1", file);
+      expect(result.current.stagedAttachments[0]?.status).toBe("ready");
+      expect(result.current.stagedAttachments[0]?.attachmentId).toBe("att-1");
+    });
+
     it("unstageAttachment drops a staged row", async () => {
       hydrateEmpty();
       apiUploadSessionAttachment.mockResolvedValue(attachmentOut({ status: "ready" }));

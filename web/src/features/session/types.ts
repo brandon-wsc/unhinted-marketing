@@ -63,6 +63,8 @@ export type StagedAttachment = {
   attachmentId: string | null;
   status: "uploading" | AttachmentStatus;
   error?: string | null;
+  /** Kept so a failed upload can re-POST the same bytes — digest restages have none. */
+  file?: File;
 };
 export type SessionEventData = Record<string, unknown>;
 export type SessionEvent = {

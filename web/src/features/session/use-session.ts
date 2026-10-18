@@ -1508,6 +1508,38 @@ export function useSession(companyId: string | undefined) {
     setStagedAttachments(next);
   }, []);
 
+  /** Re-POST the same File for a failed staged row (ADR 0047 §10 — no auto-retry). */
+  const retryAttachment = useCallback(
+    async (localId: string): Promise<void> => {
+      const cur = stagedRef.current.find((s) => s.localId === localId);
+      const sid = sessionIdRef.current;
+      if (!cur?.file || !accessToken || !sid) return;
+      const patch = (mut: (s: StagedAttachment) => StagedAttachment) => {
+        const next = stagedRef.current.map((s) => (s.localId === localId ? mut(s) : s));
+        stagedRef.current = next;
+        setStagedAttachments(next);
+      };
+      patch((s) => ({ ...s, status: "uploading", error: null }));
+      try {
+        const out = await apiUploadSessionAttachment(accessToken, sid, cur.file);
+        patch((s) => ({
+          ...s,
+          attachmentId: out.id,
+          status: out.status,
+          error: out.error ?? null,
+        }));
+      } catch (err) {
+        patch((s) => ({
+          ...s,
+          status: "failed",
+          error: err instanceof Error ? err.message : "upload_failed",
+        }));
+        throw err;
+      }
+    },
+    [accessToken],
+  );
+
   /** Take staged items for the next send; returns them so callers can restore on error. */
   const consumeStagedAttachments = useCallback((): StagedAttachment[] => {
     const cur = stagedRef.current;
@@ -2248,6 +2280,7 @@ export function useSession(companyId: string | undefined) {
     sendMessage,
     stagedAttachments,
     uploadAttachment,
+    retryAttachment,
     unstageAttachment,
     consumeStagedAttachments,
     restoreStagedAttachments,
