@@ -33,10 +33,17 @@ async def download_attachment(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
-    """Return the original file bytes to a member of the attachment's company."""
+    """Return the original file bytes — ADR 0047 §3 owner matrix.
+
+    ``org`` rows serve any company member; ``session``/``user`` rows are the
+    uploader's alone — company membership must not hand a colleague someone
+    else's scratch or Mine file. Every refusal is a uniform 404.
+    """
     attachment = await db.get(Attachment, attachment_id)
-    if attachment is None or not await repos.user_has_org_access(
-        db, user.id, attachment.company_id
+    if (
+        attachment is None
+        or not await repos.user_has_org_access(db, user.id, attachment.company_id)
+        or (attachment.owner_scope != "org" and attachment.user_id != user.id)
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found")
     try:

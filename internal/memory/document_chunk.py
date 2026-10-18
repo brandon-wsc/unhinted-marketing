@@ -167,6 +167,14 @@ def _table_chunk_texts(
             chunks.append("\n".join(current))
             current = [header_line]
             used = counter(header_line)
+        if used + cost > allowed:
+            # A lone row bigger than the budget can't ride whole — the
+            # embedder truncates it. Bounded continuations repeat the header.
+            limit = max(1, allowed - used - 1)
+            chunks.extend(
+                header_line + "\n" + piece for piece in _char_slices(line, limit, counter)
+            )
+            continue
         current.append(line)
         used += cost
     chunks.append("\n".join(current))

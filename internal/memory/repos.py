@@ -2146,12 +2146,15 @@ async def clear_migration_done_keys(db: AsyncSession) -> None:
 
 
 async def list_all_media_refs(db: AsyncSession) -> list[str]:
-    """All stored preview_images.url + preview_drafts.image_url (ADR 0025 enumerate)."""
+    """All stored preview_images.url + preview_drafts.image_url + attachment
+    object keys (ADR 0025 enumerate; ADR 0047 — a local→S3 flip must carry
+    scratch bytes too or every uploaded file strands behind the flip)."""
     images = (await db.scalars(select(PreviewImage.url).where(PreviewImage.url.is_not(None)))).all()
     drafts = (
         await db.scalars(select(PreviewDraft.image_url).where(PreviewDraft.image_url.is_not(None)))
     ).all()
-    return [u for u in (*images, *drafts) if u]
+    attachments = (await db.scalars(select(Attachment.object_key))).all()
+    return [u for u in (*images, *drafts, *attachments) if u]
 
 
 # --- Job queue (ADR 0039) ---------------------------------------------------

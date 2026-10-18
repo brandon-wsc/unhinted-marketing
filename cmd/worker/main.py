@@ -78,7 +78,8 @@ async def _job_attachment_embed(db: AsyncSession, job: Job) -> None:
         raise RuntimeError("attachment_embed job missing payload.attachment_id")
     from internal.memory.document_ingest import run_attachment_embed
 
-    await run_attachment_embed(db, attachment_id=uuid.UUID(str(raw)))
+    embed_round = int((job.payload or {}).get("embed_round") or 0)
+    await run_attachment_embed(db, attachment_id=uuid.UUID(str(raw)), embed_round=embed_round)
     logger.info("job %s attachment_embed: attachment=%s", job.id, raw)
 
 

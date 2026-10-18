@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 # sessions/{id}/r{revision}-{hex}.{ext} (hex optional for leftover rN.ext keys)
 _STORE_KEY_RE = re.compile(r"^sessions/[A-Za-z0-9_-]+/r\d+(?:-[0-9a-f]+)?\.[A-Za-z0-9]+$")
+# ADR 0047 scratch bytes — object-store keys, but never public: the
+# unauthenticated media route keeps gating on ``is_store_key`` only.
+_ATTACHMENT_KEY_RE = re.compile(r"^attachments/[0-9a-fA-F-]{36}/[^/]{1,300}$")
 _API_MEDIA_PREFIX = "/api/media/"
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -82,6 +85,15 @@ def sniff_image_bytes(data: bytes) -> tuple[str, str] | None:
 
 def is_store_key(value: str) -> bool:
     return bool(_STORE_KEY_RE.match(value))
+
+
+def is_attachment_key(value: str) -> bool:
+    return bool(_ATTACHMENT_KEY_RE.match(value))
+
+
+def _is_object_key(value: str) -> bool:
+    """Any real object key (preview image or attachment) for ref peeling."""
+    return is_store_key(value) or is_attachment_key(value)
 
 
 def _safe_relative_key(key: str) -> bool:
@@ -180,20 +192,20 @@ def extract_store_key(stored: str | None) -> str | None:
         return None
     if value.startswith("placeholder://") or value.startswith("data:"):
         return None
-    if is_store_key(value):
+    if _is_object_key(value):
         return value
     if value.startswith(_API_MEDIA_PREFIX):
         key = value[len(_API_MEDIA_PREFIX) :].lstrip("/")
-        return key if is_store_key(key) else None
+        return key if _is_object_key(key) else None
     if value.startswith("http://") or value.startswith("https://"):
         idx = value.find(_API_MEDIA_PREFIX)
         if idx >= 0:
             key = value[idx + len(_API_MEDIA_PREFIX) :].lstrip("/")
-            return key if is_store_key(key) else None
+            return key if _is_object_key(key) else None
         for prefix in _s3_peel_prefixes():
             if value.startswith(prefix):
                 key = value[len(prefix) :].lstrip("/")
-                return key if is_store_key(key) else None
+                return key if _is_object_key(key) else None
     return None
 
 

@@ -1223,6 +1223,7 @@ async def revise_while_image_parked(
     *,
     user_content: str,
     source_question_id: str | None = None,
+    attachment_ids: list[uuid.UUID] | None = None,
 ) -> dict[str, Any]:
     """Revise while awaiting Execute, then re-park (ADR 0036).
 
@@ -1250,6 +1251,7 @@ async def revise_while_image_parked(
         session,
         user_content=user_content,
         source_question_id=source_question_id,
+        attachment_ids=attachment_ids,
         discard_pre_state=accepted,
         pre_mode=pre_mode,
         skip_park_check=True,
@@ -1283,7 +1285,10 @@ async def run_session_turn(
         park_kind = await session_park_kind(session)
         if park_kind == "angle":
             # ADR 0028: a typed reply while parked at the angle gate IS the pick.
-            return await choose_angle_turn(db, session, angle_text=user_content)
+            # ADR 0047 §8: attachment_ids ride the reply — never dropped.
+            return await choose_angle_turn(
+                db, session, angle_text=user_content, attachment_ids=attachment_ids
+            )
         if park_kind == "image":
             # ADR 0036: a typed reply while image-parked is a new script, not a queue.
             return await revise_while_image_parked(
@@ -1291,6 +1296,7 @@ async def run_session_turn(
                 session,
                 user_content=user_content,
                 source_question_id=source_question_id,
+                attachment_ids=attachment_ids,
             )
         if park_kind is not None:
             raise SessionTurnConflict(
@@ -1405,6 +1411,7 @@ async def _resume_parked_turn(
     *,
     kind: ParkKind,
     user_pick_text: str | None = None,
+    attachment_ids: list[uuid.UUID] | None = None,
     apply_pick: Callable[[list[dict[str, Any]]], Awaitable[None]] | None = None,
     error_state_extra: dict[str, Any],
 ) -> dict[str, Any]:
@@ -1435,7 +1442,15 @@ async def _resume_parked_turn(
         )
         if not already_persisted:
             user_msg = await repos.add_session_message(
-                db, session_id=session_id, role="user", content=user_pick_text
+                db,
+                session_id=session_id,
+                role="user",
+                content=user_pick_text,
+                metadata=(
+                    {"attachment_ids": [str(aid) for aid in attachment_ids]}
+                    if attachment_ids
+                    else None
+                ),
             )
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
     if user_msg is not None:
@@ -1571,6 +1586,7 @@ async def choose_angle_turn(
     angle_text: str | None = None,
     persona: str | None = None,
     image_format: str | None = None,
+    attachment_ids: list[uuid.UUID] | None = None,
 ) -> dict[str, Any]:
     """Resume parked graph at interrupt_before angle_gate (ADR 0030).
 
@@ -1617,6 +1633,12 @@ async def choose_angle_turn(
             update["chosen_persona"] = picked_persona
         if picked_format is not None:
             update["chosen_image_format"] = picked_format
+        if attachment_ids is not None:
+            # ADR 0047 §13 — a typed pick carrying attachments re-hydrates
+            # digests so the resumed graph sees them like a normal turn.
+            update["attachments"] = await _hydrate_session_attachments(
+                db, session.id, referenced_ids=attachment_ids
+            )
         await graph.aupdate_state(_session_config(session.id), update)
 
     return await _resume_parked_turn(
@@ -1625,6 +1647,7 @@ async def choose_angle_turn(
         kind="angle",
         # Typed pick is persisted as a user row; a card index pick is not.
         user_pick_text=chosen if angle_index is None and angle_text is not None else None,
+        attachment_ids=attachment_ids,
         apply_pick=apply_pick,
         error_state_extra={"chosen_angle": None},
     )

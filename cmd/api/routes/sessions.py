@@ -510,7 +510,11 @@ async def _message_attachment_reachable(
     if attachment.owner_scope == "user":
         return attachment.user_id == user.id
     if attachment.owner_scope == "session":
-        if attachment.session_id == session.id and attachment.user_id == user.id:
+        if attachment.user_id != user.id:
+            # A join row alone never satisfies reachability — scratch belongs
+            # to its uploader, whoever's session references it.
+            return False
+        if attachment.session_id == session.id:
             return True
         return await db.get(AttachmentSession, (attachment.id, session.id)) is not None
     return False
@@ -1124,6 +1128,14 @@ async def post_session_image_upload(
 _MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # ADR 0047 §4 cap (10–20 MB/file)
 _SESSION_SCRATCH_CAP = 10  # ADR 0047 §14 — bound digest tokens per session
 _ATTACHMENT_ALLOWED_EXTS = {".pdf", ".docx", ".txt", ".md"}
+# Media type is derived server-side — the uploader's ``file.content_type``
+# is untrusted (a ".pdf" labelled text/html would echo as HTML on download).
+_ATTACHMENT_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".txt": "text/plain; charset=utf-8",
+    ".md": "text/markdown; charset=utf-8",
+}
 # ADR 0047 §12 — spreadsheets stay product-path only; steer, never ingest.
 _ATTACHMENT_SPREADSHEET_EXTS = {".csv", ".xlsx"}
 _ATTACHMENT_INGEST_KIND = "attachment_ingest"
@@ -1210,7 +1222,7 @@ async def post_session_attachment(
 
     attachment_id = uuid.uuid4()
     object_key = f"attachments/{attachment_id}/{filename}"
-    content_type = file.content_type or "application/octet-stream"
+    content_type = _ATTACHMENT_CONTENT_TYPES[ext]
     try:
         await put_bytes(key=object_key, data=raw, content_type=content_type)
     except MediaStorageError as exc:
