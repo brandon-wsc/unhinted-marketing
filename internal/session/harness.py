@@ -16,21 +16,31 @@ from typing import Any
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, RunCancelled
 from pydantic_ai.models import Model
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.llm.recorder import LlmCallRecordBuilder, track
 from internal.llm.resolve import gemini_catalog_id, openai_compat_model_id, resolve_llm_model
 from internal.llm.router import LlmProviderError, ModelTier
+from internal.memory import document_retrieve
 from internal.memory.repos import list_top_signals
 from internal.session import prompts
 from internal.session.context import get_db
 from internal.session.events import session_event_bus
 from internal.session.tiers import NODE_MODEL_TIERS
-from schemas.tools import QueryMarketTrendsResponse, QueryMarketTrendsSignal
+from schemas.tools import (
+    QueryMarketTrendsResponse,
+    QueryMarketTrendsSignal,
+    ReadAttachmentResponse,
+    ReadAttachmentSlice,
+)
 
 logger = logging.getLogger(__name__)
 
 PUBLISH_TOOL_NAMES = frozenset({"publish_social_post"})
-CHAT_TOOL_NAMES = frozenset({"query_market_trends"})
+CHAT_TOOL_NAMES = frozenset({"query_market_trends", "read_attachment"})
+
+# ADR 0047 §6 — per-turn read_attachment budget (chosen cap in the 2–3 range).
+MAX_ATTACHMENT_READS_PER_TURN = 3
 
 # Match nodes._DELTA_FLUSH_CHARS — long replies must not overflow SSE queues.
 _DELTA_FLUSH_CHARS = 24
@@ -41,6 +51,11 @@ _model_override: Model | None = None
 @dataclass
 class ChatDeps:
     company_id: uuid.UUID | None = None
+    # ADR 0047 §14 — owner scope is re-checked on every read_attachment call;
+    # the ids the LLM emits are untrusted, so the tool needs both ids.
+    user_id: uuid.UUID | None = None
+    # Per-turn read_attachment counter (deps are rebuilt each turn).
+    attachment_reads: int = 0
 
 
 def set_chat_model_override(model: Model | None) -> None:
@@ -160,6 +175,95 @@ async def query_market_trends(
     return await lookup_market_trends(region, limit)
 
 
+async def read_document(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID,
+    user_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    query: str | None = None,
+    section: str | None = None,
+) -> dict | None:
+    """Module-level retrieve seam for ``read_attachment`` (ADR 0047 §6).
+
+    Same monkeypatchable style as ``document_ingest.embed_texts``: unpatched it
+    delegates to ``document_retrieve.read_document`` looked up on the module, so
+    patching either site keeps tests hermetic.
+    """
+    return await document_retrieve.read_document(
+        db,
+        company_id=company_id,
+        user_id=user_id,
+        attachment_id=attachment_id,
+        query=query,
+        section=section,
+    )
+
+
+async def read_attachment(
+    ctx: RunContext[ChatDeps],
+    attachment_id: str,
+    query: str | None = None,
+    section: str | None = None,
+) -> ReadAttachmentResponse:
+    """Read-only slices from one session attachment (ADR 0047 §5/§6/§14).
+
+    Never raises and never returns full document text: every refusal is
+    ``slices=[]`` + a non-empty ``error``. A call with neither ``query`` nor
+    ``section`` is refused before the seam (the service would refuse anyway);
+    ``attachment_reads`` is the per-turn budget — only calls that pass local
+    validation count against it.
+    """
+    deps = ctx.deps
+    q = (query or "").strip()
+    s = (section or "").strip()
+    if not q and not s:
+        return ReadAttachmentResponse(
+            error="missing_query_or_section: pass query= or section="
+        )
+    try:
+        att_id = uuid.UUID(str(attachment_id))
+    except (ValueError, TypeError, AttributeError):
+        return ReadAttachmentResponse(error="invalid_attachment_id")
+    if deps.company_id is None or deps.user_id is None:
+        # §14 — without both ids the tool cannot re-check owner scope.
+        return ReadAttachmentResponse(error="missing_scope")
+    try:
+        db = get_db()
+    except RuntimeError:
+        return ReadAttachmentResponse(error="no_session_db")
+    deps.attachment_reads += 1
+    if deps.attachment_reads > MAX_ATTACHMENT_READS_PER_TURN:
+        return ReadAttachmentResponse(
+            error=f"budget_exceeded: max {MAX_ATTACHMENT_READS_PER_TURN} reads per turn"
+        )
+    try:
+        result = await read_document(
+            db,
+            company_id=deps.company_id,
+            user_id=deps.user_id,
+            attachment_id=att_id,
+            query=q or None,
+            section=s or None,
+        )
+    except Exception as exc:  # noqa: BLE001 — the tool must never raise to the LLM
+        logger.warning("read_attachment seam failed: %s", exc)
+        return ReadAttachmentResponse(error="read_failed")
+    if not isinstance(result, dict) or not result:
+        # §14 — unknown / out-of-scope ids are indistinguishable.
+        return ReadAttachmentResponse(error="not_found_or_out_of_scope")
+    slices = [
+        ReadAttachmentSlice(
+            chunk_id=str(item.get("chunk_id") or ""),
+            ref=str(item.get("ref") or ""),
+            text=str(item.get("text") or ""),
+        )
+        for item in result.get("slices") or []
+        if isinstance(item, dict)
+    ]
+    return ReadAttachmentResponse(slices=slices, partial=bool(result.get("partial")))
+
+
 async def slow_probe(ctx: RunContext[ChatDeps]) -> str:
     """Test-only: sleep so Stop/cancel can be observed mid-tool. Never register in prod."""
     del ctx
@@ -172,7 +276,7 @@ def build_chat_agent(
     model: Model,
     extra_tools: Sequence[Any] = (),
 ) -> Agent[ChatDeps, str]:
-    tools: list[Any] = [query_market_trends, *extra_tools]
+    tools: list[Any] = [query_market_trends, read_attachment, *extra_tools]
     return Agent(
         model,
         deps_type=ChatDeps,

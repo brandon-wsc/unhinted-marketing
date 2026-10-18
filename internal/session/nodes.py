@@ -720,6 +720,20 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
     return out
 
 
+# ADR 0047 §5 — digest-only whitelist for the chat payload; raw doc_profile
+# or chunk text must never reach the prompt.
+_CHAT_ATTACHMENT_FIELDS = ("id", "filename", "title", "kind_guess", "status", "partial")
+
+
+def _chat_attachment_digests(state: SessionState) -> list[dict[str, Any]]:
+    """Whitelist ``state["attachments"]`` digests for the chat prompt (§5/§13)."""
+    out: list[dict[str, Any]] = []
+    for digest in state.get("attachments") or []:
+        if isinstance(digest, dict):
+            out.append({key: digest.get(key) for key in _CHAT_ATTACHMENT_FIELDS})
+    return out
+
+
 async def _chat_stream(state: SessionState, user: str) -> str | None:
     """Stream the chat reply via the Pydantic AI harness (ADR 0019)."""
     history = (state.get("messages") or [])[-8:]
@@ -740,6 +754,7 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
             "product_clarify": bool(state.get("product_clarify")),
             "product_candidates": (state.get("product_candidates") or [])[:3],
             "primary_product": state.get("primary_product"),
+            "attachments": _chat_attachment_digests(state),
         },
         ensure_ascii=False,
     )
@@ -750,10 +765,17 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
             company_id = uuid.UUID(str(raw_company))
         except ValueError:
             company_id = None
+    user_id: uuid.UUID | None = None
+    raw_user = state.get("user_id")
+    if raw_user:
+        try:
+            user_id = uuid.UUID(str(raw_user))
+        except ValueError:
+            user_id = None
     return await stream_chat_reply(
         user_prompt=payload,
         session_id=_thread_uuid(state),
-        deps=ChatDeps(company_id=company_id),
+        deps=ChatDeps(company_id=company_id, user_id=user_id),
     )
 
 
@@ -792,6 +814,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
                                 "roast_level": pack.get("roast_level"),
                                 "locale": pack.get("locale"),
                             },
+                            "attachments": _chat_attachment_digests(state),
                         },
                         ensure_ascii=False,
                     ),
