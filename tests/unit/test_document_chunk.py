@@ -188,3 +188,21 @@ def test_parse_then_chunk_end_to_end() -> None:
     assert chunks[1].kind == "text" and chunks[1].heading_path == "產品目錄 > 優惠詳情"
     assert all(c.page_start is None and c.page_end is None for c in chunks)
     assert result.truncated is False
+
+
+def test_oversized_single_table_row_splits_with_header() -> None:
+    """A lone row larger than the budget must not ride whole — the embedder
+    truncates it and the row's tail loses vector coverage. Bounded
+    continuations each repeat the header row."""
+    big_cell = "超長產品描述" * 40  # ~240 chars, way over budget
+    md = f"| 名稱 | 描述 |\n| --- | --- |\n| 產品A | {big_cell} |\n| 產品B | 正常 |\n"
+    result = _chunk(md, budget=60)
+    tables = [c for c in result.chunks if c.kind == "table"]
+    assert len(tables) >= 3, tables
+    for chunk in tables:
+        assert len(_embed_text(chunk)) <= 60, chunk.text
+        first_line = chunk.text.splitlines()[0]
+        assert "名稱" in first_line and "描述" in first_line
+    joined = "".join(c.text for c in tables)
+    assert "產品A" in joined and "產品B" in joined
+    assert big_cell[:20] in joined and big_cell[-20:] in joined

@@ -310,3 +310,116 @@ async def test_ingest_job_dedupes_per_attachment(
 
     job = await run_next_job(db_session)
     assert job is not None and job.status == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_cold_embedder_reschedules_fresh_embed_job(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cold pass must enqueue a *new* runnable job — reusing the current
+    job's one-shot dedupe key dead-ends the attachment at ``ready_lexical``
+    forever (the row's key already exists once its job succeeded)."""
+    patch_embedder(monkeypatch, none_embedder)
+    user_id, company_id, session_id = await _member_with_session(client, db_session)
+    attachment_id = await _seed_pdf(
+        db_session, user_id=user_id, company_id=company_id, session_id=session_id
+    )
+    await run_next_job(db_session)  # ingest → ready_lexical + embed job :0
+
+    embed_job = await run_next_job(db_session)  # cold pass again
+    assert embed_job is not None and embed_job.kind == ATTACHMENT_EMBED_KIND
+    assert embed_job.status == "succeeded"
+
+    embed_jobs = await fetch_jobs(db_session, kind=ATTACHMENT_EMBED_KIND)
+    assert len(embed_jobs) == 2, "cold pass must schedule a follow-up, not collide"
+    assert embed_jobs[1].status == "pending"
+    assert embed_jobs[1].dedupe_key != embed_jobs[0].dedupe_key
+
+    # When the embedder warms, the follow-up completes the job.
+    patch_embedder(monkeypatch, warm_embedder)
+    from tests.api.attachment_helpers import run_embed
+
+    await run_embed(db_session, attachment_id)
+    row = await fetch_attachment(db_session, attachment_id)
+    assert row.status == "ready"
+    assert all(c.embedding is not None for c in await fetch_chunks(db_session, attachment_id))
+
+
+@pytest.mark.asyncio
+async def test_cold_embedder_stops_rescheduling_after_cap(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A permanently-cold embedder must not loop forever — after the
+    reschedule cap the row stays honestly ``ready_lexical`` (lexical
+    retrieval still works), not ``ready`` and not a job-queue burn."""
+    patch_embedder(monkeypatch, none_embedder)
+    user_id, company_id, session_id = await _member_with_session(client, db_session)
+    attachment_id = await _seed_pdf(
+        db_session, user_id=user_id, company_id=company_id, session_id=session_id
+    )
+    await run_next_job(db_session)
+
+    from internal.memory.document_ingest import _EMBED_MAX_RESCHEDULES
+    from tests.api.attachment_helpers import run_embed
+
+    for embed_round in range(_EMBED_MAX_RESCHEDULES + 2):
+        await run_embed(db_session, attachment_id, embed_round=embed_round)
+
+    embed_jobs = await fetch_jobs(db_session, kind=ATTACHMENT_EMBED_KIND)
+    assert len(embed_jobs) <= _EMBED_MAX_RESCHEDULES + 1
+    row = await fetch_attachment(db_session, attachment_id)
+    assert row.status == "ready_lexical"
+
+
+@pytest.mark.asyncio
+async def test_empty_document_marks_failed_not_ready(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Zero-byte / heading-only input yields no chunks — that is a permanent
+    ``failed`` with readable error (§10), never a false ``ready`` with no
+    retrievable text."""
+    patch_embedder(monkeypatch, warm_embedder)
+    user_id, company_id, session_id = await _member_with_session(client, db_session)
+    attachment_id = await seed_pending_attachment(
+        db_session,
+        user_id=user_id,
+        company_id=company_id,
+        session_id=session_id,
+        filename="notes.txt",
+        data=b"",
+        content_type="text/plain",
+    )
+
+    job = await run_next_job(db_session)
+    assert job is not None and job.status == "succeeded"  # no retry burn
+
+    row = await fetch_attachment(db_session, attachment_id)
+    assert row.status == "failed"
+    assert row.error and "text" in row.error.lower()
+    assert await fetch_chunks(db_session, attachment_id) == []
+
+
+@pytest.mark.asyncio
+async def test_embed_runs_off_worker_event_loop(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AGENTS.md review rule: CPU-bound ONNX inference inside async handlers
+    runs in a worker thread — a warm embed must never pin the loop."""
+    import threading
+
+    loop_ident = threading.get_ident()
+    seen: list[int] = []
+
+    def spy(texts: list[str]) -> list[list[float] | None]:
+        seen.append(threading.get_ident())
+        return [None] * len(texts)
+
+    patch_embedder(monkeypatch, spy)
+    user_id, company_id, session_id = await _member_with_session(client, db_session)
+    attachment_id = await _seed_pdf(
+        db_session, user_id=user_id, company_id=company_id, session_id=session_id
+    )
+
+    await run_ingest(db_session, attachment_id)
+    assert seen, "embed seam was never called"
+    assert all(ident != loop_ident for ident in seen)

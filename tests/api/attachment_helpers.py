@@ -68,8 +68,10 @@ def attachment_ingest_dedupe_key(attachment_id: uuid.UUID) -> str:
     return f"{ATTACHMENT_INGEST_KIND}:{attachment_id}"
 
 
-def attachment_embed_dedupe_key(attachment_id: uuid.UUID) -> str:
-    return f"{ATTACHMENT_EMBED_KIND}:{attachment_id}"
+def attachment_embed_dedupe_key(attachment_id: uuid.UUID, embed_round: int = 0) -> str:
+    """Dedupe keys carry a reschedule round — a cold-embedder follow-up must
+    get a fresh key, not collide with the job that just ran."""
+    return f"{ATTACHMENT_EMBED_KIND}:{attachment_id}:{embed_round}"
 
 
 # --- document fixtures ------------------------------------------------------
@@ -295,11 +297,11 @@ async def run_ingest(db: AsyncSession, attachment_id: uuid.UUID) -> None:
     await db.commit()
 
 
-async def run_embed(db: AsyncSession, attachment_id: uuid.UUID) -> None:
+async def run_embed(db: AsyncSession, attachment_id: uuid.UUID, embed_round: int = 0) -> None:
     """Run the second-phase embed handler directly."""
     from internal.memory.document_ingest import run_attachment_embed
 
-    await run_attachment_embed(db, attachment_id=attachment_id)
+    await run_attachment_embed(db, attachment_id=attachment_id, embed_round=embed_round)
     await db.commit()
 
 
@@ -483,7 +485,9 @@ class StubSessionGraph:
 
     async def ainvoke(self, graph_input, config):
         self.last_input = graph_input
-        values = dict(graph_input or {})
+        # Parked resumes call ainvoke(None) — the interrupted state's values
+        # (set via aupdate_state) carry forward like a real checkpoint.
+        values = {**self._values, **dict(graph_input or {})}
         if self.reply is not None:
             values["messages"] = [
                 *(values.get("messages") or []),
@@ -491,6 +495,9 @@ class StubSessionGraph:
             ]
         self._values = values
         return values
+
+    async def aupdate_state(self, config, update):
+        self._values.update(dict(update or {}))
 
     async def aget_state(self, config):
         return SimpleNamespace(values=dict(self._values), next=())
