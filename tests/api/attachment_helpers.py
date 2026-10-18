@@ -551,3 +551,189 @@ async def read_object_bytes(key: str) -> bytes | None:
         return await get_bytes(key)
     except MediaStorageError:
         return None
+
+
+# --- read_attachment tool seams (ADR 0047 §5/§6/§14) ------------------------------
+#
+# Invented names the chat-tool step must satisfy (mirrored in
+# tests/unit/test_read_attachment_tool.py,
+# tests/unit/test_session_chat_attachments.py and the zero-instruction
+# step defs in tests/api/bdd/step_defs/test_attachments.py):
+#
+# - ``internal.session.harness.read_attachment`` — async Pydantic AI tool fn
+#   ``(ctx: RunContext[ChatDeps], attachment_id: str, query: str | None = None,
+#   section: str | None = None) -> ReadAttachmentResponse``. Registered on the
+#   chat agent; ``CHAT_TOOL_NAMES`` gains ``"read_attachment"`` and stays
+#   disjoint from ``PUBLISH_TOOL_NAMES``.
+# - ``schemas.tools.ReadAttachmentSlice {chunk_id: str, ref: str, text: str}``
+#   and ``schemas.tools.ReadAttachmentResponse {slices: [ReadAttachmentSlice],
+#   partial: bool, error: str | None}`` — the ONLY fields the LLM ever sees
+#   (§5: digests + slices, never doc_profile / full document text).
+# - ``ChatDeps`` gains ``user_id: uuid.UUID | None`` and a per-turn counter
+#   ``attachment_reads: int``; ``harness.MAX_ATTACHMENT_READS_PER_TURN = 3``
+#   pins the ADR "≤2–3 calls per turn" cap — call #4 in one turn returns an
+#   error whose string contains ``"budget"`` (chosen: ``"budget_exceeded"``).
+# - ``harness.read_document`` — module-level seam the tool invokes, signature
+#   mirroring ``document_retrieve.read_document`` (same monkeypatchable style
+#   as ``document_ingest.embed_texts`` / ``document_retrieve.embed_query``).
+# - Refusals never raise: ``slices=[]`` + non-empty ``error`` for seam
+#   refusals (unknown/out-of-scope id → ``None``), a call with neither
+#   ``query`` nor ``section`` (chosen: refused before the seam), an
+#   unparsable ``attachment_id``, and a missing session-db context.
+
+READ_ATTACHMENT_TOOL = "read_attachment"
+"""Pydantic AI tool name — ``CHAT_TOOL_NAMES`` member, never a publish tool."""
+
+MAX_ATTACHMENT_READS = 3
+"""Chosen per-turn budget (ADR 0047 §6 "≤2–3 calls"); the impl pins the same
+cap as ``harness.MAX_ATTACHMENT_READS_PER_TURN``."""
+
+PAYLOAD_ATTACHMENTS_KEY = "attachments"
+"""``_chat_stream`` JSON payload key for the per-turn digest list:
+``[{id, filename, title, kind_guess, status, partial}]`` (§5/§13)."""
+
+FULL_TEXT_SENTINEL = "FULL-TEXT-LEAK-SENTINEL-全文外洩照出嚟"
+"""Canary planted in a fake state-digest field a correct ``_chat_stream``
+must never forward: the prompt carries digest fields only, never raw
+document/chunk text (§5)."""
+
+
+def model_prompt_text(messages) -> str:
+    """Flatten every string ``part.content`` of a pydantic-ai ModelMessage
+    list — the FunctionModel probe for what the agent actually saw."""
+    texts: list[str] = []
+    for message in messages or []:
+        for part in getattr(message, "parts", []) or []:
+            content = getattr(part, "content", None)
+            if isinstance(content, str):
+                texts.append(content)
+    return "\n".join(texts)
+
+
+def make_digest_probe_model(
+    *,
+    filename: str,
+    title: str,
+    reply: str,
+    seen: dict,
+    sentinel: str = FULL_TEXT_SENTINEL,
+):
+    """FunctionModel + stream_function pair for ``set_chat_model_override``.
+
+    The model emits ``reply`` ONLY when the prompt it was served carries the
+    attachment digest (``"attachments"`` key + ``filename`` + ``title``) and
+    no ``sentinel`` full-text leak — otherwise a ``MISSING-DIGEST`` marker,
+    so assertions stay red until ``_chat_stream`` wires digests in (§5).
+    ``seen`` records what the model observed for Then-step assertions.
+    """
+    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.models.function import FunctionModel
+
+    def _decide(messages) -> str:
+        blob = model_prompt_text(messages)
+        seen["prompt_text"] = blob
+        seen["saw_attachments_key"] = f'"{PAYLOAD_ATTACHMENTS_KEY}"' in blob
+        seen["saw_filename"] = filename in blob
+        seen["saw_title"] = title in blob
+        seen["saw_full_text"] = sentinel in blob
+        if (
+            seen["saw_attachments_key"]
+            and seen["saw_filename"]
+            and seen["saw_title"]
+            and not seen["saw_full_text"]
+        ):
+            return reply
+        return "MISSING-DIGEST-SENTINEL"
+
+    def fn(messages, agent_info):
+        return ModelResponse(parts=[TextPart(content=_decide(messages))])
+
+    async def stream_fn(messages, agent_info):
+        yield _decide(messages)
+
+    return FunctionModel(fn, stream_function=stream_fn)
+
+
+def make_read_attachment_driver(
+    *,
+    calls: list[dict],
+    returns_seen: list,
+    final_text: str,
+):
+    """FunctionModel that issues ``read_attachment`` ToolCallParts — one per
+    model invocation until ``calls`` is exhausted — recording every
+    ToolReturnPart content into ``returns_seen`` before emitting
+    ``final_text``. Deterministic, sequential calls so per-turn budgets are
+    observable."""
+    import json as _json
+
+    from pydantic_ai.messages import (
+        ModelResponse,
+        TextPart,
+        ToolCallPart,
+        ToolReturnPart,
+    )
+    from pydantic_ai.models.function import DeltaToolCall, FunctionModel
+
+    seen_ids: set[str] = set()
+
+    def _decide(messages) -> tuple[str, dict | None]:
+        for message in messages or []:
+            for part in getattr(message, "parts", []) or []:
+                if (
+                    isinstance(part, ToolReturnPart)
+                    and part.tool_call_id not in seen_ids
+                ):
+                    seen_ids.add(part.tool_call_id)
+                    returns_seen.append(str(part.content))
+        idx = len(returns_seen)
+        if idx < len(calls):
+            return ("tool", calls[idx])
+        return ("text", None)
+
+    def fn(messages, agent_info):
+        kind, call = _decide(messages)
+        if kind == "tool":
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        tool_name=READ_ATTACHMENT_TOOL,
+                        args=dict(call),
+                    )
+                ]
+            )
+        return ModelResponse(parts=[TextPart(content=final_text)])
+
+    async def stream_fn(messages, agent_info):
+        kind, call = _decide(messages)
+        if kind == "tool":
+            yield {
+                0: DeltaToolCall(
+                    name=READ_ATTACHMENT_TOOL,
+                    json_args=_json.dumps(call),
+                )
+            }
+        else:
+            yield final_text
+
+    return FunctionModel(fn, stream_function=stream_fn)
+
+
+def patch_read_document_seam(monkeypatch: pytest.MonkeyPatch, stub) -> None:
+    """Patch the ``read_document`` seam wherever the chat tool may look it up
+    (same dual-site style as ``patch_query_embedder``): ``harness.read_document``
+    covers a module-level binding the tool calls directly;
+    ``document_retrieve.read_document`` covers a ``from ... import`` /
+    module-attribute call site. Both use ``raising=False`` — either binding
+    may legitimately be the only one an impl defines."""
+    try:
+        from internal.session import harness
+    except ImportError:
+        pass
+    else:
+        monkeypatch.setattr(harness, "read_document", stub, raising=False)
+    try:
+        from internal.memory import document_retrieve
+    except ImportError:
+        return
+    monkeypatch.setattr(document_retrieve, "read_document", stub, raising=False)

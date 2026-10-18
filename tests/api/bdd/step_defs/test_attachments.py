@@ -29,6 +29,7 @@ from tests.api.attachment_helpers import (
     fetch_join_rows,
     fetch_session_row,
     list_attachment_rows,
+    make_digest_probe_model,
     make_offer_markdown,
     make_over_cap_text,
     make_pdf_with_outline,
@@ -99,6 +100,14 @@ def test_documents_never_leak_across_companies() -> None:
     "../features/attachments.feature", "an attached file rides on the next message"
 )
 def test_attached_file_rides_on_next_message() -> None:
+    pass
+
+
+@scenario(
+    "../features/attachments.feature",
+    "zero-instruction upload asks instead of pretending",
+)
+def test_zero_instruction_upload_asks_instead_of_pretending() -> None:
     pass
 
 
@@ -552,3 +561,101 @@ def attachment_rows_and_object_removed(api, bdd_ctx) -> None:
     assert api.run(fetch_chunk_count(attachment_id)) == 0
     assert api.run(fetch_join_rows(attachment_id)) == []
     assert api.run(read_object_bytes(bdd_ctx["object_key"])) is None
+
+
+# --- read_attachment chat tool (ADR 0047 §5/§6/§8/§14) ----------------------------
+#
+# The zero-instruction scenario runs the REAL compiled session graph — the
+# Given's StubSessionGraph is swapped out in the When step — with a canned
+# ``route_intent`` classifier (``complete_json`` → intent="chat") and a
+# FunctionModel that only produces the offering reply when the prompt it
+# was served carries the attachment digest. Everything between POST
+# /messages and the chat node — _invoke_graph, digest hydration,
+# _chat_stream, the Pydantic AI harness — runs for real.
+
+
+def _last_assistant_message(bdd_ctx) -> dict:
+    assistants = [
+        m
+        for m in bdd_ctx["message_response"]["messages"]
+        if m["role"] == "assistant"
+    ]
+    assert assistants, "no assistant message in POST /messages response"
+    return assistants[-1]
+
+
+@when("they send a message with only the attachment")
+def send_message_with_only_attachment(api, bdd_ctx, monkeypatch) -> None:
+    """POST /messages with ``attachment_ids`` and a minimal content through
+    the real graph; the FunctionModel crafts the §8 offering reply only
+    when the prompt carries the digest — red until ``_chat_stream`` wires
+    ``state["attachments"]`` into the payload."""
+    import json as _json
+
+    from internal.session import harness as H
+    from internal.session import nodes as N
+
+    set_session_graph(None)  # real graph — the Given set a StubSessionGraph
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+
+    async def _route_json(**_kwargs):
+        # Canned intent classifier — keeps the turn deterministic while
+        # everything else (chat node, harness, hydration) runs for real.
+        return _json.dumps({"intent": "chat", "research": {}})
+
+    monkeypatch.setattr(N, "complete_json", _route_json)
+
+    row = _attachment(api, bdd_ctx)
+    title = str((row.doc_profile or {}).get("title") or row.filename)
+    bdd_ctx["digest_filename"] = row.filename
+    bdd_ctx["digest_title"] = title
+    reply = (
+        f"收到 {row.filename}（{title}）。我可以幫你："
+        "用呢份嘢出 post、存入我嘅庫、或者講吓重點。想點？"
+    )
+    seen: dict = {}
+    monkeypatch.setattr(
+        H,
+        "_model_override",
+        make_digest_probe_model(
+            filename=row.filename,
+            title=title,
+            reply=reply,
+            seen=seen,
+        ),
+    )
+    bdd_ctx["model_seen"] = seen
+    _post_session_message(api, bdd_ctx, "用呢份嘢")
+
+
+@then("the assistant reply carries the document digest")
+def assistant_reply_carries_document_digest(bdd_ctx) -> None:
+    """§8/§5: the reply quotes digest facts (filename + title) — which the
+    FunctionModel only writes when the prompt actually carried the digest."""
+    seen = bdd_ctx.get("model_seen") or {}
+    assert seen.get("saw_full_text") is not True, (
+        "chat prompt leaked a non-digest field — §5 digest-only violation"
+    )
+    assert seen.get("saw_attachments_key"), (
+        f"no attachments digest in the chat prompt; model saw: {seen}"
+    )
+    content = _last_assistant_message(bdd_ctx)["content"]
+    assert content != "MISSING-DIGEST-SENTINEL", (
+        f"chat prompt carried no digest; model saw: {seen}"
+    )
+    assert bdd_ctx["digest_filename"] in content
+    assert bdd_ctx["digest_title"] in content
+
+
+@then("the reply offers actions for drafting, saving and summarizing")
+def reply_offers_draft_save_summarize_actions(bdd_ctx) -> None:
+    """§8: ambiguity asks — the reply offers draft / save-to-library /
+    summarize actions instead of pretending the doc was read."""
+    content = _last_assistant_message(bdd_ctx)["content"]
+    assert "post" in content.lower() or "出帖" in content, (
+        f"no drafting action offered: {content!r}"
+    )
+    assert "存入" in content, f"no save-to-library action offered: {content!r}"
+    assert "重點" in content or "講吓" in content, (
+        f"no summarize action offered: {content!r}"
+    )
