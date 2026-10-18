@@ -215,3 +215,12 @@ def test_extract_store_key_accepts_attachment_keys() -> None:
     from internal.media.storage import is_store_key
 
     assert is_store_key(key) is False
+
+
+def test_extract_store_key_accepts_long_attachment_names() -> None:
+    """Long (but stored) attachment filenames must still enumerate — the
+    upload cap bounds new keys, and older/foreign keys peel regardless."""
+    from internal.media.storage import extract_store_key
+
+    key = f"attachments/{uuid.uuid4()}/{'a' * 320}.pdf"
+    assert extract_store_key(key) == key

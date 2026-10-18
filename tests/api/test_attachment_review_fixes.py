@@ -22,6 +22,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from internal.memory import repos
 from internal.memory.models import AttachmentSession, Session
 from internal.session.graph import set_session_graph
 from tests.api.attachment_helpers import (
@@ -257,6 +258,20 @@ async def test_media_ref_enumeration_includes_attachment_keys(
 
 
 @pytest.mark.asyncio
+async def test_upload_rejects_overlong_filename(client: AsyncClient) -> None:
+    """A filename whose UTF-8 bytes exceed the cap is refused up front —
+    local stores cap path components at 255 bytes, and migration enumeration
+    must never see a key it can't classify."""
+    _data, headers, session_id = await _member_and_session(client)
+    res = await client.post(
+        f"/api/sessions/{session_id}/attachments",
+        files={"file": ("a" * 250 + ".pdf", PDF_UPLOAD[1], "application/pdf")},
+        headers=headers,
+    )
+    assert res.status_code == 400, res.text
+
+
+@pytest.mark.asyncio
 async def test_parked_image_reply_keeps_attachment_refs(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -293,6 +308,52 @@ async def test_parked_image_reply_keeps_attachment_refs(
     assert attachment_id in (msg.get("metadata") or {}).get("attachment_ids", [])
     chips = {str(d.get("id")) for d in msg.get("attachments") or []}
     assert attachment_id in chips, f"no digest chip on parked-reply message: {msg}"
+
+
+@pytest.mark.asyncio
+async def test_retried_angle_pick_merges_attachment_refs(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Idempotent-retry edge: the first typed pick already persisted a user
+    row with no refs; a retry carrying ``attachment_ids`` must merge them
+    onto that row (chips + digests), not drop them with the skip."""
+    patch_embedder(monkeypatch, none_embedder)
+    set_session_graph(StubSessionGraph(reply="好"))
+    _data, headers, session_id = await _member_and_session(client)
+    uploaded = await _upload(
+        client,
+        session_id,
+        headers,
+        filename="offers.md",
+        data=make_offer_markdown(),
+        content_type="text/markdown",
+    )
+    attachment_id = uploaded["id"]
+
+    session = await db_session.get(Session, session_id)
+    assert session is not None
+    session.state = {
+        **(session.state or {}),
+        "awaiting_angle_pick": True,
+        "brief": {"angles": ["慳錢角度", "打卡角度"]},
+    }
+    # Simulates the earlier failed pick attempt that persisted its user row.
+    pick_text = "用打卡角度"
+    await repos.add_session_message(
+        db_session, session_id=session_id, role="user", content=pick_text
+    )
+    await db_session.commit()
+
+    posted = await client.post(
+        f"/api/sessions/{session_id}/messages",
+        json={"content": pick_text, "attachment_ids": [attachment_id]},
+        headers=headers,
+    )
+    assert posted.status_code == 200, posted.text
+    msg = _last_user_message(posted.json())
+    assert attachment_id in (msg.get("metadata") or {}).get("attachment_ids", []), msg
+    chips = {str(d.get("id")) for d in msg.get("attachments") or []}
+    assert attachment_id in chips, f"no digest chip on retried pick: {msg}"
 
 
 @pytest.mark.asyncio
