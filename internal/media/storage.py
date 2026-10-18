@@ -26,9 +26,12 @@ from internal.media.config import StorageSnapshot, get_snapshot
 logger = logging.getLogger(__name__)
 
 # sessions/{id}/r{revision}-{hex}.{ext} (hex optional for leftover rN.ext keys)
-_STORE_KEY_RE = re.compile(
-    r"^sessions/[A-Za-z0-9_-]+/r\d+(?:-[0-9a-f]+)?\.[A-Za-z0-9]+$"
-)
+_STORE_KEY_RE = re.compile(r"^sessions/[A-Za-z0-9_-]+/r\d+(?:-[0-9a-f]+)?\.[A-Za-z0-9]+$")
+# ADR 0047 scratch bytes — object-store keys, but never public: the
+# unauthenticated media route keeps gating on ``is_store_key`` only. Name
+# length is unbounded here so every stored key still enumerates for
+# migration/GC; uploads cap the name separately (sessions.py upload route).
+_ATTACHMENT_KEY_RE = re.compile(r"^attachments/[0-9a-fA-F-]{36}/[^/]+$")
 _API_MEDIA_PREFIX = "/api/media/"
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -84,6 +87,15 @@ def sniff_image_bytes(data: bytes) -> tuple[str, str] | None:
 
 def is_store_key(value: str) -> bool:
     return bool(_STORE_KEY_RE.match(value))
+
+
+def is_attachment_key(value: str) -> bool:
+    return bool(_ATTACHMENT_KEY_RE.match(value))
+
+
+def _is_object_key(value: str) -> bool:
+    """Any real object key (preview image or attachment) for ref peeling."""
+    return is_store_key(value) or is_attachment_key(value)
 
 
 def _safe_relative_key(key: str) -> bool:
@@ -182,20 +194,20 @@ def extract_store_key(stored: str | None) -> str | None:
         return None
     if value.startswith("placeholder://") or value.startswith("data:"):
         return None
-    if is_store_key(value):
+    if _is_object_key(value):
         return value
     if value.startswith(_API_MEDIA_PREFIX):
         key = value[len(_API_MEDIA_PREFIX) :].lstrip("/")
-        return key if is_store_key(key) else None
+        return key if _is_object_key(key) else None
     if value.startswith("http://") or value.startswith("https://"):
         idx = value.find(_API_MEDIA_PREFIX)
         if idx >= 0:
             key = value[idx + len(_API_MEDIA_PREFIX) :].lstrip("/")
-            return key if is_store_key(key) else None
+            return key if _is_object_key(key) else None
         for prefix in _s3_peel_prefixes():
             if value.startswith(prefix):
                 key = value[len(prefix) :].lstrip("/")
-                return key if is_store_key(key) else None
+                return key if _is_object_key(key) else None
     return None
 
 
@@ -426,6 +438,21 @@ def _put_bytes_sync(*, key: str, data: bytes, content_type: str) -> _PutOutcome:
     return _PutOutcome(url=public_url_for(key, snap), dual_s3_copied=dual_s3_copied)
 
 
+def _get_bytes_sync(key: str) -> bytes:
+    """Read object bytes back. Prefers the local file (local backend or
+    dual-write copy); falls back to S3 get_object under an S3/dual snapshot."""
+    snap = get_snapshot()
+    if snap.backend == "local" or snap.dual_write:
+        path = local_abs_path(key)
+        if path.is_file():
+            return path.read_bytes()
+    target = snap if snap.backend == "s3" else snap.dual_s3()
+    if _strip(target.bucket):
+        resp = s3_client_for(target).get_object(Bucket=_strip(target.bucket), Key=key)
+        return resp["Body"].read()
+    raise MediaStorageError(f"Object not readable: {key}")
+
+
 def _delete_key_sync(key: str) -> None:
     snap = get_snapshot()
     write_local = snap.backend == "local" or snap.dual_write
@@ -461,6 +488,11 @@ async def delete_key(key: str) -> None:
     await asyncio.to_thread(_delete_key_sync, key)
 
 
+async def get_bytes(key: str) -> bytes:
+    """Read object bytes back (local file or S3 get_object)."""
+    return await asyncio.to_thread(_get_bytes_sync, key)
+
+
 def _replace_key_ext(key: str, ext: str) -> str:
     stem, dot, _old = key.rpartition(".")
     if stem and dot:
@@ -488,9 +520,7 @@ async def _fetch_provider_image(url: str) -> tuple[bytes, tuple[str, str]]:
     except httpx.HTTPError as exc:
         raise MediaStorageError("Could not fetch the provider image.") from exc
     if response.status_code != 200:
-        raise MediaStorageError(
-            f"Provider image fetch returned HTTP {response.status_code}."
-        )
+        raise MediaStorageError(f"Provider image fetch returned HTTP {response.status_code}.")
     raw = response.content
     if not raw:
         raise MediaStorageError("Provider image fetch returned an empty body.")
@@ -523,9 +553,7 @@ async def persist_generated_image(image_ref: str, *, key: str) -> str:
             key = _replace_key_ext(key, ext)
         await put_bytes(key=key, data=raw, content_type=content_type)
         return key
-    raise MediaStorageError(
-        "Unsupported image scheme (expected http(s) or data:)."
-    )
+    raise MediaStorageError("Unsupported image scheme (expected http(s) or data:).")
 
 
 def media_object_key(*, session_id: str, revision: int, ext: str = "png") -> str:

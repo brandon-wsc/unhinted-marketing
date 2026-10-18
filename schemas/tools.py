@@ -40,6 +40,28 @@ class QueryMarketTrendsResponse(BaseModel):
     notes: str = ""
 
 
+class ReadAttachmentSlice(BaseModel):
+    """One document-chunk slice returned by ``read_attachment`` (ADR 0047 §6)."""
+
+    chunk_id: str
+    # Page/section pointer for the UI citation chip ("p.1 · 優惠詳情").
+    ref: str
+    text: str
+
+
+class ReadAttachmentResponse(BaseModel):
+    """``read_attachment`` tool return — the ONLY fields the LLM ever sees.
+
+    §5: digests + slices, never doc_profile or full document text. Every
+    refusal (unknown id, out of scope, bad params, missing db, over budget)
+    returns ``slices=[]`` + a non-empty ``error`` — the tool never raises.
+    """
+
+    slices: list[ReadAttachmentSlice] = Field(default_factory=list, max_length=5)
+    partial: bool = False
+    error: str | None = None
+
+
 class PublishSocialPostRequest(BaseModel):
     """Confirm-handler adapter input only — never invoked from LangGraph (ADR 0003)."""
 

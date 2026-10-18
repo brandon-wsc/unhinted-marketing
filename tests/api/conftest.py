@@ -30,6 +30,9 @@ TRUNCATE_TABLES = (
     "session_node_steps",
     "question_node_steps",
     "question_runs",
+    "attachment_sessions",
+    "document_chunks",
+    "attachments",
     "sessions",
     "llm_call_records",
     "recommended_questions",
@@ -98,9 +101,7 @@ async def session_factory(engine):
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def clean_db(
-    engine, migrated_database: str, monkeypatch: pytest.MonkeyPatch, tmp_path
-):
+async def clean_db(engine, migrated_database: str, monkeypatch: pytest.MonkeyPatch, tmp_path):
     """Truncate app tables before each API test."""
     from cryptography.fernet import Fernet
 

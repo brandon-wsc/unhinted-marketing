@@ -3,6 +3,7 @@ import logging
 import re
 import uuid
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import (
@@ -18,6 +19,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import bearer_scheme, get_current_user, resolve_current_user
@@ -25,12 +27,20 @@ from internal.auth.org import member_publish_requires_approval
 from internal.media.gc import collect_session_store_keys, reclaim_unreferenced_keys
 from internal.media.storage import (
     MediaStorageError,
+    delete_key,
+    put_bytes,
     resolve_stored_url,
     stored_ref_is_image,
 )
 from internal.memory import repos
 from internal.memory.database import get_db, open_session
-from internal.memory.models import Session, User
+from internal.memory.models import (
+    Attachment,
+    AttachmentSession,
+    Session,
+    SessionMessage,
+    User,
+)
 from internal.session.events import format_sse, session_event_bus
 from internal.session.graph import ANGLE_GATE_NODE, IMAGE_PARK_NODE
 from internal.session.nodes import angle_pick_payload, recommended_image_format
@@ -67,6 +77,9 @@ from schemas.contracts import (
 )
 from schemas.session import (
     AddSessionImageRequest,
+    AttachmentDigest,
+    AttachmentListResponse,
+    AttachmentOut,
     ChooseAngleRequest,
     ChooseAngleResponse,
     ConfirmSessionRequest,
@@ -114,7 +127,7 @@ def _session_response(session: Session) -> SessionResponse:
     )
 
 
-def _message_response(msg) -> MessageResponse:
+def _message_response(msg, attachments: list[AttachmentDigest] | None = None) -> MessageResponse:
     return MessageResponse(
         id=msg.id,
         session_id=msg.session_id,
@@ -122,7 +135,59 @@ def _message_response(msg) -> MessageResponse:
         content=msg.content,
         created_at=msg.created_at,
         metadata=dict(msg.metadata_ or {}),
+        attachments=attachments or [],
     )
+
+
+def _attachment_ids_of(msg: SessionMessage) -> list[uuid.UUID]:
+    """Uuids stored in ``metadata.attachment_ids`` — bad entries dropped."""
+    ids: list[uuid.UUID] = []
+    for raw in (msg.metadata_ or {}).get("attachment_ids") or []:
+        try:
+            ids.append(uuid.UUID(str(raw)))
+        except (ValueError, TypeError, AttributeError):
+            continue
+    return ids
+
+
+async def _message_attachment_map(
+    db: AsyncSession, msgs: list[SessionMessage]
+) -> dict[uuid.UUID, list[AttachmentDigest]]:
+    """Digest chips for messages carrying ``metadata.attachment_ids``.
+
+    ADR 0047 §5 — one batched lookup; ids that no longer resolve are dropped
+    so the transcript never fails on a GC'd attachment.
+    """
+    wanted: dict[uuid.UUID, list[uuid.UUID]] = {}
+    all_ids: set[uuid.UUID] = set()
+    for m in msgs:
+        ids = _attachment_ids_of(m)
+        if ids:
+            wanted[m.id] = ids
+            all_ids.update(ids)
+    if not all_ids:
+        return {}
+    rows = await db.scalars(select(Attachment).where(Attachment.id.in_(all_ids)))
+    by_id = {r.id: r for r in rows}
+    return {
+        mid: [
+            AttachmentDigest(
+                id=by_id[aid].id,
+                filename=by_id[aid].filename,
+                status=by_id[aid].status,
+                title=(by_id[aid].doc_profile or {}).get("title"),
+            )
+            for aid in ids
+            if aid in by_id
+        ]
+        for mid, ids in wanted.items()
+    }
+
+
+async def _messages_response(db: AsyncSession, msgs: list[SessionMessage]) -> list[MessageResponse]:
+    """Transcript rows with batched attachment chips (ADR 0047 §5)."""
+    chips = await _message_attachment_map(db, msgs)
+    return [_message_response(m, attachments=chips.get(m.id)) for m in msgs]
 
 
 def _brief_from_state(state: dict | None) -> SessionBriefData | None:
@@ -151,9 +216,7 @@ def _parked_node_from_snapshot(state: dict | None, snap_next: object) -> str | N
     return None
 
 
-async def _require_owned_session(
-    db: AsyncSession, session_id: uuid.UUID, user: User
-) -> Session:
+async def _require_owned_session(db: AsyncSession, session_id: uuid.UUID, user: User) -> Session:
     session = await repos.get_session(db, session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
@@ -162,9 +225,7 @@ async def _require_owned_session(
     return session
 
 
-async def _enforce_member_token_limit(
-    db: AsyncSession, session: Session, user: User
-) -> None:
+async def _enforce_member_token_limit(db: AsyncSession, session: Session, user: User) -> None:
     """ADR 0041: cap org `member` token spend at the turn boundary.
 
     Owner/admin bypass the cap entirely. The cap counts the member's whole
@@ -174,11 +235,7 @@ async def _enforce_member_token_limit(
     a hard rate limiter.
     """
     membership = await repos.get_org_membership(db, user.id, session.company_id)
-    if (
-        membership is None
-        or membership.role != "member"
-        or membership.monthly_token_limit is None
-    ):
+    if membership is None or membership.role != "member" or membership.monthly_token_limit is None:
         return
     period_start, period_end = repos.member_month_bounds()
     by_source = await repos.sum_member_tokens_by_source(
@@ -239,9 +296,7 @@ async def list_sessions(
                 for session, preview, match_content, draft_copy in rows
             ]
         )
-    rows = await repos.list_user_sessions(
-        db, user_id=user.id, company_id=company_id, limit=limit
-    )
+    rows = await repos.list_user_sessions(db, user_id=user.id, company_id=company_id, limit=limit)
     return SessionListResponse(
         sessions=[
             SessionListItem(
@@ -416,14 +471,75 @@ async def delete_session(
     try:
         keys = await collect_session_store_keys(db, session.id)
     except Exception:
-        logger.warning(
-            "media GC collect failed session=%s", session_id, exc_info=True
-        )
+        logger.warning("media GC collect failed session=%s", session_id, exc_info=True)
         keys = None
+    # ADR 0047 §13 — scratch attachments die with their last referencing
+    # session; shared/saved rows are detached before the FK cascade runs.
+    attachment_keys = await repos.release_session_attachments(db, session.id)
     await repos.delete_session(db, session)
     await db.commit()
     if keys:
         await reclaim_unreferenced_keys(db, keys)
+    for key in attachment_keys:
+        try:
+            await delete_key(key)
+        except Exception:
+            logger.warning("attachment GC failed for key=%s", key, exc_info=True)
+
+
+async def _message_attachment_reachable(
+    db: AsyncSession,
+    attachment: Attachment | None,
+    *,
+    session: Session,
+    user: User,
+) -> bool:
+    """ADR 0047 §3/§14 owner matrix for ``PostMessageRequest.attachment_ids``.
+
+    Reachable = this session's scratch (``attachment_sessions`` join row, or
+    ``session_id`` + uploader match) or the member's library row
+    (``owner_scope='user'`` + ``user_id`` match, ``owner_scope='org'`` in the
+    same company). Everything else refuses identically — unknown, cross-tenant
+    and other-session scratch ids all map to the same 404 so existence never
+    leaks.
+    """
+    if attachment is None or attachment.company_id != session.company_id:
+        return False
+    if attachment.owner_scope == "org":
+        return True
+    if attachment.owner_scope == "user":
+        return attachment.user_id == user.id
+    if attachment.owner_scope == "session":
+        if attachment.user_id != user.id:
+            # A join row alone never satisfies reachability — scratch belongs
+            # to its uploader, whoever's session references it.
+            return False
+        if attachment.session_id == session.id:
+            return True
+        return await db.get(AttachmentSession, (attachment.id, session.id)) is not None
+    return False
+
+
+async def _resolve_message_attachments(
+    db: AsyncSession,
+    session: Session,
+    user: User,
+    attachment_ids: list[uuid.UUID],
+) -> None:
+    """Validate every ``attachment_ids`` entry before the turn runs — one bad
+    id fails the whole message with a uniform 404."""
+    unique_ids = list(dict.fromkeys(attachment_ids))
+    if not unique_ids:
+        return
+    rows = await db.scalars(select(Attachment).where(Attachment.id.in_(unique_ids)))
+    by_id = {r.id: r for r in rows}
+    for attachment_id in unique_ids:
+        if not await _message_attachment_reachable(
+            db, by_id.get(attachment_id), session=session, user=user
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
+            )
 
 
 @router.post("/{session_id}/messages", response_model=PostMessageResponse)
@@ -434,6 +550,7 @@ async def post_message(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PostMessageResponse:
     session = await _require_owned_session(db, session_id, user)
+    await _resolve_message_attachments(db, session, user, body.attachment_ids)
     await _enforce_member_token_limit(db, session, user)
     try:
         result = await run_session_turn(
@@ -441,6 +558,7 @@ async def post_message(
             session,
             user_content=body.content,
             source_question_id=body.source_question_id,
+            attachment_ids=body.attachment_ids,
         )
     except SessionTurnConflict as exc:
         raise HTTPException(
@@ -458,7 +576,7 @@ async def post_message(
     values = result["values"]
     return PostMessageResponse(
         session=_session_response(session),
-        messages=[_message_response(m) for m in all_msgs],
+        messages=await _messages_response(db, all_msgs),
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -504,7 +622,7 @@ async def resume_image(
     values = result["values"]
     return ResumeImageResponse(
         session=_session_response(session),
-        messages=[_message_response(m) for m in all_msgs],
+        messages=await _messages_response(db, all_msgs),
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -557,7 +675,7 @@ async def choose_angle(
     values = result["values"]
     return ChooseAngleResponse(
         session=_session_response(session),
-        messages=[_message_response(m) for m in all_msgs],
+        messages=await _messages_response(db, all_msgs),
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -580,9 +698,7 @@ async def stop_session(
     await db.commit()
     raw_preview = result.get("preview")
     preview = (
-        PreviewUpdatedData.model_validate(raw_preview)
-        if isinstance(raw_preview, dict)
-        else None
+        PreviewUpdatedData.model_validate(raw_preview) if isinstance(raw_preview, dict) else None
     )
     return StopSessionResponse(
         status=result["status"],
@@ -641,6 +757,20 @@ async def fork_session(
             created_at=m.created_at,
         )
 
+    # ADR 0047 §13 — fork shares attachments by reference: a join row for
+    # every attachment the copied messages reference keeps digests hydrating
+    # and tells GC the file is still in use.
+    referenced_ids: set[uuid.UUID] = set()
+    for m in copied:
+        referenced_ids.update(_attachment_ids_of(m))
+    if referenced_ids:
+        live_ids = set(
+            (await db.scalars(select(Attachment.id).where(Attachment.id.in_(referenced_ids)))).all()
+        )
+        for attachment_id in live_ids:
+            if await db.get(AttachmentSession, (attachment_id, fork.id)) is None:
+                db.add(AttachmentSession(attachment_id=attachment_id, session_id=fork.id))
+
     fork_msg = msgs[fork_idx]
     preview = await copy_session_preview(db, session, fork, as_of=fork_msg.created_at)
     await db.commit()
@@ -655,7 +785,7 @@ async def fork_session(
     new_msgs = await repos.list_session_messages(db, fork.id)
     return ForkSessionResponse(
         session=_session_response(fork),
-        messages=[_message_response(m) for m in new_msgs],
+        messages=await _messages_response(db, new_msgs),
         forked_from=ForkOrigin(
             session_id=session.id,
             message_id=body.message_id,
@@ -681,22 +811,18 @@ async def get_session_messages(
     for f in forks:
         if f.forked_from_message_id is not None:
             forks_by_message.setdefault(f.forked_from_message_id, []).append(f)
-    messages: list[MessageResponse] = []
-    for m in msgs:
-        resp = _message_response(m)
+    messages = await _messages_response(db, msgs)
+    for resp, m in zip(messages, msgs, strict=True):
         resp.forks = [
             ForkRef(session_id=f.id, title=f.title, created_at=f.created_at)
             for f in forks_by_message.get(m.id, [])
         ]
-        messages.append(resp)
 
     parked_angle = bool(state.get("awaiting_angle_pick"))
     parked_image = bool(state.get("awaiting_image_ok"))
     pick = angle_pick_payload(state) if parked_angle else None
     # Image park returns the locked format so a reload matches this version (ADR 0036).
-    locked_format = (
-        recommended_image_format(state) if parked_angle or parked_image else None
-    )
+    locked_format = recommended_image_format(state) if parked_angle or parked_image else None
     return SessionMessagesResponse(
         session=_session_response(session),
         messages=messages,
@@ -715,9 +841,7 @@ async def get_session_messages(
 async def session_events(
     session_id: uuid.UUID,
     request: Request,
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
-    ],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
 ) -> StreamingResponse:
     """SSE stream: initial snapshot, then live session events + heartbeats.
 
@@ -730,9 +854,7 @@ async def session_events(
         session = await _require_owned_session(db, session_id, user)
         draft = await repos.get_latest_preview_draft(db, session.id)
         state = session.state or {}
-        copy = normalize_draft_copy(
-            (draft.copy if draft else None) or state.get("draft")
-        )
+        copy = normalize_draft_copy((draft.copy if draft else None) or state.get("draft"))
         platform = (draft.platform if draft else None) or DEFAULT_PLATFORM
         media_items = await list_latest_session_media(db, session)
 
@@ -754,9 +876,7 @@ async def session_events(
             "state": state,
             "revision": draft.revision if draft else state.get("revision"),
             "approval_token": draft.approval_token if draft else state.get("approval_token"),
-            "image_url": resolve_stored_url(
-                draft.image_url if draft else state.get("image_url")
-            ),
+            "image_url": resolve_stored_url(draft.image_url if draft else state.get("image_url")),
             "media": media_items,
             "copy": copy,
             "platform": platform,
@@ -858,9 +978,7 @@ async def get_session_media(
     """List media for the latest preview draft (ADR 0008)."""
     session = await _require_owned_session(db, session_id, user)
     items = await list_latest_session_media(db, session)
-    return SessionMediaListResponse(
-        media=[PreviewMediaItem.model_validate(m) for m in items]
-    )
+    return SessionMediaListResponse(media=[PreviewMediaItem.model_validate(m) for m in items])
 
 
 @router.patch(
@@ -1005,6 +1123,147 @@ async def post_session_image_upload(
     return _media_mutation_response(result)
 
 
+# --- Session scratch attachments (ADR 0047) ------------------------------------
+
+_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # ADR 0047 §4 cap (10–20 MB/file)
+_SESSION_SCRATCH_CAP = 10  # ADR 0047 §14 — bound digest tokens per session
+_ATTACHMENT_ALLOWED_EXTS = {".pdf", ".docx", ".txt", ".md"}
+# Media type is derived server-side — the uploader's ``file.content_type``
+# is untrusted (a ".pdf" labelled text/html would echo as HTML on download).
+_ATTACHMENT_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".txt": "text/plain; charset=utf-8",
+    ".md": "text/markdown; charset=utf-8",
+}
+# ADR 0047 §12 — spreadsheets stay product-path only; steer, never ingest.
+_ATTACHMENT_SPREADSHEET_EXTS = {".csv", ".xlsx"}
+_ATTACHMENT_INGEST_KIND = "attachment_ingest"
+
+
+def _attachment_out(row: Attachment) -> AttachmentOut:
+    return AttachmentOut.model_validate(row)
+
+
+@router.get("/{session_id}/attachments", response_model=AttachmentListResponse)
+async def list_session_attachments(
+    session_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AttachmentListResponse:
+    """List the attachments this session references (ADR 0047 Consequences —
+    ``POST/GET …/sessions/{id}/attachments``). The only wire-level way for
+    the UI to poll ingest ``status``, the §10 ``error`` text and the §5
+    ``doc_profile`` digest; hydration reads the ``attachment_sessions`` join
+    (§13), so fork-shared and saved library docs still show up."""
+    session = await _require_owned_session(db, session_id, user)
+    rows = await repos.list_session_attachments(db, session.id)
+    return AttachmentListResponse(attachments=[_attachment_out(r) for r in rows])
+
+
+@router.post(
+    "/{session_id}/attachments",
+    response_model=AttachmentOut,
+    status_code=201,
+)
+async def post_session_attachment(
+    session_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File(...)],
+) -> AttachmentOut:
+    """Upload a scratch document (ADR 0047 §3).
+
+    Bytes land under ``attachments/{id}/{filename}``; parse/chunk/embed run on
+    the ADR 0039 job queue — never in this request (§7, no embedder warmup
+    here either). The unauthenticated ``GET /api/media/{key}`` route never
+    serves these keys; original bytes are behind
+    ``GET /api/attachments/{id}/download``.
+    """
+    session = await _require_owned_session(db, session_id, user)
+
+    # Sniff by filename extension (case-insensitive); content_type is advisory.
+    filename = Path(file.filename or "").name or "attachment"
+    if len(filename.encode("utf-8")) > 200:
+        # Local stores cap path components at 255 bytes — reject up front
+        # with a readable 400 instead of a storage 503, and keep every
+        # stored key classifiable for migration enumeration.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Attachment filename is too long",
+        )
+    ext = Path(filename).suffix.lower()
+    if ext in _ATTACHMENT_SPREADSHEET_EXTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Spreadsheet files stay on the product import path — use "
+                f"POST /api/companies/{session.company_id}/products/import"
+            ),
+        )
+    if ext not in _ATTACHMENT_ALLOWED_EXTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type — attachments accept pdf, docx, txt, md",
+        )
+
+    raw = await file.read()
+    if len(raw) > _MAX_ATTACHMENT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Attachment exceeds the 20 MB size limit",
+        )
+
+    scratch_count = await db.scalar(
+        select(func.count())
+        .select_from(Attachment)
+        .where(
+            Attachment.session_id == session.id,
+            Attachment.owner_scope == "session",
+        )
+    )
+    if (scratch_count or 0) >= _SESSION_SCRATCH_CAP:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session attachment limit reached",
+        )
+
+    attachment_id = uuid.uuid4()
+    object_key = f"attachments/{attachment_id}/{filename}"
+    content_type = _ATTACHMENT_CONTENT_TYPES[ext]
+    try:
+        await put_bytes(key=object_key, data=raw, content_type=content_type)
+    except MediaStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    attachment = Attachment(
+        id=attachment_id,
+        company_id=session.company_id,
+        owner_scope="session",
+        user_id=user.id,
+        session_id=session.id,
+        filename=filename,
+        content_type=content_type,
+        object_key=object_key,
+        status="pending",
+        doc_profile={},
+    )
+    db.add(attachment)
+    db.add(AttachmentSession(attachment_id=attachment_id, session_id=session.id))
+    await repos.enqueue_job(
+        db,
+        kind=_ATTACHMENT_INGEST_KIND,
+        payload={"attachment_id": str(attachment_id)},
+        dedupe_key=f"{_ATTACHMENT_INGEST_KIND}:{attachment_id}",
+    )
+    await db.commit()
+    await db.refresh(attachment)
+    return _attachment_out(attachment)
+
+
 def _draft_has_image(draft) -> bool:
     # media_ids is the publish image (ADR 0008). A leftover placeholder://
     # image_url is not an image — copy-only Confirm must 400 (ADR 0022).
@@ -1116,9 +1375,7 @@ async def confirm_session(
         revision=draft.revision,
     )
     try:
-        outcome, receipt = await execute_publish(
-            db, session=session, user_id=user.id, req=req
-        )
+        outcome, receipt = await execute_publish(db, session=session, user_id=user.id, req=req)
     except PublishPreconditionError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

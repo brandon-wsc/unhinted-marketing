@@ -1363,6 +1363,40 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Session Attachments
+         * @description List the attachments this session references (ADR 0047 Consequences —
+         *     ``POST/GET …/sessions/{id}/attachments``). The only wire-level way for
+         *     the UI to poll ingest ``status``, the §10 ``error`` text and the §5
+         *     ``doc_profile`` digest; hydration reads the ``attachment_sessions`` join
+         *     (§13), so fork-shared and saved library docs still show up.
+         */
+        get: operations["list_session_attachments_api_sessions__session_id__attachments_get"];
+        put?: never;
+        /**
+         * Post Session Attachment
+         * @description Upload a scratch document (ADR 0047 §3).
+         *
+         *     Bytes land under ``attachments/{id}/{filename}``; parse/chunk/embed run on
+         *     the ADR 0039 job queue — never in this request (§7, no embedder warmup
+         *     here either). The unauthenticated ``GET /api/media/{key}`` route never
+         *     serves these keys; original bytes are behind
+         *     ``GET /api/attachments/{id}/download``.
+         */
+        post: operations["post_session_attachment_api_sessions__session_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/confirm": {
         parameters: {
             query?: never;
@@ -1377,6 +1411,55 @@ export type paths = {
          * @description Traditional Confirm handler — no LLM. Adapter writes tool_receipts (ADR 0003 / 0022).
          */
         post: operations["confirm_session_api_sessions__session_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attachments/{attachment_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Attachment
+         * @description Return the original file bytes — ADR 0047 §3 owner matrix.
+         *
+         *     ``org`` rows serve any company member; ``session``/``user`` rows are the
+         *     uploader's alone — company membership must not hand a colleague someone
+         *     else's scratch or Mine file. Every refusal is a uniform 404.
+         */
+        get: operations["download_attachment_api_attachments__attachment_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attachments/{attachment_id}/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Attachment
+         * @description 「存入我嘅庫」(ADR 0047 §2) — flip the caller's own scratch row to Mine.
+         *
+         *     Owner-only: ``session``/``user`` rows save for their uploader alone —
+         *     a same-company member cannot save another member's scratch, and every
+         *     refusal is a uniform 404 so existence never leaks. Re-saving an
+         *     already-user-scope row is a 200 no-op (idempotent).
+         */
+        post: operations["save_attachment_api_attachments__attachment_id__save_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1642,6 +1725,76 @@ export type components = {
             } | null;
         };
         /**
+         * AttachmentDigest
+         * @description ADR 0047 §5 digest chip on a message that references attachments.
+         */
+        AttachmentDigest: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "ready_lexical" | "ready" | "failed";
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * AttachmentListResponse
+         * @description ``GET /sessions/{id}/attachments`` — the session's referenced docs.
+         */
+        AttachmentListResponse: {
+            /** Attachments */
+            attachments: components["schemas"]["AttachmentOut"][];
+        };
+        /**
+         * AttachmentOut
+         * @description ADR 0047 §3 attachment row — ingest flips status async via the job queue.
+         *
+         *     ``error`` carries the readable §10 failure text; ``doc_profile`` carries
+         *     the §5 deterministic digest (title/pages/outline/kind_guess/preview/
+         *     partial). Both land once the ingest job has run.
+         */
+        AttachmentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Session Id */
+            session_id: string | null;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "ready_lexical" | "ready" | "failed";
+            /**
+             * Owner Scope
+             * @enum {string}
+             */
+            owner_scope: "session" | "user" | "org";
+            /** Doc Profile */
+            doc_profile?: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
          * AudiencePersonaOption
          * @description One audience-catalog row on the bundled angle+persona card (ADR 0029).
          */
@@ -1658,6 +1811,11 @@ export type components = {
         };
         /** Body_import_company_products_api_companies__company_id__products_import_post */
         Body_import_company_products_api_companies__company_id__products_import_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_post_session_attachment_api_sessions__session_id__attachments_post */
+        Body_post_session_attachment_api_sessions__session_id__attachments_post: {
             /** File */
             file: string;
         };
@@ -2751,6 +2909,8 @@ export type components = {
             content: string;
             /** Source Question Id */
             source_question_id?: string | null;
+            /** Attachment Ids */
+            attachment_ids?: string[];
         };
         /** PostMessageResponse */
         PostMessageResponse: {
@@ -4065,6 +4225,8 @@ export type components = {
             };
             /** Forks */
             forks?: components["schemas"]["ForkRef"][];
+            /** Attachments */
+            attachments?: components["schemas"]["AttachmentDigest"][];
         };
     };
     responses: never;
@@ -6879,6 +7041,72 @@ export interface operations {
             };
         };
     };
+    list_session_attachments_api_sessions__session_id__attachments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_session_attachment_api_sessions__session_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_session_attachment_api_sessions__session_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_session_api_sessions__session_id__confirm_post: {
         parameters: {
             query?: never;
@@ -6901,6 +7129,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfirmSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_attachment_api_attachments__attachment_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_attachment_api_attachments__attachment_id__save_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentOut"];
                 };
             };
             /** @description Validation Error */

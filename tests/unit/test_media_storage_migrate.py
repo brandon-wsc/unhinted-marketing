@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import uuid
 from pathlib import Path
 
 import pytest
@@ -124,9 +125,7 @@ async def test_dual_write_s3_failure_still_serves_local(
 
 
 @pytest.mark.asyncio
-async def test_dual_delete_hits_both(
-    local_media: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_dual_delete_hits_both(local_media: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeS3()
     fake.objects[KEY] = TINY_PNG
     path = local_media / KEY
@@ -145,9 +144,7 @@ async def test_dual_delete_hits_both(
 
 
 def test_local_read_grace_after_s3_flip() -> None:
-    publish_snapshot(
-        StorageSnapshot(backend="s3", bucket="b", dual_write=True, dual_bucket="b")
-    )
+    publish_snapshot(StorageSnapshot(backend="s3", bucket="b", dual_write=True, dual_bucket="b"))
     assert S.media_backend() == "s3"
     assert S.local_read_grace() is True
     publish_snapshot(StorageSnapshot(backend="s3", bucket="b", dual_write=False))
@@ -198,3 +195,32 @@ def test_env_seed_cloud_requires_bucket(monkeypatch: pytest.MonkeyPatch) -> None
     reset_snapshot_cache()
     with pytest.raises(RuntimeError, match="S3_BUCKET"):
         snapshot_from_env()
+
+
+def test_enumerate_store_keys_includes_attachment_keys() -> None:
+    """ADR 0047 scratch bytes are store objects too — storage migration must
+    enumerate ``attachments/{id}/{name}`` keys or a local→S3 flip strands
+    every uploaded file (preview-only enumeration)."""
+    key = f"attachments/{uuid.uuid4()}/menu.pdf"
+    keys = enumerate_store_keys([key, f"/api/media/{KEY}"])
+    assert key in keys and KEY in keys
+
+
+def test_extract_store_key_accepts_attachment_keys() -> None:
+    from internal.media.storage import extract_store_key
+
+    key = f"attachments/{uuid.uuid4()}/menu.pdf"
+    assert extract_store_key(key) == key
+    # …but the unauthenticated media route's gate stays strict.
+    from internal.media.storage import is_store_key
+
+    assert is_store_key(key) is False
+
+
+def test_extract_store_key_accepts_long_attachment_names() -> None:
+    """Long (but stored) attachment filenames must still enumerate — the
+    upload cap bounds new keys, and older/foreign keys peel regardless."""
+    from internal.media.storage import extract_store_key
+
+    key = f"attachments/{uuid.uuid4()}/{'a' * 320}.pdf"
+    assert extract_store_key(key) == key

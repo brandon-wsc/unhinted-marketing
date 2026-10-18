@@ -62,6 +62,27 @@ async def _job_promote(db: AsyncSession, job: Job) -> None:
     logger.info("job %s promote_signals: %s", job.id, counts)
 
 
+async def _job_attachment_ingest(db: AsyncSession, job: Job) -> None:
+    raw = job.payload.get("attachment_id")
+    if not raw:
+        raise RuntimeError("attachment_ingest job missing payload.attachment_id")
+    from internal.memory.document_ingest import run_attachment_ingest
+
+    await run_attachment_ingest(db, attachment_id=uuid.UUID(str(raw)))
+    logger.info("job %s attachment_ingest: attachment=%s", job.id, raw)
+
+
+async def _job_attachment_embed(db: AsyncSession, job: Job) -> None:
+    raw = job.payload.get("attachment_id")
+    if not raw:
+        raise RuntimeError("attachment_embed job missing payload.attachment_id")
+    from internal.memory.document_ingest import run_attachment_embed
+
+    embed_round = int((job.payload or {}).get("embed_round") or 0)
+    await run_attachment_embed(db, attachment_id=uuid.UUID(str(raw)), embed_round=embed_round)
+    logger.info("job %s attachment_embed: attachment=%s", job.id, raw)
+
+
 async def _job_questions(db: AsyncSession, job: Job) -> None:
     company_id = job.payload.get("company_id")
     if not company_id:
@@ -80,6 +101,8 @@ _JOB_HANDLERS: dict[str, Callable[[AsyncSession, Job], Awaitable[None]]] = {
     "hot_search": _job_hot_search,
     "promote_signals": _job_promote,
     "questions": _job_questions,
+    "attachment_ingest": _job_attachment_ingest,
+    "attachment_embed": _job_attachment_embed,
 }
 
 

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -21,7 +22,13 @@ from internal.llm.resolve import company_llm_scope
 from internal.llm.router import LlmProviderError
 from internal.media.storage import resolve_stored_url, sniff_image_bytes
 from internal.memory import repos
-from internal.memory.models import PreviewImage, Session, SessionMessage
+from internal.memory.models import (
+    Attachment,
+    AttachmentSession,
+    PreviewImage,
+    Session,
+    SessionMessage,
+)
 from internal.session.context import session_db
 from internal.session.events import session_event_bus
 from internal.session.graph import (
@@ -140,9 +147,7 @@ def normalize_draft_copy(copy: dict[str, Any] | None) -> dict[str, Any]:
     ).model_dump()
 
 
-async def resolve_source_signals(
-    db: AsyncSession, signal_ids: list[Any]
-) -> list[dict[str, Any]]:
+async def resolve_source_signals(db: AsyncSession, signal_ids: list[Any]) -> list[dict[str, Any]]:
     """Resolve draft grounding ids to display rows, preserving draft order (ADR 0038).
 
     Best-effort: missing rows are dropped, a failed lookup yields [] — never a
@@ -190,9 +195,7 @@ def preview_updated_payload(
         media=items,
         draft_copy=DraftCopy.model_validate(normalize_draft_copy(copy)),
         platform=platform or DEFAULT_PLATFORM,
-        source_signals=[
-            SourceSignal.model_validate(s) for s in (source_signals or [])
-        ],
+        source_signals=[SourceSignal.model_validate(s) for s in (source_signals or [])],
     ).model_dump(by_alias=True)
 
 
@@ -224,9 +227,7 @@ def _coerce_preview_draft(
     return revision, token, copy, image_url, plan, media_ids, platform
 
 
-def _discard_revision_ceiling(
-    restored: dict[str, Any], accepted_revision: int | None
-) -> int:
+def _discard_revision_ceiling(restored: dict[str, Any], accepted_revision: int | None) -> int:
     """Highest revision Discard keeps.
 
     Prefer the lower of the anchor's ``accepted_revision`` and the pre-turn
@@ -269,9 +270,7 @@ def _apply_surviving_draft(restored: dict[str, Any], draft: Any) -> None:
     restored["media_ids"] = ids
 
 
-async def latest_preview_payload(
-    db: AsyncSession, session: Session
-) -> dict[str, Any] | None:
+async def latest_preview_payload(db: AsyncSession, session: Session) -> dict[str, Any] | None:
     """`preview.updated` body for the latest draft, or None when there is no row."""
     draft = await repos.get_latest_preview_draft(db, session.id)
     parsed = _coerce_preview_draft(draft)
@@ -286,9 +285,7 @@ async def latest_preview_payload(
         loaded = []
     if isinstance(loaded, list):
         media = [
-            item
-            for item in loaded
-            if isinstance(item, dict) and isinstance(item.get("id"), str)
+            item for item in loaded if isinstance(item, dict) and isinstance(item.get("id"), str)
         ]
     source_signals = await resolve_source_signals(
         db, list(getattr(draft, "source_signal_ids", None) or [])
@@ -342,9 +339,7 @@ async def _media_for_new_draft(
     - else reuse_media_ids: caption-only path keeps same image versions.
     """
     if create_image_row and (image_url or image_plan):
-        fmt = image_format_from_plan(
-            image_plan, fallback=image_format or "single"
-        )
+        fmt = image_format_from_plan(image_plan, fallback=image_format or "single")
         row = await repos.insert_preview_image(
             db,
             session_id=session.id,
@@ -412,7 +407,54 @@ def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str,
         "chosen_persona": state.get("chosen_persona"),
         "image_format": state.get("image_format"),
         "chosen_image_format": state.get("chosen_image_format"),
+        # ADR 0047 — last persisted digests carry over; run_session_turn
+        # refreshes them from the attachment_sessions join each message turn.
+        "attachments": list(state.get("attachments") or []),
     }
+
+
+# ADR 0047 §5 — the doc_profile subset carried on a hydrated digest.
+_ATTACHMENT_PROFILE_FIELDS = ("title", "pages", "outline", "kind_guess", "preview", "partial")
+
+
+def _attachment_digest(row: Attachment) -> dict[str, Any]:
+    """Digest for one attachment: {id, filename, status} + doc_profile subset."""
+    profile = row.doc_profile if isinstance(row.doc_profile, dict) else {}
+    digest: dict[str, Any] = {
+        "id": str(row.id),
+        "filename": row.filename,
+        "status": row.status,
+        "owner_scope": row.owner_scope,
+        "doc_profile": dict(profile),
+    }
+    for key in _ATTACHMENT_PROFILE_FIELDS:
+        if key in profile:
+            digest[key] = profile[key]
+    return digest
+
+
+async def _hydrate_session_attachments(
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    *,
+    referenced_ids: list[uuid.UUID],
+) -> list[dict[str, Any]]:
+    """ADR 0047 §13 — hydrate per-turn digests from the attachment_sessions join.
+
+    A library attachment referenced by this message may have no join row yet;
+    the first message reference inserts one so the join stays the source of
+    truth for hydration and last-session GC.
+    """
+    for attachment_id in dict.fromkeys(referenced_ids):
+        if await db.get(AttachmentSession, (attachment_id, session_id)) is None:
+            db.add(AttachmentSession(attachment_id=attachment_id, session_id=session_id))
+    rows = await db.scalars(
+        select(Attachment)
+        .join(AttachmentSession, AttachmentSession.attachment_id == Attachment.id)
+        .where(AttachmentSession.session_id == session_id)
+        .order_by(Attachment.created_at)
+    )
+    return [_attachment_digest(row) for row in rows]
 
 
 def _strip_discard_meta(state: dict[str, Any] | None) -> dict[str, Any]:
@@ -452,15 +494,11 @@ async def copy_session_preview(
     """
     latest = await repos.get_latest_preview_draft(db, source.id)
     draft = (
-        await repos.get_preview_draft_as_of(db, source.id, as_of)
-        if as_of is not None
-        else latest
+        await repos.get_preview_draft_as_of(db, source.id, as_of) if as_of is not None else latest
     )
     latest_revision = latest.revision if latest is not None else None
     if draft is None:
-        return ForkPreviewCopy(
-            copied=False, copied_revision=None, latest_revision=latest_revision
-        )
+        return ForkPreviewCopy(copied=False, copied_revision=None, latest_revision=latest_revision)
 
     id_map: dict[uuid.UUID, uuid.UUID] = {}
     for img in await repos.get_preview_images_by_ids(db, list(draft.media_ids or [])):
@@ -906,6 +944,9 @@ async def _persist_after_invoke(
         "chosen_persona": values.get("chosen_persona"),
         "image_format": values.get("image_format"),
         "chosen_image_format": values.get("chosen_image_format"),
+        # ADR 0047 — digest list hydrated this turn; resume paths without a
+        # fresh hydration fall back to the persisted digests.
+        "attachments": values.get("attachments") or (session.state or {}).get("attachments") or [],
         # UI hydrate: interrupt_before angle_gate / executor_image_gen
         "awaiting_image_ok": parked_node == IMAGE_PARK_NODE,
         "awaiting_angle_pick": parked_node == ANGLE_GATE_NODE,
@@ -995,9 +1036,7 @@ async def _persist_after_invoke(
                 }
             )
         if values.get("image_plan") and not still_interrupted:
-            events.append(
-                {"type": "draft.image_plan_updated", "data": values["image_plan"]}
-            )
+            events.append({"type": "draft.image_plan_updated", "data": values["image_plan"]})
         if not still_interrupted and values.get("image_url"):
             events.append(
                 {
@@ -1015,9 +1054,7 @@ async def _persist_after_invoke(
             existing_draft = await repos.get_latest_preview_draft(db, session.id)
             rev = int(values["revision"])
             if not existing_draft or existing_draft.revision < rev:
-                platform = (
-                    existing_draft.platform if existing_draft else None
-                ) or DEFAULT_PLATFORM
+                platform = (existing_draft.platform if existing_draft else None) or DEFAULT_PLATFORM
                 draft_copy = normalize_draft_copy(values.get("draft"))
                 media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
                     db,
@@ -1139,8 +1176,7 @@ async def _invoke_graph(
                     still_interrupted = False
                 else:
                     logger.warning(
-                        "LLM provider error during session turn "
-                        "(session=%s model=%s kind=%s): %s",
+                        "LLM provider error during session turn (session=%s model=%s kind=%s): %s",
                         session_id,
                         provider_error.model,
                         provider_error.kind,
@@ -1187,6 +1223,7 @@ async def revise_while_image_parked(
     *,
     user_content: str,
     source_question_id: str | None = None,
+    attachment_ids: list[uuid.UUID] | None = None,
 ) -> dict[str, Any]:
     """Revise while awaiting Execute, then re-park (ADR 0036).
 
@@ -1200,9 +1237,7 @@ async def revise_while_image_parked(
         raise SessionTurnConflict("busy", "Session turn already in progress")
     state = dict(session.state or {})
     anchor = state.get("turn_discard") if isinstance(state.get("turn_discard"), dict) else {}
-    accepted = (
-        anchor.get("pre_state") if isinstance(anchor.get("pre_state"), dict) else state
-    )
+    accepted = anchor.get("pre_state") if isinstance(anchor.get("pre_state"), dict) else state
     accepted = _strip_discard_meta(accepted)
     pre_mode = anchor.get("pre_mode") if isinstance(anchor.get("pre_mode"), str) else session.mode
     await _adelete_graph_thread(session.id)
@@ -1216,6 +1251,7 @@ async def revise_while_image_parked(
         session,
         user_content=user_content,
         source_question_id=source_question_id,
+        attachment_ids=attachment_ids,
         discard_pre_state=accepted,
         pre_mode=pre_mode,
         skip_park_check=True,
@@ -1229,12 +1265,19 @@ async def run_session_turn(
     *,
     user_content: str,
     source_question_id: str | None = None,
+    attachment_ids: list[uuid.UUID] | None = None,
     discard_pre_state: dict[str, Any] | None = None,
     pre_mode: str | None = None,
     skip_park_check: bool = False,
     hold_image_park: bool = False,
 ) -> dict[str, Any]:
-    """Append user message, invoke graph (never blind-resume), persist side-effects."""
+    """Append user message, invoke graph (never blind-resume), persist side-effects.
+
+    ``attachment_ids`` comes pre-validated from POST /messages (ADR 0047 §3/§14).
+    ``None`` marks a non-message entry point (initial message, parked resumes)
+    — hydration is skipped and the persisted digests carry over via
+    ``_graph_values``. A list (even empty) re-hydrates from the join.
+    """
     session_id = session.id
     if session_turn_registry.is_busy(session_id):
         raise SessionTurnConflict("busy", "Session turn already in progress")
@@ -1242,7 +1285,10 @@ async def run_session_turn(
         park_kind = await session_park_kind(session)
         if park_kind == "angle":
             # ADR 0028: a typed reply while parked at the angle gate IS the pick.
-            return await choose_angle_turn(db, session, angle_text=user_content)
+            # ADR 0047 §8: attachment_ids ride the reply — never dropped.
+            return await choose_angle_turn(
+                db, session, angle_text=user_content, attachment_ids=attachment_ids
+            )
         if park_kind == "image":
             # ADR 0036: a typed reply while image-parked is a new script, not a queue.
             return await revise_while_image_parked(
@@ -1250,6 +1296,7 @@ async def run_session_turn(
                 session,
                 user_content=user_content,
                 source_question_id=source_question_id,
+                attachment_ids=attachment_ids,
             )
         if park_kind is not None:
             raise SessionTurnConflict(
@@ -1264,12 +1311,24 @@ async def run_session_turn(
         else _strip_discard_meta(session.state)
     )
     user_msg = await repos.add_session_message(
-        db, session_id=session_id, role="user", content=user_content
+        db,
+        session_id=session_id,
+        role="user",
+        content=user_content,
+        metadata=(
+            {"attachment_ids": [str(aid) for aid in attachment_ids]} if attachment_ids else None
+        ),
     )
     repos.touch_session(session)
     existing = await repos.list_session_messages(db, session_id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
     graph_input = _graph_values(session, message_dicts)
+    if attachment_ids is not None:
+        # ADR 0047 §5/§13 — message turns hydrate digests fresh from the
+        # attachment_sessions join; this message's refs land join rows first.
+        graph_input["attachments"] = await _hydrate_session_attachments(
+            db, session_id, referenced_ids=attachment_ids
+        )
     # Always overwrite. A previous parked turn can leave the flag on the
     # checkpoint; a normal revise must be allowed to accept the caption.
     graph_input["hold_image_park"] = hold_image_park
@@ -1293,9 +1352,7 @@ async def run_session_turn(
     except TurnInFlightError as exc:
         # Lost the race between the is_busy pre-check and registration (the
         # user row above is flushed, not committed — the request rolls back).
-        raise SessionTurnConflict(
-            "busy", "Session turn already in progress"
-        ) from exc
+        raise SessionTurnConflict("busy", "Session turn already in progress") from exc
     entry.prior_message_count = len(message_dicts)
 
     try:
@@ -1354,6 +1411,7 @@ async def _resume_parked_turn(
     *,
     kind: ParkKind,
     user_pick_text: str | None = None,
+    attachment_ids: list[uuid.UUID] | None = None,
     apply_pick: Callable[[list[dict[str, Any]]], Awaitable[None]] | None = None,
     error_state_extra: dict[str, Any],
 ) -> dict[str, Any]:
@@ -1384,8 +1442,27 @@ async def _resume_parked_turn(
         )
         if not already_persisted:
             user_msg = await repos.add_session_message(
-                db, session_id=session_id, role="user", content=user_pick_text
+                db,
+                session_id=session_id,
+                role="user",
+                content=user_pick_text,
+                metadata=(
+                    {"attachment_ids": [str(aid) for aid in attachment_ids]}
+                    if attachment_ids
+                    else None
+                ),
             )
+        elif attachment_ids and last is not None:
+            # Idempotent retry carrying NEW refs — merge them onto the
+            # already-persisted row or its chips/digests silently drop.
+            meta = dict(last.metadata_ or {})
+            existing_ids = [str(i) for i in (meta.get("attachment_ids") or [])]
+            merged = existing_ids + [
+                str(aid) for aid in attachment_ids if str(aid) not in existing_ids
+            ]
+            if merged != existing_ids:
+                meta["attachment_ids"] = merged
+                last.metadata_ = meta
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
     if user_msg is not None:
         message_dicts.append({"role": "user", "content": user_pick_text})
@@ -1401,9 +1478,7 @@ async def _resume_parked_turn(
             user_message_id=user_msg.id if user_msg else uuid.uuid4(),
         )
     except TurnInFlightError as exc:
-        raise SessionTurnConflict(
-            "busy", "Session turn already in progress"
-        ) from exc
+        raise SessionTurnConflict("busy", "Session turn already in progress") from exc
     entry.kind = _PARK_ENTRY_KIND[kind]
     entry.parked_restore = parked_restore
     # A typed pick joins the original draft turn's discard scope (persisted via
@@ -1522,6 +1597,7 @@ async def choose_angle_turn(
     angle_text: str | None = None,
     persona: str | None = None,
     image_format: str | None = None,
+    attachment_ids: list[uuid.UUID] | None = None,
 ) -> dict[str, Any]:
     """Resume parked graph at interrupt_before angle_gate (ADR 0030).
 
@@ -1568,6 +1644,12 @@ async def choose_angle_turn(
             update["chosen_persona"] = picked_persona
         if picked_format is not None:
             update["chosen_image_format"] = picked_format
+        if attachment_ids is not None:
+            # ADR 0047 §13 — a typed pick carrying attachments re-hydrates
+            # digests so the resumed graph sees them like a normal turn.
+            update["attachments"] = await _hydrate_session_attachments(
+                db, session.id, referenced_ids=attachment_ids
+            )
         await graph.aupdate_state(_session_config(session.id), update)
 
     return await _resume_parked_turn(
@@ -1576,14 +1658,13 @@ async def choose_angle_turn(
         kind="angle",
         # Typed pick is persisted as a user row; a card index pick is not.
         user_pick_text=chosen if angle_index is None and angle_text is not None else None,
+        attachment_ids=attachment_ids,
         apply_pick=apply_pick,
         error_state_extra={"chosen_angle": None},
     )
 
 
-async def _stop_response(
-    db: AsyncSession, session: Session, **fields: Any
-) -> dict[str, Any]:
+async def _stop_response(db: AsyncSession, session: Session, **fields: Any) -> dict[str, Any]:
     """Attach the latest preview so the Stop body can repaint the pane."""
     if "preview" not in fields:
         fields["preview"] = await latest_preview_payload(db, session)
@@ -1874,9 +1955,7 @@ async def _bump_preview_revision(
     }
 
 
-async def list_latest_session_media(
-    db: AsyncSession, session: Session
-) -> list[dict[str, Any]]:
+async def list_latest_session_media(db: AsyncSession, session: Session) -> list[dict[str, Any]]:
     draft = await repos.get_latest_preview_draft(db, session.id)
     ids = list(draft.media_ids or []) if draft else []
     if not ids:
@@ -2016,7 +2095,9 @@ async def _stage_pending_image_draft(
     rev = base_rev + 1
     token = secrets.token_urlsafe(24)
     signal_ids = list(
-        source_signal_ids if source_signal_ids is not None else (state.get("source_signal_ids") or [])
+        source_signal_ids
+        if source_signal_ids is not None
+        else (state.get("source_signal_ids") or [])
     )
     if existing and existing.source_signal_ids and not signal_ids:
         signal_ids = list(existing.source_signal_ids)

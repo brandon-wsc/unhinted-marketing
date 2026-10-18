@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from cmd.api.routes.admin import router as admin_router
+from cmd.api.routes.attachments import router as attachments_router
 from cmd.api.routes.auth import router as auth_router
 from cmd.api.routes.byok import router as byok_router
 from cmd.api.routes.companies import router as companies_router
@@ -51,15 +52,11 @@ async def lifespan(app: FastAPI):
         try:
             await ensure_instance_settings_seeded(db)
         except Exception:
-            logging.getLogger(__name__).warning(
-                "instance settings seed failed", exc_info=True
-            )
+            logging.getLogger(__name__).warning("instance settings seed failed", exc_info=True)
         try:
             await ensure_storage_config_seeded(db)
         except Exception:
-            logging.getLogger(__name__).warning(
-                "storage config seed failed", exc_info=True
-            )
+            logging.getLogger(__name__).warning("storage config seed failed", exc_info=True)
     try:
         await resume_open_migration()
     except Exception:
@@ -106,6 +103,7 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(proposals_router, prefix="/api")
     application.include_router(publish_approvals_router, prefix="/api")
     application.include_router(sessions_router, prefix="/api")
+    application.include_router(attachments_router, prefix="/api")
     application.include_router(media_router, prefix="/api")
     application.include_router(admin_router, prefix="/api")
     application.include_router(meta_router, prefix="/api")

@@ -91,9 +91,7 @@ T = TypeVar("T", bound=BaseModel)
 QUERY_SOURCE_LLM = "llm"
 QUERY_SOURCE_NORMALIZE = "normalize"
 QUERY_SOURCE_FALLBACK = "fallback"
-REVIEWER_PARSE_MISS_FEEDBACK = (
-    "Review could not be completed — tighten grounding and craft."
-)
+REVIEWER_PARSE_MISS_FEEDBACK = "Review could not be completed — tighten grounding and craft."
 
 
 def _last_user_text(state: SessionState) -> str:
@@ -234,9 +232,7 @@ def _wants_image_change(text: str) -> bool:
 
 def offered_angles(brief: dict[str, Any] | None) -> list[str]:
     """Non-empty angle strings from a brief — the ADR 0028 pick options."""
-    return [
-        a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()
-    ]
+    return [a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()]
 
 
 def offered_personas(catalog: list[dict[str, Any]] | None) -> list[dict[str, str]]:
@@ -463,11 +459,7 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
         IntentRoute,
     )
     intent = parsed.intent if parsed else _heuristic_intent(state)
-    research = (
-        parsed.research.model_dump()
-        if parsed
-        else _heuristic_research()
-    )
+    research = parsed.research.model_dump() if parsed else _heuristic_research()
     if not rule_pass:
         research = {**research, "need_facts": False}
     prior = state.get("research") or {}
@@ -720,6 +712,20 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
     return out
 
 
+# ADR 0047 §5 — digest-only whitelist for the chat payload; raw doc_profile
+# or chunk text must never reach the prompt.
+_CHAT_ATTACHMENT_FIELDS = ("id", "filename", "title", "kind_guess", "status", "partial")
+
+
+def _chat_attachment_digests(state: SessionState) -> list[dict[str, Any]]:
+    """Whitelist ``state["attachments"]`` digests for the chat prompt (§5/§13)."""
+    out: list[dict[str, Any]] = []
+    for digest in state.get("attachments") or []:
+        if isinstance(digest, dict):
+            out.append({key: digest.get(key) for key in _CHAT_ATTACHMENT_FIELDS})
+    return out
+
+
 async def _chat_stream(state: SessionState, user: str) -> str | None:
     """Stream the chat reply via the Pydantic AI harness (ADR 0019)."""
     history = (state.get("messages") or [])[-8:]
@@ -740,6 +746,7 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
             "product_clarify": bool(state.get("product_clarify")),
             "product_candidates": (state.get("product_candidates") or [])[:3],
             "primary_product": state.get("primary_product"),
+            "attachments": _chat_attachment_digests(state),
         },
         ensure_ascii=False,
     )
@@ -750,10 +757,17 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
             company_id = uuid.UUID(str(raw_company))
         except ValueError:
             company_id = None
+    user_id: uuid.UUID | None = None
+    raw_user = state.get("user_id")
+    if raw_user:
+        try:
+            user_id = uuid.UUID(str(raw_user))
+        except ValueError:
+            user_id = None
     return await stream_chat_reply(
         user_prompt=payload,
         session_id=_thread_uuid(state),
-        deps=ChatDeps(company_id=company_id),
+        deps=ChatDeps(company_id=company_id, user_id=user_id),
     )
 
 
@@ -792,6 +806,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
                                 "roast_level": pack.get("roast_level"),
                                 "locale": pack.get("locale"),
                             },
+                            "attachments": _chat_attachment_digests(state),
                         },
                         ensure_ascii=False,
                     ),
@@ -940,9 +955,7 @@ async def product_matcher(state: SessionState) -> dict[str, Any]:
     primary_payload = hit_to_payload(primary)
     return {
         "primary_product": primary_payload,
-        "related_products": _related_payloads(
-            hits[1:], signal_hits, exclude={primary.product.id}
-        ),
+        "related_products": _related_payloads(hits[1:], signal_hits, exclude={primary.product.id}),
         "product_clarify": False,
         "product_context_ids": [primary_payload["product_id"]],
         "product_candidates": [],
@@ -1201,11 +1214,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     signal_ids = list(state.get("source_signal_ids") or [])
     # The cited set may legitimately be empty; a reviewer ask for a citation
     # can only be satisfied from the ranked pool, so allow that pool too.
-    ranked_ids = [
-        str(s["signal_id"])
-        for s in _ranked_signals(state)[:8]
-        if s.get("signal_id")
-    ]
+    ranked_ids = [str(s["signal_id"]) for s in _ranked_signals(state)[:8] if s.get("signal_id")]
     allowed_ids = list(dict.fromkeys([*signal_ids, *ranked_ids]))
     payload = {
         "draft": state.get("draft") or {},
@@ -1267,9 +1276,7 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
         "brief": state.get("brief") or {},
         "company": _slim_company(state),
         "voice_pack": {
-            k: v
-            for k, v in _voice_pack(state).items()
-            if k in ("roast_level", "locale")
+            k: v for k, v in _voice_pack(state).items() if k in ("roast_level", "locale")
         },
         "image_format": fmt,
     }
