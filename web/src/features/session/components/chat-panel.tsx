@@ -1,14 +1,21 @@
 import { cjk } from "@streamdown/cjk";
 import {
+  Bookmark,
   Check,
   ChevronDown,
   Copy,
   CornerDownRight,
+  Download,
   Ellipsis,
+  FileText,
   GitFork,
+  LoaderCircle,
+  Paperclip,
   Pencil,
   Square,
   Trash2,
+  TriangleAlert,
+  X,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -34,6 +41,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
+import { apiDownloadAttachment } from "@/features/session/api";
 import { AnglePickCard } from "@/features/session/components/angle-pick-card";
 import { InterruptCard } from "@/features/session/components/interrupt-card";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
@@ -41,18 +49,25 @@ import { RecommendedQuestions } from "@/features/session/components/recommended-
 import { SessionHistorySidebar } from "@/features/session/components/session-history";
 import { SessionShell } from "@/features/session/components/session-shell";
 import {
+  ATTACHMENT_ACCEPT,
   agentNodeFallbackKey,
   agentNodeLabelKey,
   agentTrailHeader,
+  attachmentFileError,
+  attachmentStatusKey,
+  formatAttachmentSize,
   type ImageFormat,
   imagePlanSummary,
   isConfirmSuccessStatus,
   lastAgentActionNode,
+  MAX_ATTACHMENTS,
   MAX_QUEUED_SESSION_MESSAGES,
   parseTurnDurationMs,
   QUEUE_TUCK_PX,
   shouldInterruptQueuedTurn,
   shouldRetryResumeImage,
+  stagedFromDigest,
+  stagedToDigest,
 } from "@/features/session/session-helpers";
 import {
   getSessionChatRatio,
@@ -62,6 +77,7 @@ import {
 } from "@/features/session/session-layout";
 import type {
   AgentActionRecord,
+  AttachmentDigest,
   ChatMessage,
   DraftCopy,
   ForkRef,
@@ -93,7 +109,7 @@ function overlayStackHeight(el: HTMLElement): number {
 
 export function ChatPanel() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const { showError, showInfo } = useToast();
   const companyId = user?.organizations[0]?.id;
   const canPromoteExemplar =
@@ -156,6 +172,12 @@ export function ChatPanel() {
     setComposerInput,
     editInsertAt,
     setEditInsertAt,
+    stagedAttachments,
+    uploadAttachment,
+    unstageAttachment,
+    consumeStagedAttachments,
+    restoreStagedAttachments,
+    saveAttachment,
   } = useSession(companyId);
   const {
     questions,
@@ -166,6 +188,7 @@ export function ChatPanel() {
   } = useRecommendedQuestions(companyId);
   const now = useNow();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [historyCollapsed, setHistoryCollapsed] = useState(() => {
     try {
       return localStorage.getItem(HISTORY_COLLAPSED_KEY) === "1";
@@ -293,20 +316,71 @@ export function ChatPanel() {
     composerH,
   ]);
 
+  function onPickFiles(files: FileList | null) {
+    if (!files?.length) return;
+    for (const file of Array.from(files)) {
+      const errKey = attachmentFileError(file);
+      if (errKey) {
+        showError(t(`chat.attach.${errKey}`));
+        continue;
+      }
+      if (stagedAttachments.length >= MAX_ATTACHMENTS) {
+        showError(t("chat.attach.limit"));
+        break;
+      }
+      void uploadAttachment(file).catch(() => showError(t("chat.attach.uploadFailed")));
+    }
+  }
+
+  async function onDownloadAttachment(a: AttachmentDigest) {
+    try {
+      const { blob, filename } = await apiDownloadAttachment(accessToken, a.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename || a.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showError(t("chat.attach.downloadFailed"));
+    }
+  }
+
+  async function onSaveAttachment(a: AttachmentDigest) {
+    try {
+      await saveAttachment(a.id);
+      showInfo(t("chat.attach.saved"));
+    } catch {
+      showError(t("chat.attach.saveFailed"));
+    }
+  }
+
   async function onSubmit(e?: FormEvent) {
     e?.preventDefault();
     if (stopping) return;
     const text = composerInput.trim();
-    if (!text) return;
+    // Uploaded rows ride the message; rows still uploading stay staged.
+    const sendable = stagedAttachments.filter((s) => s.attachmentId !== null);
+    if (!text && sendable.length === 0) return;
     const queueIndex = editInsertAt;
     if (sending && queueFull && queueIndex == null) return;
     setComposerInput("");
     setEditInsertAt(null);
+    const held = stagedAttachments.filter((s) => s.attachmentId === null);
+    const consumed = sendable.length ? consumeStagedAttachments() : [];
+    if (held.length) restoreStagedAttachments(held);
     try {
-      await sendMessage(text, queueIndex != null ? { queueIndex } : undefined);
+      await sendMessage(text, {
+        ...(queueIndex != null ? { queueIndex } : {}),
+        attachmentIds: sendable
+          .map((s) => s.attachmentId)
+          .filter((id): id is string => id !== null),
+        attachmentDigests: sendable.map(stagedToDigest),
+      });
     } catch (err) {
       setComposerInput(text);
       setEditInsertAt(queueIndex);
+      if (consumed.length) restoreStagedAttachments(consumed);
       const reason = err instanceof Error ? err.message : "";
       showError(
         reason === "usage_limit_exceeded" ? t("chat.error.usageLimit") : t("chat.error.sendFailed"),
@@ -326,6 +400,9 @@ export function ChatPanel() {
     }
     const removedAt = dequeueQueuedMessage(id);
     if (removedAt < 0) return;
+    if (item.attachmentDigests?.length) {
+      restoreStagedAttachments(item.attachmentDigests.map(stagedFromDigest));
+    }
     setComposerInput(item.content);
     setEditInsertAt(removedAt);
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -631,6 +708,8 @@ export function ChatPanel() {
                     <ChatMessageItem
                       message={m}
                       now={now}
+                      onDownloadAttachment={(a) => void onDownloadAttachment(a)}
+                      onSaveAttachment={(a) => void onSaveAttachment(a)}
                       retryDisabled={stopping || (sending && queueFull)}
                       onRetry={
                         awaitingImageOk || canRetryAnglePick || (!awaitingAnglePick && !!prevUser)
@@ -760,14 +839,31 @@ export function ChatPanel() {
                           className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                         >
                           <CornerDownRight className="size-3 shrink-0 text-voice" aria-hidden />
-                          <span className="min-w-0 flex-1 truncate">{item.content}</span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {item.content || item.attachmentDigests?.[0]?.filename}
+                          </span>
+                          {item.attachmentDigests?.length ? (
+                            <span className="flex shrink-0 items-center gap-1 text-[10px] text-voice">
+                              <Paperclip className="size-3" aria-hidden />
+                              {item.attachmentDigests.length > 1
+                                ? item.attachmentDigests.length
+                                : null}
+                            </span>
+                          ) : null}
                           <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
                             <IconButton
                               type="button"
                               className="h-6 w-6"
                               title={t("chat.queue.remove")}
                               aria-label={t("chat.queue.remove")}
-                              onClick={() => dequeueQueuedMessage(item.id)}
+                              onClick={() => {
+                                dequeueQueuedMessage(item.id);
+                                if (item.attachmentDigests?.length) {
+                                  restoreStagedAttachments(
+                                    item.attachmentDigests.map(stagedFromDigest),
+                                  );
+                                }
+                              }}
                             >
                               <Trash2 className="size-3" />
                             </IconButton>
@@ -796,6 +892,65 @@ export function ChatPanel() {
                   </div>
                 ) : null}
                 <div className="relative z-10 flex flex-col rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
+                  {stagedAttachments.length > 0 && (
+                    <ul className="flex flex-col border-b border-border px-1 pb-1.5">
+                      {stagedAttachments.map((s) => (
+                        <li
+                          key={s.localId}
+                          className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground"
+                        >
+                          {s.status === "uploading" || s.status === "pending" ? (
+                            <LoaderCircle
+                              className="size-3 shrink-0 animate-spin text-voice"
+                              aria-hidden
+                            />
+                          ) : s.status === "failed" ? (
+                            <TriangleAlert
+                              className="size-3 shrink-0 text-destructive"
+                              aria-hidden
+                            />
+                          ) : (
+                            <FileText
+                              className="size-3 shrink-0 text-muted-foreground"
+                              aria-hidden
+                            />
+                          )}
+                          <span className="min-w-0 flex-1 truncate">
+                            {s.size > 0
+                              ? `${s.filename} · ${formatAttachmentSize(s.size)}`
+                              : s.filename}
+                          </span>
+                          <span
+                            className={cn("shrink-0", s.status === "failed" && "text-destructive")}
+                          >
+                            {s.status === "failed" && s.error
+                              ? s.error
+                              : t(`chat.attach.status.${attachmentStatusKey(s.status)}`)}
+                          </span>
+                          <IconButton
+                            type="button"
+                            className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                            title={t("chat.attach.remove")}
+                            aria-label={t("chat.attach.remove")}
+                            onClick={() => unstageAttachment(s.localId)}
+                          >
+                            <X className="size-3" />
+                          </IconButton>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept={ATTACHMENT_ACCEPT}
+                    className="hidden"
+                    onChange={(e) => {
+                      onPickFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
                   <Textarea
                     ref={inputRef}
                     value={composerInput}
@@ -807,6 +962,18 @@ export function ChatPanel() {
                     className="block max-h-40 min-h-16 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 shadow-none not-read-only:hover:border-0 not-read-only:focus-visible:border-0 not-read-only:focus-visible:ring-0 not-read-only:focus-visible:hover:border-0"
                   />
                   <div className="flex items-center justify-end gap-1 px-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={stopping}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="h-8 w-8 rounded-full text-foreground"
+                      title={t("chat.attach.add")}
+                      aria-label={t("chat.attach.add")}
+                    >
+                      <Paperclip className="size-[18px]" />
+                    </Button>
                     {(sending || stopping) && (
                       <Button
                         type="button"
@@ -827,7 +994,8 @@ export function ChatPanel() {
                       size="icon"
                       disabled={
                         stopping ||
-                        !composerInput.trim() ||
+                        (!composerInput.trim() &&
+                          !stagedAttachments.some((s) => s.attachmentId !== null)) ||
                         (sending && queueFull && editInsertAt == null)
                       }
                       className="h-8 w-8 rounded-full text-foreground"
@@ -1095,6 +1263,8 @@ function ChatMessageItem({
   onFork,
   forkDisabled,
   onOpenFork,
+  onDownloadAttachment,
+  onSaveAttachment,
 }: {
   message: ChatMessage;
   now: Date;
@@ -1103,14 +1273,25 @@ function ChatMessageItem({
   onFork?: () => void;
   forkDisabled?: boolean;
   onOpenFork?: (sessionId: string) => void;
+  onDownloadAttachment?: (a: AttachmentDigest) => void;
+  onSaveAttachment?: (a: AttachmentDigest) => void;
 }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
         <div className="flex max-w-[85%] flex-col sm:max-w-[75%]">
-          <div className="whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground">
-            {message.content}
-          </div>
+          {message.content ? (
+            <div className="whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+              {message.content}
+            </div>
+          ) : null}
+          {message.attachments && message.attachments.length > 0 && (
+            <AttachmentChips
+              attachments={message.attachments}
+              onDownload={onDownloadAttachment}
+              onSave={onSaveAttachment}
+            />
+          )}
           <MessageMeta
             align="user"
             content={message.content}
@@ -1215,6 +1396,73 @@ function ForksChip({ forks, onOpen }: { forks: ForkRef[]; onOpen: (sessionId: st
         </DropdownMenu>
       </ForkDividerRow>
     </div>
+  );
+}
+
+/** Digest chips under a user bubble — read-only actions only (ADR 0047). */
+function AttachmentChips({
+  attachments,
+  onDownload,
+  onSave,
+}: {
+  attachments: AttachmentDigest[];
+  onDownload?: (a: AttachmentDigest) => void;
+  onSave?: (a: AttachmentDigest) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <ul className="mt-1.5 flex flex-col items-end gap-1 sm:flex-row sm:flex-wrap sm:justify-end">
+      {attachments.map((a) => {
+        const failed = a.status === "failed";
+        const chip = (
+          <span className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-foreground">
+            {a.status === "pending" ? (
+              <LoaderCircle className="size-3.5 shrink-0 animate-spin text-voice" aria-hidden />
+            ) : failed ? (
+              <TriangleAlert className="size-3.5 shrink-0 text-destructive" aria-hidden />
+            ) : (
+              <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            )}
+            <span className="max-w-44 truncate font-medium">{a.title || a.filename}</span>
+            <span
+              className={cn("text-[10px]", failed ? "text-destructive" : "text-muted-foreground")}
+            >
+              {t(`chat.attach.status.${attachmentStatusKey(a.status)}`)}
+            </span>
+          </span>
+        );
+        if (failed || (!onDownload && !onSave)) return <li key={a.id}>{chip}</li>;
+        return (
+          <li key={a.id}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={a.title || a.filename}
+                  className="transition hover:bg-accent hover:text-accent-foreground rounded-lg"
+                >
+                  {chip}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                {onDownload && (
+                  <DropdownMenuItem onSelect={() => onDownload(a)}>
+                    <Download className="size-3.5" />
+                    {t("chat.attach.download")}
+                  </DropdownMenuItem>
+                )}
+                {onSave && (
+                  <DropdownMenuItem onSelect={() => onSave(a)}>
+                    <Bookmark className="size-3.5" />
+                    {t("chat.attach.save")}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

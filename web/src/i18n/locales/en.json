@@ -101,6 +101,24 @@
       "holdForAngle": "Queued messages wait until you pick an angle or Stop.",
       "interrupt": "Press Enter again to interrupt and send — this turn's messages stay."
     },
+    "attach": {
+      "add": "Attach files",
+      "badType": "Only PDF / DOCX / TXT / MD are supported",
+      "tooBig": "File is over 20 MB",
+      "limit": "Up to 10 attachments",
+      "uploadFailed": "Upload failed",
+      "download": "Download original",
+      "downloadFailed": "Download failed",
+      "save": "Save to library",
+      "saved": "Saved to library",
+      "saveFailed": "Could not save to library",
+      "remove": "Remove",
+      "status": {
+        "processing": "Processing",
+        "ready": "Ready",
+        "failed": "Could not read"
+      }
+    },
     "live": "Live",
     "offline": "Offline",
     "message": {

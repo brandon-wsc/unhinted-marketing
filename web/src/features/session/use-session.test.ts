@@ -14,6 +14,9 @@ const {
   apiDeleteSession,
   apiUpdateSessionDraft,
   apiConfirmSession,
+  apiListSessionAttachments,
+  apiUploadSessionAttachment,
+  apiSaveAttachment,
   getRememberedSessionId,
   setRememberedSessionId,
   subscribeSessionEvents,
@@ -30,6 +33,9 @@ const {
   apiDeleteSession: vi.fn(),
   apiUpdateSessionDraft: vi.fn(),
   apiConfirmSession: vi.fn(),
+  apiListSessionAttachments: vi.fn(),
+  apiUploadSessionAttachment: vi.fn(),
+  apiSaveAttachment: vi.fn(),
   getRememberedSessionId: vi.fn(),
   setRememberedSessionId: vi.fn(),
   subscribeSessionEvents: vi.fn(),
@@ -55,6 +61,9 @@ vi.mock("@/features/session/api", () => ({
   apiDeleteSession,
   apiUpdateSessionDraft,
   apiConfirmSession,
+  apiListSessionAttachments,
+  apiUploadSessionAttachment,
+  apiSaveAttachment,
 }));
 
 vi.mock("@/features/session/session-storage", () => ({
@@ -3086,6 +3095,173 @@ describe("useSession", () => {
         "sess-1",
         expect.objectContaining({ angleIndex: 1, imageFormat: "comic_4panel" }),
       );
+    });
+  });
+
+  describe("attachments (ADR 0047)", () => {
+    const attachmentOut = (over: Record<string, unknown> = {}) => ({
+      id: "att-1",
+      session_id: "sess-1",
+      filename: "notes.pdf",
+      content_type: "application/pdf",
+      status: "pending",
+      owner_scope: "session",
+      created_at: "2026-01-01T00:00:03Z",
+      ...over,
+    });
+    const digest = {
+      id: "att-1",
+      filename: "notes.pdf",
+      status: "ready" as const,
+    };
+    const hydrateEmpty = () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue({ session: sessionFixture, messages: [] });
+    };
+    const turnWith = (content: string) => ({
+      session: sessionFixture,
+      messages: [
+        {
+          id: "u-a",
+          session_id: "sess-1",
+          role: "user",
+          content,
+          created_at: "2026-01-01T00:00:01Z",
+          attachments: [digest],
+        },
+      ],
+      ...idleTurn,
+    });
+
+    it("uploadAttachment stages the file and polls it to ready", async () => {
+      hydrateEmpty();
+      apiUploadSessionAttachment.mockResolvedValue(attachmentOut());
+      apiListSessionAttachments.mockResolvedValue({
+        attachments: [attachmentOut({ status: "ready" })],
+      });
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      const file = new File(["pdf"], "notes.pdf", { type: "application/pdf" });
+      await act(async () => {
+        await result.current.uploadAttachment(file);
+      });
+
+      expect(apiUploadSessionAttachment).toHaveBeenCalledWith("tok", "sess-1", file);
+      expect(result.current.stagedAttachments[0]?.attachmentId).toBe("att-1");
+      expect(result.current.stagedAttachments[0]?.status).toBe("pending");
+
+      await waitFor(() => expect(result.current.stagedAttachments[0]?.status).toBe("ready"), {
+        timeout: 3000,
+      });
+      expect(apiListSessionAttachments).toHaveBeenCalledWith("tok", "sess-1");
+    });
+
+    it("sendMessage posts attachment_ids and renders server digests", async () => {
+      hydrateEmpty();
+      apiPostSessionMessage.mockResolvedValue(turnWith("睇吓呢份"));
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      await act(async () => {
+        await result.current.sendMessage("睇吓呢份", {
+          attachmentIds: ["att-1"],
+          attachmentDigests: [digest],
+        });
+      });
+
+      expect(apiPostSessionMessage).toHaveBeenCalledWith(
+        "tok",
+        "sess-1",
+        "睇吓呢份",
+        expect.objectContaining({ attachmentIds: ["att-1"] }),
+      );
+      expect(result.current.messages[0]?.attachments?.[0]?.id).toBe("att-1");
+    });
+
+    it("sends an attachment-only message with empty content", async () => {
+      hydrateEmpty();
+      apiPostSessionMessage.mockResolvedValue(turnWith(""));
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      await act(async () => {
+        await result.current.sendMessage("");
+        await result.current.sendMessage("   ");
+      });
+      expect(apiPostSessionMessage).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await result.current.sendMessage("", {
+          attachmentIds: ["att-1"],
+          attachmentDigests: [digest],
+        });
+      });
+      expect(apiPostSessionMessage).toHaveBeenCalledWith(
+        "tok",
+        "sess-1",
+        "",
+        expect.objectContaining({ attachmentIds: ["att-1"] }),
+      );
+    });
+
+    it("queues attachment sends in flight and drains them with the ids", async () => {
+      hydrateEmpty();
+      let resolveFirst: (value: unknown) => void = () => {};
+      apiPostSessionMessage
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveFirst = resolve;
+            }),
+        )
+        .mockResolvedValueOnce(turnWith(""));
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      act(() => {
+        void result.current.sendMessage("first");
+      });
+      await waitFor(() => expect(result.current.sending).toBe(true));
+
+      await act(async () => {
+        await result.current.sendMessage("", {
+          attachmentIds: ["att-1"],
+          attachmentDigests: [digest],
+        });
+      });
+      expect(result.current.queuedMessages[0]?.attachmentIds).toEqual(["att-1"]);
+
+      await act(async () => {
+        resolveFirst(turnWith("first"));
+      });
+      await waitFor(() => expect(apiPostSessionMessage).toHaveBeenCalledTimes(2));
+      expect(apiPostSessionMessage.mock.calls[1]?.[2]).toBe("");
+      expect(apiPostSessionMessage.mock.calls[1]?.[3]).toEqual(
+        expect.objectContaining({ attachmentIds: ["att-1"] }),
+      );
+    });
+
+    it("unstageAttachment drops a staged row", async () => {
+      hydrateEmpty();
+      apiUploadSessionAttachment.mockResolvedValue(attachmentOut({ status: "ready" }));
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      const file = new File(["pdf"], "notes.pdf", { type: "application/pdf" });
+      await act(async () => {
+        await result.current.uploadAttachment(file);
+      });
+      const localId = result.current.stagedAttachments[0]?.localId ?? "";
+      act(() => {
+        result.current.unstageAttachment(localId);
+      });
+      expect(result.current.stagedAttachments).toEqual([]);
     });
   });
 });

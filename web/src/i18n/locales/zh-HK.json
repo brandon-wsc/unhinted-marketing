@@ -101,6 +101,24 @@
       "holdForAngle": "等你揀個角度或者撳停，先會送排隊嗰啲。",
       "interrupt": "再撳 Enter 打斷送出 — 呢轉寫咗嘅嘢會留返。"
     },
+    "attach": {
+      "add": "附加檔案",
+      "badType": "只支援 PDF / DOCX / TXT / MD",
+      "tooBig": "檔案大過 20 MB",
+      "limit": "最多 10 個附件",
+      "uploadFailed": "上載失敗",
+      "download": "下載原件",
+      "downloadFailed": "下載失敗",
+      "save": "存入素材庫",
+      "saved": "已存入素材庫",
+      "saveFailed": "存入素材庫失敗",
+      "remove": "移除",
+      "status": {
+        "processing": "處理中",
+        "ready": "已就緒",
+        "failed": "讀取失敗"
+      }
+    },
     "live": "即時",
     "offline": "未連線",
     "message": {

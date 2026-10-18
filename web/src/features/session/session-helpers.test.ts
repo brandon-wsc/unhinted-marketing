@@ -6,8 +6,11 @@ import {
   agentTrailHeader,
   anglePickParkFromEvents,
   asStringList,
+  attachmentFileError,
+  attachmentStatusKey,
   bumpSessionInHistory,
   EMPTY_COMPOSER_DRAFT,
+  formatAttachmentSize,
   isConfirmSuccessStatus,
   isUserFacingAgentNode,
   lastAgentActionNode,
@@ -15,6 +18,7 @@ import {
   mergePreviewDraft,
   newActionId,
   newQueuedChatMessage,
+  newStagedAttachment,
   OUTCOME_NODE,
   parseAgentProgress,
   parseBrief,
@@ -27,6 +31,8 @@ import {
   shouldInterruptQueuedTurn,
   shouldRetryResumeImage,
   sortSessionHistory,
+  stagedFromDigest,
+  stagedToDigest,
   stashComposerDraft,
   waitForSseReady,
 } from "@/features/session/session-helpers";
@@ -345,6 +351,69 @@ describe("newQueuedChatMessage", () => {
     const item = newQueuedChatMessage("  hi  ");
     expect(item.content).toBe("hi");
     expect(item.id).toMatch(/^local-q-/);
+  });
+
+  it("carries attachment ids + digests when given", () => {
+    const digests = [{ id: "att-1", filename: "a.pdf", status: "ready" as const }];
+    const item = newQueuedChatMessage("", {
+      attachmentIds: ["att-1"],
+      attachmentDigests: digests,
+    });
+    expect(item.content).toBe("");
+    expect(item.attachmentIds).toEqual(["att-1"]);
+    expect(item.attachmentDigests).toEqual(digests);
+  });
+
+  it("omits attachment fields when none", () => {
+    const item = newQueuedChatMessage("hi");
+    expect(item.attachmentIds).toBeUndefined();
+    expect(item.attachmentDigests).toBeUndefined();
+  });
+});
+
+describe("attachments (ADR 0047)", () => {
+  it("attachmentFileError rejects bad types and oversized files", () => {
+    expect(attachmentFileError({ name: "a.csv", size: 10 })).toBe("badType");
+    expect(attachmentFileError({ name: "a.xlsx", size: 10 })).toBe("badType");
+    expect(attachmentFileError({ name: "a.pdf", size: 21 * 1024 * 1024 })).toBe("tooBig");
+    expect(attachmentFileError({ name: "a.PDF", size: 100 })).toBeNull();
+    expect(attachmentFileError({ name: "a.md", size: 100 })).toBeNull();
+    expect(attachmentFileError({ name: "a.docx", size: 100 })).toBeNull();
+  });
+
+  it("formatAttachmentSize renders B / KB / MB", () => {
+    expect(formatAttachmentSize(500)).toBe("500 B");
+    expect(formatAttachmentSize(2048)).toBe("2 KB");
+    expect(formatAttachmentSize(2.4 * 1024 * 1024)).toBe("2.4 MB");
+  });
+
+  it("stagedToDigest maps uploading to pending and keeps the real id", () => {
+    const staged = newStagedAttachment(new File(["x"], "b.docx"));
+    expect(stagedToDigest(staged)).toEqual({
+      id: staged.localId,
+      filename: "b.docx",
+      status: "pending",
+    });
+    expect(stagedToDigest({ ...staged, attachmentId: "att-9", status: "ready" })).toEqual({
+      id: "att-9",
+      filename: "b.docx",
+      status: "ready",
+    });
+  });
+
+  it("stagedFromDigest re-stages a digest as already-uploaded", () => {
+    const row = stagedFromDigest({ id: "att-9", filename: "b.pdf", status: "ready" });
+    expect(row.attachmentId).toBe("att-9");
+    expect(row.filename).toBe("b.pdf");
+    expect(row.status).toBe("ready");
+  });
+
+  it("attachmentStatusKey folds ingest states into chip labels", () => {
+    expect(attachmentStatusKey("uploading")).toBe("processing");
+    expect(attachmentStatusKey("pending")).toBe("processing");
+    expect(attachmentStatusKey("ready_lexical")).toBe("ready");
+    expect(attachmentStatusKey("ready")).toBe("ready");
+    expect(attachmentStatusKey("failed")).toBe("failed");
   });
 });
 

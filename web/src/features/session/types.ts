@@ -30,6 +30,10 @@ export type ForkOrigin = components["schemas"]["ForkOrigin"];
 export type ForkSessionResponse = components["schemas"]["ForkSessionResponse"];
 export type ForkPreviewNote = ForkSessionResponse["preview_note"];
 export type AudiencePersonaOption = components["schemas"]["AudiencePersonaOption"];
+export type AttachmentOut = components["schemas"]["AttachmentOut"];
+export type AttachmentDigest = components["schemas"]["AttachmentDigest"];
+export type AttachmentListResponse = components["schemas"]["AttachmentListResponse"];
+export type AttachmentStatus = AttachmentOut["status"];
 
 // --- Generated from JSON Schema mirrors (schemas/ → docs/contracts) ---
 export type AgentProgress = import("./generated/agent-progress").AgentProgressData;
@@ -48,6 +52,17 @@ export type ChatMessage = {
   metadata?: Record<string, unknown>;
   /** Chats forked from this message (ADR 0017). Absent/empty for most messages. */
   forks?: ForkRef[];
+  /** Attachment digest chips (ADR 0047 §5). Absent/empty for most messages. */
+  attachments?: AttachmentDigest[];
+};
+/** Composer-staged file — uploaded under the session, polled to ready/failed (ADR 0047). */
+export type StagedAttachment = {
+  localId: string;
+  filename: string;
+  size: number;
+  attachmentId: string | null;
+  status: "uploading" | AttachmentStatus;
+  error?: string | null;
 };
 export type SessionEventData = Record<string, unknown>;
 export type SessionEvent = {
@@ -65,6 +80,9 @@ export type AgentActionRecord = {
 export type QueuedChatMessage = {
   id: string;
   content: string;
+  /** ADR 0047 — uploads already staged ride the queued send, not the text alone. */
+  attachmentIds?: string[];
+  attachmentDigests?: AttachmentDigest[];
 };
 /** SPA-only composer snapshot — save/restore on session switch (ADR 0016). */
 export type ComposerDraft = {
