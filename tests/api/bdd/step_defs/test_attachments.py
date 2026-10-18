@@ -1,6 +1,7 @@
-"""Step defs for the ADR 0047 ingest-job scenarios in attachments.feature.
+"""Step defs for the ADR 0047 ingest-job + upload scenarios in attachments.feature.
 
-Only the ingest scenarios bind here — upload HTTP, slice retrieval, library and
+Uploads POST real multipart bytes to ``POST /api/sessions/{id}/attachments``
+and drain the ADR 0039 job queue synchronously. Slice retrieval, library and
 GC scenarios land in later steps and bind in their own modules, so this file
 uses ``scenario()`` per scenario rather than ``scenarios()`` on the feature.
 Steps stay sync (pytest-bdd); async work goes through ``api.run``.
@@ -12,7 +13,6 @@ import uuid
 
 from pytest_bdd import given, parsers, scenario, then, when
 
-from internal.memory.database import open_session
 from internal.memory.document_chunk import ChunkConfig
 from tests.api.attachment_helpers import (
     fetch_attachment_row,
@@ -22,8 +22,7 @@ from tests.api.attachment_helpers import (
     make_scanned_pdf,
     none_embedder,
     patch_embedder,
-    run_next_job,
-    seed_pending_attachment,
+    run_next_pending_job,
 )
 from tests.api.helpers import auth_header, register_user
 
@@ -54,23 +53,42 @@ def test_cold_embedder_never_marks_ready() -> None:
     pass
 
 
-async def _store_and_ingest(
-    bdd_ctx: dict, filename: str, data: bytes, content_type: str
+@scenario(
+    "../features/attachments.feature", "spreadsheet upload is steered to product import"
+)
+def test_spreadsheet_steered_to_product_import() -> None:
+    pass
+
+
+def _post_attachment(api, bdd_ctx, filename: str, data: bytes, content_type: str):
+    """``POST /api/sessions/{id}/attachments`` — the ADR 0047 §3 upload route."""
+    return api.post(
+        f"/api/sessions/{bdd_ctx['session_id']}/attachments",
+        files={"file": (filename, data, content_type)},
+        headers=auth_header(bdd_ctx["access_token"]),
+    )
+
+
+def _drain_attachment_jobs(api, *, limit: int = 8) -> None:
+    """Run queued attachment jobs synchronously (ingest → optional embed).
+
+    Bounded: a cold embedder re-enqueues ``attachment_embed``, but the dedupe
+    key is one-shot so the queue drains in a couple of passes.
+    """
+    for _ in range(limit):
+        if api.run(run_next_pending_job()) is None:
+            return
+    raise AssertionError("attachment job queue did not drain")
+
+
+def _upload_and_ingest(
+    api, bdd_ctx, filename: str, data: bytes, content_type: str
 ) -> uuid.UUID:
-    """Seed the same seam ``POST /sessions/{id}/attachments`` will use once it
-    lands: object bytes + pending row + ingest job, then run the worker handler
-    synchronously. Later steps rebind this step onto the HTTP path."""
-    async with open_session() as db:
-        attachment_id = await seed_pending_attachment(
-            db,
-            user_id=bdd_ctx["user_id"],
-            company_id=bdd_ctx["company_id"],
-            session_id=bdd_ctx["session_id"],
-            filename=filename,
-            data=data,
-            content_type=content_type,
-        )
-        await run_next_job(db)
+    """Upload over real HTTP, run the worker jobs, return the attachment id."""
+    res = _post_attachment(api, bdd_ctx, filename, data, content_type)
+    assert res.status_code in (200, 201), res.text
+    attachment_id = uuid.UUID(res.json()["id"])
+    _drain_attachment_jobs(api)
     return attachment_id
 
 
@@ -91,6 +109,7 @@ def member_with_session(api, bdd_ctx) -> None:
     bdd_ctx["user_id"] = uuid.UUID(body["user"]["id"])
     bdd_ctx["company_id"] = uuid.UUID(company_id)
     bdd_ctx["session_id"] = uuid.UUID(res.json()["id"])
+    bdd_ctx["access_token"] = body["access_token"]
 
 
 @given("the worker embedder has not finished loading")
@@ -100,22 +119,32 @@ def worker_embedder_cold(monkeypatch) -> None:
 
 @when(parsers.parse('they upload "{filename}" with extractable text'))
 def upload_extractable_text(api, bdd_ctx, filename: str) -> None:
-    bdd_ctx["attachment_id"] = api.run(
-        _store_and_ingest(bdd_ctx, filename, make_pdf_with_outline(), "application/pdf")
+    bdd_ctx["attachment_id"] = _upload_and_ingest(
+        api, bdd_ctx, filename, make_pdf_with_outline(), "application/pdf"
     )
 
 
 @when(parsers.parse('they upload "{filename}" with no extractable text'))
 def upload_no_text(api, bdd_ctx, filename: str) -> None:
-    bdd_ctx["attachment_id"] = api.run(
-        _store_and_ingest(bdd_ctx, filename, make_scanned_pdf(), "application/pdf")
+    bdd_ctx["attachment_id"] = _upload_and_ingest(
+        api, bdd_ctx, filename, make_scanned_pdf(), "application/pdf"
     )
 
 
 @when("they upload a file exceeding the chunk cap")
 def upload_over_cap(api, bdd_ctx) -> None:
-    bdd_ctx["attachment_id"] = api.run(
-        _store_and_ingest(bdd_ctx, "catalog-huge.txt", make_over_cap_text(), "text/plain")
+    bdd_ctx["attachment_id"] = _upload_and_ingest(
+        api, bdd_ctx, "catalog-huge.txt", make_over_cap_text(), "text/plain"
+    )
+
+
+@when(parsers.parse('they upload "{filename}" as an attachment'))
+def upload_attachment_refused(api, bdd_ctx, filename: str) -> None:
+    """Upload a file the endpoint is expected to refuse (ADR 0047 §12)."""
+    content_type = "text/csv" if filename.endswith(".csv") else "application/octet-stream"
+    data = b"sku,name,price\nSKU-1,Milk Tea,48\n"
+    bdd_ctx["upload_response"] = _post_attachment(
+        api, bdd_ctx, filename, data, content_type
     )
 
 
@@ -159,3 +188,11 @@ def capped_prefix_ingested(api, bdd_ctx) -> None:
 @then("the digest marks the document partial")
 def digest_marks_partial(api, bdd_ctx) -> None:
     assert _attachment(api, bdd_ctx).doc_profile["partial"] is True
+
+
+@then("the upload is refused with a pointer to product import")
+def refused_with_product_import_pointer(api, bdd_ctx) -> None:
+    """ADR 0047 §12: 400 whose detail names the product import route."""
+    res = bdd_ctx["upload_response"]
+    assert res.status_code == 400, res.text
+    assert "products/import" in res.text
