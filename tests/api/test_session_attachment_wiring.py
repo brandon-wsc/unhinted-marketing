@@ -69,6 +69,7 @@ from tests.api.attachment_helpers import (
     list_attachment_rows,
     make_offer_markdown,
     make_pdf_with_outline,
+    make_scanned_pdf,
     none_embedder,
     patch_embedder,
     read_object_bytes,
@@ -668,3 +669,161 @@ async def test_chat_phrase_cannot_save_attachment(
     assert row is not None and row.owner_scope == "session"
     saved = await list_attachment_rows(user_id=uuid.UUID(data["user"]["id"]), owner_scope="user")
     assert saved == []
+
+
+# --- review-fix additions (ADR 0047 Consequences + §8) -----------------------------
+#
+# The two-axis UI review found the contract gaps below. ``GET
+# /api/sessions/{id}/attachments`` (Consequences: "POST/GET …/attachments")
+# is the only wire-level way for the UI to observe ingest status, the
+# readable ``error`` text (§10) and the ``doc_profile`` digest (§5) —
+# until now every one of those assertions had to read the DB row.
+# ``PostMessageRequest.content`` also needs to relax for a true
+# attachment-only message (§8 zero-instruction upload).
+
+
+@pytest.mark.asyncio
+async def test_get_session_attachments_lists_upload_with_status(
+    client: AsyncClient,
+) -> None:
+    """Consequences row: GET …/attachments returns this session's rows."""
+    _data, headers, session_id = await _member_and_session(client)
+    attachment_id = await _upload(
+        client,
+        session_id,
+        headers,
+        filename=PDF_UPLOAD[0],
+        data=PDF_UPLOAD[1],
+        content_type=PDF_UPLOAD[2],
+    )
+
+    res = await client.get(f"/api/sessions/{session_id}/attachments", headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    items = body["attachments"] if isinstance(body, dict) else body
+    match = next((a for a in items if a["id"] == str(attachment_id)), None)
+    assert match is not None, f"uploaded attachment missing from list: {items}"
+    assert match["filename"] == PDF_UPLOAD[0]
+    assert match["status"] in {"pending", "ready_lexical", "ready", "failed"}
+    assert match["owner_scope"] == "session"
+
+
+@pytest.mark.asyncio
+async def test_get_session_attachments_surfaces_error_and_profile(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§10 'the attachment tells the truth' needs the error on the wire:
+    a failed ingest's row carries non-empty ``error``; a successful one
+    carries the §5 ``doc_profile`` digest."""
+    patch_embedder(monkeypatch, none_embedder)
+    _data, headers, session_id = await _member_and_session(client)
+    bad_id = await _upload(
+        client,
+        session_id,
+        headers,
+        filename="scan.pdf",
+        data=make_scanned_pdf(),
+        content_type="application/pdf",
+    )
+    good_id = await _upload(
+        client,
+        session_id,
+        headers,
+        filename=PDF_UPLOAD[0],
+        data=PDF_UPLOAD[1],
+        content_type=PDF_UPLOAD[2],
+    )
+    await _drain_attachment_jobs()
+
+    res = await client.get(f"/api/sessions/{session_id}/attachments", headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    items = body["attachments"] if isinstance(body, dict) else body
+    by_id = {a["id"]: a for a in items}
+    bad = by_id[str(bad_id)]
+    assert bad["status"] == "failed"
+    assert bad["error"], f"failed row lacks readable error: {bad}"
+    good = by_id[str(good_id)]
+    assert good["status"] == "ready_lexical"
+    assert (good["doc_profile"] or {}).get("title")
+
+
+@pytest.mark.asyncio
+async def test_get_session_attachments_requires_owner(client: AsyncClient) -> None:
+    _data, _headers, session_id = await _member_and_session(client)
+    other = await register_user(client)
+    res = await client.get(
+        f"/api/sessions/{session_id}/attachments",
+        headers=auth_header(other["access_token"]),
+    )
+    assert res.status_code in (403, 404), res.text
+
+
+@pytest.mark.asyncio
+async def test_post_message_attachment_only_content(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§8 zero-instruction upload: a message may carry only the attachment —
+    empty ``content`` is valid when ``attachment_ids`` is non-empty."""
+    patch_embedder(monkeypatch, none_embedder)
+    _data, headers, session_id = await _member_and_session(client)
+    attachment_id = await _upload(
+        client,
+        session_id,
+        headers,
+        filename=PDF_UPLOAD[0],
+        data=PDF_UPLOAD[1],
+        content_type=PDF_UPLOAD[2],
+    )
+    await _drain_attachment_jobs()
+    set_session_graph(StubSessionGraph())
+
+    res = await client.post(
+        f"/api/sessions/{session_id}/messages",
+        json={"content": "", "attachment_ids": [str(attachment_id)]},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    _assert_message_reference(_last_user_message(res.json()), attachment_id)
+
+
+@pytest.mark.asyncio
+async def test_post_message_empty_content_still_422(client: AsyncClient) -> None:
+    """Empty content without attachments stays invalid."""
+    _data, headers, session_id = await _member_and_session(client)
+    res = await client.post(
+        f"/api/sessions/{session_id}/messages",
+        json={"content": ""},
+        headers=headers,
+    )
+    assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
+async def test_message_chip_carries_title(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§8: the reply/digest quotes the doc title — the chip must ship it."""
+    patch_embedder(monkeypatch, none_embedder)
+    _data, headers, session_id = await _member_and_session(client)
+    attachment_id = await _upload(
+        client,
+        session_id,
+        headers,
+        filename=PDF_UPLOAD[0],
+        data=PDF_UPLOAD[1],
+        content_type=PDF_UPLOAD[2],
+    )
+    await _drain_attachment_jobs()
+    set_session_graph(StubSessionGraph())
+
+    res = await _post_message(
+        client,
+        session_id,
+        headers,
+        content="呢份係咩嚟",
+        attachment_ids=[attachment_id],
+    )
+    assert res.status_code == 200, res.text
+    digest = _assert_message_reference(_last_user_message(res.json()), attachment_id)
+    assert digest.get("title"), f"chip lacks doc title: {digest}"

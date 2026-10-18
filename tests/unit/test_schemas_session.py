@@ -81,6 +81,9 @@ def test_update_session_request_defaults() -> None:
 def test_post_message_requires_content() -> None:
     with pytest.raises(ValidationError):
         PostMessageRequest(content="")
+    # ADR 0047 §8 — but a true attachment-only message is valid.
+    body = PostMessageRequest(content="", attachment_ids=[uuid.uuid4()])
+    assert body.content == ""
 
 
 def test_post_message_optional_source_question_id() -> None:
