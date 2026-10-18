@@ -78,6 +78,7 @@ from schemas.contracts import (
 from schemas.session import (
     AddSessionImageRequest,
     AttachmentDigest,
+    AttachmentListResponse,
     AttachmentOut,
     ChooseAngleRequest,
     ChooseAngleResponse,
@@ -138,6 +139,17 @@ def _message_response(msg, attachments: list[AttachmentDigest] | None = None) ->
     )
 
 
+def _attachment_ids_of(msg: SessionMessage) -> list[uuid.UUID]:
+    """Uuids stored in ``metadata.attachment_ids`` — bad entries dropped."""
+    ids: list[uuid.UUID] = []
+    for raw in (msg.metadata_ or {}).get("attachment_ids") or []:
+        try:
+            ids.append(uuid.UUID(str(raw)))
+        except (ValueError, TypeError, AttributeError):
+            continue
+    return ids
+
+
 async def _message_attachment_map(
     db: AsyncSession, msgs: list[SessionMessage]
 ) -> dict[uuid.UUID, list[AttachmentDigest]]:
@@ -149,16 +161,10 @@ async def _message_attachment_map(
     wanted: dict[uuid.UUID, list[uuid.UUID]] = {}
     all_ids: set[uuid.UUID] = set()
     for m in msgs:
-        ids: list[uuid.UUID] = []
-        for raw in (m.metadata_ or {}).get("attachment_ids") or []:
-            try:
-                aid = uuid.UUID(str(raw))
-            except (ValueError, TypeError, AttributeError):
-                continue
-            ids.append(aid)
-            all_ids.add(aid)
+        ids = _attachment_ids_of(m)
         if ids:
             wanted[m.id] = ids
+            all_ids.update(ids)
     if not all_ids:
         return {}
     rows = await db.scalars(select(Attachment).where(Attachment.id.in_(all_ids)))
@@ -169,12 +175,19 @@ async def _message_attachment_map(
                 id=by_id[aid].id,
                 filename=by_id[aid].filename,
                 status=by_id[aid].status,
+                title=(by_id[aid].doc_profile or {}).get("title"),
             )
             for aid in ids
             if aid in by_id
         ]
         for mid, ids in wanted.items()
     }
+
+
+async def _messages_response(db: AsyncSession, msgs: list[SessionMessage]) -> list[MessageResponse]:
+    """Transcript rows with batched attachment chips (ADR 0047 §5)."""
+    chips = await _message_attachment_map(db, msgs)
+    return [_message_response(m, attachments=chips.get(m.id)) for m in msgs]
 
 
 def _brief_from_state(state: dict | None) -> SessionBriefData | None:
@@ -511,9 +524,15 @@ async def _resolve_message_attachments(
 ) -> None:
     """Validate every ``attachment_ids`` entry before the turn runs — one bad
     id fails the whole message with a uniform 404."""
-    for attachment_id in dict.fromkeys(attachment_ids):
-        attachment = await db.get(Attachment, attachment_id)
-        if not await _message_attachment_reachable(db, attachment, session=session, user=user):
+    unique_ids = list(dict.fromkeys(attachment_ids))
+    if not unique_ids:
+        return
+    rows = await db.scalars(select(Attachment).where(Attachment.id.in_(unique_ids)))
+    by_id = {r.id: r for r in rows}
+    for attachment_id in unique_ids:
+        if not await _message_attachment_reachable(
+            db, by_id.get(attachment_id), session=session, user=user
+        ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
             )
@@ -550,11 +569,10 @@ async def post_message(
     await db.refresh(session)
 
     all_msgs = await repos.list_session_messages(db, session.id)
-    chips = await _message_attachment_map(db, all_msgs)
     values = result["values"]
     return PostMessageResponse(
         session=_session_response(session),
-        messages=[_message_response(m, attachments=chips.get(m.id)) for m in all_msgs],
+        messages=await _messages_response(db, all_msgs),
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -597,11 +615,10 @@ async def resume_image(
     await db.refresh(session)
 
     all_msgs = await repos.list_session_messages(db, session.id)
-    chips = await _message_attachment_map(db, all_msgs)
     values = result["values"]
     return ResumeImageResponse(
         session=_session_response(session),
-        messages=[_message_response(m, attachments=chips.get(m.id)) for m in all_msgs],
+        messages=await _messages_response(db, all_msgs),
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -651,11 +668,10 @@ async def choose_angle(
     await db.refresh(session)
 
     all_msgs = await repos.list_session_messages(db, session.id)
-    chips = await _message_attachment_map(db, all_msgs)
     values = result["values"]
     return ChooseAngleResponse(
         session=_session_response(session),
-        messages=[_message_response(m, attachments=chips.get(m.id)) for m in all_msgs],
+        messages=await _messages_response(db, all_msgs),
         interrupted=result["interrupted"],
         mode=session.mode,
         revision=values.get("revision") or None,
@@ -742,11 +758,7 @@ async def fork_session(
     # and tells GC the file is still in use.
     referenced_ids: set[uuid.UUID] = set()
     for m in copied:
-        for raw in (m.metadata_ or {}).get("attachment_ids") or []:
-            try:
-                referenced_ids.add(uuid.UUID(str(raw)))
-            except (ValueError, TypeError, AttributeError):
-                continue
+        referenced_ids.update(_attachment_ids_of(m))
     if referenced_ids:
         live_ids = set(
             (await db.scalars(select(Attachment.id).where(Attachment.id.in_(referenced_ids)))).all()
@@ -767,10 +779,9 @@ async def fork_session(
         preview_note = "not_carried_later"
 
     new_msgs = await repos.list_session_messages(db, fork.id)
-    chips = await _message_attachment_map(db, new_msgs)
     return ForkSessionResponse(
         session=_session_response(fork),
-        messages=[_message_response(m, attachments=chips.get(m.id)) for m in new_msgs],
+        messages=await _messages_response(db, new_msgs),
         forked_from=ForkOrigin(
             session_id=session.id,
             message_id=body.message_id,
@@ -796,15 +807,12 @@ async def get_session_messages(
     for f in forks:
         if f.forked_from_message_id is not None:
             forks_by_message.setdefault(f.forked_from_message_id, []).append(f)
-    chips = await _message_attachment_map(db, msgs)
-    messages: list[MessageResponse] = []
-    for m in msgs:
-        resp = _message_response(m, attachments=chips.get(m.id))
+    messages = await _messages_response(db, msgs)
+    for resp, m in zip(messages, msgs, strict=True):
         resp.forks = [
             ForkRef(session_id=f.id, title=f.title, created_at=f.created_at)
             for f in forks_by_message.get(m.id, [])
         ]
-        messages.append(resp)
 
     parked_angle = bool(state.get("awaiting_angle_pick"))
     parked_image = bool(state.get("awaiting_image_ok"))
@@ -1122,15 +1130,23 @@ _ATTACHMENT_INGEST_KIND = "attachment_ingest"
 
 
 def _attachment_out(row: Attachment) -> AttachmentOut:
-    return AttachmentOut(
-        id=row.id,
-        session_id=row.session_id,
-        filename=row.filename,
-        content_type=row.content_type,
-        status=row.status,
-        owner_scope=row.owner_scope,
-        created_at=row.created_at,
-    )
+    return AttachmentOut.model_validate(row)
+
+
+@router.get("/{session_id}/attachments", response_model=AttachmentListResponse)
+async def list_session_attachments(
+    session_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AttachmentListResponse:
+    """List the attachments this session references (ADR 0047 Consequences —
+    ``POST/GET …/sessions/{id}/attachments``). The only wire-level way for
+    the UI to poll ingest ``status``, the §10 ``error`` text and the §5
+    ``doc_profile`` digest; hydration reads the ``attachment_sessions`` join
+    (§13), so fork-shared and saved library docs still show up."""
+    session = await _require_owned_session(db, session_id, user)
+    rows = await repos.list_session_attachments(db, session.id)
+    return AttachmentListResponse(attachments=[_attachment_out(r) for r in rows])
 
 
 @router.post(

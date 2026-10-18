@@ -258,7 +258,7 @@ async def read_attachment(
             ref=str(item.get("ref") or ""),
             text=str(item.get("text") or ""),
         )
-        for item in result.get("slices") or []
+        for item in (result.get("slices") or [])[:5]
         if isinstance(item, dict)
     ]
     return ReadAttachmentResponse(slices=slices, partial=bool(result.get("partial")))

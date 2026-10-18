@@ -82,12 +82,4 @@ async def save_attachment(
         # the file for digests and shares the GC refcount (§13).
         attachment.session_id = None
     await db.commit()
-    return AttachmentOut(
-        id=attachment.id,
-        session_id=attachment.session_id,
-        filename=attachment.filename,
-        content_type=attachment.content_type,
-        status=attachment.status,
-        owner_scope=attachment.owner_scope,
-        created_at=attachment.created_at,
-    )
+    return AttachmentOut.model_validate(attachment)

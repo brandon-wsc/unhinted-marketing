@@ -4702,6 +4702,53 @@
       }
     },
     "/api/sessions/{session_id}/attachments": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "List Session Attachments",
+        "description": "List the attachments this session references (ADR 0047 Consequences —\n``POST/GET …/sessions/{id}/attachments``). The only wire-level way for\nthe UI to poll ingest ``status``, the §10 ``error`` text and the §5\n``doc_profile`` digest; hydration reads the ``attachment_sessions`` join\n(§13), so fork-shared and saved library docs still show up.",
+        "operationId": "list_session_attachments_api_sessions__session_id__attachments_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "sessions"
@@ -5840,7 +5887,24 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "pending",
+              "ready_lexical",
+              "ready",
+              "failed"
+            ],
             "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
           }
         },
         "type": "object",
@@ -5851,6 +5915,23 @@
         ],
         "title": "AttachmentDigest",
         "description": "ADR 0047 §5 digest chip on a message that references attachments."
+      },
+      "AttachmentListResponse": {
+        "properties": {
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentOut"
+            },
+            "type": "array",
+            "title": "Attachments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attachments"
+        ],
+        "title": "AttachmentListResponse",
+        "description": "``GET /sessions/{id}/attachments`` — the session's referenced docs."
       },
       "AttachmentOut": {
         "properties": {
@@ -5881,11 +5962,38 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "pending",
+              "ready_lexical",
+              "ready",
+              "failed"
+            ],
             "title": "Status"
           },
           "owner_scope": {
             "type": "string",
+            "enum": [
+              "session",
+              "user",
+              "org"
+            ],
             "title": "Owner Scope"
+          },
+          "doc_profile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Doc Profile"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
           },
           "created_at": {
             "type": "string",
@@ -5904,7 +6012,7 @@
           "created_at"
         ],
         "title": "AttachmentOut",
-        "description": "ADR 0047 §3 upload response — ingest flips status async via the job queue."
+        "description": "ADR 0047 §3 attachment row — ingest flips status async via the job queue.\n\n``error`` carries the readable §10 failure text; ``doc_profile`` carries\nthe §5 deterministic digest (title/pages/outline/kind_guess/preview/\npartial). Both land once the ingest job has run."
       },
       "AudiencePersonaOption": {
         "properties": {
@@ -8885,7 +8993,6 @@
           "content": {
             "type": "string",
             "maxLength": 8000,
-            "minLength": 1,
             "title": "Content"
           },
           "source_question_id": {

@@ -1370,7 +1370,15 @@ export type paths = {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Session Attachments
+         * @description List the attachments this session references (ADR 0047 Consequences —
+         *     ``POST/GET …/sessions/{id}/attachments``). The only wire-level way for
+         *     the UI to poll ingest ``status``, the §10 ``error`` text and the §5
+         *     ``doc_profile`` digest; hydration reads the ``attachment_sessions`` join
+         *     (§13), so fork-shared and saved library docs still show up.
+         */
+        get: operations["list_session_attachments_api_sessions__session_id__attachments_get"];
         put?: never;
         /**
          * Post Session Attachment
@@ -1724,12 +1732,29 @@ export type components = {
             id: string;
             /** Filename */
             filename: string;
-            /** Status */
-            status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "ready_lexical" | "ready" | "failed";
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * AttachmentListResponse
+         * @description ``GET /sessions/{id}/attachments`` — the session's referenced docs.
+         */
+        AttachmentListResponse: {
+            /** Attachments */
+            attachments: components["schemas"]["AttachmentOut"][];
         };
         /**
          * AttachmentOut
-         * @description ADR 0047 §3 upload response — ingest flips status async via the job queue.
+         * @description ADR 0047 §3 attachment row — ingest flips status async via the job queue.
+         *
+         *     ``error`` carries the readable §10 failure text; ``doc_profile`` carries
+         *     the §5 deterministic digest (title/pages/outline/kind_guess/preview/
+         *     partial). Both land once the ingest job has run.
          */
         AttachmentOut: {
             /**
@@ -1743,10 +1768,22 @@ export type components = {
             filename: string;
             /** Content Type */
             content_type: string;
-            /** Status */
-            status: string;
-            /** Owner Scope */
-            owner_scope: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "ready_lexical" | "ready" | "failed";
+            /**
+             * Owner Scope
+             * @enum {string}
+             */
+            owner_scope: "session" | "user" | "org";
+            /** Doc Profile */
+            doc_profile?: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -6987,6 +7024,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PreviewMediaMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_session_attachments_api_sessions__session_id__attachments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentListResponse"];
                 };
             };
             /** @description Validation Error */

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from schemas.contracts import (
     AudiencePersonaOption,
@@ -54,10 +54,17 @@ class UpdateSessionRequest(BaseModel):
 
 
 class PostMessageRequest(BaseModel):
-    content: str = Field(min_length=1, max_length=8000)
+    # ADR 0047 §8 — empty only when the message carries attachments.
+    content: str = Field(max_length=8000)
     source_question_id: str | None = Field(default=None, max_length=80)
     # ADR 0047 §3 — attach this session's scratch or the member's library docs.
     attachment_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def _content_or_attachments(self) -> "PostMessageRequest":
+        if not self.content and not self.attachment_ids:
+            raise ValueError("content or attachment_ids is required")
+        return self
 
 
 class ForkSessionRequest(BaseModel):
@@ -82,12 +89,17 @@ class ForkOrigin(BaseModel):
     title: str | None = None
 
 
+AttachmentStatus = Literal["pending", "ready_lexical", "ready", "failed"]
+AttachmentScope = Literal["session", "user", "org"]
+
+
 class AttachmentDigest(BaseModel):
     """ADR 0047 §5 digest chip on a message that references attachments."""
 
     id: uuid.UUID
     filename: str
-    status: str  # pending | ready_lexical | ready | failed
+    status: AttachmentStatus
+    title: str | None = None
 
 
 class MessageResponse(BaseModel):
@@ -263,15 +275,29 @@ class PreviewMediaMutationResponse(BaseModel):
 
 
 class AttachmentOut(BaseModel):
-    """ADR 0047 §3 upload response — ingest flips status async via the job queue."""
+    """ADR 0047 §3 attachment row — ingest flips status async via the job queue.
+
+    ``error`` carries the readable §10 failure text; ``doc_profile`` carries
+    the §5 deterministic digest (title/pages/outline/kind_guess/preview/
+    partial). Both land once the ingest job has run."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     session_id: uuid.UUID | None
     filename: str
     content_type: str
-    status: str  # pending | ready_lexical | ready | failed
-    owner_scope: str  # session | user | org
+    status: AttachmentStatus
+    owner_scope: AttachmentScope
+    doc_profile: dict = Field(default_factory=dict)
+    error: str | None = None
     created_at: datetime
+
+
+class AttachmentListResponse(BaseModel):
+    """``GET /sessions/{id}/attachments`` — the session's referenced docs."""
+
+    attachments: list[AttachmentOut]
 
 
 class SessionEvent(BaseModel):

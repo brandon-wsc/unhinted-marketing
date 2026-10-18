@@ -44,6 +44,7 @@ class ReadAttachmentSlice(BaseModel):
     """One document-chunk slice returned by ``read_attachment`` (ADR 0047 §6)."""
 
     chunk_id: str
+    # Page/section pointer for the UI citation chip ("p.1 · 優惠詳情").
     ref: str
     text: str
 
@@ -56,7 +57,7 @@ class ReadAttachmentResponse(BaseModel):
     returns ``slices=[]`` + a non-empty ``error`` — the tool never raises.
     """
 
-    slices: list[ReadAttachmentSlice] = Field(default_factory=list)
+    slices: list[ReadAttachmentSlice] = Field(default_factory=list, max_length=5)
     partial: bool = False
     error: str | None = None
 
