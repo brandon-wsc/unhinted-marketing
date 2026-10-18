@@ -1452,6 +1452,17 @@ async def _resume_parked_turn(
                     else None
                 ),
             )
+        elif attachment_ids and last is not None:
+            # Idempotent retry carrying NEW refs — merge them onto the
+            # already-persisted row or its chips/digests silently drop.
+            meta = dict(last.metadata_ or {})
+            existing_ids = [str(i) for i in (meta.get("attachment_ids") or [])]
+            merged = existing_ids + [
+                str(aid) for aid in attachment_ids if str(aid) not in existing_ids
+            ]
+            if merged != existing_ids:
+                meta["attachment_ids"] = merged
+                last.metadata_ = meta
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
     if user_msg is not None:
         message_dicts.append({"role": "user", "content": user_pick_text})

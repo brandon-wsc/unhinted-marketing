@@ -28,8 +28,10 @@ logger = logging.getLogger(__name__)
 # sessions/{id}/r{revision}-{hex}.{ext} (hex optional for leftover rN.ext keys)
 _STORE_KEY_RE = re.compile(r"^sessions/[A-Za-z0-9_-]+/r\d+(?:-[0-9a-f]+)?\.[A-Za-z0-9]+$")
 # ADR 0047 scratch bytes — object-store keys, but never public: the
-# unauthenticated media route keeps gating on ``is_store_key`` only.
-_ATTACHMENT_KEY_RE = re.compile(r"^attachments/[0-9a-fA-F-]{36}/[^/]{1,300}$")
+# unauthenticated media route keeps gating on ``is_store_key`` only. Name
+# length is unbounded here so every stored key still enumerates for
+# migration/GC; uploads cap the name separately (sessions.py upload route).
+_ATTACHMENT_KEY_RE = re.compile(r"^attachments/[0-9a-fA-F-]{36}/[^/]+$")
 _API_MEDIA_PREFIX = "/api/media/"
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"

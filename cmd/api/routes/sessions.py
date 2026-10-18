@@ -1184,6 +1184,14 @@ async def post_session_attachment(
 
     # Sniff by filename extension (case-insensitive); content_type is advisory.
     filename = Path(file.filename or "").name or "attachment"
+    if len(filename.encode("utf-8")) > 200:
+        # Local stores cap path components at 255 bytes — reject up front
+        # with a readable 400 instead of a storage 503, and keep every
+        # stored key classifiable for migration enumeration.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Attachment filename is too long",
+        )
     ext = Path(filename).suffix.lower()
     if ext in _ATTACHMENT_SPREADSHEET_EXTS:
         raise HTTPException(
