@@ -25,12 +25,31 @@ for the full pinned seam):
 - query embedding goes through a module-level ``embed_query``/``embed_texts``
   lookup so tests can monkeypatch it (same seam style as
   ``document_ingest.embed_texts``).
+
+Invented contract the session-wiring step must satisfy (see
+test_session_attachment_wiring.py for the full pinned seam):
+- ``PostMessageRequest.attachment_ids: list[uuid.UUID]`` — each id must be
+  this session's scratch (``attachment_sessions`` join or ``session_id``) or
+  the member's ``user``/``org`` library row; unknown / cross-tenant /
+  out-of-scope ids → 404 (existence never leaks).
+- The persisted user message stores ``metadata["attachment_ids"]`` (the
+  ``MESSAGE_ATTACHMENT_IDS_KEY`` constant) as a list of uuid strings, and
+  ``MessageResponse`` gains an ``attachments`` digest-chip list
+  ``[{id, filename, status}]``.
+- ``session.state["attachments"]`` holds hydrated digests
+  ``{id, filename, status, doc_profile subset}`` per ADR 0047 §5/§13.
+- ``POST /api/attachments/{id}/save`` — save-to-library is HTTP (§2): flips
+  the caller's own session-scratch row to ``owner_scope="user"``; unknown /
+  cross-company / non-owner → 404; re-save → 200 (idempotent).
+- ``StubSessionGraph`` — the deterministic ``set_session_graph`` seam for
+  POST /messages without LLM keys (see class docstring).
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -414,3 +433,121 @@ async def read_document_for_member(
             query=query,
             section=section,
         )
+
+
+# --- session wiring seams (ADR 0047 §2/§3/§5/§13) ------------------------------
+
+# Invented names (documented in test_session_attachment_wiring.py):
+MESSAGE_ATTACHMENT_IDS_KEY = "attachment_ids"
+"""metadata key on the persisted user message row: ``[str(attachment_id)]``."""
+
+MESSAGE_ATTACHMENTS_FIELD = "attachments"
+"""``MessageResponse`` digest-chip field: ``[{id, filename, status}]``."""
+
+STATE_ATTACHMENTS_KEY = "attachments"
+"""``session.state`` digest list — hydrated from the ``attachment_sessions``
+join per ADR 0047 §13: ``{id, filename, status, doc_profile subset}``."""
+
+SAVE_ATTACHMENT_PATH = "/api/attachments/{attachment_id}/save"
+"""Save-to-library route (§2) — POST flips the caller's scratch row to
+``owner_scope="user"`` and returns the updated ``AttachmentOut``."""
+
+# Fields a state digest must carry beyond id/filename/status — any one of the
+# doc_profile subset keys satisfies the §5 "digests only" contract.
+DIGEST_PROFILE_KEYS = ("title", "preview", "pages", "outline", "kind_guess", "doc_profile")
+
+
+class StubSessionGraph:
+    """Deterministic stand-in for the compiled session graph.
+
+    ``set_session_graph(StubSessionGraph())`` lets POST /messages run a real
+    turn without LLM keys: ``ainvoke`` echoes the ``graph_input`` state dict
+    (optionally appending a canned assistant reply to ``messages``) so every
+    key the service put on the input — including future ``attachments``
+    digests — flows back into ``values``; ``aget_state`` reports the echoed
+    values with ``next=()`` (never parked, never interrupted). ``last_input``
+    records the exact ``graph_input`` for assertions.
+
+    Matches the seam ``internal.session.service._invoke_graph`` /
+    ``session_park_kind`` use: ``await graph.ainvoke(input, config)`` → dict,
+    ``await graph.aget_state(config)`` → snapshot with ``.values`` and
+    ``.next``. The conftest ``clean_db`` fixture resets it per test.
+    """
+
+    def __init__(self, reply: str | None = None) -> None:
+        self.reply = reply
+        self.last_input: dict | None = None
+        self._values: dict = {}
+
+    async def ainvoke(self, graph_input, config):
+        self.last_input = graph_input
+        values = dict(graph_input or {})
+        if self.reply is not None:
+            values["messages"] = [
+                *(values.get("messages") or []),
+                {"role": "assistant", "content": self.reply},
+            ]
+        self._values = values
+        return values
+
+    async def aget_state(self, config):
+        return SimpleNamespace(values=dict(self._values), next=())
+
+
+async def fetch_session_row(session_id: uuid.UUID) -> Session | None:
+    """Open-session ``sessions`` row fetch — ``None`` after delete."""
+    async with open_session() as db:
+        return await db.get(Session, session_id)
+
+
+async def fetch_attachment_or_none(attachment_id: uuid.UUID) -> Attachment | None:
+    """Open-session ``attachments`` row fetch — ``None`` after GC/delete."""
+    async with open_session() as db:
+        return await db.get(Attachment, attachment_id)
+
+
+async def list_attachment_rows(
+    *,
+    user_id: uuid.UUID | None = None,
+    owner_scope: str | None = None,
+    company_id: uuid.UUID | None = None,
+) -> list[Attachment]:
+    """Open-session attachment listing with optional scope/owner filters."""
+    async with open_session() as db:
+        stmt = select(Attachment).order_by(Attachment.created_at)
+        if user_id is not None:
+            stmt = stmt.where(Attachment.user_id == user_id)
+        if owner_scope is not None:
+            stmt = stmt.where(Attachment.owner_scope == owner_scope)
+        if company_id is not None:
+            stmt = stmt.where(Attachment.company_id == company_id)
+        return list((await db.scalars(stmt)).all())
+
+
+async def fetch_join_rows(
+    attachment_id: uuid.UUID, *, session_id: uuid.UUID | None = None
+) -> list[AttachmentSession]:
+    """``attachment_sessions`` rows for an attachment (optionally one session)."""
+    async with open_session() as db:
+        stmt = select(AttachmentSession).where(
+            AttachmentSession.attachment_id == attachment_id
+        )
+        if session_id is not None:
+            stmt = stmt.where(AttachmentSession.session_id == session_id)
+        return list((await db.scalars(stmt)).all())
+
+
+async def fetch_chunk_count(attachment_id: uuid.UUID) -> int:
+    async with open_session() as db:
+        return len(await fetch_chunks(db, attachment_id))
+
+
+async def read_object_bytes(key: str) -> bytes | None:
+    """``get_bytes`` or ``None`` on ``MediaStorageError`` — backend-agnostic
+    'are the object bytes gone' probe for GC assertions."""
+    from internal.media.storage import MediaStorageError, get_bytes
+
+    try:
+        return await get_bytes(key)
+    except MediaStorageError:
+        return None

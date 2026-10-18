@@ -14,9 +14,21 @@ import uuid
 from pytest_bdd import given, parsers, scenario, then, when
 
 from internal.memory.document_chunk import ChunkConfig
+from internal.session.graph import set_session_graph
 from tests.api.attachment_helpers import (
+    DIGEST_PROFILE_KEYS,
+    MESSAGE_ATTACHMENT_IDS_KEY,
+    MESSAGE_ATTACHMENTS_FIELD,
+    SAVE_ATTACHMENT_PATH,
+    STATE_ATTACHMENTS_KEY,
+    StubSessionGraph,
+    fetch_attachment_or_none,
     fetch_attachment_row,
+    fetch_chunk_count,
     fetch_chunk_rows,
+    fetch_join_rows,
+    fetch_session_row,
+    list_attachment_rows,
     make_offer_markdown,
     make_over_cap_text,
     make_pdf_with_outline,
@@ -24,6 +36,7 @@ from tests.api.attachment_helpers import (
     none_embedder,
     patch_embedder,
     read_document_for_member,
+    read_object_bytes,
     run_next_pending_job,
 )
 from tests.api.helpers import auth_header, register_user
@@ -79,6 +92,28 @@ def test_section_slices_work_while_embeddings_pending() -> None:
     "../features/attachments.feature", "documents never leak across companies"
 )
 def test_documents_never_leak_across_companies() -> None:
+    pass
+
+
+@scenario(
+    "../features/attachments.feature", "an attached file rides on the next message"
+)
+def test_attached_file_rides_on_next_message() -> None:
+    pass
+
+
+@scenario("../features/attachments.feature", "save to library is an HTTP action")
+def test_save_to_library_is_http_action() -> None:
+    pass
+
+
+@scenario("../features/attachments.feature", "a chat phrase cannot save to library")
+def test_chat_phrase_cannot_save_to_library() -> None:
+    pass
+
+
+@scenario("../features/attachments.feature", "scratch dies with the session")
+def test_scratch_dies_with_the_session() -> None:
     pass
 
 
@@ -334,3 +369,186 @@ def result_marked_partial(api, bdd_ctx) -> None:
 def request_is_refused(api, bdd_ctx) -> None:
     """Refusal shape: the seam returns ``None`` for out-of-scope ids."""
     assert bdd_ctx["read_result"] is None
+
+
+# --- session wiring (attachment_ids / save / GC — ADR 0047 §2/§3/§5/§13) --------
+#
+# Invented names (mirrored in attachment_helpers.py and
+# test_session_attachment_wiring.py): PostMessageRequest.attachment_ids;
+# user-message metadata["attachment_ids"]; MessageResponse.attachments digest
+# chips {id, filename, status}; session.state["attachments"] hydrated digests;
+# POST /api/attachments/{id}/save flips the caller's scratch to owner_scope
+# "user"; session delete reclaims scratch rows + chunks + bytes when the last
+# attachment_sessions reference dies.
+
+
+@given("the member has a ready attachment in the session")
+def member_has_ready_session_attachment(api, bdd_ctx, monkeypatch) -> None:
+    """Upload + drain jobs (``ready_lexical`` counts as ready, §7) and stub the
+    session graph so the follow-up POST /messages runs without LLM keys."""
+    patch_embedder(monkeypatch, none_embedder)
+    bdd_ctx["attachment_id"] = _upload_and_ingest(
+        api, bdd_ctx, "offers.md", make_offer_markdown(), "text/markdown"
+    )
+    assert _attachment(api, bdd_ctx).status in {"ready_lexical", "ready"}
+    set_session_graph(StubSessionGraph())
+
+
+@given("the member has a session-scoped attachment")
+def member_has_session_scoped_attachment(api, bdd_ctx, monkeypatch) -> None:
+    """Upload + drain so attachment row, chunks and bytes all exist."""
+    patch_embedder(monkeypatch, none_embedder)
+    bdd_ctx["attachment_id"] = _upload_and_ingest(
+        api, bdd_ctx, "offers.md", make_offer_markdown(), "text/markdown"
+    )
+    row = _attachment(api, bdd_ctx)
+    assert row.owner_scope == "session"
+    assert row.session_id == bdd_ctx["session_id"]
+    bdd_ctx["object_key"] = row.object_key
+    assert api.run(fetch_chunk_count(bdd_ctx["attachment_id"])) > 0
+    assert api.run(read_object_bytes(row.object_key)) is not None
+
+
+def _post_session_message(api, bdd_ctx, content: str) -> None:
+    """POST /messages carrying ``attachment_ids`` for the attachment in context."""
+    res = api.post(
+        f"/api/sessions/{bdd_ctx['session_id']}/messages",
+        json={
+            "content": content,
+            "attachment_ids": [str(bdd_ctx["attachment_id"])],
+        },
+        headers=auth_header(bdd_ctx["access_token"]),
+    )
+    assert res.status_code == 200, res.text
+    bdd_ctx["message_response"] = res.json()
+
+
+def _last_user_message(bdd_ctx) -> dict:
+    users = [
+        m for m in bdd_ctx["message_response"]["messages"] if m["role"] == "user"
+    ]
+    assert users, "no user message in POST /messages response"
+    return users[-1]
+
+
+def _attachment_digest(entries, attachment_id) -> dict | None:
+    return next(
+        (d for d in entries or [] if str(d.get("id")) == str(attachment_id)),
+        None,
+    )
+
+
+@when("they send a message with the attachment")
+def send_message_with_attachment(api, bdd_ctx) -> None:
+    _post_session_message(api, bdd_ctx, "用呢份嘢出個 post")
+
+
+@then("the message references the attachment")
+def message_references_attachment(api, bdd_ctx) -> None:
+    """The persisted user message stores ``metadata.attachment_ids`` and the
+    response carries the ``attachments`` digest chip ``{id, filename, status}``."""
+    msg = _last_user_message(bdd_ctx)
+    attachment_id = bdd_ctx["attachment_id"]
+    stored_ids = [
+        str(i)
+        for i in (msg.get("metadata") or {}).get(MESSAGE_ATTACHMENT_IDS_KEY) or []
+    ]
+    assert str(attachment_id) in stored_ids, (
+        f"user message metadata lacks {MESSAGE_ATTACHMENT_IDS_KEY}: {msg}"
+    )
+    digest = _attachment_digest(
+        msg.get(MESSAGE_ATTACHMENTS_FIELD), attachment_id
+    )
+    assert digest is not None, f"message carries no attachment digest: {msg}"
+    assert digest.get("filename")
+    assert digest.get("status")
+
+
+@then("the session carries the attachment digest")
+def session_carries_attachment_digest(api, bdd_ctx) -> None:
+    """``session.state["attachments"]`` holds the hydrated digest (§5/§13):
+    ``{id, filename, status, doc_profile subset}``."""
+    session = api.run(fetch_session_row(bdd_ctx["session_id"]))
+    assert session is not None
+    digests = (session.state or {}).get(STATE_ATTACHMENTS_KEY) or []
+    digest = _attachment_digest(digests, bdd_ctx["attachment_id"])
+    assert digest is not None, (
+        f"session.state[{STATE_ATTACHMENTS_KEY!r}] lacks the digest: {digests}"
+    )
+    assert digest.get("filename")
+    assert digest.get("status")
+    assert any(k in digest for k in DIGEST_PROFILE_KEYS), (
+        f"digest misses the doc_profile subset: {digest}"
+    )
+
+
+@when("they post the attachment to their library")
+def post_attachment_to_library(api, bdd_ctx) -> None:
+    """§2 save-to-library is an explicit HTTP action, never a chat phrase."""
+    res = api.post(
+        SAVE_ATTACHMENT_PATH.format(attachment_id=bdd_ctx["attachment_id"]),
+        headers=auth_header(bdd_ctx["access_token"]),
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["owner_scope"] == "user"
+    bdd_ctx["save_response"] = res.json()
+
+
+@then("a committed user-scope document exists")
+def committed_user_scope_document_exists(api, bdd_ctx) -> None:
+    row = _attachment(api, bdd_ctx)
+    assert row.owner_scope == "user"
+    assert row.user_id == bdd_ctx["user_id"]
+
+
+@then("the document survives the session")
+def document_survives_the_session(api, bdd_ctx) -> None:
+    """Delete the originating session — a saved row is library, not scratch."""
+    res = api.request(
+        "DELETE",
+        f"/api/sessions/{bdd_ctx['session_id']}",
+        headers=auth_header(bdd_ctx["access_token"]),
+    )
+    assert res.status_code == 204, res.text
+    row = _attachment(api, bdd_ctx)
+    assert row.owner_scope == "user"
+    assert api.run(read_object_bytes(row.object_key)) is not None
+
+
+@when("they send a message asking to save it")
+def send_message_asking_to_save(api, bdd_ctx) -> None:
+    """「幫我存入我嘅庫」— a chat phrase, not a commit (§2 / ADR 0011)."""
+    _post_session_message(api, bdd_ctx, "幫我存入我嘅庫")
+
+
+@then("no committed document exists for the member")
+def no_committed_document_for_member(api, bdd_ctx) -> None:
+    """Chat never commits: the scratch row stays session-scoped and no
+    user-scope attachment appears for the member."""
+    row = _attachment(api, bdd_ctx)
+    assert row.owner_scope == "session"
+    saved = api.run(
+        list_attachment_rows(user_id=bdd_ctx["user_id"], owner_scope="user")
+    )
+    assert saved == []
+
+
+@when("the session is deleted")
+def session_is_deleted(api, bdd_ctx) -> None:
+    res = api.request(
+        "DELETE",
+        f"/api/sessions/{bdd_ctx['session_id']}",
+        headers=auth_header(bdd_ctx["access_token"]),
+    )
+    assert res.status_code == 204, res.text
+
+
+@then("the attachment rows and the stored object are removed")
+def attachment_rows_and_object_removed(api, bdd_ctx) -> None:
+    """Last referencing session died → attachment row, document_chunks,
+    attachment_sessions rows and object bytes are all reclaimed (§13)."""
+    attachment_id = bdd_ctx["attachment_id"]
+    assert api.run(fetch_attachment_or_none(attachment_id)) is None
+    assert api.run(fetch_chunk_count(attachment_id)) == 0
+    assert api.run(fetch_join_rows(attachment_id)) == []
+    assert api.run(read_object_bytes(bdd_ctx["object_key"])) is None
