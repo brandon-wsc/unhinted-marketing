@@ -816,3 +816,96 @@ class Job(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Attachment(Base):
+    """File attachment row (ADR 0047): bytes live in the media object store
+    under the ``attachments/`` key prefix; this row carries owner scope and
+    the async ingest status."""
+
+    __tablename__ = "attachments"
+    __table_args__ = (
+        CheckConstraint(
+            "owner_scope IN ('session', 'user', 'org')",
+            name="ck_attachments_owner_scope",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'ready_lexical', 'ready', 'failed')",
+            name="ck_attachments_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    owner_scope: Mapped[str] = mapped_column(String(10), nullable=False)  # session | user | org
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(200), nullable=False)
+    object_key: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
+    doc_profile: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class DocumentChunk(Base):
+    """One chunk of an attachment (ADR 0047 §4). ``embedding`` is a
+    dimensionless vector — every retrieve filters ``embedding_model`` so a
+    second embedding space can land without re-migration (§9)."""
+
+    __tablename__ = "document_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "attachment_id", "chunk_index", name="uq_document_chunks_attachment_index"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("attachments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    heading_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    page_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AttachmentSession(Base):
+    """Join recording which sessions reference an attachment (ADR 0047 §13) —
+    forks share chunks + object bytes by reference; GC when the last
+    referencing session is deleted."""
+
+    __tablename__ = "attachment_sessions"
+
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("attachments.id", ondelete="CASCADE"), primary_key=True
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
