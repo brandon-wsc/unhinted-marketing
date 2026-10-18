@@ -17,11 +17,13 @@ from internal.memory.document_chunk import ChunkConfig
 from tests.api.attachment_helpers import (
     fetch_attachment_row,
     fetch_chunk_rows,
+    make_offer_markdown,
     make_over_cap_text,
     make_pdf_with_outline,
     make_scanned_pdf,
     none_embedder,
     patch_embedder,
+    read_document_for_member,
     run_next_pending_job,
 )
 from tests.api.helpers import auth_header, register_user
@@ -57,6 +59,26 @@ def test_cold_embedder_never_marks_ready() -> None:
     "../features/attachments.feature", "spreadsheet upload is steered to product import"
 )
 def test_spreadsheet_steered_to_product_import() -> None:
+    pass
+
+
+@scenario("../features/attachments.feature", "document slices answer a query")
+def test_document_slices_answer_a_query() -> None:
+    pass
+
+
+@scenario(
+    "../features/attachments.feature",
+    "section slices work while embeddings are pending",
+)
+def test_section_slices_work_while_embeddings_pending() -> None:
+    pass
+
+
+@scenario(
+    "../features/attachments.feature", "documents never leak across companies"
+)
+def test_documents_never_leak_across_companies() -> None:
     pass
 
 
@@ -196,3 +218,119 @@ def refused_with_product_import_pointer(api, bdd_ctx) -> None:
     res = bdd_ctx["upload_response"]
     assert res.status_code == 400, res.text
     assert "products/import" in res.text
+
+
+# --- document retrieve (read_document seam) ------------------------------------
+
+
+def _read_document(api, bdd_ctx, *, query=None, section=None, attachment_id=None):
+    """Drive the invented ``read_document`` seam as the member in context."""
+    return api.run(
+        read_document_for_member(
+            company_id=bdd_ctx["company_id"],
+            user_id=bdd_ctx["user_id"],
+            attachment_id=attachment_id or bdd_ctx["attachment_id"],
+            query=query,
+            section=section,
+        )
+    )
+
+
+@given("the member has a ready attachment with an offer section")
+def member_has_offer_attachment(api, bdd_ctx, monkeypatch) -> None:
+    """"ready" here means retrievable: ``ready_lexical`` counts (ADR 0047 §7 —
+    lexical + section slices already serve before vectors land). The offer
+    doc is .md because the pdfium fixtures are ASCII-only."""
+    patch_embedder(monkeypatch, none_embedder)
+    bdd_ctx["attachment_id"] = _upload_and_ingest(
+        api, bdd_ctx, "offers.md", make_offer_markdown(), "text/markdown"
+    )
+    assert _attachment(api, bdd_ctx).status in {"ready_lexical", "ready"}
+
+
+@given("an attachment whose embeddings are still running")
+def attachment_embeddings_still_running(api, bdd_ctx, monkeypatch) -> None:
+    patch_embedder(monkeypatch, none_embedder)
+    bdd_ctx["attachment_id"] = _upload_and_ingest(
+        api, bdd_ctx, "offers.md", make_offer_markdown(), "text/markdown"
+    )
+    assert _attachment(api, bdd_ctx).status == "ready_lexical"
+
+
+@given("a member of another company has an attachment")
+def other_company_member_has_attachment(api, bdd_ctx, monkeypatch) -> None:
+    patch_embedder(monkeypatch, none_embedder)
+    body = api.run(register_user(api.client, email="bdd-other-co@example.com"))
+    company_id = body["user"]["organizations"][0]["id"]
+    res = api.post(
+        "/api/sessions",
+        json={"company_id": company_id},
+        headers=auth_header(body["access_token"]),
+    )
+    assert res.status_code == 201, res.text
+    up = api.post(
+        f"/api/sessions/{res.json()['id']}/attachments",
+        files={"file": ("offers.md", make_offer_markdown(), "text/markdown")},
+        headers=auth_header(body["access_token"]),
+    )
+    assert up.status_code in (200, 201), up.text
+    bdd_ctx["other_attachment_id"] = uuid.UUID(up.json()["id"])
+    _drain_attachment_jobs(api)
+
+
+@when(parsers.parse('document slices are requested for "{term}"'))
+def request_slices_for_query(api, bdd_ctx, term: str) -> None:
+    bdd_ctx["read_result"] = _read_document(api, bdd_ctx, query=term)
+
+
+@when(parsers.parse('document slices are requested for the section "{section}"'))
+def request_slices_for_section(api, bdd_ctx, section: str) -> None:
+    bdd_ctx["section"] = section
+    bdd_ctx["read_result"] = _read_document(api, bdd_ctx, section=section)
+
+
+@when("the first member requests that attachment")
+def first_member_requests_attachment(api, bdd_ctx) -> None:
+    """Chosen probe: the ``read_document`` seam with the first member's
+    company_id/user_id against the other company's attachment id. (The HTTP
+    download route's cross-company refusal is already pinned by
+    test_session_attachments.py — the service seam is what §14 re-checks.)"""
+    bdd_ctx["read_result"] = _read_document(
+        api, bdd_ctx, attachment_id=bdd_ctx["other_attachment_id"]
+    )
+
+
+@then("at most 5 slices are returned")
+def at_most_five_slices(api, bdd_ctx) -> None:
+    result = bdd_ctx["read_result"]
+    assert result is not None
+    assert 1 <= len(result["slices"]) <= 5
+
+
+@then("every slice carries a chunk id, a page or section ref and text")
+def every_slice_carries_id_ref_text(api, bdd_ctx) -> None:
+    for s in bdd_ctx["read_result"]["slices"]:
+        uuid.UUID(s["chunk_id"])  # grounding id parses as a uuid
+        assert isinstance(s["ref"], str) and s["ref"].strip()
+        assert isinstance(s["text"], str) and s["text"].strip()
+
+
+@then("the slices come from that heading path")
+def slices_come_from_heading_path(api, bdd_ctx) -> None:
+    result = bdd_ctx["read_result"]
+    assert result is not None and result["slices"]
+    chunks = api.run(fetch_chunk_rows(bdd_ctx["attachment_id"]))
+    paths = {str(c.id): (c.heading_path or "") for c in chunks}
+    for s in result["slices"]:
+        assert bdd_ctx["section"] in paths.get(s["chunk_id"], "")
+
+
+@then("the result is marked partial")
+def result_marked_partial(api, bdd_ctx) -> None:
+    assert bdd_ctx["read_result"]["partial"] is True
+
+
+@then("the request is refused")
+def request_is_refused(api, bdd_ctx) -> None:
+    """Refusal shape: the seam returns ``None`` for out-of-scope ids."""
+    assert bdd_ctx["read_result"] is None

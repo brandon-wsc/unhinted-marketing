@@ -16,6 +16,15 @@ Invented contract the ingest step must satisfy:
 - ``doc_profile``: ``title``, ``pages``, ``outline``, ``kind_guess``
   (``"catalog"`` for SKU/price-dense docs | ``"document"`` fallback),
   ``preview``, ``partial``.
+
+Invented contract the retrieve step must satisfy (see test_document_retrieve.py
+for the full pinned seam):
+- ``internal.memory.document_retrieve.read_document(db, *, company_id,
+  user_id, attachment_id, query=None, section=None)`` → ``{"slices": [...],
+  "partial": bool}`` or ``None`` for out-of-scope ids.
+- query embedding goes through a module-level ``embed_query``/``embed_texts``
+  lookup so tests can monkeypatch it (same seam style as
+  ``document_ingest.embed_texts``).
 """
 
 from __future__ import annotations
@@ -134,6 +143,41 @@ def make_prose_text() -> bytes:
     return "\n\n".join(paragraphs).encode()
 
 
+def make_offer_markdown() -> bytes:
+    """Markdown doc with a ``優惠詳情`` section whose body mentions ``優惠期``.
+
+    CJK section docs go through the md parser — the pdfium fixtures are
+    ASCII-only. Lands as ~3 chunks: one under ``產品目錄``, one under
+    ``產品目錄 > 優惠詳情`` (the 優惠期 needle), one under ``產品目錄 > 條款及細則``.
+    """
+    return (
+        "# 產品目錄\n\n"
+        "本店招牌奶茶系列，每日新鮮沖調。\n\n"
+        "## 優惠詳情\n\n"
+        "優惠期由即日起至二零二六年三月三十一日，會員購買指定飲品可享九折優惠。\n\n"
+        "## 條款及細則\n\n"
+        "所有價格以港元計算，優惠不可與其他折扣同時使用。\n"
+    ).encode()
+
+
+def make_long_section_markdown(paragraphs: int = 7) -> bytes:
+    """One ``優惠詳情`` section with enough paragraphs to exceed the slice cap.
+
+    Every paragraph is its own document block (~60 chars each — under the
+    chunk budget, so one chunk per paragraph), giving ``paragraphs`` chunks
+    under the same heading path.
+    """
+    parts = ["# 產品目錄", "", "## 優惠詳情", ""]
+    for i in range(paragraphs):
+        parts.append(
+            f"優惠條款第{i + 1}項：會員於推廣期內購買指定飲品可享折扣優惠，"
+            "每張收據限用一次，詳情請向店員查詢，優惠受條款及細則約束。"
+        )
+        parts.append("")
+    parts.extend(["## 條款及細則", "", "所有價格以港元計算。"])
+    return "\n".join(parts).encode()
+
+
 # --- DB seeding -------------------------------------------------------------
 
 
@@ -147,14 +191,21 @@ async def seed_session(db: AsyncSession, *, user_id: uuid.UUID, company_id: uuid
 async def seed_pending_attachment(
     db: AsyncSession,
     *,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     company_id: uuid.UUID,
-    session_id: uuid.UUID,
+    session_id: uuid.UUID | None = None,
     filename: str,
     data: bytes,
     content_type: str,
+    owner_scope: str = "session",
 ) -> uuid.UUID:
-    """Seed the upload seam: object bytes + pending row + session join + ingest job."""
+    """Seed the upload seam: object bytes + pending row + session join + ingest job.
+
+    ``owner_scope`` pins the ADR 0047 §2 ownership matrix for retrieve tests:
+    ``session`` scratch and ``user`` library rows carry ``user_id``; ``org``
+    rows are readable by every company member (pass ``session_id=None`` and
+    ``user_id=None`` for a pure org row — the session join is then skipped).
+    """
     from internal.media.storage import put_bytes
 
     attachment_id = uuid.uuid4()
@@ -164,7 +215,7 @@ async def seed_pending_attachment(
         Attachment(
             id=attachment_id,
             company_id=company_id,
-            owner_scope="session",
+            owner_scope=owner_scope,
             user_id=user_id,
             session_id=session_id,
             filename=filename,
@@ -174,7 +225,8 @@ async def seed_pending_attachment(
             doc_profile={},
         )
     )
-    db.add(AttachmentSession(attachment_id=attachment_id, session_id=session_id))
+    if session_id is not None:
+        db.add(AttachmentSession(attachment_id=attachment_id, session_id=session_id))
     await repos.enqueue_job(
         db,
         kind=ATTACHMENT_INGEST_KIND,
@@ -303,3 +355,62 @@ def active_embedding_model_name() -> str:
     from internal.memory.embeddings import embedding_model_name
 
     return embedding_model_name()
+
+
+def patch_query_embedder(
+    monkeypatch: pytest.MonkeyPatch,
+    fn: Callable[[str], list[float] | None],
+) -> None:
+    """Patch the query-side embedder wherever the retrieve seam may look it up.
+
+    ``fn`` takes one query string and returns one vector or ``None``
+    (``embed_query`` shape). ``embed_texts`` names are patched too so an impl
+    that embeds via the batch seam is still intercepted. Same dual-site style
+    as ``patch_embedder``: ``internal.memory.embeddings`` covers module-attr
+    call sites; ``document_retrieve.<name>`` covers ``from ... import``
+    bindings (``raising=False`` — the module need not export both names).
+    """
+    from internal.memory import embeddings
+
+    def _batch(texts: list[str]) -> list[list[float] | None]:
+        return [fn(t) for t in texts]
+
+    monkeypatch.setattr(embeddings, "embed_query", fn)
+    monkeypatch.setattr(embeddings, "embed_texts", _batch)
+    try:
+        from internal.memory import document_retrieve
+    except ImportError:
+        return
+    monkeypatch.setattr(document_retrieve, "embed_query", fn, raising=False)
+    monkeypatch.setattr(document_retrieve, "embed_texts", _batch, raising=False)
+
+
+def uniform_query_vector() -> list[float]:
+    """The warm_embedder vector — cosine distance 0 to every warm chunk."""
+    return [0.001 * (i + 1) for i in range(EMBEDDING_DIM)]
+
+
+async def read_document_for_member(
+    *,
+    company_id: uuid.UUID,
+    user_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    query: str | None = None,
+    section: str | None = None,
+) -> dict | None:
+    """Open-session call of the invented ``read_document`` seam (sync BDD steps).
+
+    Deferred import: ``internal.memory.document_retrieve`` does not exist yet —
+    tests fail on the ModuleNotFoundError, never at collection.
+    """
+    from internal.memory.document_retrieve import read_document
+
+    async with open_session() as db:
+        return await read_document(
+            db,
+            company_id=company_id,
+            user_id=user_id,
+            attachment_id=attachment_id,
+            query=query,
+            section=section,
+        )
