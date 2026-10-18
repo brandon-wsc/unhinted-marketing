@@ -1426,7 +1426,11 @@ export type paths = {
         };
         /**
          * Download Attachment
-         * @description Return the original file bytes to a member of the attachment's company.
+         * @description Return the original file bytes — ADR 0047 §3 owner matrix.
+         *
+         *     ``org`` rows serve any company member; ``session``/``user`` rows are the
+         *     uploader's alone — company membership must not hand a colleague someone
+         *     else's scratch or Mine file. Every refusal is a uniform 404.
          */
         get: operations["download_attachment_api_attachments__attachment_id__download_get"];
         put?: never;

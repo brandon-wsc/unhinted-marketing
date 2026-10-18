@@ -4872,7 +4872,7 @@
           "attachments"
         ],
         "summary": "Download Attachment",
-        "description": "Return the original file bytes to a member of the attachment's company.",
+        "description": "Return the original file bytes — ADR 0047 §3 owner matrix.\n\n``org`` rows serve any company member; ``session``/``user`` rows are the\nuploader's alone — company membership must not hand a colleague someone\nelse's scratch or Mine file. Every refusal is a uniform 404.",
         "operationId": "download_attachment_api_attachments__attachment_id__download_get",
         "security": [
           {
