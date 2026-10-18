@@ -48,6 +48,8 @@ Targets are **line coverage** unless noted. CI should enforce **per-path** (or p
 
 Defer: `POST /messages` graph turns, SSE fan-out, LiteLLM nodes.
 
+**BDD (optional layer over Tier 2):** `tests/api/bdd/` — pytest-bdd `.feature` specs + step defs; same fixtures and `TEST_DATABASE_URL` gate, so `pytest tests/api` picks them up. Step functions must be **sync** — pytest-bdd does not await coroutine steps (`call_fixture_func` returns them un-awaited); drive HTTP through the `api` facade fixture in `tests/api/bdd/conftest.py`. Use BDD for user-visible API behavior a `.feature` can express (ADR → scenario traceability); internals (chunkers, score fusion) stay plain unit tests.
+
 ### Frontend
 
 | Tier | Paths | Target | Gate |
