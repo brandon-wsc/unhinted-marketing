@@ -7,6 +7,7 @@ defaults to ``len`` as the char fallback for the embedder tokenizer.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -20,6 +21,17 @@ _SEPARATOR_RE = re.compile(
     r"|[.?](?=\s)"
     r"|[\U0001f300-\U0001faff☀-➿]+"
 )
+
+
+_CJK_FLOOR = 0x2E80
+
+
+def mixed_text_units(text: str) -> int:
+    """Weighted length for the §4 ~80–110 budget, which is sized for CJK
+    density: CJK/fullwidth/emoji chars (≥U+2E80) count 1 unit, lighter chars
+    0.4 — Latin prose reaches a comparable semantic size (~275 chars) instead
+    of fragmenting every sentence at 110 chars."""
+    return math.ceil(sum(1.0 if ord(c) >= _CJK_FLOOR else 0.4 for c in text))
 
 
 @dataclass
@@ -78,18 +90,29 @@ def _sentence_pieces(text: str) -> list[str]:
 
 
 def _char_slices(text: str, allowed: int, counter: Callable[[str], int]) -> list[str]:
-    """Split an oversized sentence on chars so every slice fits the budget."""
+    """Split oversized text within the budget, snapping the cut back to the
+    last word boundary when one falls in the second half of the window —
+    Latin prose must not lose half a word at every slice. Space-free text
+    (CJK) falls through to the plain char cut as before."""
     text = text.strip()
     slices: list[str] = []
-    buf = ""
-    for char in text:
-        if buf and counter(buf + char) > allowed:
-            slices.append(buf)
-            buf = ""
-        buf += char
-    if buf:
-        slices.append(buf)
-    return slices
+    rest = text
+    while counter(rest) > allowed:
+        cut = 0
+        for i in range(len(rest)):
+            if counter(rest[: i + 1]) > allowed:
+                break
+            cut = i + 1
+        if cut <= 0:
+            cut = 1  # defensive: always make progress
+        snap = rest[:cut].rfind(" ")
+        if snap >= cut // 2:
+            cut = snap + 1
+        slices.append(rest[:cut])
+        rest = rest[cut:].lstrip()
+    if rest.strip():
+        slices.append(rest)
+    return [s for s in slices if s.strip()]
 
 
 def _paragraph_chunk_texts(
@@ -191,7 +214,7 @@ def _heading_path_update(stack: list[tuple[int, str]], block: DocumentBlock) -> 
 
 def chunk_blocks(blocks: Sequence[DocumentBlock], config: ChunkConfig | None = None) -> ChunkResult:
     config = config or ChunkConfig()
-    counter = config.counter or len
+    counter = config.counter or mixed_text_units
     chunks: list[Chunk] = []
     truncated = False
     stack: list[tuple[int, str]] = []
