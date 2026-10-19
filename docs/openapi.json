@@ -4962,6 +4962,65 @@
         }
       }
     },
+    "/api/attachments/{attachment_id}/transcript": {
+      "post": {
+        "tags": [
+          "attachments"
+        ],
+        "summary": "Post Attachment Transcript",
+        "description": "ADR 0048 §2 — accept client-supplied OCR text for a parked attachment.\n\nSame access rule as download: ``org`` rows take any company member's\ntranscript, ``session``/``user`` rows the uploader's alone; refusals are\na uniform 404. Only ``needs_ocr`` rows accept a transcript — anything\nelse is a 409 (a healthy doc is never silently re-chunked by client\ntext). The transcript lands as ``attachments/{id}/transcript.json`` and\na fresh ``attachment_ingest`` job resumes the unchanged chunk → embed\npipeline; OCR itself never runs in this process.",
+        "operationId": "post_attachment_transcript_api_attachments__attachment_id__transcript_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentTranscriptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/media/{key}": {
       "get": {
         "tags": [
@@ -5891,7 +5950,8 @@
               "pending",
               "ready_lexical",
               "ready",
-              "failed"
+              "failed",
+              "needs_ocr"
             ],
             "title": "Status"
           },
@@ -5966,7 +6026,8 @@
               "pending",
               "ready_lexical",
               "ready",
-              "failed"
+              "failed",
+              "needs_ocr"
             ],
             "title": "Status"
           },
@@ -6013,6 +6074,37 @@
         ],
         "title": "AttachmentOut",
         "description": "ADR 0047 §3 attachment row — ingest flips status async via the job queue.\n\n``error`` carries the readable §10 failure text; ``doc_profile`` carries\nthe §5 deterministic digest (title/pages/outline/kind_guess/preview/\npartial). Both land once the ingest job has run."
+      },
+      "AttachmentTranscriptRequest": {
+        "properties": {
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptPageInput"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pages"
+        ],
+        "title": "AttachmentTranscriptRequest",
+        "description": "``POST /attachments/{id}/transcript`` — per-page OCR text produced by\nany engine (browser tesseract.js today; a worker OCR job later — same\ncontract). Untrusted input: caps keep the payload bounded; ``engine`` is\nrecorded as provenance, never trusted."
       },
       "AudiencePersonaOption": {
         "properties": {
@@ -12018,6 +12110,26 @@
           "turn_id"
         ],
         "title": "TraceTurn"
+      },
+      "TranscriptPageInput": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Page"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "text"
+        ],
+        "title": "TranscriptPageInput",
+        "description": "One page of client-supplied OCR text (ADR 0048 §2)."
       },
       "UpdateDraftRequest": {
         "properties": {

@@ -8,6 +8,7 @@ import ipaddress
 import logging
 import re
 import secrets
+import uuid
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -554,6 +555,14 @@ async def persist_generated_image(image_ref: str, *, key: str) -> str:
         await put_bytes(key=key, data=raw, content_type=content_type)
         return key
     raise MediaStorageError("Unsupported image scheme (expected http(s) or data:).")
+
+
+def attachment_transcript_key(attachment_id: uuid.UUID | str) -> str:
+    """ADR 0048 §4 — canonical OCR transcript for an attachment. Same
+    ``attachments/`` prefix as the original bytes: never served by
+    ``GET /api/media/{key}``, enumerated by the local→S3 migration, and
+    deleted by the session GC."""
+    return f"attachments/{attachment_id}/transcript.json"
 
 
 def media_object_key(*, session_id: str, revision: int, ext: str = "png") -> str:

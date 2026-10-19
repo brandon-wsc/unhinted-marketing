@@ -48,8 +48,21 @@ def test_upload_becomes_lexical_ready() -> None:
     pass
 
 
-@scenario("../features/attachments.feature", "scanned PDF tells the truth")
-def test_scanned_pdf_tells_the_truth() -> None:
+@scenario("../features/attachments.feature", "scanned PDF parks for OCR")
+def test_scanned_pdf_parks_for_ocr() -> None:
+    pass
+
+
+@scenario("../features/attachments.feature", "a browser OCR transcript resumes ingest")
+def test_browser_ocr_transcript_resumes_ingest() -> None:
+    pass
+
+
+@scenario(
+    "../features/attachments.feature",
+    "transcript for a healthy attachment is refused",
+)
+def test_transcript_for_healthy_attachment_refused() -> None:
     pass
 
 
@@ -217,6 +230,58 @@ def error_says_no_readable_text(api, bdd_ctx) -> None:
     error = _attachment(api, bdd_ctx).error or ""
     assert error
     assert "text" in error.lower() or "讀唔到字" in error
+
+
+@given("a scanned attachment parked for OCR")
+def scanned_attachment_parked(api, bdd_ctx) -> None:
+    """ADR 0048 §1 — upload a no-text-layer PDF and drain the ingest job;
+    the row must park at ``needs_ocr``."""
+    bdd_ctx["attachment_id"] = _upload_and_ingest(
+        api, bdd_ctx, "menu-scan.pdf", make_scanned_pdf(), "application/pdf"
+    )
+    assert _attachment(api, bdd_ctx).status == "needs_ocr"
+
+
+@when("they post an OCR transcript for it")
+def post_ocr_transcript(api, bdd_ctx) -> None:
+    """ADR 0048 §2 — submit browser-OCR per-page text, then drain the fresh
+    ingest job the endpoint enqueues (no-op when the post was refused)."""
+    bdd_ctx["transcript_response"] = api.post(
+        f"/api/attachments/{bdd_ctx['attachment_id']}/transcript",
+        json={
+            "engine": "tesseract.js",
+            "pages": [{"page": 1, "text": "招牌奶茶 $48\n\n凍檸茶 $36"}],
+        },
+        headers=auth_header(bdd_ctx["access_token"]),
+    )
+    api.run(run_next_pending_job())
+
+
+@then("the digest says how many pages need OCR")
+def digest_says_ocr_pages(api, bdd_ctx) -> None:
+    profile = _attachment(api, bdd_ctx).doc_profile
+    assert profile["ocr"] == "pending"
+    assert isinstance(profile["pages"], int) and profile["pages"] >= 1
+
+
+@then("the digest marks the document as OCR-sourced")
+def digest_marks_ocr(api, bdd_ctx) -> None:
+    profile = _attachment(api, bdd_ctx).doc_profile
+    assert profile["ocr"] is True
+    assert profile["engine"]
+
+
+@then("the transcript is stored for re-ingest")
+def transcript_stored(api, bdd_ctx) -> None:
+    """ADR 0048 §4 — ``transcript.json`` is canonical parsed text."""
+    key = f"attachments/{bdd_ctx['attachment_id']}/transcript.json"
+    stored = api.run(read_object_bytes(key))
+    assert stored is not None and "招牌奶茶" in stored.decode()
+
+
+@then("the transcript post is refused with a conflict")
+def transcript_refused_with_conflict(api, bdd_ctx) -> None:
+    assert bdd_ctx["transcript_response"].status_code == 409
 
 
 @then(parsers.parse('no chunk is stored without a vector under status "{status}"'))

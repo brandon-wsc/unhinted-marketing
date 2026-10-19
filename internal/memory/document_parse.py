@@ -12,6 +12,24 @@ class DocumentParseError(Exception):
     """Raised when an attachment cannot be parsed into text blocks."""
 
 
+class NoExtractableTextError(DocumentParseError):
+    """ADR 0048 §1 — the document parsed cleanly but carries no text layer
+    (scanned / image-only). ``page_count`` lets the ingest job park the row
+    at ``needs_ocr`` with enough profile for a client to drive OCR."""
+
+    def __init__(self, message: str, *, page_count: int = 0) -> None:
+        super().__init__(message)
+        self.page_count = page_count
+
+
+@dataclass
+class TranscriptPage:
+    """One page of client-supplied OCR text (ADR 0048 §2)."""
+
+    page: int
+    text: str
+
+
 @dataclass
 class DocumentBlock:
     kind: str  # "heading" | "paragraph" | "table"
@@ -206,10 +224,28 @@ def _parse_pdf(data: bytes) -> list[DocumentBlock]:
     doc.close()
 
     if not any(block.kind == "paragraph" for block in blocks):
-        raise DocumentParseError(
-            "PDF has no extractable text — likely a scanned or image-only file"
+        raise NoExtractableTextError(
+            "PDF has no extractable text — likely a scanned or image-only file",
+            page_count=n_pages,
         )
     return blocks
+
+
+def parse_transcript(pages: list[TranscriptPage]) -> ParsedDocument:
+    """ADR 0048 §3 — client OCR output → the same ``ParsedDocument`` shape
+    ``parse_document`` returns, so chunking/profiling run unchanged. One
+    paragraph block per blank-line run; blank pages contribute nothing."""
+    blocks: list[DocumentBlock] = []
+    for entry in pages:
+        for para in _BLANK_RUN_RE.split(entry.text):
+            stripped = para.strip()
+            if stripped:
+                blocks.append(
+                    DocumentBlock(kind="paragraph", text=stripped, page=entry.page)
+                )
+    if not blocks:
+        raise DocumentParseError("Transcript contains no readable text")
+    return ParsedDocument(blocks=blocks)
 
 
 def parse_document(filename: str, data: bytes) -> ParsedDocument:

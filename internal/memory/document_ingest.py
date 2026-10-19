@@ -15,6 +15,7 @@ file never burns job retries (§10). Unexpected exceptions propagate.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -22,10 +23,15 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from botocore.exceptions import ClientError
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from internal.media.storage import get_bytes
+from internal.media.storage import (
+    MediaStorageError,
+    attachment_transcript_key,
+    get_bytes,
+)
 from internal.memory import embeddings, repos
 from internal.memory.document_chunk import (
     ChunkConfig,
@@ -34,8 +40,11 @@ from internal.memory.document_chunk import (
 )
 from internal.memory.document_parse import (
     DocumentBlock,
+    NoExtractableTextError,
     ParsedDocument,
+    TranscriptPage,
     parse_document,
+    parse_transcript,
 )
 from internal.memory.embeddings import embedding_model_name
 from internal.memory.models import Attachment, DocumentChunk
@@ -189,6 +198,24 @@ async def _enqueue_embed_job(
     )
 
 
+async def _load_transcript(
+    attachment_id: uuid.UUID,
+) -> tuple[ParsedDocument, str | None] | None:
+    """Read ``attachments/{id}/transcript.json`` → parsed blocks + engine
+    provenance (ADR 0048 §3/§4). ``None`` when no transcript is stored yet —
+    the caller leaves the row parked at ``needs_ocr``."""
+    try:
+        raw = await get_bytes(attachment_transcript_key(attachment_id))
+    except (MediaStorageError, ClientError):
+        return None
+    payload = json.loads(raw)
+    pages = [
+        TranscriptPage(page=int(p["page"]), text=str(p["text"]))
+        for p in payload.get("pages") or []
+    ]
+    return parse_transcript(pages), payload.get("engine")
+
+
 async def run_attachment_ingest(db: AsyncSession, *, attachment_id: uuid.UUID) -> None:
     """Parse → profile → chunk → embed one attachment (ADR 0047 §7)."""
     _cap_onnx_threads()
@@ -208,9 +235,30 @@ async def run_attachment_ingest(db: AsyncSession, *, attachment_id: uuid.UUID) -
         await db.flush()
         return
 
+    parsed: ParsedDocument
+    from_transcript = attachment.status == "needs_ocr"
+    ocr_engine: str | None = None
     try:
-        data = await get_bytes(attachment.object_key)
-        parsed = parse_document(attachment.filename, data)
+        if from_transcript:
+            # ADR 0048 §3 — the parsed text comes from the stored transcript,
+            # never the original bytes (they have no text layer; re-parsing
+            # them would just park again).
+            loaded = await _load_transcript(attachment.id)
+            if loaded is None:
+                return
+            parsed, ocr_engine = loaded
+        else:
+            data = await get_bytes(attachment.object_key)
+            parsed = parse_document(attachment.filename, data)
+    except NoExtractableTextError as exc:
+        # ADR 0048 §1 — a clean-but-empty document parks for OCR; it is not a
+        # failure. The page count lets a client drive browser OCR.
+        attachment.status = "needs_ocr"
+        attachment.error = f"No readable text could be extracted — {exc}"
+        attachment.doc_profile = {"pages": exc.page_count, "ocr": "pending"}
+        await db.flush()
+        logger.info("attachment %s parked at needs_ocr: %s", attachment.id, exc)
+        return
     except Exception as exc:  # noqa: BLE001 — parser/storage raise many types;
         # all are deterministic file faults, never retryable job errors (§10).
         await _mark_failed(db, attachment, exc)
@@ -223,6 +271,12 @@ async def run_attachment_ingest(db: AsyncSession, *, attachment_id: uuid.UUID) -
         await _mark_failed(db, attachment, ValueError("document contains no readable text"))
         return
     profile = _build_doc_profile(attachment.filename, parsed, truncated=result.truncated)
+    if from_transcript:
+        # ADR 0048 §5 — provenance marker for UI/grounding, never a trust
+        # signal: ``engine`` is whatever the client claimed.
+        profile["ocr"] = True
+        if ocr_engine:
+            profile["engine"] = ocr_engine
 
     if existing:
         await db.execute(delete(DocumentChunk).where(DocumentChunk.attachment_id == attachment_id))

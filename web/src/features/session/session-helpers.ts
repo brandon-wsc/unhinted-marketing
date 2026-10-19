@@ -546,6 +546,8 @@ export function attachmentStatusKey(status: StagedAttachment["status"]): string 
     case "ready_lexical":
     case "ready":
       return "ready";
+    case "needs_ocr":
+      return "needsOcr";
     case "failed":
       return "failed";
   }

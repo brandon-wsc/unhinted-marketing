@@ -1,4 +1,4 @@
-Feature: Session file attachments (ADR 0047)
+Feature: Session file attachments (ADR 0047; OCR transcript path per ADR 0048)
   Chat file import + document retrieve. Uploads land as session
   scratch (User x New); committing to a library is an explicit HTTP
   action — never a chat phrase and never an LLM decision. The LLM
@@ -42,10 +42,23 @@ Feature: Session file attachments (ADR 0047)
     Then the attachment status is "ready_lexical"
     And no chunk is stored without a vector under status "ready"
 
-  Scenario: scanned PDF tells the truth
+  Scenario: scanned PDF parks for OCR
     When they upload "menu-scan.pdf" with no extractable text
-    Then the attachment status is "failed"
+    Then the attachment status is "needs_ocr"
     And the error says the file has no readable text
+    And the digest says how many pages need OCR
+
+  Scenario: a browser OCR transcript resumes ingest
+    Given a scanned attachment parked for OCR
+    When they post an OCR transcript for it
+    Then the attachment status is "ready_lexical"
+    And the digest marks the document as OCR-sourced
+    And the transcript is stored for re-ingest
+
+  Scenario: transcript for a healthy attachment is refused
+    Given the member has a ready attachment in the session
+    When they post an OCR transcript for it
+    Then the transcript post is refused with a conflict
 
   Scenario: oversized file ingests a capped prefix and says so
     When they upload a file exceeding the chunk cap

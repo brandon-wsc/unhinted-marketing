@@ -331,7 +331,9 @@ async def test_attachment_owner_scope_accepts_value(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", ["pending", "ready_lexical", "ready", "failed"])
+@pytest.mark.parametrize(
+    "status", ["pending", "ready_lexical", "ready", "failed", "needs_ocr"]
+)
 async def test_attachment_status_accepts_value(
     status: str, client: AsyncClient, db_session: AsyncSession
 ) -> None:

@@ -117,6 +117,7 @@
       "status": {
         "processing": "處理中",
         "ready": "已就緒",
+        "needsOcr": "要 OCR",
         "failed": "讀取失敗"
       }
     },
