@@ -872,7 +872,13 @@
       "metaInstanceIdHint": "Register this slug with the relay (it maps to this install's URL). Read-only — generated automatically.",
       "metaRelaySecret": "Relay secret",
       "metaRelaySecretSet": "Saved (…{{last4}}) — enter a new secret to rotate",
-      "metaRelaySecretHint": "Issued by the relay operator at registration — paste it here. Required before Connect works in relay mode."
+      "metaRelaySecretHint": "Issued by the relay operator at registration — paste it here. Required before Connect works in relay mode.",
+      "ingestSection": "Signal ingest",
+      "ingestHint": "How often background workers fetch HK signals and promote them to topics. Changes apply within about a minute — no restart needed.",
+      "hotSearchInterval": "Hot-search fetch interval (minutes)",
+      "questionsInterval": "Recommended-questions interval (hours)",
+      "promoteWindow": "Signal promote window (hours)",
+      "promoteRankMax": "Trends rank cutoff for promotion"
     }
   },
   "admin": {

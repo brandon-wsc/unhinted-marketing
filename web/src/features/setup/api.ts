@@ -52,6 +52,10 @@ export type InstanceSettings = {
   meta_oauth_relay_url: string;
   meta_oauth_instance_id: string;
   meta_oauth_relay_secret_last4: string | null;
+  scheduler_hot_search_interval_minutes: number;
+  scheduler_questions_interval_hours: number;
+  news_promote_window_hours: number;
+  news_promote_trends_rank_max: number;
   setup_completed: boolean;
 };
 
@@ -62,6 +66,10 @@ export type InstanceSettingsUpdate = {
   meta_app_secret?: string;
   meta_oauth_mode?: MetaOAuthMode;
   meta_oauth_relay_secret?: string;
+  scheduler_hot_search_interval_minutes?: number;
+  scheduler_questions_interval_hours?: number;
+  news_promote_window_hours?: number;
+  news_promote_trends_rank_max?: number;
 };
 
 export async function apiGetSetupStatus(): Promise<SetupStatus> {

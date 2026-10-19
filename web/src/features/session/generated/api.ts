@@ -2468,6 +2468,14 @@ export type components = {
             meta_oauth_instance_id: string;
             /** Meta Oauth Relay Secret Last4 */
             meta_oauth_relay_secret_last4: string | null;
+            /** Scheduler Hot Search Interval Minutes */
+            scheduler_hot_search_interval_minutes: number;
+            /** Scheduler Questions Interval Hours */
+            scheduler_questions_interval_hours: number;
+            /** News Promote Window Hours */
+            news_promote_window_hours: number;
+            /** News Promote Trends Rank Max */
+            news_promote_trends_rank_max: number;
             /** Setup Completed */
             setup_completed: boolean;
         };
@@ -2490,6 +2498,14 @@ export type components = {
             meta_oauth_mode?: ("byo" | "relay") | null;
             /** Meta Oauth Relay Secret */
             meta_oauth_relay_secret?: string | null;
+            /** Scheduler Hot Search Interval Minutes */
+            scheduler_hot_search_interval_minutes?: number | null;
+            /** Scheduler Questions Interval Hours */
+            scheduler_questions_interval_hours?: number | null;
+            /** News Promote Window Hours */
+            news_promote_window_hours?: number | null;
+            /** News Promote Trends Rank Max */
+            news_promote_trends_rank_max?: number | null;
         };
         /**
          * LlmCallRecordDetail

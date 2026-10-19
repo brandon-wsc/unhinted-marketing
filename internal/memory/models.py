@@ -839,6 +839,15 @@ class InstanceSettings(Base):
     # rest, write-only in the portal (last4 for confirmation).
     meta_oauth_relay_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     meta_oauth_relay_secret_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    # ADR 0050 — ingest schedule knobs. NULL = env default; portal wins once set.
+    scheduler_hot_search_interval_minutes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    scheduler_questions_interval_hours: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    news_promote_window_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    news_promote_trends_rank_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from internal.config import settings
+from internal.instance.config import InstanceSnapshot, load_snapshot
 from internal.memory.repos import (
     create_edge,
     get_or_create_topic_entity,
@@ -22,21 +22,22 @@ def _slugify(value: str) -> str:
     return slug[:80] or "topic"
 
 
-def _should_promote(signal) -> bool:
+def _should_promote(signal, snap: InstanceSnapshot) -> bool:
     if signal.source != "google_trends_hk":
         return False
     metrics = signal.metrics or {}
     rank = metrics.get("rank")
-    return rank is not None and rank <= settings.news_promote_trends_rank_max
+    return rank is not None and rank <= snap.news_promote_trends_rank_max
 
 
 async def promote_signals(db: AsyncSession) -> dict[str, int]:
-    since = datetime.now(UTC) - timedelta(hours=settings.news_promote_window_hours)
+    snap = await load_snapshot(db)
+    since = datetime.now(UTC) - timedelta(hours=snap.news_promote_window_hours)
     signals = await list_top_signals(db, limit=50, region="HK", since=since)
     counts = {"promoted": 0, "skipped": 0}
 
     for signal in signals:
-        if not _should_promote(signal):
+        if not _should_promote(signal, snap):
             counts["skipped"] += 1
             continue
         if await signal_has_promotion_edge(db, signal.signal_id):

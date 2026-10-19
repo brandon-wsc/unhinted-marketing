@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.config import settings
+from internal.instance.config import load_snapshot
 from internal.llm.resolve import company_llm_scope
 from internal.memory.database import SessionLocal
 from internal.memory.knowledge_seed import ensure_default_personas
@@ -252,12 +253,18 @@ async def _execute(db: AsyncSession, *, run_id: uuid.UUID, company_id: uuid.UUID
     if not questions:
         raise RuntimeError("question graph produced no questions")
 
+    # ADR 0050 — TTL must outlive the configured questions tick (ADR 0018);
+    # a longer interval must not let the cache expire just before the next run.
+    snap = await load_snapshot(db)
+    ttl_hours = max(
+        settings.question_cache_ttl_hours, snap.scheduler_questions_interval_hours + 1
+    )
     await save_recommended_questions(
         db,
         company_id=company_id,
         questions=questions,
         source_signal_ids=final.get("used_signal_ids") or [],
-        ttl_hours=settings.question_cache_ttl_hours,
+        ttl_hours=ttl_hours,
     )
     run = await db.get(QuestionRun, run_id)
     if run is not None:

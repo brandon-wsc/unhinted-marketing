@@ -12,7 +12,7 @@ import signal
 import time
 from datetime import UTC, datetime, timedelta
 
-from internal.config import settings
+from internal.instance.config import InstanceSnapshot, load_snapshot
 from internal.memory.database import open_session
 from internal.memory.repos import enqueue_job, list_companies
 
@@ -32,9 +32,9 @@ def _tick_bucket(interval_seconds: int) -> str:
     return str(int(time.time() // interval_seconds))
 
 
-async def _enqueue_hot_search_cycle() -> None:
+async def _enqueue_hot_search_cycle(snap: InstanceSnapshot) -> None:
     """Hot tick: one ingest job + one promote job per interval bucket."""
-    bucket = _tick_bucket(settings.scheduler_hot_search_interval_minutes * 60)
+    bucket = _tick_bucket(snap.scheduler_hot_search_interval_minutes * 60)
     async with open_session() as db:
         for kind in ("hot_search", "promote_signals"):
             job = await enqueue_job(db, kind=kind, dedupe_key=f"{kind}:{bucket}")
@@ -49,9 +49,9 @@ def _company_jitter_seconds(company_id) -> int:
     return int(digest, 16) % 1800
 
 
-async def _enqueue_questions_cycle(force: bool = False) -> None:
+async def _enqueue_questions_cycle(snap: InstanceSnapshot, force: bool = False) -> None:
     """Questions tick: one job per company; the jitter becomes ``run_after``."""
-    bucket = _tick_bucket(settings.scheduler_questions_interval_hours * 3600)
+    bucket = _tick_bucket(snap.scheduler_questions_interval_hours * 3600)
     now = datetime.now(UTC)
     async with open_session() as db:
         companies = await list_companies(db)
@@ -73,24 +73,30 @@ async def _enqueue_questions_cycle(force: bool = False) -> None:
     )
 
 
+async def _current_snapshot() -> InstanceSnapshot:
+    """ADR 0050 — re-read instance settings each tick so portal edits apply
+    within ~1 minute without a scheduler restart."""
+    async with open_session() as db:
+        return await load_snapshot(db)
+
+
 async def run_scheduler(*, once: bool = False) -> None:
     signal.signal(signal.SIGINT, _handle_sigterm)
     signal.signal(signal.SIGTERM, _handle_sigterm)
 
-    hot_interval = settings.scheduler_hot_search_interval_minutes * 60
-    question_interval = settings.scheduler_questions_interval_hours * 3600
-    hot_elapsed = hot_interval
-    question_elapsed = question_interval
+    snap = await _current_snapshot()
+    hot_elapsed = snap.scheduler_hot_search_interval_minutes * 60
+    question_elapsed = snap.scheduler_questions_interval_hours * 3600
 
     if once:
-        await _enqueue_hot_search_cycle()
-        await _enqueue_questions_cycle(force=True)
+        await _enqueue_hot_search_cycle(snap)
+        await _enqueue_questions_cycle(snap, force=True)
         return
 
     logger.info(
         "Scheduler started (hot-search every %sm, questions every %sh)",
-        settings.scheduler_hot_search_interval_minutes,
-        settings.scheduler_questions_interval_hours,
+        snap.scheduler_hot_search_interval_minutes,
+        snap.scheduler_questions_interval_hours,
     )
 
     while not _stop:
@@ -98,17 +104,22 @@ async def run_scheduler(*, once: bool = False) -> None:
         hot_elapsed += 60
         question_elapsed += 60
 
-        if hot_elapsed >= hot_interval:
+        try:
+            snap = await _current_snapshot()
+        except Exception:
+            logger.exception("instance snapshot reload failed; keeping last values")
+
+        if hot_elapsed >= snap.scheduler_hot_search_interval_minutes * 60:
             hot_elapsed = 0
             try:
-                await _enqueue_hot_search_cycle()
+                await _enqueue_hot_search_cycle(snap)
             except Exception:
                 logger.exception("hot-search enqueue failed")
 
-        if question_elapsed >= question_interval:
+        if question_elapsed >= snap.scheduler_questions_interval_hours * 3600:
             question_elapsed = 0
             try:
-                await _enqueue_questions_cycle()
+                await _enqueue_questions_cycle(snap)
             except Exception:
                 logger.exception("questions enqueue failed")
 

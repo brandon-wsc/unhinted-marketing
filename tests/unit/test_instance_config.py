@@ -239,3 +239,32 @@ async def test_snapshot_from_row_meta_oauth_mode(
     assert _snapshot_from_row(InstanceSettings(id=1, meta_oauth_mode="relay")).meta_oauth_mode == "relay"
     # Unknown values fall back to byo rather than leaking through.
     assert _snapshot_from_row(InstanceSettings(id=1, meta_oauth_mode="bogus")).meta_oauth_mode == "byo"
+
+
+async def test_snapshot_ingest_schedule_env_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0050 — NULL schedule columns resolve to the env value; set values win."""
+    _configure(monkeypatch)
+    monkeypatch.setattr(config.settings, "scheduler_hot_search_interval_minutes", 45)
+    monkeypatch.setattr(config.settings, "scheduler_questions_interval_hours", 8)
+    monkeypatch.setattr(config.settings, "news_promote_window_hours", 36)
+    monkeypatch.setattr(config.settings, "news_promote_trends_rank_max", 7)
+
+    snap = _snapshot_from_row(InstanceSettings(id=1))
+    assert snap.scheduler_hot_search_interval_minutes == 45
+    assert snap.scheduler_questions_interval_hours == 8
+    assert snap.news_promote_window_hours == 36
+    assert snap.news_promote_trends_rank_max == 7
+
+    snap = _snapshot_from_row(
+        InstanceSettings(
+            id=1,
+            scheduler_hot_search_interval_minutes=15,
+            news_promote_trends_rank_max=3,
+        )
+    )
+    assert snap.scheduler_hot_search_interval_minutes == 15
+    assert snap.scheduler_questions_interval_hours == 8
+    assert snap.news_promote_window_hours == 36
+    assert snap.news_promote_trends_rank_max == 3
