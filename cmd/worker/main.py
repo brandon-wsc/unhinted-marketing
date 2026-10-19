@@ -169,6 +169,12 @@ async def _cmd_serve() -> int:
         settings.worker_poll_seconds,
         _RECLAIM_INTERVAL_SECONDS,
     )
+    # Warm the FastEmbed singleton up front — otherwise the first
+    # attachment_ingest sees a cold model and lands ready_lexical, waiting
+    # on the embed reschedule loop for no reason.
+    from internal.memory.embeddings import start_product_embedder_warmup
+
+    start_product_embedder_warmup()
 
     last_reclaim = 0.0
     idle_streak = 0
