@@ -8,16 +8,19 @@ import {
   apiDeleteSession,
   apiForkSession,
   apiGetSessionMessages,
+  apiListSessionAttachments,
   apiListSessions,
   apiPostSessionMessage,
   apiRegenImage,
   apiRemoveImage,
   apiResumeSessionImage,
+  apiSaveAttachment,
   apiStopSessionTurn,
   apiUpdateImagePlan,
   apiUpdateSession,
   apiUpdateSessionDraft,
   apiUploadImage,
+  apiUploadSessionAttachment,
 } from "./api";
 import {
   agentActionsFromMessages,
@@ -29,10 +32,12 @@ import {
   type ImageFormat,
   isConfirmSuccessStatus,
   isUserFacingAgentNode,
+  MAX_ATTACHMENTS,
   MAX_QUEUED_SESSION_MESSAGES,
   mergePreviewDraft,
   newActionId,
   newQueuedChatMessage,
+  newStagedAttachment,
   OUTCOME_NODE,
   parseAgentProgress,
   parseBrief,
@@ -53,6 +58,7 @@ import { SseAuthError, subscribeSessionEvents } from "./sse";
 import type {
   AgentActionRecord,
   AgentProgress,
+  AttachmentDigest,
   AudiencePersonaOption,
   ChatMessage,
   ComposerDraft,
@@ -66,6 +72,7 @@ import type {
   Session,
   SessionBrief,
   SessionListItem,
+  StagedAttachment,
 } from "./types";
 
 export { parseBrief } from "./session-helpers";
@@ -144,6 +151,8 @@ export function useSession(companyId: string | undefined) {
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatMessage[]>([]);
   const [composerInput, setComposerInputState] = useState("");
   const [editInsertAt, setEditInsertAtState] = useState<number | null>(null);
+  // ADR 0047 scratch attachments staged in the composer for the next message.
+  const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
   const [draft, setDraft] = useState<PreviewDraft | null>(null);
   const [confirmReceipt, setConfirmReceipt] = useState<ConfirmSessionResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
@@ -196,7 +205,7 @@ export function useSession(companyId: string | undefined) {
   const sendLaunchingRef = useRef(false);
   // Double-submit guard: identical text inside the window is a repeat click,
   // not a queued follow-up (ADR 0016 queues intentional sends only).
-  const lastSendRef = useRef<{ text: string; at: number } | null>(null);
+  const lastSendRef = useRef<{ text: string; ids: string; at: number } | null>(null);
   const stoppingRef = useRef(false);
   const awaitingImageOkRef = useRef(false);
   const awaitingAnglePickRef = useRef(false);
@@ -204,11 +213,14 @@ export function useSession(companyId: string | undefined) {
   const lastPersonaPickRef = useRef<string | null>(null);
   const lastImageFormatPickRef = useRef<ImageFormat | null>(null);
   const queuedRef = useRef<QueuedChatMessage[]>([]);
+  const stagedRef = useRef<StagedAttachment[]>([]);
+  const attachPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drainQueueRef = useRef<() => void>(() => {});
   // resyncCurrentSession is defined after the SSE effect; same ref pattern
   // as drainQueueRef so onOpen can call it on a post-failure reconnect.
   const resyncRef = useRef<() => void>(() => {});
   queuedRef.current = queuedMessages;
+  stagedRef.current = stagedAttachments;
   sendingRef.current = sending;
   stoppingRef.current = stopping;
   awaitingImageOkRef.current = awaitingImageOk;
@@ -1374,41 +1386,220 @@ export function useSession(companyId: string | undefined) {
     ],
   );
 
-  const enqueueQueuedAt = useCallback((content: string, index?: number): boolean => {
-    const text = content.trim();
-    if (!text) return false;
-    if (queuedRef.current.length >= MAX_QUEUED_SESSION_MESSAGES) return false;
-    const item = newQueuedChatMessage(text);
-    const next = [...queuedRef.current];
-    if (index == null || index >= next.length) {
-      next.push(item);
-    } else {
-      next.splice(Math.max(0, index), 0, item);
+  const enqueueQueuedAt = useCallback(
+    (
+      content: string,
+      index?: number,
+      attach?: { attachmentIds?: string[]; attachmentDigests?: AttachmentDigest[] },
+    ): boolean => {
+      const text = content.trim();
+      if (!text && !attach?.attachmentIds?.length) return false;
+      if (queuedRef.current.length >= MAX_QUEUED_SESSION_MESSAGES) return false;
+      const item = newQueuedChatMessage(text, attach);
+      const next = [...queuedRef.current];
+      if (index == null || index >= next.length) {
+        next.push(item);
+      } else {
+        next.splice(Math.max(0, index), 0, item);
+      }
+      queuedRef.current = next;
+      setQueuedMessages(next);
+      return true;
+    },
+    [],
+  );
+
+  // --- Attachments (ADR 0047) ---
+
+  const refreshStagedStatuses = useCallback(async () => {
+    const sid = sessionIdRef.current;
+    if (!accessToken || !sid) return;
+    try {
+      const list = await apiListSessionAttachments(accessToken, sid);
+      const byId = new Map(list.attachments.map((a) => [a.id, a]));
+      const next = stagedRef.current.map((s) => {
+        const row = s.attachmentId ? byId.get(s.attachmentId) : null;
+        if (!row) return s;
+        return { ...s, status: row.status, error: row.error ?? null };
+      });
+      stagedRef.current = next;
+      setStagedAttachments(next);
+    } catch {
+      /* poll is best-effort */
     }
-    queuedRef.current = next;
-    setQueuedMessages(next);
-    return true;
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (attachPollTimerRef.current) {
+      clearTimeout(attachPollTimerRef.current);
+      attachPollTimerRef.current = null;
+    }
+    const needsPoll = stagedAttachments.some(
+      (s) => s.attachmentId && (s.status === "pending" || s.status === "ready_lexical"),
+    );
+    if (!needsPoll) return;
+    attachPollTimerRef.current = setTimeout(() => {
+      attachPollTimerRef.current = null;
+      void refreshStagedStatuses();
+    }, 1200);
+    return () => {
+      if (attachPollTimerRef.current) clearTimeout(attachPollTimerRef.current);
+      attachPollTimerRef.current = null;
+    };
+  }, [stagedAttachments, refreshStagedStatuses]);
+
+  // Staged rows are session-scoped — switching sessions drops them.
+  const stagedSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = session?.id ?? null;
+    if (stagedSessionRef.current === id) return;
+    stagedSessionRef.current = id;
+    stagedRef.current = [];
+    setStagedAttachments([]);
+  }, [session?.id]);
+
+  const uploadAttachment = useCallback(
+    async (file: File): Promise<void> => {
+      if (!accessToken || !companyId) return;
+      if (stagedRef.current.length >= MAX_ATTACHMENTS) {
+        throw new Error("attachment_limit");
+      }
+      let active = session;
+      if (!active) {
+        active = await apiCreateSession(accessToken, companyId);
+        if (sessionIdRef.current === null || sessionIdRef.current === active.id) {
+          sessionIdRef.current = active.id;
+          setSession(active);
+          setRememberedSessionId(companyId, active.id);
+          void refreshHistory();
+        }
+      }
+      const staged = newStagedAttachment(file);
+      const patch = (mut: (s: StagedAttachment) => StagedAttachment) => {
+        const next = stagedRef.current.map((s) => (s.localId === staged.localId ? mut(s) : s));
+        stagedRef.current = next;
+        setStagedAttachments(next);
+      };
+      stagedRef.current = [...stagedRef.current, staged];
+      setStagedAttachments(stagedRef.current);
+      try {
+        const out = await apiUploadSessionAttachment(accessToken, active.id, file);
+        patch((s) => ({
+          ...s,
+          attachmentId: out.id,
+          status: out.status,
+          error: out.error ?? null,
+        }));
+      } catch (err) {
+        patch((s) => ({
+          ...s,
+          status: "failed",
+          error: err instanceof Error ? err.message : "upload_failed",
+        }));
+        throw err;
+      }
+    },
+    [accessToken, companyId, session, refreshHistory],
+  );
+
+  const unstageAttachment = useCallback((localId: string) => {
+    const next = stagedRef.current.filter((s) => s.localId !== localId);
+    stagedRef.current = next;
+    setStagedAttachments(next);
   }, []);
+
+  /** Re-POST the same File for a failed staged row (ADR 0047 §10 — no auto-retry). */
+  const retryAttachment = useCallback(
+    async (localId: string): Promise<void> => {
+      const cur = stagedRef.current.find((s) => s.localId === localId);
+      const sid = sessionIdRef.current;
+      if (!cur?.file || !accessToken || !sid) return;
+      const patch = (mut: (s: StagedAttachment) => StagedAttachment) => {
+        const next = stagedRef.current.map((s) => (s.localId === localId ? mut(s) : s));
+        stagedRef.current = next;
+        setStagedAttachments(next);
+      };
+      patch((s) => ({ ...s, status: "uploading", error: null }));
+      try {
+        const out = await apiUploadSessionAttachment(accessToken, sid, cur.file);
+        patch((s) => ({
+          ...s,
+          attachmentId: out.id,
+          status: out.status,
+          error: out.error ?? null,
+        }));
+      } catch (err) {
+        patch((s) => ({
+          ...s,
+          status: "failed",
+          error: err instanceof Error ? err.message : "upload_failed",
+        }));
+        throw err;
+      }
+    },
+    [accessToken],
+  );
+
+  /** Take staged items for the next send; returns them so callers can restore on error. */
+  const consumeStagedAttachments = useCallback((): StagedAttachment[] => {
+    const cur = stagedRef.current;
+    stagedRef.current = [];
+    setStagedAttachments([]);
+    return cur;
+  }, []);
+
+  const restoreStagedAttachments = useCallback((items: StagedAttachment[]) => {
+    stagedRef.current = items;
+    setStagedAttachments(items);
+  }, []);
+
+  const saveAttachment = useCallback(
+    async (attachmentId: string) => {
+      if (!accessToken) return;
+      return apiSaveAttachment(accessToken, attachmentId);
+    },
+    [accessToken],
+  );
 
   const sendMessage = useCallback(
     async (
       content: string,
-      options?: { queueIndex?: number; sourceQuestionId?: string; skipDupGuard?: boolean },
+      options?: {
+        queueIndex?: number;
+        sourceQuestionId?: string;
+        skipDupGuard?: boolean;
+        attachmentIds?: string[];
+        attachmentDigests?: AttachmentDigest[];
+      },
     ) => {
       const text = content.trim();
-      if (!text || !accessToken || !companyId || stoppingRef.current) {
+      if (
+        (!text && !options?.attachmentIds?.length) ||
+        !accessToken ||
+        !companyId ||
+        stoppingRef.current
+      ) {
         return;
       }
       const sendAt = Date.now();
+      const idsKey = (options?.attachmentIds ?? []).join(",");
       if (!options?.skipDupGuard) {
         const last = lastSendRef.current;
-        if (last && last.text === text && sendAt - last.at < DUP_SEND_WINDOW_MS) {
+        if (
+          last &&
+          last.text === text &&
+          last.ids === idsKey &&
+          sendAt - last.at < DUP_SEND_WINDOW_MS
+        ) {
           return;
         }
-        lastSendRef.current = { text, at: sendAt };
+        lastSendRef.current = { text, ids: idsKey, at: sendAt };
       }
       if (sendingRef.current || sendLaunchingRef.current || options?.queueIndex != null) {
-        enqueueQueuedAt(text, options?.queueIndex);
+        enqueueQueuedAt(text, options?.queueIndex, {
+          attachmentIds: options?.attachmentIds,
+          attachmentDigests: options?.attachmentDigests,
+        });
         return;
       }
       sendLaunchingRef.current = true;
@@ -1459,6 +1650,7 @@ export function useSession(companyId: string | undefined) {
             role: "user",
             content: text,
             created_at: new Date().toISOString(),
+            attachments: options?.attachmentDigests,
           };
           const pending = optimistic;
           turnAnchorRef.current = pending.id;
@@ -1474,6 +1666,7 @@ export function useSession(companyId: string | undefined) {
         const res = await apiPostSessionMessage(accessToken, active.id, text, {
           signal: abort.signal,
           sourceQuestionId: options?.sourceQuestionId,
+          attachmentIds: options?.attachmentIds,
         });
         // Stop won the race — do not re-apply discarded payload.
         if (abort.signal.aborted || epoch !== epochOf(active.id)) {
@@ -1652,7 +1845,11 @@ export function useSession(companyId: string | undefined) {
     queuedRef.current = queuedRef.current.slice(1);
     setQueuedMessages(queuedRef.current);
     // Queued sends are deliberate — skip the double-click window.
-    void sendMessage(next.content, { skipDupGuard: true });
+    void sendMessage(next.content, {
+      skipDupGuard: true,
+      attachmentIds: next.attachmentIds,
+      attachmentDigests: next.attachmentDigests,
+    });
   };
 
   const dequeueQueuedMessage = useCallback((id: string): number => {
@@ -2081,6 +2278,13 @@ export function useSession(companyId: string | undefined) {
     forking,
     forkSession,
     sendMessage,
+    stagedAttachments,
+    uploadAttachment,
+    retryAttachment,
+    unstageAttachment,
+    consumeStagedAttachments,
+    restoreStagedAttachments,
+    saveAttachment,
     enqueueQueuedMessage: enqueueQueuedAt,
     dequeueQueuedMessage,
     resumeImage,

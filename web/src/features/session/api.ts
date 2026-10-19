@@ -4,6 +4,8 @@ import { apiFetch, apiJson } from "@/lib/api-fetch";
 import { parseApiErrorResponse } from "@/lib/parse-api-error";
 import type { ImageFormat } from "./session-helpers";
 import type {
+  AttachmentListResponse,
+  AttachmentOut,
   ChooseAngleResponse,
   ConfirmSessionResponse,
   DraftCopy,
@@ -87,13 +89,14 @@ export async function apiPostSessionMessage(
   accessToken: string | null,
   sessionId: string,
   content: string,
-  init?: { signal?: AbortSignal; sourceQuestionId?: string },
+  init?: { signal?: AbortSignal; sourceQuestionId?: string; attachmentIds?: string[] },
 ): Promise<PostMessageResponse> {
   return apiJson<PostMessageResponse>(accessToken, `${API_BASE}/sessions/${sessionId}/messages`, {
     method: "POST",
     json: {
       content,
       ...(init?.sourceQuestionId ? { source_question_id: init.sourceQuestionId } : {}),
+      ...(init?.attachmentIds?.length ? { attachment_ids: init.attachmentIds } : {}),
     },
     signal: init?.signal,
   });
@@ -256,6 +259,52 @@ export async function apiConfirmSession(
       platform: body.platform ?? "instagram",
     },
   });
+}
+
+// --- Attachments (ADR 0047) ---
+
+export async function apiListSessionAttachments(
+  accessToken: string | null,
+  sessionId: string,
+): Promise<AttachmentListResponse> {
+  return apiJson<AttachmentListResponse>(
+    accessToken,
+    `${API_BASE}/sessions/${sessionId}/attachments`,
+  );
+}
+
+export async function apiUploadSessionAttachment(
+  accessToken: string | null,
+  sessionId: string,
+  file: File,
+): Promise<AttachmentOut> {
+  const form = new FormData();
+  form.append("file", file);
+  return apiJson<AttachmentOut>(accessToken, `${API_BASE}/sessions/${sessionId}/attachments`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function apiSaveAttachment(
+  accessToken: string | null,
+  attachmentId: string,
+): Promise<AttachmentOut> {
+  return apiJson<AttachmentOut>(accessToken, `${API_BASE}/attachments/${attachmentId}/save`, {
+    method: "POST",
+  });
+}
+
+export async function apiDownloadAttachment(
+  accessToken: string | null,
+  attachmentId: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetchWithAuth(accessToken, `${API_BASE}/attachments/${attachmentId}/download`);
+  if (!res.ok) throw new Error(await parseApiErrorResponse(res));
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const m = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(cd);
+  return { blob, filename: m?.[1] ? decodeURIComponent(m[1]) : "attachment" };
 }
 
 export type RecommendedQuestionsFetch =

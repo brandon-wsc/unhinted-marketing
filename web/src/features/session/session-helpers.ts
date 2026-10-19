@@ -1,6 +1,7 @@
 import type {
   AgentActionRecord,
   AgentProgress,
+  AttachmentDigest,
   AudiencePersonaOption,
   ChatMessage,
   ComposerDraft,
@@ -12,6 +13,7 @@ import type {
   SessionBrief,
   SessionListItem,
   SourceSignal,
+  StagedAttachment,
 } from "./types";
 
 export function asStringList(value: unknown): string[] {
@@ -148,10 +150,16 @@ export const MAX_QUEUED_SESSION_MESSAGES = 3;
 /** Queue card tucked under the composer top edge. */
 export const QUEUE_TUCK_PX = 12;
 
-export function newQueuedChatMessage(content: string): QueuedChatMessage {
+export function newQueuedChatMessage(
+  content: string,
+  attach?: { attachmentIds?: string[]; attachmentDigests?: AttachmentDigest[] },
+): QueuedChatMessage {
   return {
     id: `local-q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     content: content.trim(),
+    ...(attach?.attachmentIds?.length
+      ? { attachmentIds: attach.attachmentIds, attachmentDigests: attach.attachmentDigests }
+      : {}),
   };
 }
 
@@ -465,6 +473,82 @@ export function parseMediaItems(raw: unknown): PreviewMediaItem[] | null {
     });
   }
   return out;
+}
+
+// --- Attachments (ADR 0047) -----------------------------------------------
+
+export const MAX_ATTACHMENTS = 10;
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const ATTACHMENT_ACCEPT = ".pdf,.docx,.txt,.md";
+
+const ATTACHMENT_EXTS = new Set(["pdf", "docx", "txt", "md"]);
+
+/** null = ok; otherwise an i18n key suffix under chat.attach.* */
+export function attachmentFileError(file: {
+  name: string;
+  size: number;
+}): "badType" | "tooBig" | null {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!ATTACHMENT_EXTS.has(ext)) return "badType";
+  if (file.size > MAX_ATTACHMENT_BYTES) return "tooBig";
+  return null;
+}
+
+export function formatAttachmentSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+export function newStagedAttachment(file: File): StagedAttachment {
+  return {
+    localId:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    filename: file.name,
+    size: file.size,
+    attachmentId: null,
+    status: "uploading",
+    file,
+  };
+}
+
+/** Digest chip for the optimistic bubble + POST /messages rows (ADR 0047 §5). */
+export function stagedToDigest(s: StagedAttachment): AttachmentDigest {
+  return {
+    id: s.attachmentId ?? s.localId,
+    filename: s.filename,
+    status: s.status === "uploading" ? "pending" : s.status,
+  };
+}
+
+/** Re-stage a digest back into the composer (queued edit/remove puts the file back). */
+export function stagedFromDigest(d: AttachmentDigest): StagedAttachment {
+  return {
+    localId:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    filename: d.filename,
+    size: 0,
+    attachmentId: d.id,
+    status: d.status,
+  };
+}
+
+/** Status → i18n suffix under chat.attach.status.* */
+export function attachmentStatusKey(status: StagedAttachment["status"]): string {
+  switch (status) {
+    case "pending":
+    case "uploading":
+      return "processing";
+    case "ready_lexical":
+    case "ready":
+      return "ready";
+    case "failed":
+      return "failed";
+  }
 }
 
 type SseReadyHandle = { promise: Promise<void>; resolve: () => void };
