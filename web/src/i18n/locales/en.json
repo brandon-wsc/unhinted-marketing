@@ -117,6 +117,7 @@
       "status": {
         "processing": "Processing",
         "ready": "Ready",
+        "needsOcr": "Needs OCR",
         "failed": "Could not read"
       }
     },

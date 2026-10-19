@@ -413,6 +413,7 @@ describe("attachments (ADR 0047)", () => {
     expect(attachmentStatusKey("pending")).toBe("processing");
     expect(attachmentStatusKey("ready_lexical")).toBe("ready");
     expect(attachmentStatusKey("ready")).toBe("ready");
+    expect(attachmentStatusKey("needs_ocr")).toBe("needsOcr");
     expect(attachmentStatusKey("failed")).toBe("failed");
   });
 });
