@@ -894,8 +894,11 @@ async def release_session_attachments(db: AsyncSession, session_id: uuid.UUID) -
     was the last reference; shared survivors and saved/library rows get
     ``session_id`` cleared so the session-delete FK cascade cannot kill them.
     Deletes attachment rows (chunks + join rows cascade) and returns the
-    object keys whose bytes must be deleted after commit.
+    object keys whose bytes must be deleted after commit — including each
+    deleted row's ``transcript.json`` (ADR 0048 §4), whose absence is harmless
+    since ``delete_key`` is idempotent.
     """
+    from internal.media.storage import attachment_transcript_key
     attachment_ids = set(
         (
             await db.scalars(
@@ -932,6 +935,7 @@ async def release_session_attachments(db: AsyncSession, session_id: uuid.UUID) -
                 row.session_id = None
         else:
             keys.append(row.object_key)
+            keys.append(attachment_transcript_key(row.id))
             await db.delete(row)
     await db.flush()
     return keys
@@ -2148,13 +2152,26 @@ async def clear_migration_done_keys(db: AsyncSession) -> None:
 async def list_all_media_refs(db: AsyncSession) -> list[str]:
     """All stored preview_images.url + preview_drafts.image_url + attachment
     object keys (ADR 0025 enumerate; ADR 0047 — a local→S3 flip must carry
-    scratch bytes too or every uploaded file strands behind the flip)."""
+    scratch bytes too or every uploaded file strands behind the flip).
+    OCR'd attachments also yield their ``transcript.json`` key (ADR 0048 §4 —
+    the stored transcript is canonical parsed text and must migrate with the
+    original bytes)."""
+    from internal.media.storage import attachment_transcript_key
+
     images = (await db.scalars(select(PreviewImage.url).where(PreviewImage.url.is_not(None)))).all()
     drafts = (
         await db.scalars(select(PreviewDraft.image_url).where(PreviewDraft.image_url.is_not(None)))
     ).all()
-    attachments = (await db.scalars(select(Attachment.object_key))).all()
-    return [u for u in (*images, *drafts, *attachments) if u]
+    attachment_rows = (
+        await db.execute(select(Attachment.id, Attachment.object_key, Attachment.doc_profile))
+    ).all()
+    attachments = [object_key for _id, object_key, _profile in attachment_rows]
+    transcripts = [
+        attachment_transcript_key(attachment_id)
+        for attachment_id, _key, profile in attachment_rows
+        if isinstance(profile, dict) and profile.get("ocr")
+    ]
+    return [u for u in (*images, *drafts, *attachments, *transcripts) if u]
 
 
 # --- Job queue (ADR 0039) ---------------------------------------------------

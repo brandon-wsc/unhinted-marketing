@@ -1466,6 +1466,34 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/attachments/{attachment_id}/transcript": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Attachment Transcript
+         * @description ADR 0048 §2 — accept client-supplied OCR text for a parked attachment.
+         *
+         *     Same access rule as download: ``org`` rows take any company member's
+         *     transcript, ``session``/``user`` rows the uploader's alone; refusals are
+         *     a uniform 404. Only ``needs_ocr`` rows accept a transcript — anything
+         *     else is a 409 (a healthy doc is never silently re-chunked by client
+         *     text). The transcript lands as ``attachments/{id}/transcript.json`` and
+         *     a fresh ``attachment_ingest`` job resumes the unchanged chunk → embed
+         *     pipeline; OCR itself never runs in this process.
+         */
+        post: operations["post_attachment_transcript_api_attachments__attachment_id__transcript_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/media/{key}": {
         parameters: {
             query?: never;
@@ -1740,7 +1768,7 @@ export type components = {
              * Status
              * @enum {string}
              */
-            status: "pending" | "ready_lexical" | "ready" | "failed";
+            status: "pending" | "ready_lexical" | "ready" | "failed" | "needs_ocr";
             /** Title */
             title?: string | null;
         };
@@ -1776,7 +1804,7 @@ export type components = {
              * Status
              * @enum {string}
              */
-            status: "pending" | "ready_lexical" | "ready" | "failed";
+            status: "pending" | "ready_lexical" | "ready" | "failed" | "needs_ocr";
             /**
              * Owner Scope
              * @enum {string}
@@ -1793,6 +1821,19 @@ export type components = {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * AttachmentTranscriptRequest
+         * @description ``POST /attachments/{id}/transcript`` — per-page OCR text produced by
+         *     any engine (browser tesseract.js today; a worker OCR job later — same
+         *     contract). Untrusted input: caps keep the payload bounded; ``engine`` is
+         *     recorded as provenance, never trusted.
+         */
+        AttachmentTranscriptRequest: {
+            /** Engine */
+            engine?: string | null;
+            /** Pages */
+            pages: components["schemas"]["TranscriptPageInput"][];
         };
         /**
          * AudiencePersonaOption
@@ -4099,6 +4140,16 @@ export type components = {
             steps?: components["schemas"]["NodeStepSummary"][];
             /** Llm Calls */
             llm_calls?: components["schemas"]["LlmCallRecordSummary"][];
+        };
+        /**
+         * TranscriptPageInput
+         * @description One page of client-supplied OCR text (ADR 0048 §2).
+         */
+        TranscriptPageInput: {
+            /** Page */
+            page: number;
+            /** Text */
+            text: string;
         };
         /** UpdateDraftRequest */
         UpdateDraftRequest: {
@@ -7183,6 +7234,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_attachment_transcript_api_attachments__attachment_id__transcript_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachmentTranscriptRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

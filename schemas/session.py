@@ -89,7 +89,7 @@ class ForkOrigin(BaseModel):
     title: str | None = None
 
 
-AttachmentStatus = Literal["pending", "ready_lexical", "ready", "failed"]
+AttachmentStatus = Literal["pending", "ready_lexical", "ready", "failed", "needs_ocr"]
 AttachmentScope = Literal["session", "user", "org"]
 
 
@@ -298,6 +298,30 @@ class AttachmentListResponse(BaseModel):
     """``GET /sessions/{id}/attachments`` — the session's referenced docs."""
 
     attachments: list[AttachmentOut]
+
+
+class TranscriptPageInput(BaseModel):
+    """One page of client-supplied OCR text (ADR 0048 §2)."""
+
+    page: int = Field(ge=1)
+    text: str
+
+
+class AttachmentTranscriptRequest(BaseModel):
+    """``POST /attachments/{id}/transcript`` — per-page OCR text produced by
+    any engine (browser tesseract.js today; a worker OCR job later — same
+    contract). Untrusted input: caps keep the payload bounded; ``engine`` is
+    recorded as provenance, never trusted."""
+
+    engine: str | None = Field(default=None, max_length=100)
+    pages: list[TranscriptPageInput] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def _cap_total_text(self) -> "AttachmentTranscriptRequest":
+        total = sum(len(p.text) for p in self.pages)
+        if total > 2_000_000:
+            raise ValueError("Transcript exceeds the 2 MB text limit")
+        return self
 
 
 class SessionEvent(BaseModel):

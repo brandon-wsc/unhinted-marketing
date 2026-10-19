@@ -894,7 +894,7 @@ class Attachment(Base):
             name="ck_attachments_owner_scope",
         ),
         CheckConstraint(
-            "status IN ('pending', 'ready_lexical', 'ready', 'failed')",
+            "status IN ('pending', 'ready_lexical', 'ready', 'failed', 'needs_ocr')",
             name="ck_attachments_status",
         ),
     )

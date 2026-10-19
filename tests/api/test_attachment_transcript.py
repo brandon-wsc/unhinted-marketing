@@ -5,7 +5,8 @@ Invented contract the transcript step must satisfy:
 - ``POST /api/attachments/{attachment_id}/transcript`` — JSON body
   ``{"engine": str | None, "pages": [{"page": int, "text": str}]}``, auth +
   scope identical to ``GET …/download`` (unknown / cross-company /
-  non-owner for ``session``|``user`` rows → uniform 404).
+  non-owner for ``session``|``user`` rows → uniform 404). Lives in
+  ``cmd/api/routes/attachments.py`` next to download/save.
 - Only ``needs_ocr`` rows accept a transcript (any other status → 409).
 - Pages are validated against ``doc_profile["pages"]`` (out-of-range → 400);
   an all-empty transcript → 400.
@@ -42,7 +43,6 @@ from tests.api.attachment_helpers import (
     patch_embedder,
     read_object_bytes,
     run_next_job,
-    seed_pending_attachment,
     seed_session,
     warm_embedder,
 )
@@ -133,6 +133,11 @@ async def test_transcript_recovers_scanned_pdf_through_same_pipeline(
         for j in jobs
     )
 
+    # End the open transaction so claim_next_job's func.now() (= CURRENT_
+    # TIMESTAMP, frozen at txn start) postdates the job's run_after —
+    # otherwise the freshly-enqueued job looks "not yet due" here while a
+    # real worker (fresh txn per claim) would pick it up fine.
+    await db_session.commit()
     job = await run_next_job(db_session)
     assert job is not None and job.status == "succeeded"
 
@@ -180,7 +185,7 @@ async def test_transcript_cross_company_is_404(
 ) -> None:
     """Existence never leaks (ADR 0047 §14): another company's parked
     attachment refuses a transcript the same way it refuses download."""
-    token, attachment_id = await _upload_needs_ocr(client, db_session)
+    _token, attachment_id = await _upload_needs_ocr(client, db_session)
     other = await register_user(client)
 
     res = await _post_transcript(client, other["access_token"], attachment_id, GOOD_TRANSCRIPT)
@@ -226,6 +231,7 @@ async def test_transcript_reingest_without_new_submission(
     token, attachment_id = await _upload_needs_ocr(client, db_session)
     res = await _post_transcript(client, token, attachment_id, GOOD_TRANSCRIPT)
     assert res.status_code == 200
+    await db_session.commit()  # fresh txn — see the func.now() note above
     assert await run_next_job(db_session) is not None
 
     # Simulate a re-chunk trigger: drop the chunks and re-park the row —

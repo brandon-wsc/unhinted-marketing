@@ -704,7 +704,7 @@ async def test_get_session_attachments_lists_upload_with_status(
     match = next((a for a in items if a["id"] == str(attachment_id)), None)
     assert match is not None, f"uploaded attachment missing from list: {items}"
     assert match["filename"] == PDF_UPLOAD[0]
-    assert match["status"] in {"pending", "ready_lexical", "ready", "failed"}
+    assert match["status"] in {"pending", "ready_lexical", "ready", "failed", "needs_ocr"}
     assert match["owner_scope"] == "session"
 
 
@@ -741,8 +741,9 @@ async def test_get_session_attachments_surfaces_error_and_profile(
     items = body["attachments"] if isinstance(body, dict) else body
     by_id = {a["id"]: a for a in items}
     bad = by_id[str(bad_id)]
-    assert bad["status"] == "failed"
-    assert bad["error"], f"failed row lacks readable error: {bad}"
+    # ADR 0048 §1 — a scan parks for OCR; the wire still tells the truth.
+    assert bad["status"] == "needs_ocr"
+    assert bad["error"], f"needs_ocr row lacks readable error: {bad}"
     good = by_id[str(good_id)]
     assert good["status"] == "ready_lexical"
     assert (good["doc_profile"] or {}).get("title")
