@@ -960,6 +960,12 @@ async def add_session_message(
         # Fork copies keep the original timeline (ADR 0017); without this every
         # copied row shares one transaction timestamp and ordering is unstable.
         row.created_at = created_at
+    else:
+        # server_default=func.now() is the TRANSACTION clock — a user row and
+        # its assistant reply written in one commit would tie, and
+        # ORDER BY created_at then has no stable order (assistant surfaced
+        # above the question it answered). Stamp real time per row instead.
+        row.created_at = datetime.now(UTC)
     db.add(row)
     await db.flush()
     return row
