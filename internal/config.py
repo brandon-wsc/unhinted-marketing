@@ -102,6 +102,9 @@ class Settings(BaseSettings):
     news_promote_trends_rank_max: int = 10
     news_promote_window_hours: int = 24
     scheduler_hot_search_interval_minutes: int = 60
+    # ADR 0050 — False disables the periodic hot tick (ingest + promote);
+    # manual `worker hot-search` / `promote` runs are unaffected.
+    scheduler_hot_search_enabled: bool = True
     scheduler_questions_interval_hours: int = 12
     # Worker service (ADR 0039) — idle poll between claim attempts on the
     # jobs table; backs off while the queue stays empty.

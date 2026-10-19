@@ -256,15 +256,19 @@ async def test_snapshot_ingest_schedule_env_fallback(
     assert snap.scheduler_questions_interval_hours == 8
     assert snap.news_promote_window_hours == 36
     assert snap.news_promote_trends_rank_max == 7
+    assert snap.scheduler_hot_search_enabled is True
 
     snap = _snapshot_from_row(
         InstanceSettings(
             id=1,
             scheduler_hot_search_interval_minutes=15,
             news_promote_trends_rank_max=3,
+            scheduler_hot_search_enabled=False,
         )
     )
     assert snap.scheduler_hot_search_interval_minutes == 15
     assert snap.scheduler_questions_interval_hours == 8
     assert snap.news_promote_window_hours == 36
     assert snap.news_promote_trends_rank_max == 3
+    # An explicit False must survive — env fallback only applies to NULL.
+    assert snap.scheduler_hot_search_enabled is False

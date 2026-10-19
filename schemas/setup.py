@@ -74,6 +74,7 @@ class InstanceSettingsResponse(BaseModel):
     scheduler_questions_interval_hours: int
     news_promote_window_hours: int
     news_promote_trends_rank_max: int
+    scheduler_hot_search_enabled: bool
     setup_completed: bool
 
 
@@ -96,5 +97,6 @@ class InstanceSettingsUpdate(BaseModel):
     scheduler_questions_interval_hours: int | None = Field(default=None, ge=1, le=168)
     news_promote_window_hours: int | None = Field(default=None, ge=1, le=168)
     news_promote_trends_rank_max: int | None = Field(default=None, ge=1, le=50)
+    scheduler_hot_search_enabled: bool | None = None
 
     _check_url = field_validator("web_base_url")(_clean_url)

@@ -109,7 +109,10 @@ async def run_scheduler(*, once: bool = False) -> None:
         except Exception:
             logger.exception("instance snapshot reload failed; keeping last values")
 
-        if hot_elapsed >= snap.scheduler_hot_search_interval_minutes * 60:
+        if (
+            snap.scheduler_hot_search_enabled
+            and hot_elapsed >= snap.scheduler_hot_search_interval_minutes * 60
+        ):
             hot_elapsed = 0
             try:
                 await _enqueue_hot_search_cycle(snap)

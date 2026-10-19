@@ -56,6 +56,7 @@ export type InstanceSettings = {
   scheduler_questions_interval_hours: number;
   news_promote_window_hours: number;
   news_promote_trends_rank_max: number;
+  scheduler_hot_search_enabled: boolean;
   setup_completed: boolean;
 };
 
@@ -70,6 +71,7 @@ export type InstanceSettingsUpdate = {
   scheduler_questions_interval_hours?: number;
   news_promote_window_hours?: number;
   news_promote_trends_rank_max?: number;
+  scheduler_hot_search_enabled?: boolean;
 };
 
 export async function apiGetSetupStatus(): Promise<SetupStatus> {

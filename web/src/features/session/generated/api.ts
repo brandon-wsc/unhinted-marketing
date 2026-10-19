@@ -2476,6 +2476,8 @@ export type components = {
             news_promote_window_hours: number;
             /** News Promote Trends Rank Max */
             news_promote_trends_rank_max: number;
+            /** Scheduler Hot Search Enabled */
+            scheduler_hot_search_enabled: boolean;
             /** Setup Completed */
             setup_completed: boolean;
         };
@@ -2506,6 +2508,8 @@ export type components = {
             news_promote_window_hours?: number | null;
             /** News Promote Trends Rank Max */
             news_promote_trends_rank_max?: number | null;
+            /** Scheduler Hot Search Enabled */
+            scheduler_hot_search_enabled?: boolean | null;
         };
         /**
          * LlmCallRecordDetail
