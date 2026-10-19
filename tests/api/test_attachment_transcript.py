@@ -13,8 +13,8 @@ Invented contract the transcript step must satisfy:
 - On success the transcript is stored as object bytes at
   ``attachments/{id}/transcript.json`` (ADR 0048 §4 — re-chunk / re-embed
   must never re-OCR), a fresh ``attachment_ingest`` job is enqueued under
-  dedupe key ``attachment_ingest:{id}:transcript``, and the row stays
-  ``needs_ocr`` until the job runs.
+  dedupe key ``attachment_ingest:{id}:transcript``, and the row re-enters
+  the pipeline as ``pending`` — a duplicate transcript POST now conflicts.
 - The worker resolves ``needs_ocr`` + stored transcript via
   ``document_parse.parse_transcript`` — then the unchanged
   chunk → ``ready_lexical`` → embed → ``ready`` pipeline. ``doc_profile``
@@ -121,7 +121,13 @@ async def test_transcript_recovers_scanned_pdf_through_same_pipeline(
 
     res = await _post_transcript(client, token, attachment_id, GOOD_TRANSCRIPT)
     assert res.status_code == 200, res.text
-    assert res.json()["status"] == "needs_ocr"  # parked until the job runs
+    # The accepted transcript re-enters the pipeline as pending — leaving
+    # the row at needs_ocr would stall the client's ingest poll and admit
+    # duplicate submissions.
+    assert res.json()["status"] == "pending"
+    row = await fetch_attachment(db_session, attachment_id)
+    assert row.status == "pending"
+    assert row.error is None
 
     stored = await read_object_bytes(TRANSCRIPT_KEY.format(attachment_id=attachment_id))
     assert stored is not None and "招牌奶茶" in stored.decode()
@@ -163,6 +169,21 @@ async def test_transcript_on_healthy_attachment_conflicts(
     )
     row = await fetch_attachment(db_session, attachment_id)
     assert row.status == "ready"
+
+    res = await _post_transcript(client, token, attachment_id, GOOD_TRANSCRIPT)
+    assert res.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_transcript_second_post_conflicts(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Once a transcript is accepted the row is ``pending``, not
+    ``needs_ocr`` — a second submission conflicts instead of silently
+    overwriting the stored transcript."""
+    token, attachment_id = await _upload_needs_ocr(client, db_session)
+    res = await _post_transcript(client, token, attachment_id, GOOD_TRANSCRIPT)
+    assert res.status_code == 200, res.text
 
     res = await _post_transcript(client, token, attachment_id, GOOD_TRANSCRIPT)
     assert res.status_code == 409

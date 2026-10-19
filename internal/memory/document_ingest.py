@@ -203,16 +203,21 @@ async def _load_transcript(
 ) -> tuple[ParsedDocument, str | None] | None:
     """Read ``attachments/{id}/transcript.json`` → parsed blocks + engine
     provenance (ADR 0048 §3/§4). ``None`` when no transcript is stored yet —
-    the caller leaves the row parked at ``needs_ocr``."""
+    or when it is unreadable, in which case the caller falls back to the
+    original bytes (a no-text file just re-parks at ``needs_ocr`` so the
+    client can submit again)."""
     try:
         raw = await get_bytes(attachment_transcript_key(attachment_id))
     except (MediaStorageError, ClientError):
         return None
-    payload = json.loads(raw)
-    pages = [
-        TranscriptPage(page=int(p["page"]), text=str(p["text"]))
-        for p in payload.get("pages") or []
-    ]
+    try:
+        payload = json.loads(raw)
+        pages = [
+            TranscriptPage(page=int(p["page"]), text=str(p["text"]))
+            for p in payload.get("pages") or []
+        ]
+    except (KeyError, TypeError, ValueError):
+        return None
     return parse_transcript(pages), payload.get("engine")
 
 
@@ -235,17 +240,17 @@ async def run_attachment_ingest(db: AsyncSession, *, attachment_id: uuid.UUID) -
         await db.flush()
         return
 
+    # ADR 0048 §4 — the stored transcript is the canonical parsed text for
+    # an OCR'd doc. Detection is by existence, not status: the transcript
+    # route re-parks the row at ``pending`` once it accepts text, and a
+    # later re-chunk must still reuse the transcript rather than re-parse
+    # bytes that have no text layer.
+    loaded = await _load_transcript(attachment.id)
+    from_transcript = loaded is not None
     parsed: ParsedDocument
-    from_transcript = attachment.status == "needs_ocr"
     ocr_engine: str | None = None
     try:
-        if from_transcript:
-            # ADR 0048 §3 — the parsed text comes from the stored transcript,
-            # never the original bytes (they have no text layer; re-parsing
-            # them would just park again).
-            loaded = await _load_transcript(attachment.id)
-            if loaded is None:
-                return
+        if loaded is not None:
             parsed, ocr_engine = loaded
         else:
             data = await get_bytes(attachment.object_key)

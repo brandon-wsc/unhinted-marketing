@@ -3380,6 +3380,57 @@ describe("useSession", () => {
       });
     });
 
+    it("ignores a stale needs_ocr poll after the transcript is accepted", async () => {
+      hydrateEmpty();
+      apiUploadSessionAttachment.mockResolvedValue(
+        attachmentOut({ status: "needs_ocr", error: "PDF has no extractable text" }),
+      );
+      apiDownloadAttachment.mockResolvedValue({
+        blob: new Blob(["pdf"]),
+        filename: "scan.pdf",
+      });
+      ocrMakeEngine.mockResolvedValue({
+        id: "fake-engine/1",
+        recognize: vi.fn(async () => "認識したテキスト"),
+        terminate: vi.fn(async () => {}),
+      });
+      ocrMakeRenderer.mockResolvedValue(fakeRenderer);
+      apiPostAttachmentTranscript.mockResolvedValue(attachmentOut({ status: "pending" }));
+      // A GET issued before the transcript commit still reports needs_ocr —
+      // it must not regress the row's pending patch and kill the ingest poll.
+      apiListSessionAttachments.mockResolvedValue({
+        attachments: [attachmentOut({ status: "needs_ocr" })],
+      });
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      const file = new File(["pdf"], "scan.pdf", { type: "application/pdf" });
+      await act(async () => {
+        await result.current.uploadAttachment(file);
+      });
+      const localId = result.current.stagedAttachments[0]?.localId ?? "";
+
+      await act(async () => {
+        await result.current.ocrAttachment(localId);
+      });
+      expect(result.current.stagedAttachments[0]?.status).toBe("pending");
+
+      await waitFor(() => expect(apiListSessionAttachments).toHaveBeenCalled(), {
+        timeout: 3000,
+      });
+      expect(result.current.stagedAttachments[0]?.status).toBe("pending");
+
+      // The guard is a bounded post-submit window, not a permanent pin —
+      // a truthful later status still applies normally.
+      apiListSessionAttachments.mockResolvedValue({
+        attachments: [attachmentOut({ status: "ready" })],
+      });
+      await waitFor(() => expect(result.current.stagedAttachments[0]?.status).toBe("ready"), {
+        timeout: 3000,
+      });
+    });
+
     it("does not offer OCR for rows that are not needs_ocr", async () => {
       hydrateEmpty();
       apiUploadSessionAttachment.mockResolvedValue(attachmentOut({ status: "ready" }));

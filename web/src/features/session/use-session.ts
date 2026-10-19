@@ -87,6 +87,11 @@ type SseReadyHandle = { promise: Promise<void>; resolve: () => void };
 // Identical send inside this window is treated as a double-click and dropped.
 const DUP_SEND_WINDOW_MS = 1200;
 
+// After a transcript POST lands, a GET already in flight can still report the
+// pre-commit needs_ocr — treat that read as stale for this window so it cannot
+// regress the row's pending patch and stall the resumed ingest poll (ADR 0048).
+const OCR_SUBMITTED_STALE_MS = 30_000;
+
 type LiveChatSnapshot = {
   messages: ChatMessage[];
   agentActions: AgentActionRecord[];
@@ -221,6 +226,9 @@ export function useSession(companyId: string | undefined) {
   const queuedRef = useRef<QueuedChatMessage[]>([]);
   const stagedRef = useRef<StagedAttachment[]>([]);
   const ocrRunsRef = useRef(new Map<string, AbortController>());
+  // attachmentId → Date.now() of its accepted transcript POST; lets the
+  // attachment poll ignore stale needs_ocr reads for a bounded window.
+  const ocrSubmittedRef = useRef(new Map<string, number>());
   const attachPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drainQueueRef = useRef<() => void>(() => {});
   // resyncCurrentSession is defined after the SSE effect; same ref pattern
@@ -1426,7 +1434,16 @@ export function useSession(companyId: string | undefined) {
       const byId = new Map(list.attachments.map((a) => [a.id, a]));
       const next = stagedRef.current.map((s) => {
         const row = s.attachmentId ? byId.get(s.attachmentId) : null;
-        if (!row) return s;
+        if (!row || !s.attachmentId) return s;
+        const submittedAt = ocrSubmittedRef.current.get(s.attachmentId);
+        if (row.status !== "needs_ocr") {
+          ocrSubmittedRef.current.delete(s.attachmentId);
+        } else if (
+          submittedAt !== undefined &&
+          Date.now() - submittedAt < OCR_SUBMITTED_STALE_MS
+        ) {
+          return s;
+        }
         return { ...s, status: row.status, error: row.error ?? null };
       });
       stagedRef.current = next;
@@ -1462,6 +1479,7 @@ export function useSession(companyId: string | undefined) {
     if (stagedSessionRef.current === id) return;
     stagedSessionRef.current = id;
     for (const controller of ocrRunsRef.current.values()) controller.abort();
+    ocrSubmittedRef.current.clear();
     stagedRef.current = [];
     setStagedAttachments([]);
   }, [session?.id]);
@@ -1517,6 +1535,8 @@ export function useSession(companyId: string | undefined) {
 
   const unstageAttachment = useCallback((localId: string) => {
     ocrRunsRef.current.get(localId)?.abort();
+    const cur = stagedRef.current.find((s) => s.localId === localId);
+    if (cur?.attachmentId) ocrSubmittedRef.current.delete(cur.attachmentId);
     const next = stagedRef.current.filter((s) => s.localId !== localId);
     stagedRef.current = next;
     setStagedAttachments(next);
@@ -1606,6 +1626,7 @@ export function useSession(companyId: string | undefined) {
           engine: engine.id,
           pages,
         });
+        ocrSubmittedRef.current.set(cur.attachmentId, Date.now());
         patchStaged(localId)((s) => ({ ...s, status: out.status, error: out.error ?? null }));
       } catch (err) {
         if (err instanceof OcrAbortError) return;
