@@ -17,6 +17,10 @@ const {
   apiListSessionAttachments,
   apiUploadSessionAttachment,
   apiSaveAttachment,
+  apiDownloadAttachment,
+  apiPostAttachmentTranscript,
+  ocrMakeEngine,
+  ocrMakeRenderer,
   getRememberedSessionId,
   setRememberedSessionId,
   subscribeSessionEvents,
@@ -36,6 +40,10 @@ const {
   apiListSessionAttachments: vi.fn(),
   apiUploadSessionAttachment: vi.fn(),
   apiSaveAttachment: vi.fn(),
+  apiDownloadAttachment: vi.fn(),
+  apiPostAttachmentTranscript: vi.fn(),
+  ocrMakeEngine: vi.fn(),
+  ocrMakeRenderer: vi.fn(),
   getRememberedSessionId: vi.fn(),
   setRememberedSessionId: vi.fn(),
   subscribeSessionEvents: vi.fn(),
@@ -64,6 +72,12 @@ vi.mock("@/features/session/api", () => ({
   apiListSessionAttachments,
   apiUploadSessionAttachment,
   apiSaveAttachment,
+  apiDownloadAttachment,
+  apiPostAttachmentTranscript,
+}));
+
+vi.mock("@/features/session/ocr/runtime", () => ({
+  defaultOcrDeps: { makeEngine: ocrMakeEngine, makeRenderer: ocrMakeRenderer },
 }));
 
 vi.mock("@/features/session/session-storage", () => ({
@@ -3286,6 +3300,194 @@ describe("useSession", () => {
         result.current.unstageAttachment(localId);
       });
       expect(result.current.stagedAttachments).toEqual([]);
+    });
+  });
+
+  describe("attachment OCR (ADR 0049)", () => {
+    const attachmentOut = (over: Record<string, unknown> = {}) => ({
+      id: "att-1",
+      session_id: "sess-1",
+      filename: "scan.pdf",
+      content_type: "application/pdf",
+      status: "pending",
+      owner_scope: "session",
+      created_at: "2026-01-01T00:00:03Z",
+      ...over,
+    });
+    const hydrateEmpty = () => {
+      getRememberedSessionId.mockReturnValue("sess-1");
+      apiGetSessionMessages.mockResolvedValue({ session: sessionFixture, messages: [] });
+    };
+    const fakeRenderer = {
+      totalPages: 2,
+      renderPage: vi.fn(async (page: number) => ({ page })),
+      close: vi.fn(async () => {}),
+    };
+
+    it("ocrAttachment downloads, transcribes and posts the transcript", async () => {
+      hydrateEmpty();
+      apiUploadSessionAttachment.mockResolvedValue(
+        attachmentOut({ status: "needs_ocr", error: "PDF has no extractable text" }),
+      );
+      apiDownloadAttachment.mockResolvedValue({
+        blob: new Blob(["pdf"]),
+        filename: "scan.pdf",
+      });
+      ocrMakeEngine.mockResolvedValue({
+        id: "fake-engine/1",
+        recognize: vi.fn(async () => "認識したテキスト"),
+        terminate: vi.fn(async () => {}),
+      });
+      ocrMakeRenderer.mockResolvedValue({
+        totalPages: 2,
+        renderPage: vi.fn(async (page: number) => ({ page })),
+        close: vi.fn(async () => {}),
+      });
+      apiPostAttachmentTranscript.mockResolvedValue(attachmentOut({ status: "pending" }));
+      apiListSessionAttachments.mockResolvedValue({
+        attachments: [attachmentOut({ status: "ready" })],
+      });
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      const file = new File(["pdf"], "scan.pdf", { type: "application/pdf" });
+      await act(async () => {
+        await result.current.uploadAttachment(file);
+      });
+      const localId = result.current.stagedAttachments[0]?.localId ?? "";
+      expect(result.current.stagedAttachments[0]?.status).toBe("needs_ocr");
+
+      await act(async () => {
+        await result.current.ocrAttachment(localId);
+      });
+
+      expect(apiDownloadAttachment).toHaveBeenCalledWith("tok", "att-1");
+      expect(apiPostAttachmentTranscript).toHaveBeenCalledWith("tok", "att-1", {
+        engine: "fake-engine/1",
+        pages: [
+          { page: 1, text: "認識したテキスト" },
+          { page: 2, text: "認識したテキスト" },
+        ],
+      });
+      expect(result.current.stagedAttachments[0]?.status).toBe("pending");
+      expect(result.current.ocrProgress[localId]).toBeUndefined();
+
+      // The transcript POST re-parks the row at pending; the existing ingest poll
+      // resumes and carries it to ready without a second status loop.
+      await waitFor(() => expect(result.current.stagedAttachments[0]?.status).toBe("ready"), {
+        timeout: 3000,
+      });
+    });
+
+    it("does not offer OCR for rows that are not needs_ocr", async () => {
+      hydrateEmpty();
+      apiUploadSessionAttachment.mockResolvedValue(attachmentOut({ status: "ready" }));
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      const file = new File(["pdf"], "notes.pdf", { type: "application/pdf" });
+      await act(async () => {
+        await result.current.uploadAttachment(file);
+      });
+      const localId = result.current.stagedAttachments[0]?.localId ?? "";
+      await act(async () => {
+        await result.current.ocrAttachment(localId);
+      });
+      expect(apiDownloadAttachment).not.toHaveBeenCalled();
+      expect(apiPostAttachmentTranscript).not.toHaveBeenCalled();
+    });
+
+    it("clears progress and keeps the row parked when the transcript POST fails", async () => {
+      hydrateEmpty();
+      apiUploadSessionAttachment.mockResolvedValue(
+        attachmentOut({ status: "needs_ocr", error: "PDF has no extractable text" }),
+      );
+      apiDownloadAttachment.mockResolvedValue({
+        blob: new Blob(["pdf"]),
+        filename: "scan.pdf",
+      });
+      ocrMakeEngine.mockResolvedValue({
+        id: "fake-engine/1",
+        recognize: vi.fn(async () => "認識したテキスト"),
+        terminate: vi.fn(async () => {}),
+      });
+      ocrMakeRenderer.mockResolvedValue(fakeRenderer);
+      apiPostAttachmentTranscript.mockRejectedValue(new Error("transcript rejected"));
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      const file = new File(["pdf"], "scan.pdf", { type: "application/pdf" });
+      await act(async () => {
+        await result.current.uploadAttachment(file);
+      });
+      const localId = result.current.stagedAttachments[0]?.localId ?? "";
+
+      await act(async () => {
+        await expect(result.current.ocrAttachment(localId)).rejects.toThrow(
+          "transcript rejected",
+        );
+      });
+      expect(result.current.stagedAttachments[0]?.status).toBe("needs_ocr");
+      expect(result.current.ocrProgress[localId]).toBeUndefined();
+    });
+
+    it("cancelAttachmentOcr aborts the run without posting a transcript", async () => {
+      hydrateEmpty();
+      apiUploadSessionAttachment.mockResolvedValue(
+        attachmentOut({ status: "needs_ocr", error: "PDF has no extractable text" }),
+      );
+      apiDownloadAttachment.mockResolvedValue({
+        blob: new Blob(["pdf"]),
+        filename: "scan.pdf",
+      });
+      let releasePage: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        releasePage = resolve;
+      });
+      ocrMakeEngine.mockResolvedValue({
+        id: "fake-engine/1",
+        recognize: vi.fn(async () => {
+          await gate;
+          return "認識したテキスト";
+        }),
+        terminate: vi.fn(async () => {}),
+      });
+      ocrMakeRenderer.mockResolvedValue({
+        totalPages: 2,
+        renderPage: vi.fn(async (page: number) => ({ page })),
+        close: vi.fn(async () => {}),
+      });
+
+      const { result } = renderHook(() => useSession("co-1"));
+      await waitFor(() => expect(result.current.restoring).toBe(false));
+
+      const file = new File(["pdf"], "scan.pdf", { type: "application/pdf" });
+      await act(async () => {
+        await result.current.uploadAttachment(file);
+      });
+      const localId = result.current.stagedAttachments[0]?.localId ?? "";
+
+      let runPromise: Promise<void> = Promise.resolve();
+      await act(async () => {
+        runPromise = result.current.ocrAttachment(localId);
+        await Promise.resolve();
+      });
+      expect(result.current.ocrProgress[localId]).toBeDefined();
+
+      act(() => {
+        result.current.cancelAttachmentOcr(localId);
+        releasePage();
+      });
+      await act(async () => {
+        await runPromise;
+      });
+
+      expect(apiPostAttachmentTranscript).not.toHaveBeenCalled();
+      expect(result.current.stagedAttachments[0]?.status).toBe("needs_ocr");
+      expect(result.current.ocrProgress[localId]).toBeUndefined();
     });
   });
 });
