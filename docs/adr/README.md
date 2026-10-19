@@ -49,7 +49,8 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0044](./0044-azure-aca-demo.md) | Hosted Azure demo: azd + Container Apps + external Postgres | Accepted |
 | [0045](./0045-honest-citations-preview-identity-sse-h2.md) | Honest citations, org preview identity, SSE HTTP/2 hardening | Accepted |
 | [0046](./0046-account-settings-profile.md) | Account settings page (`/account`) + self-service profile (`PATCH /api/auth/me`) | Accepted |
-| [0047](./0047-session-file-attachments.md) | Session file attachments (chat import + document retrieve) | Proposed |
+| [0047](./0047-session-file-attachments.md) | Session file attachments (chat import + document retrieve) | Proposed (§10 amended by 0048) |
+| [0048](./0048-scanned-pdf-ocr-transcript.md) | Scanned-PDF OCR via client transcript (`needs_ocr` + transcript contract) | Proposed |
 
 ## Format
 

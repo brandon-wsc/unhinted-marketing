@@ -1,6 +1,6 @@
 # ADR 0047 — Session file attachments (chat import + document retrieve)
 
-- **Status:** Proposed
+- **Status:** Proposed (§10 scan-failure path amended by [0048](./0048-scanned-pdf-ocr-transcript.md))
 - **Date:** 2026-10-18
 - **Supersedes:** [ADR 0019](./0019-pydantic-ai-inner-harness.md) §4 in part — keeps "documents are `attachment_id` tools returning slices", replaces the external HTTP document service with in-process worker ingest (parser + chunker ship in the worker, never in the request path or the LLM loop). Extends [COLLECT](../knowledge/COLLECT.md) §3 inventory.
 
