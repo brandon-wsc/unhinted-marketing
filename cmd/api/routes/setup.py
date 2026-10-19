@@ -74,6 +74,7 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
             scheduler_questions_interval_hours=settings.scheduler_questions_interval_hours,
             news_promote_window_hours=settings.news_promote_window_hours,
             news_promote_trends_rank_max=settings.news_promote_trends_rank_max,
+            scheduler_hot_search_enabled=settings.scheduler_hot_search_enabled,
             setup_completed=False,
         )
     return InstanceSettingsResponse(
@@ -108,6 +109,11 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
         ),
         news_promote_trends_rank_max=(
             row.news_promote_trends_rank_max or settings.news_promote_trends_rank_max
+        ),
+        scheduler_hot_search_enabled=(
+            settings.scheduler_hot_search_enabled
+            if row.scheduler_hot_search_enabled is None
+            else row.scheduler_hot_search_enabled
         ),
         setup_completed=row.setup_completed_at is not None,
     )
@@ -260,6 +266,8 @@ async def put_instance_settings(
         fields["news_promote_window_hours"] = body.news_promote_window_hours
     if body.news_promote_trends_rank_max is not None:
         fields["news_promote_trends_rank_max"] = body.news_promote_trends_rank_max
+    if body.scheduler_hot_search_enabled is not None:
+        fields["scheduler_hot_search_enabled"] = body.scheduler_hot_search_enabled
     if fields:
         row = await repos.upsert_instance_settings(db, **fields)
     await db.commit()

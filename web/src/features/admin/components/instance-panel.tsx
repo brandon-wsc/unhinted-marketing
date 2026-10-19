@@ -75,6 +75,7 @@ export function InstancePanel() {
   const [questionsInterval, setQuestionsInterval] = useState("12");
   const [promoteWindow, setPromoteWindow] = useState("24");
   const [promoteRankMax, setPromoteRankMax] = useState("10");
+  const [hotSearchEnabled, setHotSearchEnabled] = useState(true);
 
   const { error, setError } = useAsyncData(
     () => apiGetInstanceSettings(accessToken),
@@ -93,6 +94,7 @@ export function InstancePanel() {
       setQuestionsInterval(String(row.scheduler_questions_interval_hours));
       setPromoteWindow(String(row.news_promote_window_hours));
       setPromoteRankMax(String(row.news_promote_trends_rank_max));
+      setHotSearchEnabled(row.scheduler_hot_search_enabled);
     },
     [accessToken],
     {
@@ -124,6 +126,7 @@ export function InstancePanel() {
         scheduler_questions_interval_hours: Number.parseInt(questionsInterval, 10) || undefined,
         news_promote_window_hours: Number.parseInt(promoteWindow, 10) || undefined,
         news_promote_trends_rank_max: Number.parseInt(promoteRankMax, 10) || undefined,
+        scheduler_hot_search_enabled: hotSearchEnabled,
       });
       setSettings(next);
       setSmtpPassword("");
@@ -278,6 +281,15 @@ export function InstancePanel() {
         {t("system.instance.ingestSection")}
       </h2>
       <p className="text-xs text-muted-foreground">{t("system.instance.ingestHint")}</p>
+      <label htmlFor="inst-hot-enabled" className="flex items-center justify-between gap-3 text-sm">
+        <span>{t("system.instance.ingestEnabled")}</span>
+        <Switch
+          id="inst-hot-enabled"
+          checked={hotSearchEnabled}
+          onCheckedChange={setHotSearchEnabled}
+          disabled={!canEdit}
+        />
+      </label>
       <div className="grid grid-cols-2 gap-3">
         <FormField id="inst-hot-interval" label={t("system.instance.hotSearchInterval")}>
           <Input

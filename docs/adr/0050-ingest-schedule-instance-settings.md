@@ -12,9 +12,10 @@ These knobs are all **instance-scoped**: `hot_search` / `promote_signals` mainta
 
 ## Decision
 
-- New nullable integer columns on `instance_settings` (singleton, ADR 0026):
+- New nullable columns on `instance_settings` (singleton, ADR 0026):
   `scheduler_hot_search_interval_minutes`, `scheduler_questions_interval_hours`,
-  `news_promote_window_hours`, `news_promote_trends_rank_max`.
+  `news_promote_window_hours`, `news_promote_trends_rank_max`, and the boolean
+  `scheduler_hot_search_enabled`.
 - `NULL` = unset → the env value is the effective default (env seeds semantics,
   unchanged). `InstanceSnapshot` resolves the fallback; the API response always
   returns the effective value so the portal shows what is actually running.
@@ -25,6 +26,10 @@ These knobs are all **instance-scoped**: `hot_search` / `promote_signals` mainta
   (`load_snapshot` when `cache_is_stale()`), so a portal save takes effect
   within ~1 minute with no restart. `promote_signals` loads the snapshot at
   job start. Intervals remain whole units (minutes / hours), matching env.
+- `scheduler_hot_search_enabled = false` gates the periodic hot tick only —
+  the scheduler skips enqueuing `hot_search` and `promote_signals` (elapsed
+  keeps accruing, so re-enabling fires on the next tick). Manual runs
+  (`worker hot-search`, `worker promote`, `--once`) are unaffected.
 - `question_cache_ttl_hours` stays env-only, but the question runner clamps
   the effective TTL to `max(env_ttl, questions_interval_hours + 1)` so the
   ADR 0018 invariant (TTL must outlive the tick) survives a longer configured

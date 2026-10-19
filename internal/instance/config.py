@@ -50,6 +50,7 @@ class InstanceSnapshot:
     scheduler_questions_interval_hours: int = 12
     news_promote_window_hours: int = 24
     news_promote_trends_rank_max: int = 10
+    scheduler_hot_search_enabled: bool = True
 
 
 def _strip(value: str | None) -> str:
@@ -77,6 +78,7 @@ def snapshot_from_env() -> InstanceSnapshot:
         scheduler_questions_interval_hours=settings.scheduler_questions_interval_hours,
         news_promote_window_hours=settings.news_promote_window_hours,
         news_promote_trends_rank_max=settings.news_promote_trends_rank_max,
+        scheduler_hot_search_enabled=settings.scheduler_hot_search_enabled,
     )
 
 
@@ -160,6 +162,11 @@ def _snapshot_from_row(row) -> InstanceSnapshot:
         ),
         news_promote_trends_rank_max=(
             row.news_promote_trends_rank_max or settings.news_promote_trends_rank_max
+        ),
+        scheduler_hot_search_enabled=(
+            settings.scheduler_hot_search_enabled
+            if row.scheduler_hot_search_enabled is None
+            else row.scheduler_hot_search_enabled
         ),
     )
 

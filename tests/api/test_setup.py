@@ -319,6 +319,7 @@ async def test_instance_settings_ingest_schedule(client: AsyncClient) -> None:
     assert (
         body["news_promote_trends_rank_max"] == settings.news_promote_trends_rank_max
     )
+    assert body["scheduler_hot_search_enabled"] is True
 
     res = await client.put(
         "/api/instance/settings",
@@ -328,6 +329,7 @@ async def test_instance_settings_ingest_schedule(client: AsyncClient) -> None:
             "scheduler_questions_interval_hours": 6,
             "news_promote_window_hours": 48,
             "news_promote_trends_rank_max": 5,
+            "scheduler_hot_search_enabled": False,
         },
     )
     assert res.status_code == 200, res.text
@@ -336,6 +338,7 @@ async def test_instance_settings_ingest_schedule(client: AsyncClient) -> None:
     assert body["scheduler_questions_interval_hours"] == 6
     assert body["news_promote_window_hours"] == 48
     assert body["news_promote_trends_rank_max"] == 5
+    assert body["scheduler_hot_search_enabled"] is False
 
     # Persisted across reads.
     body = (

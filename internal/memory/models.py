@@ -848,6 +848,10 @@ class InstanceSettings(Base):
     )
     news_promote_window_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     news_promote_trends_rank_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # NULL = env default (true); False disables the periodic hot tick.
+    scheduler_hot_search_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -875,6 +875,7 @@
       "metaRelaySecretHint": "Issued by the relay operator at registration — paste it here. Required before Connect works in relay mode.",
       "ingestSection": "Signal ingest",
       "ingestHint": "How often background workers fetch HK signals and promote them to topics. Changes apply within about a minute — no restart needed.",
+      "ingestEnabled": "Periodic signal fetch + promote",
       "hotSearchInterval": "Hot-search fetch interval (minutes)",
       "questionsInterval": "Recommended-questions interval (hours)",
       "promoteWindow": "Signal promote window (hours)",

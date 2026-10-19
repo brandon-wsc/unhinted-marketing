@@ -7733,6 +7733,10 @@
             "type": "integer",
             "title": "News Promote Trends Rank Max"
           },
+          "scheduler_hot_search_enabled": {
+            "type": "boolean",
+            "title": "Scheduler Hot Search Enabled"
+          },
           "setup_completed": {
             "type": "boolean",
             "title": "Setup Completed"
@@ -7761,6 +7765,7 @@
           "scheduler_questions_interval_hours",
           "news_promote_window_hours",
           "news_promote_trends_rank_max",
+          "scheduler_hot_search_enabled",
           "setup_completed"
         ],
         "title": "InstanceSettingsResponse"
@@ -7891,6 +7896,17 @@
               }
             ],
             "title": "News Promote Trends Rank Max"
+          },
+          "scheduler_hot_search_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduler Hot Search Enabled"
           }
         },
         "type": "object",
