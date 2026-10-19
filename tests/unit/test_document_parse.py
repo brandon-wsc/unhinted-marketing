@@ -213,6 +213,49 @@ def test_parse_scanned_pdf_raises_readable_error() -> None:
         _parse("scan.pdf", _make_pdf([None]))
 
 
+def test_parse_scanned_pdf_raises_no_extractable_text_with_page_count() -> None:
+    """ADR 0048 §1: a no-text-layer PDF raises ``NoExtractableTextError`` — a
+    ``DocumentParseError`` subclass carrying ``page_count`` so the ingest job
+    can park the row at ``needs_ocr`` with a real page count for the UI
+    instead of failing it blind."""
+    from internal.memory.document_parse import NoExtractableTextError
+
+    with pytest.raises(NoExtractableTextError) as excinfo:
+        _parse("scan.pdf", _make_pdf([None, None, None]))
+    assert isinstance(excinfo.value, _parse_error())
+    assert excinfo.value.page_count == 3
+
+
+def test_parse_transcript_pages_become_page_numbered_paragraphs() -> None:
+    """ADR 0048 §3 — ``parse_transcript(pages)`` turns client OCR output into
+    the same ``ParsedDocument`` shape ``parse_document`` returns: one
+    paragraph block per blank-line run with ``page`` carried through, and
+    blank pages contribute nothing."""
+    from internal.memory.document_parse import TranscriptPage, parse_transcript
+
+    doc = parse_transcript(
+        [
+            TranscriptPage(page=1, text="第一頁第一段。\n\n第一頁第二段。"),
+            TranscriptPage(page=2, text="   "),
+            TranscriptPage(page=3, text="第三頁內容。"),
+        ]
+    )
+    paras = [b for b in doc.blocks if b.kind == "paragraph"]
+    assert [b.page for b in paras] == [1, 1, 3]
+    assert "第一頁第一段" in paras[0].text
+    assert "第一頁第二段" in paras[1].text
+    assert "第三頁內容" in paras[2].text
+
+
+def test_parse_transcript_all_blank_raises_readable_error() -> None:
+    """A transcript that contributes no text is a parse failure, not a false
+    ``ready`` (ADR 0048 §9 — same honesty posture as ADR 0047 §10)."""
+    from internal.memory.document_parse import TranscriptPage, parse_transcript
+
+    with pytest.raises(_parse_error()):
+        parse_transcript([TranscriptPage(page=1, text="  \n\n  ")])
+
+
 def test_parse_corrupt_pdf_raises_readable_error() -> None:
     with pytest.raises(_parse_error()):
         _parse("broken.pdf", b"this is not a pdf document")

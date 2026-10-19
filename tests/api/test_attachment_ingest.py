@@ -155,16 +155,13 @@ async def test_ingest_kind_guess_reads_catalog_vs_document(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "data",
-    [make_scanned_pdf(), b"this is not a pdf document"],
-    ids=["scanned", "corrupt"],
-)
-async def test_ingest_parse_failure_marks_failed_and_job_succeeds(
-    client: AsyncClient, db_session: AsyncSession, data: bytes
+async def test_ingest_scanned_pdf_parks_at_needs_ocr(
+    client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """ADR 0047 §10: parse failures are permanent — the handler swallows the
-    parse error so a corrupt file never burns job retries."""
+    """ADR 0048 §1: a no-text-layer PDF parks at ``needs_ocr`` instead of
+    ``failed`` — the row carries the honest error plus the page count a
+    client needs to drive browser OCR, and the job still succeeds so a
+    scan never burns retries."""
     user_id, company_id, session_id = await _member_with_session(client, db_session)
     attachment_id = await _seed_pdf(
         db_session,
@@ -172,7 +169,36 @@ async def test_ingest_parse_failure_marks_failed_and_job_succeeds(
         company_id=company_id,
         session_id=session_id,
         filename="menu-scan.pdf",
-        data=data,
+        data=make_scanned_pdf(),
+    )
+
+    job = await run_next_job(db_session)
+    assert job is not None and job.status == "succeeded"
+    assert job.attempts == 1
+
+    row = await fetch_attachment(db_session, attachment_id)
+    assert row.status == "needs_ocr"
+    assert row.error and "text" in row.error.lower()
+    assert row.doc_profile["pages"] == 1
+    assert row.doc_profile["ocr"] == "pending"
+    assert await fetch_chunks(db_session, attachment_id) == []
+
+
+@pytest.mark.asyncio
+async def test_ingest_corrupt_file_marks_failed_and_job_succeeds(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """ADR 0047 §10 unchanged by 0048: corrupt bytes are a permanent
+    ``failed`` — the handler swallows the parse error so a broken file
+    never burns job retries."""
+    user_id, company_id, session_id = await _member_with_session(client, db_session)
+    attachment_id = await _seed_pdf(
+        db_session,
+        user_id=user_id,
+        company_id=company_id,
+        session_id=session_id,
+        filename="menu-scan.pdf",
+        data=b"this is not a pdf document",
     )
 
     job = await run_next_job(db_session)
