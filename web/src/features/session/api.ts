@@ -6,6 +6,7 @@ import type { ImageFormat } from "./session-helpers";
 import type {
   AttachmentListResponse,
   AttachmentOut,
+  AttachmentTranscriptRequest,
   ChooseAngleResponse,
   ConfirmSessionResponse,
   DraftCopy,
@@ -305,6 +306,18 @@ export async function apiDownloadAttachment(
   const cd = res.headers.get("Content-Disposition") ?? "";
   const m = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(cd);
   return { blob, filename: m?.[1] ? decodeURIComponent(m[1]) : "attachment" };
+}
+
+// ADR 0048/0049 — submit a browser-OCR transcript for a needs_ocr attachment.
+export async function apiPostAttachmentTranscript(
+  accessToken: string | null,
+  attachmentId: string,
+  body: AttachmentTranscriptRequest,
+): Promise<AttachmentOut> {
+  return apiJson<AttachmentOut>(accessToken, `${API_BASE}/attachments/${attachmentId}/transcript`, {
+    method: "POST",
+    json: body,
+  });
 }
 
 export type RecommendedQuestionsFetch =

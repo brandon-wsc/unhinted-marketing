@@ -119,7 +119,14 @@
         "ready": "Ready",
         "needsOcr": "Needs OCR",
         "failed": "Could not read"
-      }
+      },
+      "ocr": {
+        "run": "OCR in browser",
+        "cancel": "Cancel OCR",
+        "loading": "Loading",
+        "submitting": "Uploading"
+      },
+      "ocrFailed": "OCR failed"
     },
     "live": "Live",
     "offline": "Offline",

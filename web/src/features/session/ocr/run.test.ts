@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { OcrAbortError, ocrAttachmentToTranscript } from "./run";
 import type { OcrEngine, PdfRenderer } from "./run";
+import { OcrAbortError, ocrAttachmentToTranscript } from "./run";
 
 const fakeEngine = (texts: Record<number, string> = {}): OcrEngine => ({
   id: "fake-engine/1",

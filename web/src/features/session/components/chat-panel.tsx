@@ -13,6 +13,7 @@ import {
   Paperclip,
   Pencil,
   RotateCcw,
+  ScanText,
   Square,
   Trash2,
   TriangleAlert,
@@ -176,6 +177,9 @@ export function ChatPanel() {
     stagedAttachments,
     uploadAttachment,
     retryAttachment,
+    ocrAttachment,
+    cancelAttachmentOcr,
+    ocrProgress,
     unstageAttachment,
     consumeStagedAttachments,
     restoreStagedAttachments,
@@ -896,65 +900,100 @@ export function ChatPanel() {
                 <div className="relative z-10 flex flex-col rounded-2xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-voice-border focus-within:border-voice focus-within:hover:border-voice">
                   {stagedAttachments.length > 0 && (
                     <ul className="flex flex-col border-b border-border px-1 pb-1.5">
-                      {stagedAttachments.map((s) => (
-                        <li
-                          key={s.localId}
-                          className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground"
-                        >
-                          {s.status === "uploading" || s.status === "pending" ? (
-                            <LoaderCircle
-                              className="size-3 shrink-0 animate-spin text-voice"
-                              aria-hidden
-                            />
-                          ) : s.status === "failed" ? (
-                            <TriangleAlert
-                              className="size-3 shrink-0 text-destructive"
-                              aria-hidden
-                            />
-                          ) : (
-                            <FileText
-                              className="size-3 shrink-0 text-muted-foreground"
-                              aria-hidden
-                            />
-                          )}
-                          <span className="min-w-0 flex-1 truncate">
-                            {s.size > 0
-                              ? `${s.filename} · ${formatAttachmentSize(s.size)}`
-                              : s.filename}
-                          </span>
-                          <span
-                            className={cn("shrink-0", s.status === "failed" && "text-destructive")}
+                      {stagedAttachments.map((s) => {
+                        const ocrRun = ocrProgress[s.localId];
+                        return (
+                          <li
+                            key={s.localId}
+                            className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-tight text-muted-foreground"
                           >
-                            {s.status === "failed" && s.error
-                              ? s.error
-                              : t(`chat.attach.status.${attachmentStatusKey(s.status)}`)}
-                          </span>
-                          {s.status === "failed" && s.file ? (
+                            {s.status === "uploading" || s.status === "pending" || ocrRun ? (
+                              <LoaderCircle
+                                className="size-3 shrink-0 animate-spin text-voice"
+                                aria-hidden
+                              />
+                            ) : s.status === "failed" ? (
+                              <TriangleAlert
+                                className="size-3 shrink-0 text-destructive"
+                                aria-hidden
+                              />
+                            ) : (
+                              <FileText
+                                className="size-3 shrink-0 text-muted-foreground"
+                                aria-hidden
+                              />
+                            )}
+                            <span className="min-w-0 flex-1 truncate">
+                              {s.size > 0
+                                ? `${s.filename} · ${formatAttachmentSize(s.size)}`
+                                : s.filename}
+                            </span>
+                            <span
+                              className={cn(
+                                "shrink-0",
+                                s.status === "failed" && "text-destructive",
+                              )}
+                            >
+                              {ocrRun
+                                ? ocrRun.phase === "ocr"
+                                  ? `OCR ${ocrRun.page}/${ocrRun.total}`
+                                  : t(`chat.attach.ocr.${ocrRun.phase}`)
+                                : s.status === "failed" && s.error
+                                  ? s.error
+                                  : t(`chat.attach.status.${attachmentStatusKey(s.status)}`)}
+                            </span>
+                            {ocrRun ? (
+                              <IconButton
+                                type="button"
+                                className="h-6 w-6 shrink-0"
+                                title={t("chat.attach.ocr.cancel")}
+                                aria-label={t("chat.attach.ocr.cancel")}
+                                onClick={() => cancelAttachmentOcr(s.localId)}
+                              >
+                                <Square className="size-3" fill="currentColor" stroke="none" />
+                              </IconButton>
+                            ) : s.status === "needs_ocr" ? (
+                              <IconButton
+                                type="button"
+                                className="h-6 w-6 shrink-0"
+                                title={t("chat.attach.ocr.run")}
+                                aria-label={t("chat.attach.ocr.run")}
+                                onClick={() =>
+                                  void ocrAttachment(s.localId).catch(() =>
+                                    showError(t("chat.attach.ocrFailed")),
+                                  )
+                                }
+                              >
+                                <ScanText className="size-3" />
+                              </IconButton>
+                            ) : null}
+                            {s.status === "failed" && s.file ? (
+                              <IconButton
+                                type="button"
+                                className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                                title={t("chat.attach.retry")}
+                                aria-label={t("chat.attach.retry")}
+                                onClick={() =>
+                                  void retryAttachment(s.localId).catch(() =>
+                                    showError(t("chat.attach.uploadFailed")),
+                                  )
+                                }
+                              >
+                                <RotateCcw className="size-3" />
+                              </IconButton>
+                            ) : null}
                             <IconButton
                               type="button"
                               className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-                              title={t("chat.attach.retry")}
-                              aria-label={t("chat.attach.retry")}
-                              onClick={() =>
-                                void retryAttachment(s.localId).catch(() =>
-                                  showError(t("chat.attach.uploadFailed")),
-                                )
-                              }
+                              title={t("chat.attach.remove")}
+                              aria-label={t("chat.attach.remove")}
+                              onClick={() => unstageAttachment(s.localId)}
                             >
-                              <RotateCcw className="size-3" />
+                              <X className="size-3" />
                             </IconButton>
-                          ) : null}
-                          <IconButton
-                            type="button"
-                            className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-                            title={t("chat.attach.remove")}
-                            aria-label={t("chat.attach.remove")}
-                            onClick={() => unstageAttachment(s.localId)}
-                          >
-                            <X className="size-3" />
-                          </IconButton>
-                        </li>
-                      ))}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                   <input

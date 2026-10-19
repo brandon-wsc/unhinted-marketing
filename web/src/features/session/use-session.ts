@@ -6,10 +6,12 @@ import {
   apiConfirmSession,
   apiCreateSession,
   apiDeleteSession,
+  apiDownloadAttachment,
   apiForkSession,
   apiGetSessionMessages,
   apiListSessionAttachments,
   apiListSessions,
+  apiPostAttachmentTranscript,
   apiPostSessionMessage,
   apiRegenImage,
   apiRemoveImage,
@@ -22,6 +24,8 @@ import {
   apiUploadImage,
   apiUploadSessionAttachment,
 } from "./api";
+import { OcrAbortError, ocrAttachmentToTranscript } from "./ocr/run";
+import { defaultOcrDeps } from "./ocr/runtime";
 import {
   agentActionsFromMessages,
   anglePickParkFromEvents,
@@ -66,6 +70,7 @@ import type {
   DraftCopy,
   ForkOrigin,
   ForkPreviewNote,
+  OcrRunState,
   PreviewDraft,
   PreviewMediaMutationResponse,
   QueuedChatMessage,
@@ -153,6 +158,7 @@ export function useSession(companyId: string | undefined) {
   const [editInsertAt, setEditInsertAtState] = useState<number | null>(null);
   // ADR 0047 scratch attachments staged in the composer for the next message.
   const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
+  const [ocrProgress, setOcrProgress] = useState<Record<string, OcrRunState>>({});
   const [draft, setDraft] = useState<PreviewDraft | null>(null);
   const [confirmReceipt, setConfirmReceipt] = useState<ConfirmSessionResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
@@ -214,6 +220,7 @@ export function useSession(companyId: string | undefined) {
   const lastImageFormatPickRef = useRef<ImageFormat | null>(null);
   const queuedRef = useRef<QueuedChatMessage[]>([]);
   const stagedRef = useRef<StagedAttachment[]>([]);
+  const ocrRunsRef = useRef(new Map<string, AbortController>());
   const attachPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drainQueueRef = useRef<() => void>(() => {});
   // resyncCurrentSession is defined after the SSE effect; same ref pattern
@@ -1454,9 +1461,19 @@ export function useSession(companyId: string | undefined) {
     const id = session?.id ?? null;
     if (stagedSessionRef.current === id) return;
     stagedSessionRef.current = id;
+    for (const controller of ocrRunsRef.current.values()) controller.abort();
     stagedRef.current = [];
     setStagedAttachments([]);
   }, [session?.id]);
+
+  const patchStaged = useCallback(
+    (localId: string) => (mut: (s: StagedAttachment) => StagedAttachment) => {
+      const next = stagedRef.current.map((s) => (s.localId === localId ? mut(s) : s));
+      stagedRef.current = next;
+      setStagedAttachments(next);
+    },
+    [],
+  );
 
   const uploadAttachment = useCallback(
     async (file: File): Promise<void> => {
@@ -1475,11 +1492,7 @@ export function useSession(companyId: string | undefined) {
         }
       }
       const staged = newStagedAttachment(file);
-      const patch = (mut: (s: StagedAttachment) => StagedAttachment) => {
-        const next = stagedRef.current.map((s) => (s.localId === staged.localId ? mut(s) : s));
-        stagedRef.current = next;
-        setStagedAttachments(next);
-      };
+      const patch = patchStaged(staged.localId);
       stagedRef.current = [...stagedRef.current, staged];
       setStagedAttachments(stagedRef.current);
       try {
@@ -1499,10 +1512,11 @@ export function useSession(companyId: string | undefined) {
         throw err;
       }
     },
-    [accessToken, companyId, session, refreshHistory],
+    [accessToken, companyId, session, refreshHistory, patchStaged],
   );
 
   const unstageAttachment = useCallback((localId: string) => {
+    ocrRunsRef.current.get(localId)?.abort();
     const next = stagedRef.current.filter((s) => s.localId !== localId);
     stagedRef.current = next;
     setStagedAttachments(next);
@@ -1514,11 +1528,7 @@ export function useSession(companyId: string | undefined) {
       const cur = stagedRef.current.find((s) => s.localId === localId);
       const sid = sessionIdRef.current;
       if (!cur?.file || !accessToken || !sid) return;
-      const patch = (mut: (s: StagedAttachment) => StagedAttachment) => {
-        const next = stagedRef.current.map((s) => (s.localId === localId ? mut(s) : s));
-        stagedRef.current = next;
-        setStagedAttachments(next);
-      };
+      const patch = patchStaged(localId);
       patch((s) => ({ ...s, status: "uploading", error: null }));
       try {
         const out = await apiUploadSessionAttachment(accessToken, sid, cur.file);
@@ -1537,7 +1547,7 @@ export function useSession(companyId: string | undefined) {
         throw err;
       }
     },
-    [accessToken],
+    [accessToken, patchStaged],
   );
 
   /** Take staged items for the next send; returns them so callers can restore on error. */
@@ -1560,6 +1570,57 @@ export function useSession(companyId: string | undefined) {
     },
     [accessToken],
   );
+
+  // ADR 0049 — browser OCR for rows parked at needs_ocr: download the bytes,
+  // transcribe client-side, POST the transcript, then let the existing ingest
+  // poll carry the re-parked row to ready. Park stays the safe state on abort
+  // or failure — no auto-retry (0048 §9).
+  const setOcrRunState = useCallback((localId: string, state: OcrRunState | null) => {
+    setOcrProgress((m) => {
+      const next = { ...m };
+      if (state) next[localId] = state;
+      else delete next[localId];
+      return next;
+    });
+  }, []);
+
+  const ocrAttachment = useCallback(
+    async (localId: string): Promise<void> => {
+      const cur = stagedRef.current.find((s) => s.localId === localId);
+      if (!cur?.attachmentId || cur.status !== "needs_ocr" || !accessToken) return;
+      if (ocrRunsRef.current.has(localId)) return;
+      const controller = new AbortController();
+      ocrRunsRef.current.set(localId, controller);
+      try {
+        setOcrRunState(localId, { phase: "loading" });
+        const { blob } = await apiDownloadAttachment(accessToken, cur.attachmentId);
+        const engine = await defaultOcrDeps.makeEngine();
+        const pages = await ocrAttachmentToTranscript(blob, {
+          engine,
+          makeRenderer: defaultOcrDeps.makeRenderer,
+          onProgress: ({ page, total }) => setOcrRunState(localId, { phase: "ocr", page, total }),
+          signal: controller.signal,
+        });
+        setOcrRunState(localId, { phase: "submitting" });
+        const out = await apiPostAttachmentTranscript(accessToken, cur.attachmentId, {
+          engine: engine.id,
+          pages,
+        });
+        patchStaged(localId)((s) => ({ ...s, status: out.status, error: out.error ?? null }));
+      } catch (err) {
+        if (err instanceof OcrAbortError) return;
+        throw err;
+      } finally {
+        ocrRunsRef.current.delete(localId);
+        setOcrRunState(localId, null);
+      }
+    },
+    [accessToken, patchStaged, setOcrRunState],
+  );
+
+  const cancelAttachmentOcr = useCallback((localId: string) => {
+    ocrRunsRef.current.get(localId)?.abort();
+  }, []);
 
   const sendMessage = useCallback(
     async (
@@ -2281,6 +2342,9 @@ export function useSession(companyId: string | undefined) {
     stagedAttachments,
     uploadAttachment,
     retryAttachment,
+    ocrAttachment,
+    cancelAttachmentOcr,
+    ocrProgress,
     unstageAttachment,
     consumeStagedAttachments,
     restoreStagedAttachments,

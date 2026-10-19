@@ -3426,9 +3426,7 @@ describe("useSession", () => {
       const localId = result.current.stagedAttachments[0]?.localId ?? "";
 
       await act(async () => {
-        await expect(result.current.ocrAttachment(localId)).rejects.toThrow(
-          "transcript rejected",
-        );
+        await expect(result.current.ocrAttachment(localId)).rejects.toThrow("transcript rejected");
       });
       expect(result.current.stagedAttachments[0]?.status).toBe("needs_ocr");
       expect(result.current.ocrProgress[localId]).toBeUndefined();
