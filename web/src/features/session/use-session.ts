@@ -1438,10 +1438,7 @@ export function useSession(companyId: string | undefined) {
         const submittedAt = ocrSubmittedRef.current.get(s.attachmentId);
         if (row.status !== "needs_ocr") {
           ocrSubmittedRef.current.delete(s.attachmentId);
-        } else if (
-          submittedAt !== undefined &&
-          Date.now() - submittedAt < OCR_SUBMITTED_STALE_MS
-        ) {
+        } else if (submittedAt !== undefined && Date.now() - submittedAt < OCR_SUBMITTED_STALE_MS) {
           return s;
         }
         return { ...s, status: row.status, error: row.error ?? null };
