@@ -120,14 +120,10 @@ export function InstancePanel() {
         meta_app_secret: metaAppSecret || undefined,
         meta_oauth_mode: metaMode,
         meta_oauth_relay_secret: relaySecret || undefined,
-        scheduler_hot_search_interval_minutes:
-          Number.parseInt(hotSearchInterval, 10) || undefined,
-        scheduler_questions_interval_hours:
-          Number.parseInt(questionsInterval, 10) || undefined,
-        news_promote_window_hours:
-          Number.parseInt(promoteWindow, 10) || undefined,
-        news_promote_trends_rank_max:
-          Number.parseInt(promoteRankMax, 10) || undefined,
+        scheduler_hot_search_interval_minutes: Number.parseInt(hotSearchInterval, 10) || undefined,
+        scheduler_questions_interval_hours: Number.parseInt(questionsInterval, 10) || undefined,
+        news_promote_window_hours: Number.parseInt(promoteWindow, 10) || undefined,
+        news_promote_trends_rank_max: Number.parseInt(promoteRankMax, 10) || undefined,
       });
       setSettings(next);
       setSmtpPassword("");
