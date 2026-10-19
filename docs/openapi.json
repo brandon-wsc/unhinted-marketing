@@ -4968,7 +4968,7 @@
           "attachments"
         ],
         "summary": "Post Attachment Transcript",
-        "description": "ADR 0048 §2 — accept client-supplied OCR text for a parked attachment.\n\nSame access rule as download: ``org`` rows take any company member's\ntranscript, ``session``/``user`` rows the uploader's alone; refusals are\na uniform 404. Only ``needs_ocr`` rows accept a transcript — anything\nelse is a 409 (a healthy doc is never silently re-chunked by client\ntext). The transcript lands as ``attachments/{id}/transcript.json`` and\na fresh ``attachment_ingest`` job resumes the unchanged chunk → embed\npipeline; OCR itself never runs in this process.",
+        "description": "ADR 0048 §2 — accept client-supplied OCR text for a parked attachment.\n\nSame access rule as download: ``org`` rows take any company member's\ntranscript, ``session``/``user`` rows the uploader's alone; refusals are\na uniform 404. Only ``needs_ocr`` rows accept a transcript — anything\nelse is a 409 (a healthy doc is never silently re-chunked by client\ntext). The transcript lands as ``attachments/{id}/transcript.json``, the\nrow immediately re-enters the pipeline as ``pending`` (so the client\npoll resumes and a duplicate POST conflicts), and a fresh\n``attachment_ingest`` job resumes the unchanged chunk → embed pipeline;\nOCR itself never runs in this process.",
         "operationId": "post_attachment_transcript_api_attachments__attachment_id__transcript_post",
         "security": [
           {

@@ -85,6 +85,39 @@ async def test_get_session_messages_image_park_defaults_format_single(
 
 
 @pytest.mark.asyncio
+async def test_session_messages_same_transaction_keep_write_order(
+    client, db_session
+) -> None:
+    """A user row and its assistant reply commit in one transaction —
+    server_default func.now() is the TXN clock, so both would share one
+    created_at and ORDER BY has no stable winner (the reply once rendered
+    above the question). Per-row real timestamps pin the write order."""
+    from internal.memory import repos
+
+    data = await register_user(client)
+    token = data["access_token"]
+    company_id = data["user"]["organizations"][0]["id"]
+    headers = auth_header(token)
+
+    created = await client.post("/api/sessions", headers=headers, json={"company_id": company_id})
+    session_id = uuid.UUID(created.json()["id"])
+
+    user_msg = await repos.add_session_message(
+        db_session, session_id=session_id, role="user", content="講緊咩"
+    )
+    asst_msg = await repos.add_session_message(
+        db_session, session_id=session_id, role="assistant", content="係一張發票"
+    )
+    await db_session.commit()
+    assert user_msg.created_at < asst_msg.created_at
+
+    res = await client.get(f"/api/sessions/{session_id}/messages", headers=headers)
+    assert res.status_code == 200, res.text
+    roles = [m["role"] for m in res.json()["messages"]]
+    assert roles == ["user", "assistant"]
+
+
+@pytest.mark.asyncio
 async def test_session_not_found(client) -> None:
     data = await register_user(client)
     missing = uuid.uuid4()

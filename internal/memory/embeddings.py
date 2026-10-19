@@ -17,6 +17,9 @@ _lock = threading.Lock()
 _model: Any | None = None
 _model_failed = False
 _load_started = False
+# Set once a warmup attempt finishes (success OR failure) so interactive
+# readers can wait out a cold load instead of silently losing vector search.
+_load_done = threading.Event()
 
 
 def reset_product_embedder_for_tests() -> None:
@@ -26,6 +29,7 @@ def reset_product_embedder_for_tests() -> None:
         _model = None
         _model_failed = False
         _load_started = False
+    _load_done.clear()
 
 
 def embedding_model_name() -> str:
@@ -43,18 +47,21 @@ def _model_name() -> str:
 def _init_model_safe() -> None:
     global _model, _model_failed
     try:
-        from fastembed import TextEmbedding
+        try:
+            from fastembed import TextEmbedding
 
-        name = _model_name()
-        loaded = TextEmbedding(model_name=name)
-    except Exception:
+            name = _model_name()
+            loaded = TextEmbedding(model_name=name)
+        except Exception:
+            with _lock:
+                _model_failed = True
+            logger.exception("Product embedder init failed — vector tier disabled")
+            return
         with _lock:
-            _model_failed = True
-        logger.exception("Product embedder init failed — vector tier disabled")
-        return
-    with _lock:
-        _model = loaded
-    logger.info("Product embedder ready model=%s dim=%s", _model_name(), EMBEDDING_DIM)
+            _model = loaded
+        logger.info("Product embedder ready model=%s dim=%s", _model_name(), EMBEDDING_DIM)
+    finally:
+        _load_done.set()
 
 
 def start_product_embedder_warmup() -> None:
@@ -118,7 +125,17 @@ def embed_texts(texts: list[str]) -> list[list[float] | None]:
 
 
 def embed_query(text: str) -> list[float] | None:
-    """Single query embedding for retrieve."""
+    """Single query embedding for retrieve.
+
+    Unlike ``embed_texts`` — worker-side, where a cold model parks vectors as
+    NULL for the reschedule loop — a query embed backs interactive reads
+    (``read_attachment``). Returning None mid-warmup yields empty slices and
+    the LLM reports the document unreadable, so this waits out an in-flight
+    load with a bound instead of giving up instantly.
+    """
+    _get_model()
+    if _load_started and _model is None and not _model_failed:
+        _load_done.wait(timeout=30)
     vecs = embed_texts([text])
     return vecs[0] if vecs else None
 

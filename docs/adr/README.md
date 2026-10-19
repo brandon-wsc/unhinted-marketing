@@ -51,6 +51,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0046](./0046-account-settings-profile.md) | Account settings page (`/account`) + self-service profile (`PATCH /api/auth/me`) | Accepted |
 | [0047](./0047-session-file-attachments.md) | Session file attachments (chat import + document retrieve) | Proposed (§10 amended by 0048) |
 | [0048](./0048-scanned-pdf-ocr-transcript.md) | Scanned-PDF OCR via client transcript (`needs_ocr` + transcript contract) | Proposed |
+| [0049](./0049-browser-ocr-client-path.md) | Browser OCR client path (pdf.js + tesseract.js behind engine seam) | Proposed |
 
 ## Format
 

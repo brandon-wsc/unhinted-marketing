@@ -34,6 +34,8 @@ export type AttachmentOut = components["schemas"]["AttachmentOut"];
 export type AttachmentDigest = components["schemas"]["AttachmentDigest"];
 export type AttachmentListResponse = components["schemas"]["AttachmentListResponse"];
 export type AttachmentStatus = AttachmentOut["status"];
+export type AttachmentTranscriptRequest = components["schemas"]["AttachmentTranscriptRequest"];
+export type TranscriptPageInput = components["schemas"]["TranscriptPageInput"];
 
 // --- Generated from JSON Schema mirrors (schemas/ → docs/contracts) ---
 export type AgentProgress = import("./generated/agent-progress").AgentProgressData;
@@ -66,6 +68,11 @@ export type StagedAttachment = {
   /** Kept so a failed upload can re-POST the same bytes — digest restages have none. */
   file?: File;
 };
+/** Browser-OCR run state for one staged row (ADR 0049) — keyed by localId. */
+export type OcrRunState =
+  | { phase: "loading" }
+  | { phase: "ocr"; page: number; total: number }
+  | { phase: "submitting" };
 export type SessionEventData = Record<string, unknown>;
 export type SessionEvent = {
   type: string;

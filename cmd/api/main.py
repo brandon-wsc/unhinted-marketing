@@ -43,6 +43,9 @@ async def lifespan(app: FastAPI):
     from internal.session.semantic_gate import start_semantic_router_warmup
 
     start_semantic_router_warmup()
+    from internal.memory.embeddings import start_product_embedder_warmup
+
+    start_product_embedder_warmup()
     from internal.instance.config import ensure_instance_settings_seeded
     from internal.media.config import ensure_storage_config_seeded
     from internal.media.migrate import resume_open_migration

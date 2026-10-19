@@ -110,9 +110,11 @@ async def post_attachment_transcript(
     transcript, ``session``/``user`` rows the uploader's alone; refusals are
     a uniform 404. Only ``needs_ocr`` rows accept a transcript — anything
     else is a 409 (a healthy doc is never silently re-chunked by client
-    text). The transcript lands as ``attachments/{id}/transcript.json`` and
-    a fresh ``attachment_ingest`` job resumes the unchanged chunk → embed
-    pipeline; OCR itself never runs in this process.
+    text). The transcript lands as ``attachments/{id}/transcript.json``, the
+    row immediately re-enters the pipeline as ``pending`` (so the client
+    poll resumes and a duplicate POST conflicts), and a fresh
+    ``attachment_ingest`` job resumes the unchanged chunk → embed pipeline;
+    OCR itself never runs in this process.
     """
     attachment = await db.get(Attachment, attachment_id)
     if (
@@ -151,6 +153,11 @@ async def post_attachment_transcript(
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
+    # Re-park as pending before enqueueing: the row has left the parked
+    # state the moment its transcript is accepted — leaving it needs_ocr
+    # would stop the client's ingest poll and admit duplicate transcripts.
+    attachment.status = "pending"
+    attachment.error = None
     await repos.enqueue_job(
         db,
         kind="attachment_ingest",

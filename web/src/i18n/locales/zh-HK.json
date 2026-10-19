@@ -119,7 +119,14 @@
         "ready": "已就緒",
         "needsOcr": "要 OCR",
         "failed": "讀取失敗"
-      }
+      },
+      "ocr": {
+        "run": "喺瀏覽器 OCR",
+        "cancel": "取消 OCR",
+        "loading": "準備中",
+        "submitting": "上傳緊"
+      },
+      "ocrFailed": "OCR 失敗"
     },
     "live": "即時",
     "offline": "未連線",
