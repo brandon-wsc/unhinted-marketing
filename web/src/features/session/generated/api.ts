@@ -1483,9 +1483,11 @@ export type paths = {
          *     transcript, ``session``/``user`` rows the uploader's alone; refusals are
          *     a uniform 404. Only ``needs_ocr`` rows accept a transcript — anything
          *     else is a 409 (a healthy doc is never silently re-chunked by client
-         *     text). The transcript lands as ``attachments/{id}/transcript.json`` and
-         *     a fresh ``attachment_ingest`` job resumes the unchanged chunk → embed
-         *     pipeline; OCR itself never runs in this process.
+         *     text). The transcript lands as ``attachments/{id}/transcript.json``, the
+         *     row immediately re-enters the pipeline as ``pending`` (so the client
+         *     poll resumes and a duplicate POST conflicts), and a fresh
+         *     ``attachment_ingest`` job resumes the unchanged chunk → embed pipeline;
+         *     OCR itself never runs in this process.
          */
         post: operations["post_attachment_transcript_api_attachments__attachment_id__transcript_post"];
         delete?: never;
