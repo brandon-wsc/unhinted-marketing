@@ -70,6 +70,10 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
             meta_oauth_relay_url="",
             meta_oauth_instance_id="",
             meta_oauth_relay_secret_last4=None,
+            scheduler_hot_search_interval_minutes=settings.scheduler_hot_search_interval_minutes,
+            scheduler_questions_interval_hours=settings.scheduler_questions_interval_hours,
+            news_promote_window_hours=settings.news_promote_window_hours,
+            news_promote_trends_rank_max=settings.news_promote_trends_rank_max,
             setup_completed=False,
         )
     return InstanceSettingsResponse(
@@ -90,6 +94,21 @@ def _settings_out(row: InstanceSettings | None) -> InstanceSettingsResponse:
         meta_oauth_relay_url=row.meta_oauth_relay_url or "",
         meta_oauth_instance_id=row.meta_oauth_instance_id or "",
         meta_oauth_relay_secret_last4=row.meta_oauth_relay_secret_last4,
+        # ADR 0050 — NULL means "follow env"; the response reports the effective value.
+        scheduler_hot_search_interval_minutes=(
+            row.scheduler_hot_search_interval_minutes
+            or settings.scheduler_hot_search_interval_minutes
+        ),
+        scheduler_questions_interval_hours=(
+            row.scheduler_questions_interval_hours
+            or settings.scheduler_questions_interval_hours
+        ),
+        news_promote_window_hours=(
+            row.news_promote_window_hours or settings.news_promote_window_hours
+        ),
+        news_promote_trends_rank_max=(
+            row.news_promote_trends_rank_max or settings.news_promote_trends_rank_max
+        ),
         setup_completed=row.setup_completed_at is not None,
     )
 
@@ -228,6 +247,19 @@ async def put_instance_settings(
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
             ) from exc
+    # ADR 0050 — ingest schedule knobs.
+    if body.scheduler_hot_search_interval_minutes is not None:
+        fields["scheduler_hot_search_interval_minutes"] = (
+            body.scheduler_hot_search_interval_minutes
+        )
+    if body.scheduler_questions_interval_hours is not None:
+        fields["scheduler_questions_interval_hours"] = (
+            body.scheduler_questions_interval_hours
+        )
+    if body.news_promote_window_hours is not None:
+        fields["news_promote_window_hours"] = body.news_promote_window_hours
+    if body.news_promote_trends_rank_max is not None:
+        fields["news_promote_trends_rank_max"] = body.news_promote_trends_rank_max
     if fields:
         row = await repos.upsert_instance_settings(db, **fields)
     await db.commit()

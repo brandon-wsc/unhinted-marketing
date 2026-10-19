@@ -45,6 +45,11 @@ class InstanceSnapshot:
     meta_oauth_relay_url: str = ""
     meta_oauth_instance_id: str = ""
     meta_oauth_relay_secret: str = ""
+    # ADR 0050 — ingest schedule; resolved values (env fallback already applied).
+    scheduler_hot_search_interval_minutes: int = 60
+    scheduler_questions_interval_hours: int = 12
+    news_promote_window_hours: int = 24
+    news_promote_trends_rank_max: int = 10
 
 
 def _strip(value: str | None) -> str:
@@ -68,6 +73,10 @@ def snapshot_from_env() -> InstanceSnapshot:
         meta_oauth_relay_url=_strip(settings.oauth_relay_url)
         or HOSTED_OAUTH_RELAY_URL,
         meta_oauth_relay_secret=_strip(settings.oauth_relay_secret),
+        scheduler_hot_search_interval_minutes=settings.scheduler_hot_search_interval_minutes,
+        scheduler_questions_interval_hours=settings.scheduler_questions_interval_hours,
+        news_promote_window_hours=settings.news_promote_window_hours,
+        news_promote_trends_rank_max=settings.news_promote_trends_rank_max,
     )
 
 
@@ -138,6 +147,20 @@ def _snapshot_from_row(row) -> InstanceSnapshot:
         or HOSTED_OAUTH_RELAY_URL,
         meta_oauth_instance_id=_strip(row.meta_oauth_instance_id),
         meta_oauth_relay_secret=relay_secret,
+        scheduler_hot_search_interval_minutes=(
+            row.scheduler_hot_search_interval_minutes
+            or settings.scheduler_hot_search_interval_minutes
+        ),
+        scheduler_questions_interval_hours=(
+            row.scheduler_questions_interval_hours
+            or settings.scheduler_questions_interval_hours
+        ),
+        news_promote_window_hours=(
+            row.news_promote_window_hours or settings.news_promote_window_hours
+        ),
+        news_promote_trends_rank_max=(
+            row.news_promote_trends_rank_max or settings.news_promote_trends_rank_max
+        ),
     )
 
 

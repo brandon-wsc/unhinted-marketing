@@ -7717,6 +7717,22 @@
             ],
             "title": "Meta Oauth Relay Secret Last4"
           },
+          "scheduler_hot_search_interval_minutes": {
+            "type": "integer",
+            "title": "Scheduler Hot Search Interval Minutes"
+          },
+          "scheduler_questions_interval_hours": {
+            "type": "integer",
+            "title": "Scheduler Questions Interval Hours"
+          },
+          "news_promote_window_hours": {
+            "type": "integer",
+            "title": "News Promote Window Hours"
+          },
+          "news_promote_trends_rank_max": {
+            "type": "integer",
+            "title": "News Promote Trends Rank Max"
+          },
           "setup_completed": {
             "type": "boolean",
             "title": "Setup Completed"
@@ -7741,6 +7757,10 @@
           "meta_oauth_relay_url",
           "meta_oauth_instance_id",
           "meta_oauth_relay_secret_last4",
+          "scheduler_hot_search_interval_minutes",
+          "scheduler_questions_interval_hours",
+          "news_promote_window_hours",
+          "news_promote_trends_rank_max",
           "setup_completed"
         ],
         "title": "InstanceSettingsResponse"
@@ -7819,6 +7839,58 @@
               }
             ],
             "title": "Meta Oauth Relay Secret"
+          },
+          "scheduler_hot_search_interval_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1440.0,
+                "minimum": 5.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduler Hot Search Interval Minutes"
+          },
+          "scheduler_questions_interval_hours": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 168.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduler Questions Interval Hours"
+          },
+          "news_promote_window_hours": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 168.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News Promote Window Hours"
+          },
+          "news_promote_trends_rank_max": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 50.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News Promote Trends Rank Max"
           }
         },
         "type": "object",

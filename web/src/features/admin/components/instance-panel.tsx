@@ -71,6 +71,10 @@ export function InstancePanel() {
   const [metaMode, setMetaMode] = useState<MetaOAuthMode>("byo");
   const [relaySecret, setRelaySecret] = useState("");
   const [instanceIdCopied, setInstanceIdCopied] = useState(false);
+  const [hotSearchInterval, setHotSearchInterval] = useState("60");
+  const [questionsInterval, setQuestionsInterval] = useState("12");
+  const [promoteWindow, setPromoteWindow] = useState("24");
+  const [promoteRankMax, setPromoteRankMax] = useState("10");
 
   const { error, setError } = useAsyncData(
     () => apiGetInstanceSettings(accessToken),
@@ -85,6 +89,10 @@ export function InstancePanel() {
       setSmtpTls(row.smtp_tls);
       setMetaAppId(row.meta_app_id);
       setMetaMode(row.meta_oauth_mode);
+      setHotSearchInterval(String(row.scheduler_hot_search_interval_minutes));
+      setQuestionsInterval(String(row.scheduler_questions_interval_hours));
+      setPromoteWindow(String(row.news_promote_window_hours));
+      setPromoteRankMax(String(row.news_promote_trends_rank_max));
     },
     [accessToken],
     {
@@ -112,6 +120,14 @@ export function InstancePanel() {
         meta_app_secret: metaAppSecret || undefined,
         meta_oauth_mode: metaMode,
         meta_oauth_relay_secret: relaySecret || undefined,
+        scheduler_hot_search_interval_minutes:
+          Number.parseInt(hotSearchInterval, 10) || undefined,
+        scheduler_questions_interval_hours:
+          Number.parseInt(questionsInterval, 10) || undefined,
+        news_promote_window_hours:
+          Number.parseInt(promoteWindow, 10) || undefined,
+        news_promote_trends_rank_max:
+          Number.parseInt(promoteRankMax, 10) || undefined,
       });
       setSettings(next);
       setSmtpPassword("");
@@ -262,6 +278,56 @@ export function InstancePanel() {
           </label>
         </>
       )}
+      <h2 className="pt-2 text-sm font-semibold text-foreground">
+        {t("system.instance.ingestSection")}
+      </h2>
+      <p className="text-xs text-muted-foreground">{t("system.instance.ingestHint")}</p>
+      <div className="grid grid-cols-2 gap-3">
+        <FormField id="inst-hot-interval" label={t("system.instance.hotSearchInterval")}>
+          <Input
+            id="inst-hot-interval"
+            type="number"
+            min={5}
+            max={1440}
+            value={hotSearchInterval}
+            onChange={(e) => setHotSearchInterval(e.target.value)}
+            readOnly={!canEdit}
+          />
+        </FormField>
+        <FormField id="inst-questions-interval" label={t("system.instance.questionsInterval")}>
+          <Input
+            id="inst-questions-interval"
+            type="number"
+            min={1}
+            max={168}
+            value={questionsInterval}
+            onChange={(e) => setQuestionsInterval(e.target.value)}
+            readOnly={!canEdit}
+          />
+        </FormField>
+        <FormField id="inst-promote-window" label={t("system.instance.promoteWindow")}>
+          <Input
+            id="inst-promote-window"
+            type="number"
+            min={1}
+            max={168}
+            value={promoteWindow}
+            onChange={(e) => setPromoteWindow(e.target.value)}
+            readOnly={!canEdit}
+          />
+        </FormField>
+        <FormField id="inst-promote-rank" label={t("system.instance.promoteRankMax")}>
+          <Input
+            id="inst-promote-rank"
+            type="number"
+            min={1}
+            max={50}
+            value={promoteRankMax}
+            onChange={(e) => setPromoteRankMax(e.target.value)}
+            readOnly={!canEdit}
+          />
+        </FormField>
+      </div>
       <h2 className="pt-2 text-sm font-semibold text-foreground">
         {t("system.instance.metaSection")}
       </h2>

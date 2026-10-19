@@ -872,7 +872,13 @@
       "metaInstanceIdHint": "喺 relay 註冊呢個 slug（佢會 map 去呢個 install 嘅 URL）。自動生成，唯讀。",
       "metaRelaySecret": "Relay secret",
       "metaRelaySecretSet": "已儲存（…{{last4}}）— 輸入新 secret 先會更新",
-      "metaRelaySecretHint": "由 relay 營運方喺註冊嗰陣發出 — 貼落嚟呢度。Relay 模式要 set 咗先用到 Connect。"
+      "metaRelaySecretHint": "由 relay 營運方喺註冊嗰陣發出 — 貼落嚟呢度。Relay 模式要 set 咗先用到 Connect。",
+      "ingestSection": "訊號擷取",
+      "ingestHint": "背景 worker 幾耐擷取一次香港訊號同升級佢哋做主題。儲存後約一分鐘內生效，唔使重啟。",
+      "hotSearchInterval": "熱門搜尋擷取間隔（分鐘）",
+      "questionsInterval": "推薦問題生成間隔（小時）",
+      "promoteWindow": "訊號升級窗口（小時）",
+      "promoteRankMax": "Trends 排名升級上限"
     }
   },
   "admin": {

@@ -294,3 +294,65 @@ async def test_invite_url_uses_db_base_url(client: AsyncClient) -> None:
     )
     assert invite.status_code == 201, invite.text
     assert invite.json()["invite_url"].startswith("https://portal.example.com/invite/")
+
+
+@pytest.mark.asyncio
+async def test_instance_settings_ingest_schedule(client: AsyncClient) -> None:
+    """ADR 0050 — ingest schedule knobs default to env values and persist
+    through PUT; bounds are enforced by the schema."""
+    owner = await _run_setup(client)
+    headers = auth_header(owner["access_token"])
+
+    # Never-set fields report the env-derived effective values.
+    res = await client.get("/api/instance/settings", headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert (
+        body["scheduler_hot_search_interval_minutes"]
+        == settings.scheduler_hot_search_interval_minutes
+    )
+    assert (
+        body["scheduler_questions_interval_hours"]
+        == settings.scheduler_questions_interval_hours
+    )
+    assert body["news_promote_window_hours"] == settings.news_promote_window_hours
+    assert (
+        body["news_promote_trends_rank_max"] == settings.news_promote_trends_rank_max
+    )
+
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={
+            "scheduler_hot_search_interval_minutes": 30,
+            "scheduler_questions_interval_hours": 6,
+            "news_promote_window_hours": 48,
+            "news_promote_trends_rank_max": 5,
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["scheduler_hot_search_interval_minutes"] == 30
+    assert body["scheduler_questions_interval_hours"] == 6
+    assert body["news_promote_window_hours"] == 48
+    assert body["news_promote_trends_rank_max"] == 5
+
+    # Persisted across reads.
+    body = (
+        await client.get("/api/instance/settings", headers=headers)
+    ).json()
+    assert body["scheduler_hot_search_interval_minutes"] == 30
+
+    # Out-of-range values are rejected.
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={"scheduler_hot_search_interval_minutes": 2},
+    )
+    assert res.status_code == 422
+    res = await client.put(
+        "/api/instance/settings",
+        headers=headers,
+        json={"news_promote_trends_rank_max": 99},
+    )
+    assert res.status_code == 422

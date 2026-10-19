@@ -69,6 +69,11 @@ class InstanceSettingsResponse(BaseModel):
     meta_oauth_instance_id: str
     # ADR 0034 — per-install relay shared secret (write-only; last4 confirms set).
     meta_oauth_relay_secret_last4: str | None
+    # ADR 0050 — ingest schedule; effective values (env fallback resolved).
+    scheduler_hot_search_interval_minutes: int
+    scheduler_questions_interval_hours: int
+    news_promote_window_hours: int
+    news_promote_trends_rank_max: int
     setup_completed: bool
 
 
@@ -84,5 +89,12 @@ class InstanceSettingsUpdate(BaseModel):
     meta_app_secret: str | None = Field(default=None, max_length=255)
     meta_oauth_mode: MetaOAuthMode | None = None
     meta_oauth_relay_secret: str | None = Field(default=None, max_length=255)
+    # ADR 0050 — ingest schedule knobs; omitted keeps current value.
+    scheduler_hot_search_interval_minutes: int | None = Field(
+        default=None, ge=5, le=1440
+    )
+    scheduler_questions_interval_hours: int | None = Field(default=None, ge=1, le=168)
+    news_promote_window_hours: int | None = Field(default=None, ge=1, le=168)
+    news_promote_trends_rank_max: int | None = Field(default=None, ge=1, le=50)
 
     _check_url = field_validator("web_base_url")(_clean_url)
