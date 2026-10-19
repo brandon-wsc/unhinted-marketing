@@ -170,6 +170,44 @@ def test_parse_pdf_outline_becomes_heading_blocks() -> None:
     assert blocks.index(headings[0]) < blocks.index(paras[0]) < blocks.index(headings[1])
 
 
+def test_parse_pdf_reflows_column_wrapped_lines_into_prose() -> None:
+    """Pdfium emits \\n at every visual line wrap — wrapped lines must rejoin
+    into flowing sentences or the chunker cuts one chunk per line (ADR 0047
+    §4: chunks are readable slices, not layout artifacts)."""
+    ops = (
+        b"BT /F1 12 Tf 50 700 Td (First wrapped line of a sentence still) Tj ET "
+        b"BT /F1 12 Tf 50 686 Td (continuing on the next row.) Tj ET"
+    )
+    body = b"<< /Length " + str(len(ops)).encode() + b" >>\nstream\n" + ops + b"\nendstream"
+    pdf = _pdf_doc(
+        [
+            b"<< /Type /Catalog /Pages 2 0 R >>",
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+            b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+            body,
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        ]
+    )
+    doc = _parse("wrap.pdf", pdf)
+    paras = [b for b in doc.blocks if b.kind == "paragraph"]
+    assert len(paras) == 1
+    assert "\n" not in paras[0].text
+    assert "sentence still continuing on the next row." in paras[0].text
+
+
+def test_reflow_pdf_text_joins_soft_breaks_and_hyphen_wraps() -> None:
+    from internal.memory.document_parse import _reflow_pdf_text
+
+    # pdfium soft-break marker \ufffe joins with no space ("com￾\npile")
+    assert _reflow_pdf_text("com￾\npile is done.") == "compile is done."
+    # A wrapped hyphen keeps the hyphen ("well-\nknown")
+    assert _reflow_pdf_text("well-\nknown trick") == "well-known trick"
+    # Plain wraps become a space; blank-line runs stay paragraph breaks
+    assert _reflow_pdf_text("line one\nline two") == "line one line two"
+    assert _reflow_pdf_text("para one\n\npara two") == "para one\n\npara two"
+
+
 def test_parse_scanned_pdf_raises_readable_error() -> None:
     with pytest.raises(_parse_error()):
         _parse("scan.pdf", _make_pdf([None]))

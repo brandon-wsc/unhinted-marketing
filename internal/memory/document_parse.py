@@ -143,6 +143,23 @@ def _parse_docx(data: bytes) -> list[DocumentBlock]:
     return blocks
 
 
+def _reflow_pdf_text(text: str) -> str:
+    """Reflow pdfium's visual line-wrap output into paragraph prose.
+
+    ``get_text_range`` breaks at every rendered line (column width), not at
+    sentence or paragraph ends — feeding it raw would make the chunker emit
+    one fragment per line. ``￾`` is pdfium's soft-break marker (word split
+    at the wrap): it joins with no space. A hyphen at a wrap joins without
+    adding space, keeping the hyphen. Other single newlines become a space;
+    blank-line runs (when a producer emits them) stay paragraph breaks.
+    """
+    text = text.replace("\r\n", "\n")
+    text = text.replace("￾\n", "").replace("￾", "")
+    text = re.sub(r"-\n(?=\S)", "-", text)
+    text = _BLANK_RUN_RE.sub("\x00", text)
+    return text.replace("\n", " ").replace("\x00", "\n\n")
+
+
 def _parse_pdf(data: bytes) -> list[DocumentBlock]:
     import pypdfium2 as pdfium
 
@@ -176,7 +193,7 @@ def _parse_pdf(data: bytes) -> list[DocumentBlock]:
         page = doc[i]
         textpage = page.get_textpage()
         try:
-            text = (textpage.get_text_range() or "").replace("\r\n", "\n")
+            text = _reflow_pdf_text(textpage.get_text_range() or "")
         finally:
             textpage.close()
             page.close()

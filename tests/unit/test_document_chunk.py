@@ -174,6 +174,46 @@ def test_chunk_cap_not_flagged_when_under() -> None:
     assert len(result.chunks) == 1
 
 
+def test_default_counter_weights_latin_below_cjk_density() -> None:
+    """ADR 0047 §4's ~80–110 budget is sized for CJK density. Latin prose
+    carries less per char, so the default counter weights non-CJK at 0.4 —
+    an English chunk reaches a comparable semantic size (~275 chars) instead
+    of forcing 110-char fragments that slice every sentence."""
+    from internal.memory.document_chunk import mixed_text_units
+
+    assert mixed_text_units("說明文字") == 4
+    assert mixed_text_units("a" * 110) == 44
+    assert mixed_text_units("中文 mix") == 4
+
+
+def test_latin_prose_chunks_keep_whole_sentences() -> None:
+    from internal.memory.document_chunk import ChunkConfig, chunk_blocks
+    from internal.memory.document_parse import DocumentBlock
+
+    sentence = (
+        "Dynamic languages such as JavaScript are more difficult to compile "
+        "than statically typed ones. "
+    )
+    text = (sentence * 6).strip()
+    res = chunk_blocks([DocumentBlock(kind="paragraph", text=text)], ChunkConfig())
+    assert len(res.chunks) >= 2
+    for c in res.chunks:
+        assert c.text.rstrip().endswith(".")
+        assert len(c.text) > 110
+
+
+def test_oversized_latin_sentence_slices_at_word_boundary() -> None:
+    from internal.memory.document_chunk import ChunkConfig, chunk_blocks
+    from internal.memory.document_parse import DocumentBlock
+
+    text = " ".join(f"word{i:02d}" for i in range(60))
+    res = chunk_blocks([DocumentBlock(kind="paragraph", text=text)], ChunkConfig())
+    assert len(res.chunks) > 1
+    for c in res.chunks:
+        tail = c.text.split()[-1]
+        assert tail.startswith("word") and len(tail) == 6
+
+
 def test_parse_then_chunk_end_to_end() -> None:
     from internal.memory.document_chunk import ChunkConfig, chunk_blocks
     from internal.memory.document_parse import parse_document
