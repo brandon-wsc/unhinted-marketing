@@ -482,7 +482,7 @@ export function InstancePanel() {
         <p className="text-xs text-muted-foreground">{t("system.instance.metaCallbackMissing")}</p>
       )}
       {canEdit && (
-        <div className="sticky bottom-0 border-t border-border bg-card/80 py-3 backdrop-blur">
+        <div className="sticky bottom-0 border-t border-border bg-background py-3">
           <Button type="submit" disabled={saving}>
             {saving ? t("setup.submitting") : t("common.save")}
           </Button>
