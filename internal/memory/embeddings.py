@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 # paraphrase-multilingual-MiniLM-L12-v2 output size — keep migration in sync.
 EMBEDDING_DIM = 384
 
+# FastEmbed downloads weights via huggingface_hub.snapshot_download → tqdm
+# thread_map, whose ensure_lock is not safe for concurrent callers: two
+# in-flight downloads can both observe ``_lock`` unset and the second context
+# exit crashes on ``del tqdm_class._lock`` (AttributeError). Serialize every
+# FastEmbed model build process-wide — internal/session/semantic_gate.py's
+# FastEmbedEncoder construction holds this too.
+fastembed_init_lock = threading.Lock()
+
 _lock = threading.Lock()
 _model: Any | None = None
 _model_failed = False
@@ -51,7 +59,8 @@ def _init_model_safe() -> None:
             from fastembed import TextEmbedding
 
             name = _model_name()
-            loaded = TextEmbedding(model_name=name)
+            with fastembed_init_lock:
+                loaded = TextEmbedding(model_name=name)
         except Exception:
             with _lock:
                 _model_failed = True

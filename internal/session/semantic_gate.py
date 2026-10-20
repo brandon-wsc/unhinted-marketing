@@ -14,6 +14,7 @@ import threading
 from typing import Any, Literal
 
 from internal.config import settings
+from internal.memory.embeddings import fastembed_init_lock
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,11 @@ def _build_router() -> Any:
 def _init_router_safe() -> None:
     global _router, _router_failed
     try:
-        router = _build_router()
+        # FastEmbedEncoder builds a fastembed.TextEmbedding → snapshot_download;
+        # hold the shared lock so concurrent model downloads cannot trip tqdm's
+        # thread_map ensure_lock race (see internal/memory/embeddings.py).
+        with fastembed_init_lock:
+            router = _build_router()
     except Exception:
         with _lock:
             _router_failed = True
