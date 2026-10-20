@@ -6,6 +6,7 @@ import threading
 import time
 from types import SimpleNamespace
 
+from internal.memory.embeddings import fastembed_init_lock
 from internal.session import semantic_gate as sg
 
 
@@ -66,3 +67,27 @@ def test_classify_does_not_block_on_cold_init(monkeypatch) -> None:
             return
         time.sleep(0.02)
     raise AssertionError("semantic router never became ready after warmup")
+
+
+def test_router_init_holds_fastembed_init_lock(monkeypatch) -> None:
+    """Regression: concurrent snapshot_download callers race inside tqdm
+    thread_map's ensure_lock (``del tqdm_class._lock`` AttributeError), so
+    the FastEmbedEncoder build must hold the shared ``fastembed_init_lock``."""
+    sg.reset_semantic_router_for_tests()
+    monkeypatch.setattr(sg.settings, "semantic_router_enabled", True)
+
+    def build():
+        # Must already be held by _init_router_safe — an uncontended acquire
+        # here would mean the lock was not taken.
+        assert not fastembed_init_lock.acquire(blocking=False)
+        return SimpleNamespace(name="router")
+
+    monkeypatch.setattr(sg, "_build_router", build)
+    sg.start_semantic_router_warmup()
+    for _ in range(50):
+        if sg._router is not None or sg._router_failed:
+            break
+        time.sleep(0.02)
+    assert sg._router is not None
+    assert not sg._router_failed
+    sg.reset_semantic_router_for_tests()
