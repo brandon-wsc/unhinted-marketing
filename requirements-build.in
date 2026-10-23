@@ -1,3 +1,5 @@
 # Build backend — pinned into runtime/dev locks so `pip install --no-build-isolation`
 # never resolves hatchling (or transitive build deps) from PyPI at install time.
+# `editables` is required by hatchling for editable (-e) installs.
 hatchling>=1.21.0
+editables>=0.5
