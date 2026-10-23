@@ -1,6 +1,6 @@
 # ADR 0006 — API path prefix vs SPA same-origin proxy
 
-- **Status:** Accepted; **migration executed 2026-08-04**
+- **Status:** Accepted; **migration executed 2026-08-04** (well-known root-path exception: [ADR 0051](./0051-remote-mcp-server.md) §2)
 - **Date:** 2026-08-03
 - **Supersedes:** —
 - **Related:** [ADR 0005](./0005-platform-levels-and-llm-records.md) (admin API + web admin page)

@@ -9,7 +9,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0003](./0003-confirm-without-llm.md) | Confirm / publish without LLM | Accepted |
 | [0004](./0004-stop-discard-and-image-resume.md) | Stop discards turn; explicit image resume | Accepted (§1 superseded by 0016) |
 | [0005](./0005-platform-levels-and-llm-records.md) | Platform levels + LLM call records | Accepted |
-| [0006](./0006-api-path-prefix-and-spa-proxy.md) | API `/api` prefix vs SPA same-origin proxy | Accepted (migration pending) |
+| [0006](./0006-api-path-prefix-and-spa-proxy.md) | API `/api` prefix vs SPA same-origin proxy | Accepted (executed; well-known exception 0051) |
 | [0007](./0007-admin-trace-viewer.md) | Admin Trace viewer (node-steps + session) | Accepted |
 | [0008](./0008-preview-images-append-only.md) | Append-only preview images + draft `media_ids` | Accepted (`url` storage amended by 0024) |
 | [0009](./0009-research-gate-and-tavily-ingest.md) | Unified intent + research gate; Tavily∪PG ingest | Accepted |
@@ -31,8 +31,8 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0026](./0026-onprem-first-run-setup.md) | On-prem first-run setup, invite-only register, DB instance settings | Accepted |
 | [0027](./0027-docker-deploy-packages.md) | Docker deployment packages (all-in-one vs external-DB) | Accepted |
 | [0028](./0028-angle-pick-before-draft.md) | Angle pick parks before drafting | Superseded by 0029 |
-| [0029](./0029-angle-persona-bundled-gate.md) | Bundled angle + persona gate | Accepted |
-| [0030](./0030-image-format-in-bundled-gate.md) | Image format rides the bundled angle gate | Accepted (§6 superseded by 0036) |
+| [0029](./0029-angle-persona-bundled-gate.md) | Bundled angle + persona gate | Accepted (gate may be answered via MCP: 0051) |
+| [0030](./0030-image-format-in-bundled-gate.md) | Image format rides the bundled angle gate | Accepted (§6 superseded by 0036; gate via MCP: 0051) |
 | [0031](./0031-queue-send-while-image-parked.md) | Queue Send while parked at image OK | Superseded by 0036 |
 | [0036](./0036-image-direction-new-script.md) | Image direction change is a new script, then Discard or Execute | Accepted |
 | [0032](./0032-meta-oauth-byo-and-relay.md) | On-prem Meta OAuth: BYO-app default + opt-in relay | Accepted |
@@ -52,6 +52,8 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0047](./0047-session-file-attachments.md) | Session file attachments (chat import + document retrieve) | Proposed (§10 amended by 0048) |
 | [0048](./0048-scanned-pdf-ocr-transcript.md) | Scanned-PDF OCR via client transcript (`needs_ocr` + transcript contract) | Proposed |
 | [0049](./0049-browser-ocr-client-path.md) | Browser OCR client path (pdf.js + tesseract.js behind engine seam) | Proposed |
+| [0050](./0050-ingest-schedule-instance-settings.md) | Ingest schedule knobs in instance settings | Accepted |
+| [0051](./0051-remote-mcp-server.md) | Remote MCP server for consumer AI apps (OAuth grants, auto gates, Confirm stays UI) | Accepted |
 
 ## Format
 
