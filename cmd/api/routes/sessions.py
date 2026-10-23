@@ -43,6 +43,7 @@ from internal.memory.models import (
 )
 from internal.session.events import format_sse, session_event_bus
 from internal.session.graph import ANGLE_GATE_NODE, IMAGE_PARK_NODE
+from internal.session.guards import enforce_member_token_limit, require_owned_session
 from internal.session.nodes import angle_pick_payload, recommended_image_format
 from internal.session.service import (
     DEFAULT_PLATFORM,
@@ -67,7 +68,6 @@ from internal.tools.publish import (
     execute_publish,
     resolve_publish_image_url,
 )
-from schemas.company import UsageLimitExceededDetail
 from schemas.contracts import (
     DraftCopy,
     PreviewMediaItem,
@@ -217,40 +217,11 @@ def _parked_node_from_snapshot(state: dict | None, snap_next: object) -> str | N
 
 
 async def _require_owned_session(db: AsyncSession, session_id: uuid.UUID, user: User) -> Session:
-    session = await repos.get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    if session.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-    return session
+    return await require_owned_session(db, session_id, user.id)
 
 
 async def _enforce_member_token_limit(db: AsyncSession, session: Session, user: User) -> None:
-    """ADR 0041: cap org `member` token spend at the turn boundary.
-
-    Owner/admin bypass the cap entirely. The cap counts the member's whole
-    spend — platform key ('env') and org BYOK ('org') are both the org's
-    bill. llm_call_records flush asynchronously after each call, so
-    in-flight turns can overshoot slightly — an accepted guardrail lag, not
-    a hard rate limiter.
-    """
-    membership = await repos.get_org_membership(db, user.id, session.company_id)
-    if membership is None or membership.role != "member" or membership.monthly_token_limit is None:
-        return
-    period_start, period_end = repos.member_month_bounds()
-    by_source = await repos.sum_member_tokens_by_source(
-        db, user_id=user.id, company_id=session.company_id, since=period_start
-    )
-    used = sum(by_source.values())
-    if used >= membership.monthly_token_limit:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=UsageLimitExceededDetail(
-                limit=membership.monthly_token_limit,
-                used=used,
-                period_end=period_end,
-            ).model_dump(mode="json"),
-        )
+    await enforce_member_token_limit(db, session, user.id)
 
 
 @router.get("", response_model=SessionListResponse)
