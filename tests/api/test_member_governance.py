@@ -157,6 +157,67 @@ async def test_member_over_limit_blocked_at_other_turn_boundaries(
 
 
 @pytest.mark.asyncio
+async def test_member_over_limit_blocked_at_create_with_initial_message(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /sessions with initial_message is a turn boundary too — no turn, no orphan session."""
+    turns: list[object] = []
+
+    async def _turn(*args, **kwargs):
+        turns.append(args)
+        return {"values": {}, "interrupted": False, "events": []}
+
+    monkeypatch.setattr("cmd.api.routes.sessions.run_session_turn", _turn)
+    owner = await register_user(client, email=f"own-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = uuid.UUID(owner["user"]["organizations"][0]["id"])
+    member = await register_user(client, email=f"mem-{uuid.uuid4().hex[:8]}@example.com")
+    member_id = uuid.UUID(member["user"]["id"])
+    await _join(db_session, member["user"]["id"], company_id, monthly_token_limit=100)
+    db_session.add(_llm_record(member_id, company_id, total_tokens=150))
+    await db_session.commit()
+
+    headers = auth_header(member["access_token"])
+    res = await client.post(
+        "/api/sessions",
+        headers=headers,
+        json={"company_id": str(company_id), "initial_message": "draft a post"},
+    )
+    assert res.status_code == 403, res.text
+    detail = res.json()["detail"]
+    assert detail["reason"] == "usage_limit_exceeded"
+    assert detail["limit"] == 100
+    assert detail["used"] == 150
+    assert turns == []
+
+    listed = await client.get(
+        "/api/sessions", headers=headers, params={"company_id": str(company_id)}
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["sessions"] == []
+
+
+@pytest.mark.asyncio
+async def test_member_over_limit_can_still_create_empty_session(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """No initial_message = no turn, so the cap does not apply to plain create."""
+    owner = await register_user(client, email=f"own-{uuid.uuid4().hex[:8]}@example.com")
+    company_id = uuid.UUID(owner["user"]["organizations"][0]["id"])
+    member = await register_user(client, email=f"mem-{uuid.uuid4().hex[:8]}@example.com")
+    member_id = uuid.UUID(member["user"]["id"])
+    await _join(db_session, member["user"]["id"], company_id, monthly_token_limit=100)
+    db_session.add(_llm_record(member_id, company_id, total_tokens=150))
+    await db_session.commit()
+
+    res = await client.post(
+        "/api/sessions",
+        headers=auth_header(member["access_token"]),
+        json={"company_id": str(company_id)},
+    )
+    assert res.status_code == 201, res.text
+
+
+@pytest.mark.asyncio
 async def test_org_key_usage_counts_toward_cap(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

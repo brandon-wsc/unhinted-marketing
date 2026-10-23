@@ -2,8 +2,9 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from cmd.api.routes.admin import router as admin_router
 from cmd.api.routes.attachments import router as attachments_router
@@ -29,6 +30,7 @@ from internal.llm.keys import assert_byok_encryption_key_safe
 from internal.llm.recorder import drain as drain_llm_records
 from internal.session.checkpointer import close_postgres_checkpointer, open_postgres_checkpointer
 from internal.session.graph import build_session_graph, set_session_graph
+from internal.session.guards import SessionGuardError
 from internal.session.trace import drain as drain_node_steps
 
 
@@ -111,6 +113,12 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(admin_router, prefix="/api")
     application.include_router(meta_router, prefix="/api")
     application.include_router(setup_router, prefix="/api")
+
+    @application.exception_handler(SessionGuardError)
+    async def session_guard_error_handler(request: Request, exc: SessionGuardError):
+        # Domain guard errors become HTTP responses here; other
+        # transports map them to their own error shape.
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     @application.get("/api/health")
     async def health() -> dict[str, str]:
