@@ -76,7 +76,8 @@ There is **no scope** for publish or Confirm, the member publish-approval queue 
 ### 6. Identity comes from the token only
 
 - No tool accepts `user_id` or `company_id`. The company is always `grant.company_id`, and sessions created over MCP are owned by `sub` in that company.
-- The route-private guards in `cmd/api/routes/sessions.py` move to a shared module that both REST routes and the MCP adapter call. Copying them is not allowed. The guards are `_require_owned_session`, `_enforce_member_token_limit`, and attachment resolution.
+- Session ownership and the member token cap live in `internal/session/guards.py`, shared by REST routes and the MCP adapter. Copying them is not allowed. Attachment resolution stays route-private because attachments over MCP are out of scope.
+- The MCP adapter always passes `company_id=grant.company_id` to `require_owned_session`. A session the same user owns in another company is refused (403), so a grant never reaches beyond its one company. REST omits it and keeps the user-only check.
 - Existing rules keep applying unchanged: member token caps (ADR 0041 / 0042), BYOK routing (ADR 0020 / 0021), and the member publish-approval policy at Confirm.
 
 ### 7. Tool surface
