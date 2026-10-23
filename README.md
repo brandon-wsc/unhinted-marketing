@@ -47,6 +47,15 @@ From a checkout instead: `cd deploy && docker compose up -d --build` (external D
 
 **Demo / local CD** — a personal machine or private demo host that should always run latest `main`, still the on-prem compose package: [`./deploy/demo-sync.sh`](deploy/demo-sync.sh). Customer installs stay on a GitHub Release; do not use the demo script to update those.
 
+## Connect an AI app (MCP)
+
+Each install is its own remote MCP server + OAuth 2.1 authorization server ([ADR 0051](docs/adr/0051-remote-mcp-server.md)). Users paste **one URL** into their AI app — `{WEB_BASE_URL}/api/mcp`, shown on the **Account** page — and the app discovers OAuth itself via `/.well-known/oauth-*` (already proxied in the shipped nginx configs). During consent the user signs in and binds the connection to **exactly one company**; drafts created by the app appear in the user's chat history with a source badge, and publishing always stays behind the in-app Confirm button.
+
+- **Works with:** Claude (Connectors → Custom → Web) and ChatGPT (Plugins → Add custom MCP server). Both use Client ID Metadata Documents, which is the supported path.
+- **Gemini:** not yet — its connected-apps flow requires Dynamic Client Registration (RFC 7591), which we don't ship.
+- **Operator requirement:** the MCP URL must be a public HTTPS endpoint reachable from the vendor's cloud (they call the server, not the user's machine). On-prem installs behind a firewall need that host exposed. `WEB_BASE_URL` must match it — consent links and token audiences are derived from it.
+- **Revocation:** users manage connected apps under **Account → Connected apps**; revocation cuts the next MCP call immediately.
+
 ## Develop
 
 ```bash

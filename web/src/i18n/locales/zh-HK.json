@@ -66,6 +66,25 @@
       "saving": "儲存緊…",
       "saved": "已儲存"
     },
+    "connectAi": {
+      "title": "連接 AI 應用",
+      "description": "俾外部 AI 應用（Claude、ChatGPT 等）用你公司嘅語氣同產品資料經 Unhinted 起稿；發佈依然要返嚟呢度撳確認。",
+      "urlLabel": "你嘅 MCP server URL",
+      "steps": {
+        "claude": {
+          "1": "喺 Claude 開 Customize → Connectors → Add → Custom → Web。",
+          "2": "幫佢改名（例如「Unhinted」），貼上你嘅 MCP server URL。",
+          "3": "喺 Unhinted 授權頁登入，揀公司，批准連接。"
+        },
+        "chatgpt": {
+          "1": "喺 ChatGPT 開 Plugins →「+」→ Add custom MCP server。",
+          "2": "輸入名稱，喺 Server URL 貼上你嘅 MCP server URL。",
+          "3": "授權方式揀 OAuth，然後喺 Unhinted 授權頁批准。"
+        }
+      },
+      "geminiNote": "Gemini 暫時未支援——佢嘅 connected apps 流程需要 Dynamic Client Registration，我哋冇提供。",
+      "footer": "設定途中會要求你登入並揀一間公司。已連接嘅 app 會喺下面列出，可以隨時撤銷。"
+    },
     "connectedApps": {
       "title": "已連接應用",
       "empty": "暫時冇外部 AI 應用連接。",
