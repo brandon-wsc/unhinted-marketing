@@ -137,6 +137,7 @@ export function ChatPanel() {
     angleOptions,
     anglePersonas,
     recommendedPersona,
+    recommendedAngleIndex,
     recommendedImageFormat,
     canRetryAnglePick,
     draft,
@@ -621,6 +622,7 @@ export function ChatPanel() {
       angles={angleOptions}
       personas={anglePersonas}
       recommendedPersona={recommendedPersona}
+      recommendedAngleIndex={recommendedAngleIndex}
       recommendedImageFormat={recommendedImageFormat}
       sending={sending || stopping}
       onPick={(angle, persona, imageFormat) => void onPickAngle(angle, persona, imageFormat)}

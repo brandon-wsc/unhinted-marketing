@@ -125,6 +125,7 @@ class SessionMessagesResponse(BaseModel):
     awaiting_angle_pick: bool = False
     personas: list[AudiencePersonaOption] = Field(default_factory=list)
     recommended_persona: str | None = None
+    recommended_angle_index: int | None = None
     image_format_options: list[Literal["single", "comic_4panel"]] = Field(default_factory=list)
     # Locked format at either park (angle_gate or image) so a reload keeps the toggle.
     recommended_image_format: Literal["single", "comic_4panel"] | None = None

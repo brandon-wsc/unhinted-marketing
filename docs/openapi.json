@@ -200,6 +200,80 @@
         ]
       }
     },
+    "/api/auth/me/connected-apps": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "List Connected Apps",
+        "description": "ADR 0051 §4 — non-revoked MCP grants for the /account page.",
+        "operationId": "list_connected_apps_api_auth_me_connected_apps_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Connected Apps Api Auth Me Connected Apps Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/me/connected-apps/{grant_id}": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Revoke Connected App",
+        "description": "Revoke the grant; the next MCP call with its tokens is refused.",
+        "operationId": "revoke_connected_app_api_auth_me_connected_apps__grant_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "grant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Grant Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/signals/top": {
       "get": {
         "tags": [
@@ -5874,6 +5948,324 @@
         ]
       }
     },
+    "/api/mcp": {
+      "post": {
+        "tags": [
+          "mcp"
+        ],
+        "summary": "Mcp Endpoint",
+        "operationId": "mcp_endpoint_api_mcp_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Mcp Endpoint Api Mcp Post"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/oauth/authorize": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Authorize",
+        "description": "Client opens the browser here; we redirect to the SPA consent page.",
+        "operationId": "authorize_api_oauth_authorize_get",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Client Id"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Redirect Uri"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code Challenge"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code Challenge Method"
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "code",
+              "title": "Response Type"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "State"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "resource",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resource"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Consent",
+        "description": "Approve or deny — plain HTTP on the web session, no LLM (ADR 0003).",
+        "operationId": "consent_api_oauth_authorize_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Consent Api Oauth Authorize Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oauth/authorize/request": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Authorize Request Details",
+        "description": "Consent-page data: who is asking, what scopes, which companies apply.",
+        "operationId": "authorize_request_details_api_oauth_authorize_request_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Authorize Request Details Api Oauth Authorize Request Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oauth/token": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Token",
+        "description": "Public endpoint — form-encoded per RFC 6749; PKCE is the client auth.",
+        "operationId": "token_api_oauth_token_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Token Api Oauth Token Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-protected-resource/api/mcp": {
+      "get": {
+        "tags": [
+          "oauth-discovery"
+        ],
+        "summary": "Protected Resource Metadata",
+        "description": "RFC 9728 — how clients find this install's authorization server.",
+        "operationId": "protected_resource_metadata__well_known_oauth_protected_resource_api_mcp_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Protected Resource Metadata  Well Known Oauth Protected Resource Api Mcp Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-authorization-server": {
+      "get": {
+        "tags": [
+          "oauth-discovery"
+        ],
+        "summary": "Authorization Server Metadata",
+        "description": "RFC 8414 — issuer = web_base_url; CIMD means no registration endpoint.",
+        "operationId": "authorization_server_metadata__well_known_oauth_authorization_server_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Authorization Server Metadata  Well Known Oauth Authorization Server Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -7289,6 +7681,32 @@
         ],
         "title": "ConfirmSessionResponse"
       },
+      "ConsentRequest": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "approve": {
+            "type": "boolean",
+            "title": "Approve"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "company_id",
+          "approve"
+        ],
+        "title": "ConsentRequest",
+        "description": "POST /api/oauth/authorize body — the SPA consent decision (§3)."
+      },
       "CreateSessionRequest": {
         "properties": {
           "company_id": {
@@ -7523,6 +7941,17 @@
               }
             ],
             "title": "Recommended Persona"
+          },
+          "recommended_angle_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Angle Index"
           },
           "image_format_options": {
             "items": {
@@ -10680,6 +11109,17 @@
             "type": "array",
             "title": "Angles"
           },
+          "recommended_angle_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Angle Index"
+          },
           "persona": {
             "anyOf": [
               {
@@ -10702,6 +11142,7 @@
           "can_do",
           "cannot_do",
           "angles",
+          "recommended_angle_index",
           "persona",
           "summary"
         ],
@@ -10861,6 +11302,17 @@
               }
             ],
             "title": "Recommended Persona"
+          },
+          "recommended_angle_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Angle Index"
           },
           "image_format_options": {
             "items": {

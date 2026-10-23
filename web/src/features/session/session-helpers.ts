@@ -310,6 +310,11 @@ export function filterOfferedPersonas(raw: unknown): AudiencePersonaOption[] {
   return out;
 }
 
+/** ADR 0051 — brief's 0-based strongest angle; anything odd reads as null. */
+export function parseAngleIndex(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 /** `draft.awaiting_angle_pick` in a turn response — shared park sniff. */
 export function anglePickParkFromEvents(
   interrupted: boolean,
@@ -319,6 +324,7 @@ export function anglePickParkFromEvents(
   angles: string[];
   personas: AudiencePersonaOption[];
   recommendedPersona: string | null;
+  recommendedAngleIndex: number | null;
   recommendedImageFormat: ImageFormat | null;
 } {
   const ev = interrupted ? events?.find((e) => e.type === "draft.awaiting_angle_pick") : undefined;
@@ -329,6 +335,7 @@ export function anglePickParkFromEvents(
     personas: filterOfferedPersonas(ev?.data?.personas),
     recommendedPersona:
       typeof recommended === "string" && recommended.trim() ? recommended.trim() : null,
+    recommendedAngleIndex: parseAngleIndex(ev?.data?.recommended_angle_index),
     recommendedImageFormat: parseImageFormat(ev?.data?.recommended_image_format),
   };
 }

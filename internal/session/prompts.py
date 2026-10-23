@@ -136,6 +136,7 @@ Return JSON only:
   "can_do": ["actionable idea", ...],
   "cannot_do": ["out of scope / unsafe", ...],
   "angles": ["content angle", ...],
+  "recommended_angle_index": 0,
   "persona": "persona slug or null",
   "summary": "1-2 sentence brief"
 }}
@@ -146,7 +147,7 @@ Prefer zh-HK for user-facing strings in can_do/angles/summary when the company i
 Each angle MUST name: (1) the human emotion/pain, (2) a one-second visual hook, (3) the product bridge — not generic「提升品牌曝光」or roasting a named institution.
 cannot_do must include: inventing stats, publishing without UI Confirm, humour that hurts the brand, punching down on named orgs/events as the joke.
 When primary_product is present, angles/bridge must use that product; do not invent price/SKU/specs absent from its search_document.
-Offer 2–3 distinct angles — the user picks one before drafting.
+Offer 2–3 distinct angles — the user picks one before drafting. Set recommended_angle_index to the 0-based index of the strongest angle for this brief.
 When angle_feedback is present, the user rejected or redirected the prior_brief angles — produce fresh angles honoring that feedback; do not re-offer what they declined.
 Honor `image_format` from the user payload (`single` | `comic_4panel`). It is already chosen on the angle card (sticky across re-brief). Write every angle for that vehicle:
 - comic_4panel: each angle is a 4-panel arc (起／承／轉／合); panel 1 is a one-second visual; panel 4 soft-lands the brand. can_do must lock 4 格漫畫.

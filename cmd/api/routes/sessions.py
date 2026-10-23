@@ -802,6 +802,7 @@ async def get_session_messages(
         awaiting_angle_pick=parked_angle,
         personas=pick["personas"] if pick else [],
         recommended_persona=pick["recommended_persona"] if pick else None,
+        recommended_angle_index=pick["recommended_angle_index"] if pick else None,
         image_format_options=pick["image_format_options"] if pick else [],
         recommended_image_format=locked_format,
         forked_from=await _fork_origin(db, session),

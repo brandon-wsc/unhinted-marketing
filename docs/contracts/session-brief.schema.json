@@ -22,6 +22,18 @@
       "title": "Angles",
       "type": "array"
     },
+    "recommended_angle_index": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recommended Angle Index"
+    },
     "persona": {
       "anyOf": [
         {
@@ -44,6 +56,7 @@
     "can_do",
     "cannot_do",
     "angles",
+    "recommended_angle_index",
     "persona",
     "summary"
   ],

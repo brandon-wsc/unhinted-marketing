@@ -195,8 +195,6 @@ async def start_post_draft(ctx: McpContext, args: StartPostDraftArgs) -> dict[st
 async def _awaiting_angle_payload(session: Session) -> dict[str, Any]:
     payload = angle_pick_payload(session.state or {})
     payload.pop("awaiting", None)
-    brief = (session.state or {}).get("brief") or {}
-    payload["recommended_angle_index"] = brief.get("recommended_angle_index")
     return payload
 
 

@@ -73,6 +73,8 @@ class BriefOut(BaseModel):
     can_do: list[str] = Field(default_factory=list)
     cannot_do: list[str] = Field(default_factory=list)
     angles: list[str] = Field(default_factory=list)
+    # ADR 0051 §10 — 0-based index of the strongest angle; out of range = null.
+    recommended_angle_index: int | None = None
     persona: str | None = None
     summary: str = ""
 
