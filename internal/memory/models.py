@@ -181,7 +181,7 @@ class OAuthCode(Base):
     __tablename__ = "oauth_codes"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    code_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    code_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
@@ -210,7 +210,7 @@ class OAuthRefreshToken(Base):
         nullable=False,
         index=True,
     )
-    token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     family_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

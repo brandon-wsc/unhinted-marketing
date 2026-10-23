@@ -122,7 +122,13 @@ type LiveChatSnapshot = {
 // REST is the source of truth: POST /messages returns the full transcript plus
 // turn events. SSE is an enhancement layer (live assistant messages, mode
 // changes, later agent progress) that merges into the same state with dedupe.
-export function useSession(companyId: string | undefined, requestedSessionId?: string) {
+export function useSession(
+  companyId: string | undefined,
+  requestedSessionId?: string,
+  // ADR 0051 §12 — a /sessions/:id deep link may point at another company than
+  // organizations[0]; the loaded session's company becomes the UI context.
+  onSessionCompany?: (companyId: string) => void,
+) {
   const { accessToken, refreshAccessToken } = useAuth();
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1127,6 +1133,9 @@ export function useSession(companyId: string | undefined, requestedSessionId?: s
       const seq = ++sessionNavSeq.current;
       const res = await apiGetSessionMessages(accessToken, targetSessionId);
       if (seq !== sessionNavSeq.current) return;
+      if (res.session.company_id && res.session.company_id !== companyId) {
+        onSessionCompany?.(res.session.company_id);
+      }
       captureLiveChat(sessionIdRef.current);
       stashComposerDraft(composerDraftsRef.current, sessionIdRef.current, currentComposerDraft());
       const live = liveChatBySessionRef.current.get(targetSessionId);
@@ -1144,12 +1153,13 @@ export function useSession(companyId: string | undefined, requestedSessionId?: s
       } else {
         applyHydratedSession(res);
       }
-      setRememberedSessionId(companyId, res.session.id);
+      setRememberedSessionId(res.session.company_id ?? companyId, res.session.id);
       void refreshHistory();
     },
     [
       accessToken,
       companyId,
+      onSessionCompany,
       currentComposerDraft,
       captureLiveChat,
       restoreLiveChat,

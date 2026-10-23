@@ -16,20 +16,11 @@ MCPToolStatus = Literal[
     "running",
     "awaiting_angle_pick",
     "awaiting_image_ok",
+    "awaiting_reply",
     "ready",
     "failed",
     "cancelled",
 ]
-
-MCP_TOOL_NAMES = (
-    "get_brand_context",
-    "start_post_draft",
-    "get_post_draft",
-    "choose_angle",
-    "approve_image",
-    "revise_post_draft",
-    "cancel_post_draft",
-)
 
 # §5 scope table — the only mapping between tools and scopes.
 MCP_TOOL_SCOPES: dict[str, str] = {
@@ -68,15 +59,72 @@ class RevisePostDraftArgs(SessionToolArgs):
 
 
 class ConsentRequest(BaseModel):
-    """POST /api/oauth/authorize body — the SPA consent decision (§3)."""
+    """POST /api/oauth/authorize body — the SPA consent decision (§3).
+
+    ``company_id`` is required only when approving; a deny needs no company.
+    """
 
     request_id: uuid.UUID
-    company_id: uuid.UUID
+    company_id: uuid.UUID | None = None
     approve: bool
 
 
+class ConsentResult(BaseModel):
+    """POST /api/oauth/authorize response — where to send the user's browser."""
+
+    redirect: str
+
+
+class ConsentDetailsCompany(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class ConsentDetails(BaseModel):
+    """GET /api/oauth/authorize/request response — the consent page's data."""
+
+    client_id: str
+    client_name: str
+    client_host: str | None
+    scopes: list[str]
+    companies: list[ConsentDetailsCompany]
+
+
+class ConnectedApp(BaseModel):
+    """GET /api/auth/me/connected-apps row — one live grant."""
+
+    id: uuid.UUID
+    client_id: str
+    client_name: str
+    company_id: uuid.UUID
+    scopes: list[str]
+    created_at: str
+    last_used_at: str | None
+
+
+class OAuthTokenResponse(BaseModel):
+    """POST /api/oauth/token success body (RFC 6749 §5.1)."""
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    refresh_token: str
+    scope: str
+
+
+class OAuthErrorBody(BaseModel):
+    """RFC 6749 §5.2 error — top-level ``error``, never nested under detail."""
+
+    error: str
+    error_description: str | None = None
+
+
 class ToolResult(BaseModel):
-    """``structuredContent`` shared by every tool call."""
+    """``structuredContent`` shared by every tool call.
+
+    Declared for generated-contract completeness (§7); the JSON-RPC layer
+    assembles results as plain dicts since the envelope is transport-shaped.
+    """
 
     session_id: uuid.UUID | None = None
     status: MCPToolStatus | None = None

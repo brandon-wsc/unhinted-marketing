@@ -64,7 +64,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("code_hash"),
     )
-    op.create_index("ix_oauth_codes_code_hash", "oauth_codes", ["code_hash"])
     op.create_table(
         "oauth_refresh_tokens",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -81,7 +80,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("token_hash"),
     )
     op.create_index("ix_oauth_refresh_tokens_grant_id", "oauth_refresh_tokens", ["grant_id"])
-    op.create_index("ix_oauth_refresh_tokens_token_hash", "oauth_refresh_tokens", ["token_hash"])
     op.create_index("ix_oauth_refresh_tokens_family_id", "oauth_refresh_tokens", ["family_id"])
     op.create_unique_constraint(
         "uq_oauth_grant", "oauth_grants", ["user_id", "client_id", "company_id"]
@@ -91,9 +89,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_constraint("uq_oauth_grant", "oauth_grants", type_="unique")
     op.drop_index("ix_oauth_refresh_tokens_family_id", table_name="oauth_refresh_tokens")
-    op.drop_index("ix_oauth_refresh_tokens_token_hash", table_name="oauth_refresh_tokens")
     op.drop_index("ix_oauth_refresh_tokens_grant_id", table_name="oauth_refresh_tokens")
     op.drop_table("oauth_refresh_tokens")
-    op.drop_index("ix_oauth_codes_code_hash", table_name="oauth_codes")
     op.drop_table("oauth_codes")
     op.drop_table("oauth_auth_requests")

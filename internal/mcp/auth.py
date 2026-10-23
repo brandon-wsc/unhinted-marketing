@@ -43,7 +43,7 @@ def challenge_header(*, scope: str | None = None, error: str | None = None) -> s
     return f"Bearer {' '.join(parts)}"
 
 
-def auth_challenge(*, scope: str | None = None) -> HTTPException:
+def auth_challenge() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated",

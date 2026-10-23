@@ -11,3 +11,4 @@ class MetaResponse(BaseModel):
     deployment_mode: DeploymentMode
     app_env: str
     version: str
+    web_base_url: str

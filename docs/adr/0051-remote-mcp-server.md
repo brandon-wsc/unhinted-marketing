@@ -94,7 +94,7 @@ Request and result shapes live in `schemas/mcp.py` and are exported like other c
 | `revise_post_draft(session_id, instruction)` | `drafts:write` | `POST /messages` semantics, including parked-image revise ([ADR 0036](./0036-image-direction-new-script.md)) |
 | `cancel_post_draft(session_id)` | `drafts:write` | Stop ([ADR 0004](./0004-stop-discard-and-image-resume.md)) |
 
-Results carry `status`: `running` | `awaiting_angle_pick` | `awaiting_image_ok` | `ready` | `failed` | `cancelled`. Results **never** include `approval_token`.
+Results carry `status`: `running` | `awaiting_angle_pick` | `awaiting_image_ok` | `awaiting_reply` | `ready` | `failed` | `cancelled`. Results **never** include `approval_token`. `awaiting_reply` covers turns that end outside a park or preview — the assistant asked a clarifying question or simply replied; it carries the last assistant `message` and the client answers via `revise_post_draft`.
 
 ### 8. Long turns: return immediately, poll for state
 
@@ -142,7 +142,7 @@ Results carry `status`: `running` | `awaiting_angle_pick` | `awaiting_image_ok` 
 
 - Users can draft from Claude or ChatGPT with our voice, catalog, and signals, either fully hands-off (`auto=true`) or by relaying gate choices in the external chat. Publishing is always one click in our UI.
 - Each install becomes an OAuth authorization server. New surface: consent page, grants table, token endpoint, metadata endpoints, and client-metadata fetching (SSRF-guarded: HTTPS only, no private ranges, size and time caps).
-- The Python MCP SDK becomes a dependency. Pin a version published at least 7 days before adoption.
+- The JSON-RPC layer is hand-written (`internal/mcp/server.py`) rather than the official Python MCP SDK — the surface is small (`initialize`, `ping`, `notifications/*` tolerated, `tools/list`, `tools/call`, batches), and the SDK's transport assumptions do not fit a stateless per-POST dispatcher. If the surface grows, adopting the SDK means a dependency pinned at least 7 days before adoption.
 - ADR 0006 gains its first root-path exception. nginx and Vite configs must route `/.well-known/oauth-` to the API.
 - Session guards move out of route-private helpers. REST behaviour must stay identical, covered by existing route tests plus MCP adapter tests.
 - `recommended_angle_index` also improves the web card through pre-selection, independent of MCP.

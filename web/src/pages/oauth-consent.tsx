@@ -78,20 +78,16 @@ export function OAuthConsentPage() {
     );
   }
 
-  const NIL_UUID = "00000000-0000-0000-0000-000000000000";
-
   async function decide(approve: boolean) {
     if (submitting) return;
     setSubmitting(approve ? "approve" : "deny");
     setError(null);
     try {
-      // company_id is required by the schema; the backend skips the membership
-      // check when approve=false, so deny can fall back to a nil uuid.
       const res = await apiJson<{ redirect: string }>(accessToken, `${API_BASE}/oauth/authorize`, {
         method: "POST",
         json: {
           request_id: requestId,
-          company_id: companyId || NIL_UUID,
+          company_id: companyId || null,
           approve,
         },
       });

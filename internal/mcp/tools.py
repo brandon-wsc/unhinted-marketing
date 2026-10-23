@@ -9,6 +9,7 @@ Mutating tools spawn a background turn and return ``status: "running"``;
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from typing import Any
@@ -31,6 +32,7 @@ from schemas.mcp import (
 )
 
 from .auth import McpContext
+from .errors import ToolRefusal
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +52,15 @@ async def get_brand_context(ctx: McpContext) -> dict[str, Any]:
     return {
         "company_name": company.name if company else "",
         "voice": voice_pack(company.profile if company else None),
-        "products": [{"name": p.name, "sku": p.sku} for p in (products or [])],
+        "products": [_product_summary(p) for p in (products or [])],
     }
+
+
+def _product_summary(p: Any) -> dict[str, str]:
+    """Name + one-line summary from profile notes/description (ADR 0051 §7)."""
+    profile = p.profile if isinstance(getattr(p, "profile", None), dict) else {}
+    summary = str(profile.get("notes") or profile.get("description") or "").strip()
+    return {"name": p.name, "summary": summary[:200]}
 
 
 async def _load_session(db: AsyncSession, ctx: McpContext, session_id: uuid.UUID) -> Session:
@@ -65,18 +74,72 @@ def _confirm_url(session_id: uuid.UUID) -> str:
     return f"{get_snapshot().web_base_url}/sessions/{session_id}"
 
 
-def _spawn_turn(coro) -> asyncio.Task:
+# Turns spawned by this adapter, keyed by session. The registry only knows a
+# turn once `run_session_turn` calls `begin()` — this map closes the gap
+# between `create_task` and `begin`, and covers the whole auto-drive run.
+_pending_turns: dict[uuid.UUID, asyncio.Task] = {}
+# §13 — session → grant, so a grant can't run too many drafts at once.
+_pending_grants: dict[uuid.UUID, uuid.UUID] = {}
+GRANT_MAX_CONCURRENT = 3
+
+
+def _is_turn_pending(session_id: uuid.UUID) -> bool:
+    task = _pending_turns.get(session_id)
+    return task is not None and not task.done()
+
+
+def _grant_running_count(grant_id: uuid.UUID) -> int:
+    return sum(
+        1 for sid, gid in _pending_grants.items() if gid == grant_id and _is_turn_pending(sid)
+    )
+
+
+def _spawn_turn(session_id: uuid.UUID, coro, grant_id: uuid.UUID | None = None) -> asyncio.Task:
     task = asyncio.create_task(coro)
-    task.add_done_callback(_log_turn_failure)
+    _pending_turns[session_id] = task
+    if grant_id is not None:
+        _pending_grants[session_id] = grant_id
+    task.add_done_callback(lambda done: _on_turn_done(session_id, done))
     return task
 
 
-def _log_turn_failure(task: asyncio.Task) -> None:
+def _on_turn_done(session_id: uuid.UUID, task: asyncio.Task) -> None:
+    if _pending_turns.get(session_id) is task:
+        _pending_turns.pop(session_id, None)
+        _pending_grants.pop(session_id, None)
     if task.cancelled():
         return
     exc = task.exception()
-    if exc is not None:
-        logger.warning("MCP session turn failed", exc_info=exc)
+    if exc is None:
+        return
+    logger.warning("MCP session turn failed", exc_info=exc)
+    # loop already closing → error reporting is best-effort
+    with contextlib.suppress(RuntimeError):
+        asyncio.get_running_loop().create_task(_record_turn_error(session_id, exc))
+
+
+async def _record_turn_error(session_id: uuid.UUID, exc: BaseException) -> None:
+    """Persist the failure so get_post_draft reports `failed`, not `ready`."""
+    try:
+        async with open_session() as db:
+            session = await repos.get_session(db, session_id)
+            if session is None:
+                return
+            session.state = {**(session.state or {}), "mcp_turn_error": str(exc)}
+            await db.commit()
+    except Exception:
+        logger.warning("could not persist MCP turn error", exc_info=True)
+
+
+def _clear_turn_error(session: Session) -> None:
+    state = session.state or {}
+    if "mcp_turn_error" in state:
+        session.state = {k: v for k, v in state.items() if k != "mcp_turn_error"}
+
+
+def _compose_content(brief: str, context: str | None) -> str:
+    """External context enters as user-turn data, never as instructions."""
+    return brief if context is None else f"{brief}\n\nContext:\n{context}"
 
 
 async def _run_session_turn_bg(session_id: uuid.UUID, *, user_content: str) -> None:
@@ -84,6 +147,7 @@ async def _run_session_turn_bg(session_id: uuid.UUID, *, user_content: str) -> N
         session = await repos.get_session(db, session_id)
         if session is None:
             return
+        _clear_turn_error(session)
         await service.run_session_turn(db, session, user_content=user_content)
         await db.commit()
 
@@ -91,6 +155,7 @@ async def _run_session_turn_bg(session_id: uuid.UUID, *, user_content: str) -> N
 async def _auto_drive(
     session_id: uuid.UUID,
     *,
+    user_id: uuid.UUID,
     scopes: set[str],
     persona: str | None,
     image_format: str | None,
@@ -100,7 +165,7 @@ async def _auto_drive(
     """Deterministic gate answerer (§10): at most one auto answer per gate."""
     answered: set[str] = set()
     picks: dict[str, Any] = {}
-    content = brief if context is None else f"{brief}\n\nContext:\n{context}"
+    content = _compose_content(brief, context)
     try:
         await _run_session_turn_bg(session_id, user_content=content)
         while True:
@@ -111,24 +176,30 @@ async def _auto_drive(
                 kind = await service.session_park_kind(session)
                 if kind == GATE_ANGLE and GATE_ANGLE not in answered:
                     answered.add(GATE_ANGLE)
-                    brief_state = (session.state or {}).get("brief") or {}
-                    offered = brief_state.get("angles") or []
-                    index = brief_state.get("recommended_angle_index")
+                    # ADR 0041 — every turn re-checks the member cap, same as REST.
+                    await enforce_member_token_limit(db, session, user_id)
+                    payload = angle_pick_payload(session.state or {})
+                    offered = payload.get("angles") or []
+                    index = payload.get("recommended_angle_index")
                     if not isinstance(index, int) or not (0 <= index < len(offered)):
                         index = 0
+                    # Record the *effective* picks — caller values win, then
+                    # the park's own recommendations (§10).
+                    eff_persona = persona or payload.get("recommended_persona")
+                    eff_format = image_format or payload.get("recommended_image_format")
                     picks.update(
                         {
                             "angle_index": index,
-                            "persona": persona,
-                            "image_format": image_format,
+                            "persona": eff_persona,
+                            "image_format": eff_format,
                         }
                     )
                     await service.choose_angle_turn(
                         db,
                         session,
                         angle_index=index,
-                        persona=persona,
-                        image_format=image_format,
+                        persona=eff_persona,
+                        image_format=eff_format,
                     )
                     await db.commit()
                     continue
@@ -136,6 +207,7 @@ async def _auto_drive(
                     if "images:generate" not in scopes:
                         break
                     answered.add(GATE_IMAGE)
+                    await enforce_member_token_limit(db, session, user_id)
                     picks["image_approved"] = True
                     await service.resume_image_turn(db, session)
                     await db.commit()
@@ -159,6 +231,10 @@ async def _record_auto_picks(session_id: uuid.UUID, picks: dict[str, Any]) -> No
 
 async def start_post_draft(ctx: McpContext, args: StartPostDraftArgs) -> dict[str, Any]:
     """Create the grant-owned session, then run turns in the background."""
+    if _grant_running_count(ctx.claims.grant_id) >= GRANT_MAX_CONCURRENT:
+        raise ToolRefusal(
+            "rate_limited", f"Too many concurrent drafts for this app (max {GRANT_MAX_CONCURRENT})"
+        )
     async with open_session() as db:
         session = await repos.create_session(
             db, user_id=ctx.claims.user_id, company_id=ctx.claims.company_id
@@ -169,26 +245,33 @@ async def start_post_draft(ctx: McpContext, args: StartPostDraftArgs) -> dict[st
             "client_id": ctx.grant.client_id,
             "client_name": ctx.grant.client_name,
         }
-        await db.commit()
-
+        # ADR 0041 — cap check BEFORE commit so an over-limit member never
+        # leaves an orphan session behind.
         await enforce_member_token_limit(db, session, ctx.claims.user_id)
+        await db.commit()
 
     if args.auto:
         _spawn_turn(
+            session.id,
             _auto_drive(
                 session.id,
+                user_id=ctx.claims.user_id,
                 scopes=ctx.scopes,
                 persona=args.persona,
                 image_format=args.image_format,
                 brief=args.brief,
                 context=args.context,
-            )
+            ),
+            grant_id=ctx.claims.grant_id,
         )
     else:
-        content = (
-            args.brief if args.context is None else f"{args.brief}\n\nContext:\n{args.context}"
+        _spawn_turn(
+            session.id,
+            _run_session_turn_bg(
+                session.id, user_content=_compose_content(args.brief, args.context)
+            ),
+            grant_id=ctx.claims.grant_id,
         )
-        _spawn_turn(_run_session_turn_bg(session.id, user_content=content))
     return {"session_id": session.id, "status": "running"}
 
 
@@ -203,7 +286,7 @@ async def get_post_draft(ctx: McpContext, args: SessionToolArgs) -> dict[str, An
     async with open_session() as db:
         session = await _load_session(db, ctx, args.session_id)
 
-        if session_turn_registry.is_busy(session.id):
+        if session_turn_registry.is_busy(session.id) or _is_turn_pending(session.id):
             return {"session_id": session.id, "status": "running"}
 
         state = session.state or {}
@@ -222,19 +305,41 @@ async def get_post_draft(ctx: McpContext, args: SessionToolArgs) -> dict[str, An
                 "copy": state.get("draft"),
                 "image_plan": state.get("image_plan"),
             }
-        if state.get("error"):
-            return {**result, "status": "failed", "error": str(state["error"])}
+        error = state.get("mcp_turn_error") or state.get("error")
+        if error:
+            return {**result, "status": "failed", "error": str(error)}
 
         preview = await service.latest_preview_payload(db, session)
-    ready: dict[str, Any] = {"status": "ready", "confirm_url": _confirm_url(session.id)}
-    if preview:
-        # §12 — approval_token never leaves the server.
-        ready["preview"] = {
-            "copy": preview.get("copy"),
-            "image_url": preview.get("image_url"),
-            "media": preview.get("media"),
-        }
-    return {**result, **ready}
+        if preview:
+            # §12 — approval_token never leaves the server.
+            return {
+                **result,
+                "status": "ready",
+                "confirm_url": _confirm_url(session.id),
+                "preview": {
+                    "copy": preview.get("copy"),
+                    "image_url": preview.get("image_url"),
+                    "media": preview.get("media"),
+                },
+            }
+
+        messages = await repos.list_session_messages(db, session.id)
+    # Turn ended without a park or preview — the assistant asked or said
+    # something. Surface it so the client can answer via revise_post_draft.
+    last = next((m for m in reversed(messages) if m.role == "assistant"), None)
+    return {
+        **result,
+        "status": "awaiting_reply",
+        "message": last.content if last else None,
+    }
+
+
+def _assert_not_busy(session_id: uuid.UUID) -> None:
+    """§8 — a mutating call while a turn runs answers a tool error."""
+    if session_turn_registry.is_busy(session_id) or _is_turn_pending(session_id):
+        raise ToolRefusal(
+            "turn_in_flight", "A turn is still running — poll get_post_draft for state"
+        )
 
 
 async def _spawn_resume(
@@ -243,10 +348,9 @@ async def _spawn_resume(
     """Shared prelude for choose/approve: guard + park check + background turn."""
     async with open_session() as db:
         session = await _load_session(db, ctx, args.session_id)
+        _assert_not_busy(session.id)
         kind = await service.session_park_kind(session)
         if kind != expected_park:
-            from internal.mcp.errors import ToolRefusal
-
             raise ToolRefusal(
                 "invalid_state",
                 f"Session is not parked at {expected_park} (currently {kind or 'not parked'})",
@@ -254,19 +358,20 @@ async def _spawn_resume(
         await enforce_member_token_limit(db, session, ctx.claims.user_id)
         session_id = session.id
 
-    _spawn_turn(runner(session_id))
+    _spawn_turn(session_id, runner(session_id), grant_id=ctx.claims.grant_id)
     return {"session_id": session_id, "status": "running"}
 
 
 async def choose_angle(ctx: McpContext, args: ChooseAngleArgs) -> dict[str, Any]:
     if args.angle_index is None and not (args.angle or args.feedback):
-        from internal.mcp.errors import ToolRefusal
-
         raise ToolRefusal("invalid_params", "Provide angle_index, angle or feedback")
 
     async def run(session_id: uuid.UUID) -> None:
         async with open_session() as db:
             session = await repos.get_session(db, session_id)
+            if session is None:
+                return
+            _clear_turn_error(session)
             await service.choose_angle_turn(
                 db,
                 session,
@@ -284,6 +389,9 @@ async def approve_image(ctx: McpContext, args: SessionToolArgs) -> dict[str, Any
     async def run(session_id: uuid.UUID) -> None:
         async with open_session() as db:
             session = await repos.get_session(db, session_id)
+            if session is None:
+                return
+            _clear_turn_error(session)
             await service.resume_image_turn(db, session)
             await db.commit()
 
@@ -295,9 +403,14 @@ async def revise_post_draft(ctx: McpContext, args: RevisePostDraftArgs) -> dict[
     session_id = args.session_id
     async with open_session() as db:
         session = await _load_session(db, ctx, session_id)
+        _assert_not_busy(session_id)
         await enforce_member_token_limit(db, session, ctx.claims.user_id)
 
-    _spawn_turn(_run_session_turn_bg(session_id, user_content=args.instruction))
+    _spawn_turn(
+        session_id,
+        _run_session_turn_bg(session_id, user_content=args.instruction),
+        grant_id=ctx.claims.grant_id,
+    )
     return {"session_id": session_id, "status": "running"}
 
 

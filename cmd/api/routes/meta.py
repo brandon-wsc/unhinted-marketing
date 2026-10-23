@@ -9,6 +9,7 @@ sensitive — mode, app env, and version only.
 from fastapi import APIRouter
 
 from internal.config import settings
+from internal.instance.config import get_snapshot
 from schemas.meta import MetaResponse
 
 router = APIRouter(tags=["meta"])
@@ -23,4 +24,5 @@ async def get_meta() -> MetaResponse:
         deployment_mode=settings.deployment_mode,
         app_env=settings.app_env,
         version=API_VERSION,
+        web_base_url=get_snapshot().web_base_url.rstrip("/"),
     )

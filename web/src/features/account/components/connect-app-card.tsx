@@ -1,16 +1,32 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CopyField } from "@/components/copy-field";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { API_BASE } from "@/lib/api-base";
 
 /**
  * ADR 0051 — the MCP URL is the whole install story: the client discovers
  * OAuth itself via `/.well-known`, then our consent page binds one company.
- * Derived from the SPA origin, which is the install's public web_base_url.
+ * Prefer the configured web_base_url (token audiences bind to it); the page
+ * origin is only a fallback for when /api/meta is unreachable.
  */
 export function ConnectAppCard() {
   const { t } = useTranslation();
-  const mcpUrl = `${window.location.origin}/api/mcp`;
+  const [base, setBase] = useState(window.location.origin);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/meta`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((meta: { web_base_url?: string } | null) => {
+        if (!cancelled && meta?.web_base_url) setBase(meta.web_base_url.replace(/\/+$/, ""));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const mcpUrl = `${base}/api/mcp`;
 
   return (
     <section className="space-y-4 rounded-lg border border-border bg-card p-4">

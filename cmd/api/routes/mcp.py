@@ -12,12 +12,14 @@ import json
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.instance.config import get_snapshot
 from internal.mcp import server as mcp_server
 from internal.mcp.auth import McpContext, get_mcp_context
+from internal.mcp.grants import KNOWN_SCOPES
+from internal.mcp.oauth import DEFAULT_SCOPES
 from internal.mcp.tokens import MCP_PATH, mcp_resource_url
 from internal.memory.database import get_db
 
@@ -41,7 +43,7 @@ async def mcp_endpoint(
     request: Request,
     ctx: Annotated[McpContext, Depends(get_mcp_context)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict[str, Any]:
+) -> Any:
     if not _origin_allowed(request):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Origin")
     try:
@@ -52,7 +54,11 @@ async def mcp_endpoint(
             "id": None,
             "error": {"code": mcp_server.RPC_PARSE_ERROR, "message": "Invalid JSON"},
         }
-    return await mcp_server.dispatch(db, ctx, body)
+    result = await mcp_server.dispatch(ctx, body)
+    await db.commit()  # lands get_mcp_context's touch_grant (last_used_at)
+    if result is None:
+        return Response(status_code=status.HTTP_202_ACCEPTED)
+    return result
 
 
 @discovery_router.get("/.well-known/oauth-protected-resource/api/mcp")
@@ -62,7 +68,7 @@ async def protected_resource_metadata() -> dict[str, Any]:
     return {
         "resource": mcp_resource_url(),
         "authorization_servers": [snap.web_base_url],
-        "scopes_supported": ["knowledge:read", "drafts:write"],
+        "scopes_supported": DEFAULT_SCOPES,
         "bearer_methods_supported": ["header"],
     }
 
@@ -79,5 +85,5 @@ async def authorization_server_metadata() -> dict[str, Any]:
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"],
-        "scopes_supported": ["knowledge:read", "drafts:write", "images:generate"],
+        "scopes_supported": sorted(KNOWN_SCOPES),
     }

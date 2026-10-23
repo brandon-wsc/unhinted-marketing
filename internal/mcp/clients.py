@@ -8,8 +8,8 @@ exact string match against the document's list.
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
-import socket
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -26,7 +26,13 @@ class ClientMetadataError(Exception):
         super().__init__(message)
 
 
-def _host_is_public(host: str) -> bool:
+async def _host_is_public(host: str) -> bool:
+    """Async DNS lookup — sync getaddrinfo would block the event loop.
+
+    Residual risk: httpx re-resolves on connect, so a hostile DNS answer that
+    changes between checks and the fetch could still rebind (documented
+    hardening gap — pinning the peer IP is left for later).
+    """
     host = host.strip().lower()
     if host in {"localhost", "localhost.localdomain"}:
         return False
@@ -37,7 +43,7 @@ def _host_is_public(host: str) -> bool:
     else:
         return ip.is_global
     try:
-        infos = socket.getaddrinfo(host, None)
+        infos = await asyncio.get_running_loop().getaddrinfo(host, None)
     except OSError:
         return False
     for info in infos:
@@ -50,7 +56,7 @@ def _host_is_public(host: str) -> bool:
     return True
 
 
-def validate_client_id(client_id: str) -> str:
+async def validate_client_id(client_id: str) -> str:
     """A client_id must be a public HTTPS URL (CIMD). Returns it stripped."""
     url = (client_id or "").strip()
     parsed = urlparse(url)
@@ -58,7 +64,7 @@ def validate_client_id(client_id: str) -> str:
         raise ClientMetadataError("client_id must be an https URL")
     if parsed.username or parsed.password:
         raise ClientMetadataError("client_id must not carry credentials")
-    if not _host_is_public(parsed.hostname):
+    if not await _host_is_public(parsed.hostname):
         raise ClientMetadataError("client_id host is not public")
     return url
 
@@ -87,17 +93,27 @@ async def fetch_client_metadata(client_id: str) -> dict:
 
     import httpx
 
-    validate_client_id(client_id)
+    await validate_client_id(client_id)
     try:
         async with (
+            asyncio.timeout(FETCH_TIMEOUT_SECONDS),
             httpx.AsyncClient(timeout=FETCH_TIMEOUT_SECONDS, follow_redirects=False) as client,
             client.stream("GET", client_id) as response,
         ):
             if response.status_code != 200:
                 raise ClientMetadataError(f"client metadata fetch failed ({response.status_code})")
-            body = await response.aread()
-            if len(body) > MAX_METADATA_BYTES:
-                raise ClientMetadataError("client metadata too large")
+            chunks: list[bytes] = []
+            size = 0
+            # Stream and cap as we read — aread() would download the whole
+            # body first, so the byte cap would never actually bind.
+            async for chunk in response.aiter_bytes(8192):
+                size += len(chunk)
+                if size > MAX_METADATA_BYTES:
+                    raise ClientMetadataError("client metadata too large")
+                chunks.append(chunk)
+            body = b"".join(chunks)
+    except TimeoutError as exc:
+        raise ClientMetadataError("client metadata fetch timed out") from exc
     except httpx.HTTPError as exc:
         raise ClientMetadataError(f"client metadata fetch failed: {exc}") from exc
     try:

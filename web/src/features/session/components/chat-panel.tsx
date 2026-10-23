@@ -113,7 +113,11 @@ export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string 
   const { t } = useTranslation();
   const { user, accessToken } = useAuth();
   const { showError, showInfo } = useToast();
-  const companyId = user?.organizations[0]?.id;
+  // ADR 0051 §12 — a /sessions/:id deep link can point at a company other than
+  // organizations[0]; the loaded session's company becomes the UI context so a
+  // user on several companies never confirms a post under the wrong org.
+  const [sessionCompanyId, setSessionCompanyId] = useState<string | undefined>();
+  const companyId = sessionCompanyId ?? user?.organizations[0]?.id;
   const canPromoteExemplar =
     user?.organizations[0]?.role === "owner" || user?.organizations[0]?.role === "admin";
   const {
@@ -185,7 +189,7 @@ export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string 
     consumeStagedAttachments,
     restoreStagedAttachments,
     saveAttachment,
-  } = useSession(companyId, requestedSessionId);
+  } = useSession(companyId, requestedSessionId, setSessionCompanyId);
   const {
     questions,
     loading: questionsLoading,

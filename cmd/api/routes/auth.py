@@ -30,6 +30,7 @@ from schemas.auth import (
     UserResponse,
     UserUpdate,
 )
+from schemas.mcp import ConnectedApp
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -203,21 +204,21 @@ async def patch_me(
 async def list_connected_apps(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> list[dict]:
+) -> list[ConnectedApp]:
     """ADR 0051 §4 — non-revoked MCP grants for the /account page."""
     from internal.mcp import grants as grant_repo
 
     grants = await grant_repo.list_connected_apps(db, user.id)
     return [
-        {
-            "id": str(g.id),
-            "client_id": g.client_id,
-            "client_name": g.client_name,
-            "company_id": str(g.company_id),
-            "scopes": list(g.scopes or []),
-            "created_at": g.created_at.isoformat(),
-            "last_used_at": g.last_used_at.isoformat() if g.last_used_at else None,
-        }
+        ConnectedApp(
+            id=g.id,
+            client_id=g.client_id,
+            client_name=g.client_name,
+            company_id=g.company_id,
+            scopes=list(g.scopes or []),
+            created_at=g.created_at.isoformat(),
+            last_used_at=g.last_used_at.isoformat() if g.last_used_at else None,
+        )
         for g in grants
     ]
 

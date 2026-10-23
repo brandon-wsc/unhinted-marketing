@@ -22,8 +22,9 @@ server {
         proxy_read_timeout 3600s;
     }
 
-    # RFC-required root discovery paths (ADR 0051 §8) — the one ADR 0006 exception.
-    location /.well-known/ {
+    # RFC-required root discovery paths (ADR 0051 §8) — the one ADR 0006
+    # exception. Scoped to oauth-* so acme-challenge/security.txt stay SPA-owned.
+    location /.well-known/oauth- {
         proxy_pass http://${API_UPSTREAM};
         proxy_set_header Host $proxy_host;
         proxy_set_header X-Forwarded-Host $host;

@@ -38,13 +38,18 @@ def test_pkce_rejects_wrong_verifier():
     assert not pkce_verifier_matches("wrong", _challenge("right"))
 
 
-def test_client_id_must_be_https():
-    assert validate_client_id("https://chatgpt.com/connector.json") == "https://chatgpt.com/connector.json"
+@pytest.mark.asyncio
+async def test_client_id_must_be_https():
+    assert (
+        await validate_client_id("https://chatgpt.com/connector.json")
+        == "https://chatgpt.com/connector.json"
+    )
     with pytest.raises(ClientMetadataError):
-        validate_client_id("http://example.com/app.json")
+        await validate_client_id("http://example.com/app.json")
 
 
-def test_client_id_rejects_local_and_private_hosts():
+@pytest.mark.asyncio
+async def test_client_id_rejects_local_and_private_hosts():
     for url in (
         "https://localhost/app.json",
         "https://127.0.0.1/app.json",
@@ -54,7 +59,7 @@ def test_client_id_rejects_local_and_private_hosts():
         "https://169.254.169.254/latest/meta.json",
     ):
         with pytest.raises(ClientMetadataError):
-            validate_client_id(url)
+            await validate_client_id(url)
 
 
 def test_client_document_needs_redirect_uris_list():

@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.jwt import generate_refresh_token, hash_refresh_token
@@ -33,10 +33,12 @@ from internal.memory.models import (
     OAuthGrant,
     OAuthRefreshToken,
 )
+from schemas.mcp import OAuthTokenResponse
 
 AUTH_REQUEST_TTL = timedelta(minutes=10)
 AUTH_CODE_TTL = timedelta(seconds=60)
 REFRESH_TTL = timedelta(days=30)
+# Scopes the PRM advertises — `images:generate` is opt-in at consent.
 DEFAULT_SCOPES = ["knowledge:read", "drafts:write"]
 
 
@@ -79,7 +81,7 @@ async def issue_auth_request(
 ) -> OAuthAuthRequest:
     """Validate the /authorize query; a failure surfaces as an OAuth error."""
     try:
-        clean_client_id = validate_client_id(client_id)
+        clean_client_id = await validate_client_id(client_id)
     except ClientMetadataError as exc:
         raise OAuthError("invalid_client", exc.message) from exc
     try:
@@ -126,7 +128,7 @@ async def complete_consent(
     *,
     request_id: uuid.UUID,
     user_id: uuid.UUID,
-    company_id: uuid.UUID,
+    company_id: uuid.UUID | None,
     approve: bool,
 ) -> str:
     """Consent → redirect URL with code+state+iss (RFC 9207) or error."""
@@ -172,6 +174,12 @@ async def _upsert_grant(
             OAuthGrant.company_id == company_id,
         )
     )
+    if grant is not None and grant.revoked_at is not None:
+        # A revoked grant must never come back: tokens bound to its id stay
+        # dead. Delete so the unique slot frees, then issue a fresh grant.
+        await db.delete(grant)
+        await db.flush()
+        grant = None
     if grant is None:
         grant = OAuthGrant(
             user_id=user_id,
@@ -184,7 +192,6 @@ async def _upsert_grant(
     else:
         grant.client_name = client_name
         grant.scopes = scopes
-        grant.revoked_at = None
     await db.flush()
     return grant
 
@@ -202,14 +209,15 @@ async def _mint_refresh(db: AsyncSession, grant: OAuthGrant) -> str:
     return token
 
 
-def _token_response(grant: OAuthGrant, access: str, expires: datetime, refresh: str) -> dict:
-    return {
-        "access_token": access,
-        "token_type": "bearer",
-        "expires_in": max(0, int((expires - datetime.now(UTC)).total_seconds())),
-        "refresh_token": refresh,
-        "scope": " ".join(grant.scopes or []),
-    }
+def _token_response(
+    grant: OAuthGrant, access: str, expires: datetime, refresh: str
+) -> OAuthTokenResponse:
+    return OAuthTokenResponse(
+        access_token=access,
+        expires_in=max(0, int((expires - datetime.now(UTC)).total_seconds())),
+        refresh_token=refresh,
+        scope=" ".join(grant.scopes or []),
+    )
 
 
 async def exchange_code(
@@ -220,7 +228,7 @@ async def exchange_code(
     client_id: str,
     code_verifier: str | None,
     resource: str | None,
-) -> dict:
+) -> OAuthTokenResponse:
     row = await db.scalar(select(OAuthCode).where(OAuthCode.code_hash == hash_refresh_token(code)))
     if (
         row is None
@@ -253,17 +261,33 @@ async def exchange_code(
     return _token_response(grant, access, expires, refresh)
 
 
-async def rotate_refresh(db: AsyncSession, *, refresh_token: str) -> dict:
+async def rotate_refresh(
+    db: AsyncSession, *, refresh_token: str, client_id: str | None = None
+) -> OAuthTokenResponse:
     row = await db.scalar(
         select(OAuthRefreshToken).where(
             OAuthRefreshToken.token_hash == hash_refresh_token(refresh_token)
         )
     )
-    if row is None or row.revoked_at is not None or row.expires_at < datetime.now(UTC):
+    if row is None or row.expires_at < datetime.now(UTC):
         raise OAuthError("invalid_grant", "refresh token invalid")
+    if row.revoked_at is not None:
+        # Reuse of a rotated-out token (OAuth 2.1 §6.1): someone has a stale
+        # copy — kill the whole family, forcing a fresh authorize.
+        await db.execute(
+            update(OAuthRefreshToken)
+            .where(
+                OAuthRefreshToken.family_id == row.family_id,
+                OAuthRefreshToken.revoked_at.is_(None),
+            )
+            .values(revoked_at=datetime.now(UTC))
+        )
+        raise OAuthError("invalid_grant", "refresh token reuse detected")
     grant = await get_active_grant(db, row.grant_id)
     if grant is None:
         raise OAuthError("invalid_grant", "grant revoked")
+    if client_id is not None and grant.client_id != client_id:
+        raise OAuthError("invalid_client", "client_id does not match the grant")
     row.revoked_at = datetime.now(UTC)
 
     access, expires = create_mcp_access_token(grant)

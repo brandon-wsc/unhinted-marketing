@@ -69,16 +69,16 @@
     "connectAi": {
       "title": "連接 AI 應用",
       "description": "俾外部 AI 應用（Claude、ChatGPT 等）用你公司嘅語氣同產品資料經 Unhinted 起稿；發佈依然要返嚟呢度撳確認。",
-      "urlLabel": "你嘅 MCP server URL",
+      "urlLabel": "你嘅 MCP 伺服器網址",
       "steps": {
         "claude": {
           "1": "喺 Claude 開 Customize → Connectors → Add → Custom → Web。",
-          "2": "幫佢改名（例如「Unhinted」），貼上你嘅 MCP server URL。",
+          "2": "幫佢改名（例如「Unhinted」），貼上你嘅 MCP 伺服器網址。",
           "3": "喺 Unhinted 授權頁登入，揀公司，批准連接。"
         },
         "chatgpt": {
           "1": "喺 ChatGPT 開 Plugins →「+」→ Add custom MCP server。",
-          "2": "輸入名稱，喺 Server URL 貼上你嘅 MCP server URL。",
+          "2": "輸入名稱，喺 Server URL 貼上你嘅 MCP 伺服器網址。",
           "3": "授權方式揀 OAuth，然後喺 Unhinted 授權頁批准。"
         }
       },

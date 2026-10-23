@@ -12,7 +12,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
@@ -20,19 +20,30 @@ from internal.mcp import oauth
 from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import User
-from schemas.mcp import ConsentRequest
+from schemas.mcp import (
+    ConsentDetails,
+    ConsentDetailsCompany,
+    ConsentRequest,
+    ConsentResult,
+    OAuthErrorBody,
+)
 
 router = APIRouter(prefix="/oauth", tags=["oauth"])
 
 
-def _oauth_http(exc: oauth.OAuthError) -> HTTPException:
-    return HTTPException(
+_NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+
+
+def _oauth_error(exc: oauth.OAuthError) -> JSONResponse:
+    """RFC 6749 §5.2 — the error code lives at the top level, not in detail."""
+    return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"error": exc.error, "error_description": exc.description},
+        content=OAuthErrorBody(error=exc.error, error_description=exc.description).model_dump(),
+        headers=_NO_STORE,
     )
 
 
-@router.get("/authorize")
+@router.get("/authorize", response_model=None)
 async def authorize(
     db: Annotated[AsyncSession, Depends(get_db)],
     *,
@@ -44,7 +55,7 @@ async def authorize(
     state: str = "",
     scope: str | None = None,
     resource: str | None = None,
-) -> RedirectResponse:
+) -> RedirectResponse | JSONResponse:
     """Client opens the browser here; we redirect to the SPA consent page."""
     if response_type != "code":
         raise HTTPException(status_code=400, detail="response_type must be code")
@@ -61,16 +72,16 @@ async def authorize(
         )
         await db.commit()
     except oauth.OAuthError as exc:
-        raise _oauth_http(exc) from exc
+        return _oauth_error(exc)
     return RedirectResponse(oauth.consent_url(request), status_code=302)
 
 
-@router.get("/authorize/request")
+@router.get("/authorize/request", response_model=None)
 async def authorize_request_details(
     request_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> ConsentDetails | JSONResponse:
     """Consent-page data: who is asking, what scopes, which companies apply."""
     from urllib.parse import urlparse
 
@@ -80,30 +91,32 @@ async def authorize_request_details(
     try:
         oauth.live_request(request)
     except oauth.OAuthError as exc:
-        raise _oauth_http(exc) from exc
-    return {
-        "client_id": request.client_id,
-        "client_name": request.client_name or request.client_id,
-        "client_host": urlparse(request.client_id).hostname,
-        "scopes": request.scope.split(),
-        "companies": [
-            {"id": str(m.organization_id), "name": m.organization.name}
+        return _oauth_error(exc)
+    return ConsentDetails(
+        client_id=request.client_id,
+        client_name=request.client_name or request.client_id,
+        client_host=urlparse(request.client_id).hostname,
+        scopes=request.scope.split(),
+        companies=[
+            ConsentDetailsCompany(id=m.organization_id, name=m.organization.name)
             for m in user.memberships
             if m.organization.entity_type == "company"
         ],
-    }
+    )
 
 
-@router.post("/authorize")
+@router.post("/authorize", response_model=None)
 async def consent(
     body: ConsentRequest,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> ConsentResult | JSONResponse:
     """Approve or deny — plain HTTP on the web session, no LLM (ADR 0003)."""
     request_id = body.request_id
     approve = body.approve
     company_id = body.company_id
+    if approve and company_id is None:
+        raise HTTPException(status_code=400, detail="company_id is required to approve")
     if approve and not await repos.user_has_org_access(db, user.id, company_id):
         raise HTTPException(status_code=403, detail="not a member of that company")
     try:
@@ -116,12 +129,12 @@ async def consent(
         )
         await db.commit()
     except oauth.OAuthError as exc:
-        raise _oauth_http(exc) from exc
-    return {"redirect": redirect}
+        return _oauth_error(exc)
+    return ConsentResult(redirect=redirect)
 
 
-@router.post("/token")
-async def token(request: Request, db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
+@router.post("/token", response_model=None)
+async def token(request: Request, db: Annotated[AsyncSession, Depends(get_db)]) -> JSONResponse:
     """Public endpoint — form-encoded per RFC 6749; PKCE is the client auth."""
     form = await request.form()
     grant_type = str(form.get("grant_type") or "")
@@ -137,11 +150,13 @@ async def token(request: Request, db: Annotated[AsyncSession, Depends(get_db)]) 
             )
         elif grant_type == "refresh_token":
             result = await oauth.rotate_refresh(
-                db, refresh_token=str(form.get("refresh_token") or "")
+                db,
+                refresh_token=str(form.get("refresh_token") or ""),
+                client_id=form.get("client_id") or None,
             )
         else:
             raise oauth.OAuthError("unsupported_grant_type", grant_type or "missing")
         await db.commit()
     except oauth.OAuthError as exc:
-        raise _oauth_http(exc) from exc
-    return result
+        return _oauth_error(exc)
+    return JSONResponse(result.model_dump(), headers=_NO_STORE)

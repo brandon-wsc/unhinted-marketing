@@ -9,13 +9,15 @@ scopes first — a missing scope answers HTTP 403 with a step-up challenge.
 from __future__ import annotations
 
 import json
+import time
 import uuid
+from collections import deque
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from internal.session.guards import SessionGuardError
 from schemas.mcp import (
     MCP_TOOL_SCOPES,
     ChooseAngleArgs,
@@ -33,6 +35,29 @@ RPC_INVALID_REQUEST = -32600
 RPC_METHOD_NOT_FOUND = -32601
 RPC_INVALID_PARAMS = -32602
 RPC_INTERNAL_ERROR = -32603
+
+# Spec version we answer `initialize` with; clients advertise theirs in params.
+PROTOCOL_VERSION = "2026-07-28"
+
+# §13 — per-grant rate limit on mutating tools, sliding 60s window. The
+# concurrent-draft cap lives next to the turn tracking in tools.py.
+MUTATING_TOOLS = frozenset(
+    {"start_post_draft", "choose_angle", "approve_image", "revise_post_draft", "cancel_post_draft"}
+)
+RATE_LIMIT_MUTATING = 30
+_rate_windows: dict[uuid.UUID, deque[float]] = {}
+
+
+def _check_grant_rate(ctx: McpContext, name: str) -> None:
+    if str(name) not in MUTATING_TOOLS:
+        return
+    now = time.monotonic()
+    win = _rate_windows.setdefault(ctx.claims.grant_id, deque())
+    while win and now - win[0] > 60.0:
+        win.popleft()
+    if len(win) >= RATE_LIMIT_MUTATING:
+        raise ToolRefusal("rate_limited", "Rate limit reached — slow down and retry shortly")
+    win.append(now)
 
 
 class _Tool(BaseModel):
@@ -66,9 +91,11 @@ TOOLS: dict[str, _Tool] = {
         args_model=SessionToolArgs,
         description=(
             "Current draft state: running | awaiting_angle_pick | "
-            "awaiting_image_ok | ready | failed | cancelled. When ready it "
-            "carries the preview and a confirm_url for the user to publish "
-            "in the Unhinted UI."
+            "awaiting_image_ok | awaiting_reply | ready | failed | "
+            "cancelled. awaiting_reply carries the assistant's message — "
+            "answer it with revise_post_draft. When ready it carries the "
+            "preview and a confirm_url for the user to publish in the "
+            "Unhinted UI."
         ),
     ),
     "choose_angle": _Tool(
@@ -159,14 +186,45 @@ def _tools_list() -> dict:
     }
 
 
-async def dispatch(db: AsyncSession, ctx: McpContext, body: Any) -> dict:
-    """One JSON-RPC request → one response object."""
+def _initialize_result(params: dict[str, Any]) -> dict:
+    from cmd.api.routes.meta import API_VERSION
+
+    return {
+        # Answer the client's version when offered; ours when they send none.
+        "protocolVersion": params.get("protocolVersion") or PROTOCOL_VERSION,
+        "capabilities": {"tools": {"listChanged": False}},
+        "serverInfo": {"name": "unhinted-marketing", "version": API_VERSION},
+    }
+
+
+async def dispatch(ctx: McpContext, body: Any) -> dict | list | None:
+    """Requests → responses. ``None`` means notifications only → HTTP 202.
+
+    Batches are supported: each item gets its own response, notifications
+    (no ``id``) are silently consumed as JSON-RPC requires.
+    """
+    if isinstance(body, list):
+        if not body:
+            return _rpc_error(None, RPC_INVALID_REQUEST, "Empty batch")
+        responses = [resp for item in body if (resp := await _dispatch_one(ctx, item)) is not None]
+        return responses or None
+    return await _dispatch_one(ctx, body)
+
+
+async def _dispatch_one(ctx: McpContext, body: Any) -> dict | None:
+    """One JSON-RPC request → one response object, or None for a notification."""
     if not isinstance(body, dict) or body.get("jsonrpc") != "2.0":
         return _rpc_error(None, RPC_INVALID_REQUEST, "Expected a JSON-RPC 2.0 request")
     rpc_id = body.get("id")
     method = body.get("method")
     params = body.get("params") or {}
 
+    if rpc_id is None:
+        return None  # notification — never answered
+    if method == "initialize":
+        return _rpc_result(rpc_id, _initialize_result(params))
+    if method == "ping":
+        return _rpc_result(rpc_id, {})
     if method == "tools/list":
         return _rpc_result(rpc_id, _tools_list())
     if method != "tools/call":
@@ -191,6 +249,7 @@ async def dispatch(db: AsyncSession, ctx: McpContext, body: Any) -> dict:
         args = None
 
     try:
+        _check_grant_rate(ctx, name)
         if args is None:
             data = await tool.handler(ctx)
         else:
@@ -199,15 +258,11 @@ async def dispatch(db: AsyncSession, ctx: McpContext, body: Any) -> dict:
         return _tool_error_result(
             rpc_id, exc.reason, exc.message, params.get("arguments", {}).get("session_id")
         )
-    except Exception as exc:
-        from internal.session.guards import SessionGuardError
-
-        if isinstance(exc, SessionGuardError):
-            return _tool_error_result(
-                rpc_id,
-                refusal_reason(exc),
-                str(exc.detail),
-                params.get("arguments", {}).get("session_id"),
-            )
-        raise
+    except SessionGuardError as exc:
+        return _tool_error_result(
+            rpc_id,
+            refusal_reason(exc),
+            str(exc.detail),
+            params.get("arguments", {}).get("session_id"),
+        )
     return _tool_result(rpc_id, data)

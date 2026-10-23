@@ -1,7 +1,7 @@
 """Tool-level refusals (ADR 0051 §7).
 
-A ToolRefusal is a normal tool result — ``isError: true`` with a machine
-``reason`` — never an HTTP error and never a raised exception. Guard
+A ToolRefusal is raised inside a handler but becomes a normal tool result —
+``isError: true`` with a machine ``reason`` — never an HTTP error. Guard
 refusals map to the same shape via ``GUARD_REASONS``.
 """
 

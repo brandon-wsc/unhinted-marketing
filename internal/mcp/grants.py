@@ -11,10 +11,10 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from internal.memory.models import OAuthGrant
+from internal.memory.models import OAuthGrant, OAuthRefreshToken
 
 KNOWN_SCOPES = frozenset({"knowledge:read", "drafts:write", "images:generate"})
 
@@ -67,7 +67,17 @@ async def revoke_grant(db: AsyncSession, *, user_id: uuid.UUID, grant_id: uuid.U
     grant = await get_active_grant(db, grant_id)
     if grant is None or grant.user_id != user_id:
         return False
-    grant.revoked_at = datetime.now(UTC)
+    grant.revoked_at = now = datetime.now(UTC)
+    # Revoking the grant kills every refresh token with it — a re-consent
+    # creates a new grant, so these never come back.
+    await db.execute(
+        update(OAuthRefreshToken)
+        .where(
+            OAuthRefreshToken.grant_id == grant.id,
+            OAuthRefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
     return True
 
 
