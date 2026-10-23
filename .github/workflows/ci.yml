@@ -55,6 +55,26 @@ jobs:
           if [ "$bad" -eq 0 ]; then echo "commit subjects ok"; fi
           exit "$bad"
 
+  deps:
+    name: Dependency locks + audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install --require-hashes -r requirements-ci.txt
+      - name: Locks cover pyproject (stale-lock check)
+        run: |
+          scripts/regen_deps.sh --check
+          git diff --exit-code -- 'requirements*.txt'
+      - run: pip install --require-hashes -r requirements-dev.txt
+      - name: Audit (ignores in pip-audit-ignores.txt)
+        run: >
+          pip-audit
+          $(grep -vE '^\s*(#|$)' pip-audit-ignores.txt | sed 's/^/--ignore-vuln /' | tr '\n' ' ')
+
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
@@ -63,7 +83,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install "ruff>=0.8.0"
+      - run: pip install --require-hashes -r requirements-ci.txt
       - run: ruff check .
 
   backend-unit:
@@ -75,7 +95,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[dev]"
+      - run: |
+          pip install --require-hashes -r requirements-dev.txt
+          pip install --no-deps --no-build-isolation -e .
       - name: Tier 1 utils (coverage ≥85%)
         run: >
           pytest tests/unit
@@ -128,7 +150,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[dev]"
+      - run: |
+          pip install --require-hashes -r requirements-dev.txt
+          pip install --no-deps --no-build-isolation -e .
       - name: Tier 2 API routes (coverage ≥70%)
         run: >
           pytest tests/api
@@ -191,7 +215,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: pip install -e '.[dev]'
+      - run: |
+          pip install --require-hashes -r requirements-dev.txt
+          pip install --no-deps --no-build-isolation -e .
       - name: Fail if contract mirrors are out of date
         run: python -m scripts.check_contracts_fresh
       - name: Fail if generated TS types are out of date

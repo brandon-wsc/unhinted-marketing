@@ -1,0 +1,4 @@
+# CI-only tooling — compiled to requirements-ci.txt by scripts/regen_deps.sh
+ruff>=0.8.0
+pip-audit>=2.7.0
+uv>=0.6.0
