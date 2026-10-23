@@ -67,6 +67,14 @@ class RevisePostDraftArgs(SessionToolArgs):
     instruction: str = Field(min_length=1, max_length=8000)
 
 
+class ConsentRequest(BaseModel):
+    """POST /api/oauth/authorize body — the SPA consent decision (§3)."""
+
+    request_id: uuid.UUID
+    company_id: uuid.UUID
+    approve: bool
+
+
 class ToolResult(BaseModel):
     """``structuredContent`` shared by every tool call."""
 

@@ -65,3 +65,19 @@ async def protected_resource_metadata() -> dict[str, Any]:
         "scopes_supported": ["knowledge:read", "drafts:write"],
         "bearer_methods_supported": ["header"],
     }
+
+
+@discovery_router.get("/.well-known/oauth-authorization-server")
+async def authorization_server_metadata() -> dict[str, Any]:
+    """RFC 8414 — issuer = web_base_url; CIMD means no registration endpoint."""
+    base = get_snapshot().web_base_url
+    return {
+        "issuer": base,
+        "authorization_endpoint": f"{base}/api/oauth/authorize",
+        "token_endpoint": f"{base}/api/oauth/token",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["none"],
+        "scopes_supported": ["knowledge:read", "drafts:write", "images:generate"],
+    }

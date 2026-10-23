@@ -16,6 +16,7 @@ from cmd.api.routes.mcp import discovery_router as oauth_discovery_router
 from cmd.api.routes.mcp import router as mcp_router
 from cmd.api.routes.media import router as media_router
 from cmd.api.routes.meta import router as meta_router
+from cmd.api.routes.oauth import router as oauth_router
 from cmd.api.routes.products import router as products_router
 from cmd.api.routes.proposals import router as proposals_router
 from cmd.api.routes.publish_approvals import router as publish_approvals_router
@@ -116,6 +117,7 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(meta_router, prefix="/api")
     application.include_router(setup_router, prefix="/api")
     application.include_router(mcp_router, prefix="/api")
+    application.include_router(oauth_router, prefix="/api")
     # ADR 0006 exception (ADR 0051 §2): OAuth discovery metadata must sit at
     # the domain root, so this one router mounts without the /api prefix.
     # Ingress must route /.well-known/oauth-* to the API, not the SPA.
