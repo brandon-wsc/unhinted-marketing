@@ -38,6 +38,23 @@ class BddApi:
     def post(self, path: str, **kwargs: Any) -> Response:
         return self.request("POST", path, **kwargs)
 
+    def mcp_rpc(self, method: str, params: dict | None = None, *, token: str | None) -> Response:
+        """One JSON-RPC request to ``/api/mcp`` (ADR 0051; see tests/api/mcp_helpers.py)."""
+        from tests.api.mcp_helpers import MCP_PATH, rpc_body, rpc_headers
+
+        name = (params or {}).get("name")
+        return self.post(
+            MCP_PATH,
+            json=rpc_body(method, params),
+            headers=rpc_headers(method, name=name, token=token),
+        )
+
+    def mcp_list_tools(self, token: str | None) -> Response:
+        return self.mcp_rpc("tools/list", token=token)
+
+    def mcp_call(self, tool: str, arguments: dict, token: str | None) -> Response:
+        return self.mcp_rpc("tools/call", {"name": tool, "arguments": arguments}, token=token)
+
 
 @pytest.fixture
 def bdd_ctx() -> dict:
