@@ -1,8 +1,8 @@
 """JSON-RPC dispatch surface (internal/mcp/server.py) — ADR 0051 §8.
 
-Handshake methods, notifications, batches, and the §13 per-grant rate
-window — all pure logic, no Postgres. Tool handlers are not exercised
-here; they need a live grant and are covered under tests/api/.
+Handshake methods, notifications, and the §13 per-grant rate window —
+all pure logic, no Postgres. Tool handlers are not exercised here; they
+need a live grant and are covered under tests/api/.
 """
 
 from __future__ import annotations
@@ -72,27 +72,12 @@ async def test_notification_returns_none():
 
 
 @pytest.mark.asyncio
-async def test_batch_dispatches_requests_and_drops_notifications():
-    body = [
-        _req("initialize", rpc_id=1),
-        _req("ping", rpc_id=2),
-        {"jsonrpc": "2.0", "method": "notifications/cancelled"},
-    ]
+async def test_batch_body_is_invalid_request():
+    """MCP dropped JSON-RPC batching in 2025-06-18 — arrays are refused."""
+    body = [_req("initialize", rpc_id=1), _req("ping", rpc_id=2)]
     res = await server.dispatch(_ctx(), body)
-    assert isinstance(res, list) and len(res) == 2
-    assert [r["id"] for r in res] == [1, 2]
-
-
-@pytest.mark.asyncio
-async def test_batch_of_only_notifications_returns_none():
-    body = [{"jsonrpc": "2.0", "method": "notifications/a"}]
-    assert await server.dispatch(_ctx(), body) is None
-
-
-@pytest.mark.asyncio
-async def test_empty_batch_is_invalid_request():
-    res = await server.dispatch(_ctx(), [])
     assert res["error"]["code"] == server.RPC_INVALID_REQUEST
+    assert res["id"] is None
 
 
 @pytest.mark.asyncio

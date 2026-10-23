@@ -592,6 +592,7 @@ See `.env.example`. Local `.env` is gitignored.
 | **H2** | Interrupt resume ignores user intent (`ainvoke(None)`) | ✅ **Mitigated** — [ADR 0004](./adr/0004-stop-discard-and-image-resume.md) + [ADR 0016](./adr/0016-queue-send-while-turn-in-flight.md) + [ADR 0028](./adr/0028-angle-pick-before-draft.md): Stop discards parked turns; FE queue while in-flight and at either park; image resume `POST /resume-image` only; angle pick via `POST /choose-angle` or typed `/messages`; `/messages` 409 while busy or image-parked; chat/JSON completions stream + `aclose` on cancel (best-effort upstream abort) |
 | **H3** | `use-session.ts` correctness concentrated & untested | ✅ **Mitigated** — pure helpers in `session-helpers.ts` (+ Tier 1 cov gate); `use-session.test.ts` covers restore / send / queue-while-in-flight / optimistic `route_intent` / confirm / SSE merge / SSE reconnect + resync / switch isolation + composer draft save/restore |
 | **I1** | Confirm idempotency key global (cross-user receipt leak) | ✅ **Mitigated** — foreign key → 409; same session/user only replays |
+| **H4** | CIMD client-metadata fetch can DNS-rebind — `_host_is_public` resolves once at validation, httpx re-resolves on connect | ⏸ **Held** — SSRF guard (https-only, no private ranges, redirects refused, size/time caps) ships in [ADR 0051](./adr/0051-remote-mcp-server.md) `internal/mcp/clients.py`; a hostile DNS answer could still change between check and fetch. Fix = pin the resolved peer IP for the request |
 
 ### Other gaps
 

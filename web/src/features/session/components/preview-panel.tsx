@@ -113,7 +113,9 @@ export function PreviewPanel({
   const [governance, setGovernance] = useState<CompanyGovernanceSettings | null>(null);
 
   // ADR 0041: members under the approval policy send drafts for sign-off.
-  const isOrgMember = user?.organizations[0]?.role === "member";
+  // The role is read for the session's company, not organizations[0] — a
+  // deep-linked session can belong to another org (ADR 0051 §12).
+  const isOrgMember = user?.organizations.find((o) => o.id === companyId)?.role === "member";
   useAsyncData(
     async () =>
       companyId && isOrgMember ? apiGetGovernance(accessToken, companyId) : Promise.resolve(null),

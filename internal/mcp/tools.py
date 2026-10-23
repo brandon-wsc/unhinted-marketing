@@ -330,24 +330,27 @@ async def get_post_draft(ctx: McpContext, args: SessionToolArgs) -> dict[str, An
         if error:
             return {**result, "status": "failed", "error": str(error)}
 
-        preview = await service.latest_preview_payload(db, session)
-        if preview:
-            # §12 — approval_token never leaves the server.
-            return {
-                **result,
-                "status": "ready",
-                "confirm_url": _confirm_url(session.id),
-                "preview": {
-                    "copy": preview.get("copy"),
-                    "image_url": preview.get("image_url"),
-                    "media": preview.get("media"),
-                },
-            }
-
         messages = await repos.list_session_messages(db, session.id)
+        preview = await service.latest_preview_payload(db, session)
+    # Surface the last assistant turn output so a question asked after the
+    # preview exists is not hidden behind `ready`.
+    last = next((m for m in reversed(messages) if m.role == "assistant"), None)
+    if preview:
+        # §12 — approval_token never leaves the server.
+        return {
+            **result,
+            "status": "ready",
+            "confirm_url": _confirm_url(session.id),
+            "message": last.content if last else None,
+            "preview": {
+                "copy": preview.get("copy"),
+                "image_url": preview.get("image_url"),
+                "media": preview.get("media"),
+            },
+        }
+
     # Turn ended without a park or preview — the assistant asked or said
     # something. Surface it so the client can answer via revise_post_draft.
-    last = next((m for m in reversed(messages) if m.role == "assistant"), None)
     return {
         **result,
         "status": "awaiting_reply",

@@ -326,6 +326,26 @@ async def test_manual_edit_after_failed_turn_reports_ready(client) -> None:
     assert result["status"] == "ready"
 
 
+async def test_ready_carries_the_latest_assistant_message(client) -> None:
+    """A question asked after the preview exists must not be hidden by `ready`."""
+    ctx, _body = await _ctx(client)
+    async with open_session() as db:
+        session = await repos.create_session(
+            db, user_id=ctx.claims.user_id, company_id=ctx.claims.company_id
+        )
+        session.mode = MODE_PREVIEW
+        session.state = {"revision": 0}
+        await db.flush()
+        await service.update_session_draft(db, session, caption="中秋快樂", hashtags=[], cta="")
+        db.add(SessionMessage(session_id=session.id, role="assistant", content="要唔要加優惠碼？"))
+        await db.commit()
+        sid = session.id
+
+    result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
+    assert result["status"] == "ready"
+    assert result["message"] == "要唔要加優惠碼？"
+
+
 async def test_no_park_no_preview_reports_awaiting_reply(client) -> None:
     ctx, _body = await _ctx(client)
     async with open_session() as db:

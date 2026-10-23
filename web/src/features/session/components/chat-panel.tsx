@@ -118,8 +118,8 @@ export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string 
   // user on several companies never confirms a post under the wrong org.
   const [sessionCompanyId, setSessionCompanyId] = useState<string | undefined>();
   const companyId = sessionCompanyId ?? user?.organizations[0]?.id;
-  const canPromoteExemplar =
-    user?.organizations[0]?.role === "owner" || user?.organizations[0]?.role === "admin";
+  const sessionOrgRole = user?.organizations.find((o) => o.id === companyId)?.role;
+  const canPromoteExemplar = sessionOrgRole === "owner" || sessionOrgRole === "admin";
   const {
     session,
     messages,

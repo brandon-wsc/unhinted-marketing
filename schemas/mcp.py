@@ -8,19 +8,9 @@ stays a UI click (ADR 0003).
 from __future__ import annotations
 
 import uuid
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
-
-MCPToolStatus = Literal[
-    "running",
-    "awaiting_angle_pick",
-    "awaiting_image_ok",
-    "awaiting_reply",
-    "ready",
-    "failed",
-    "cancelled",
-]
 
 # §5 scope table — the only mapping between tools and scopes.
 MCP_TOOL_SCOPES: dict[str, str] = {
@@ -117,18 +107,3 @@ class OAuthErrorBody(BaseModel):
 
     error: str
     error_description: str | None = None
-
-
-class ToolResult(BaseModel):
-    """``structuredContent`` shared by every tool call.
-
-    Declared for generated-contract completeness (§7); the JSON-RPC layer
-    assembles results as plain dicts since the envelope is transport-shaped.
-    """
-
-    session_id: uuid.UUID | None = None
-    status: MCPToolStatus | None = None
-    reason: str | None = None
-    error: str | None = None
-    # ready / parked payloads; angle_pick_payload keys when awaiting a pick.
-    data: dict[str, Any] | None = None

@@ -202,17 +202,15 @@ def _initialize_result(params: dict[str, Any]) -> dict:
     }
 
 
-async def dispatch(ctx: McpContext, body: Any) -> dict | list | None:
-    """Requests → responses. ``None`` means notifications only → HTTP 202.
+async def dispatch(ctx: McpContext, body: Any) -> dict | None:
+    """Request → response. ``None`` means a notification → HTTP 202.
 
-    Batches are supported: each item gets its own response, notifications
-    (no ``id``) are silently consumed as JSON-RPC requires.
+    MCP removed JSON-RPC batching in 2025-06-18, so an array body is an
+    invalid request — answering it would also hide a mid-batch refusal
+    after earlier items already started turns.
     """
     if isinstance(body, list):
-        if not body:
-            return _rpc_error(None, RPC_INVALID_REQUEST, "Empty batch")
-        responses = [resp for item in body if (resp := await _dispatch_one(ctx, item)) is not None]
-        return responses or None
+        return _rpc_error(None, RPC_INVALID_REQUEST, "JSON-RPC batching is not supported")
     return await _dispatch_one(ctx, body)
 
 
