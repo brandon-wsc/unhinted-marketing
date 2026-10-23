@@ -16,12 +16,16 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Install dependencies first for layer caching, then the source.
-COPY pyproject.toml README.md ./
+# Install dependencies first for layer caching, then the source. Deps come from
+# the hash-pinned lock (scripts/regen_deps.sh); hatchling is pinned there too so
+# --no-build-isolation never resolves build deps from PyPI at image build time.
+COPY pyproject.toml README.md requirements.txt ./
 COPY internal ./internal
 COPY schemas ./schemas
 COPY cmd ./cmd
-RUN python -m venv /opt/venv && /opt/venv/bin/pip install .
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --require-hashes -r requirements.txt \
+    && /opt/venv/bin/pip install --no-deps --no-build-isolation .
 
 FROM python:3.12-slim
 
