@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 GATE_ANGLE = "angle"
 GATE_IMAGE = "image"
+TURN_ERROR_KEY = "mcp_turn_error"
+TURN_ERROR_REVISION_KEY = "mcp_turn_error_revision"
 
 
 async def get_brand_context(ctx: McpContext) -> dict[str, Any]:
@@ -125,16 +127,35 @@ async def _record_turn_error(session_id: uuid.UUID, exc: BaseException) -> None:
             session = await repos.get_session(db, session_id)
             if session is None:
                 return
-            session.state = {**(session.state or {}), "mcp_turn_error": str(exc)}
+            state = session.state or {}
+            # Stamp the revision: a completed turn rebuilds state (dropping
+            # these keys), but non-turn edits copy state and bump the revision.
+            session.state = {
+                **state,
+                TURN_ERROR_KEY: str(exc),
+                TURN_ERROR_REVISION_KEY: state.get("revision"),
+            }
             await db.commit()
     except Exception:
         logger.warning("could not persist MCP turn error", exc_info=True)
 
 
+def _live_turn_error(state: dict[str, Any]) -> str | None:
+    """The recorded failure, unless a later edit moved the draft past it."""
+    error = state.get(TURN_ERROR_KEY)
+    if not error:
+        return None
+    if state.get(TURN_ERROR_REVISION_KEY, state.get("revision")) != state.get("revision"):
+        return None
+    return str(error)
+
+
 def _clear_turn_error(session: Session) -> None:
     state = session.state or {}
-    if "mcp_turn_error" in state:
-        session.state = {k: v for k, v in state.items() if k != "mcp_turn_error"}
+    if TURN_ERROR_KEY in state or TURN_ERROR_REVISION_KEY in state:
+        session.state = {
+            k: v for k, v in state.items() if k not in (TURN_ERROR_KEY, TURN_ERROR_REVISION_KEY)
+        }
 
 
 def _compose_content(brief: str, context: str | None) -> str:
@@ -305,7 +326,7 @@ async def get_post_draft(ctx: McpContext, args: SessionToolArgs) -> dict[str, An
                 "copy": state.get("draft"),
                 "image_plan": state.get("image_plan"),
             }
-        error = state.get("mcp_turn_error") or state.get("error")
+        error = _live_turn_error(state) or state.get("error")
         if error:
             return {**result, "status": "failed", "error": str(error)}
 

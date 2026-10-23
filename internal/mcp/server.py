@@ -38,6 +38,9 @@ RPC_INTERNAL_ERROR = -32603
 
 # Spec version we answer `initialize` with; clients advertise theirs in params.
 PROTOCOL_VERSION = "2026-07-28"
+# Versions whose Streamable HTTP + tools/structuredContent shape this surface
+# satisfies. Anything else (e.g. 2025-03-26, no structuredContent) gets ours.
+SUPPORTED_PROTOCOL_VERSIONS = frozenset({PROTOCOL_VERSION, "2025-11-25", "2025-06-18"})
 
 # §13 — per-grant rate limit on mutating tools, sliding 60s window. The
 # concurrent-draft cap lives next to the turn tracking in tools.py.
@@ -190,8 +193,10 @@ def _initialize_result(params: dict[str, Any]) -> dict:
     from cmd.api.routes.meta import API_VERSION
 
     return {
-        # Answer the client's version when offered; ours when they send none.
-        "protocolVersion": params.get("protocolVersion") or PROTOCOL_VERSION,
+        # Keep the client's version only when we support it; otherwise offer ours.
+        "protocolVersion": requested
+        if (requested := params.get("protocolVersion")) in SUPPORTED_PROTOCOL_VERSIONS
+        else PROTOCOL_VERSION,
         "capabilities": {"tools": {"listChanged": False}},
         "serverInfo": {"name": "unhinted-marketing", "version": API_VERSION},
     }

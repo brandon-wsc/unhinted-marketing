@@ -42,6 +42,18 @@ async def test_initialize_returns_handshake_result():
 
 
 @pytest.mark.asyncio
+async def test_initialize_keeps_a_supported_client_version():
+    res = await server.dispatch(_ctx(), _req("initialize", {"protocolVersion": "2025-06-18"}))
+    assert res["result"]["protocolVersion"] == "2025-06-18"
+
+
+@pytest.mark.asyncio
+async def test_initialize_never_echoes_an_unsupported_version():
+    res = await server.dispatch(_ctx(), _req("initialize", {"protocolVersion": "2024-11-05"}))
+    assert res["result"]["protocolVersion"] == server.PROTOCOL_VERSION
+
+
+@pytest.mark.asyncio
 async def test_ping_returns_empty_result():
     res = await server.dispatch(_ctx(), _req("ping"))
     assert res == {"jsonrpc": "2.0", "id": 1, "result": {}}

@@ -31,8 +31,10 @@ from internal.mcp.tokens import McpAccessClaims, create_mcp_access_token
 from internal.memory import repos
 from internal.memory.database import open_session
 from internal.memory.models import LlmCallRecord, OAuthRefreshToken, Session, SessionMessage
+from internal.session import service
 from internal.session.graph import set_session_graph
 from internal.session.guards import MemberTokenLimitExceeded
+from internal.session.state import MODE_PREVIEW
 from schemas.mcp import (
     RevisePostDraftArgs,
     SessionToolArgs,
@@ -141,6 +143,23 @@ async def test_refresh_requires_the_grants_client_id(client) -> None:
                 db, refresh_token=refresh, client_id="https://evil.example/x.json"
             )
         assert exc.value.error == "invalid_client"
+
+
+async def test_refresh_without_client_id_is_rejected(client) -> None:
+    """OAuth 2.1 — a public client must identify itself on every token request."""
+    ctx, _body = await _ctx(client)
+    async with open_session() as db:
+        refresh = await oauth._mint_refresh(db, ctx.grant)
+        await db.commit()
+        with pytest.raises(oauth.OAuthError) as exc:
+            await oauth.rotate_refresh(db, refresh_token=refresh, client_id=None)
+        assert exc.value.error == "invalid_request"
+
+    res = await client.post(
+        "/api/oauth/token", data={"grant_type": "refresh_token", "refresh_token": refresh}
+    )
+    assert res.status_code == 400
+    assert res.json()["error"] == "invalid_request"
 
 
 async def test_reusing_a_rotated_refresh_kills_the_family(client) -> None:
@@ -280,6 +299,31 @@ async def test_turn_failure_reports_failed(client) -> None:
     result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
     assert result["status"] == "failed"
     assert "in progress" in result["error"]
+
+
+async def test_manual_edit_after_failed_turn_reports_ready(client) -> None:
+    """A non-turn edit (no state rebuild) bumps the revision past the failure."""
+    ctx, _body = await _ctx(client)
+    async with open_session() as db:
+        session = await repos.create_session(
+            db, user_id=ctx.claims.user_id, company_id=ctx.claims.company_id
+        )
+        session.mode = MODE_PREVIEW
+        session.state = {"revision": 0}
+        await db.commit()
+        sid = session.id
+
+    await tools._record_turn_error(sid, RuntimeError("provider down"))
+    failed = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
+    assert failed["status"] == "failed"
+
+    async with open_session() as db:
+        session = await repos.get_session(db, sid)
+        await service.update_session_draft(db, session, caption="中秋快樂", hashtags=[], cta="")
+        await db.commit()
+
+    result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
+    assert result["status"] == "ready"
 
 
 async def test_no_park_no_preview_reports_awaiting_reply(client) -> None:

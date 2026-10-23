@@ -262,8 +262,12 @@ async def exchange_code(
 
 
 async def rotate_refresh(
-    db: AsyncSession, *, refresh_token: str, client_id: str | None = None
+    db: AsyncSession, *, refresh_token: str, client_id: str | None
 ) -> OAuthTokenResponse:
+    # OAuth 2.1 — an unauthenticated (public) client must send client_id, or
+    # the refresh token is not bound to anyone.
+    if not client_id:
+        raise OAuthError("invalid_request", "client_id is required")
     row = await db.scalar(
         select(OAuthRefreshToken).where(
             OAuthRefreshToken.token_hash == hash_refresh_token(refresh_token)
@@ -286,7 +290,7 @@ async def rotate_refresh(
     grant = await get_active_grant(db, row.grant_id)
     if grant is None:
         raise OAuthError("invalid_grant", "grant revoked")
-    if client_id is not None and grant.client_id != client_id:
+    if grant.client_id != client_id:
         raise OAuthError("invalid_client", "client_id does not match the grant")
     row.revoked_at = datetime.now(UTC)
 
