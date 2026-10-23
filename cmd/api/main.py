@@ -12,6 +12,8 @@ from cmd.api.routes.auth import router as auth_router
 from cmd.api.routes.byok import router as byok_router
 from cmd.api.routes.companies import router as companies_router
 from cmd.api.routes.invites import router as invites_router
+from cmd.api.routes.mcp import discovery_router as oauth_discovery_router
+from cmd.api.routes.mcp import router as mcp_router
 from cmd.api.routes.media import router as media_router
 from cmd.api.routes.meta import router as meta_router
 from cmd.api.routes.products import router as products_router
@@ -113,6 +115,11 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     application.include_router(admin_router, prefix="/api")
     application.include_router(meta_router, prefix="/api")
     application.include_router(setup_router, prefix="/api")
+    application.include_router(mcp_router, prefix="/api")
+    # ADR 0006 exception (ADR 0051 §2): OAuth discovery metadata must sit at
+    # the domain root, so this one router mounts without the /api prefix.
+    # Ingress must route /.well-known/oauth-* to the API, not the SPA.
+    application.include_router(oauth_discovery_router)
 
     @application.exception_handler(SessionGuardError)
     async def session_guard_error_handler(request: Request, exc: SessionGuardError):
