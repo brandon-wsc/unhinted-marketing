@@ -34,7 +34,6 @@ import {
   filterOfferedAngles,
   filterOfferedPersonas,
   type ImageFormat,
-  parseAngleIndex,
   isConfirmSuccessStatus,
   isUserFacingAgentNode,
   MAX_ATTACHMENTS,
@@ -45,6 +44,7 @@ import {
   newStagedAttachment,
   OUTCOME_NODE,
   parseAgentProgress,
+  parseAngleIndex,
   parseBrief,
   parseConfirmReceipt,
   parseDraftCopy,
@@ -122,7 +122,7 @@ type LiveChatSnapshot = {
 // REST is the source of truth: POST /messages returns the full transcript plus
 // turn events. SSE is an enhancement layer (live assistant messages, mode
 // changes, later agent progress) that merges into the same state with dedupe.
-export function useSession(companyId: string | undefined) {
+export function useSession(companyId: string | undefined, requestedSessionId?: string) {
   const { accessToken, refreshAccessToken } = useAuth();
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -978,6 +978,7 @@ export function useSession(companyId: string | undefined) {
       awaiting_angle_pick?: boolean;
       personas?: unknown;
       recommended_persona?: string | null;
+      recommended_angle_index?: number | null;
       recommended_image_format?: string | null;
       forked_from?: ForkOrigin | null;
     }) => {
@@ -1296,7 +1297,9 @@ export function useSession(companyId: string | undefined) {
     }
     if (restoreAttemptedRef.current === companyId) return;
     restoreAttemptedRef.current = companyId;
-    const remembered = getRememberedSessionId(companyId);
+    // ADR 0051 §12 — an explicit /sessions/:id deep link wins over the
+    // remembered chat for this company.
+    const remembered = requestedSessionId ?? getRememberedSessionId(companyId);
     if (!remembered) {
       setRestoring(false);
       void refreshHistory();
@@ -1312,7 +1315,15 @@ export function useSession(companyId: string | undefined) {
         setRestoring(false);
         void refreshHistory();
       });
-  }, [companyId, accessToken, openSession, refreshHistory, startNewChat]);
+  }, [companyId, accessToken, requestedSessionId, openSession, refreshHistory, startNewChat]);
+
+  // A later deep-link navigation (different session id while already mounted)
+  // routes through openSession; the restore effect above owns the first mount.
+  useEffect(() => {
+    if (!requestedSessionId || requestedSessionId === sessionIdRef.current) return;
+    if (restoreAttemptedRef.current !== companyId) return;
+    void openSession(requestedSessionId).catch(() => {});
+  }, [requestedSessionId, companyId, openSession]);
 
   const stopTurn = useCallback(
     async (mode: "discard" | "interrupt" = "discard") => {

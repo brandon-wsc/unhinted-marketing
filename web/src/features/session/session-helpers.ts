@@ -33,6 +33,8 @@ export function parseBrief(data: unknown): SessionBrief | null {
     cannot_do: cannotDo,
     angles,
     persona: typeof raw.persona === "string" ? raw.persona : null,
+    recommended_angle_index:
+      typeof raw.recommended_angle_index === "number" ? raw.recommended_angle_index : null,
     summary,
   };
 }

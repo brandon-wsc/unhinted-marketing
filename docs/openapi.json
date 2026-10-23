@@ -11200,6 +11200,16 @@
             "title": "Pinned",
             "default": false
           },
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "matched_snippet": {
             "anyOf": [
               {
@@ -11358,6 +11368,98 @@
         ],
         "title": "SessionMessagesResponse"
       },
+      "SessionOrigin": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "mcp",
+            "title": "Kind"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "auto_picks": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionOriginAutoPicks"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "SessionOrigin",
+        "description": "Provenance for sessions not started in our UI (ADR 0051 §11)."
+      },
+      "SessionOriginAutoPicks": {
+        "properties": {
+          "angle_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Angle Index"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "image_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Format"
+          },
+          "image_approved": {
+            "type": "boolean",
+            "title": "Image Approved",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "SessionOriginAutoPicks",
+        "description": "What auto mode answered at the gates (ADR 0051 §11)."
+      },
       "SessionResearch": {
         "properties": {
           "session_id": {
@@ -11413,6 +11515,16 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

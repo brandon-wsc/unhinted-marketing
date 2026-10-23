@@ -78,6 +78,7 @@ describe("parseBrief", () => {
       cannot_do: [],
       angles: ["a"],
       persona: "founder",
+      recommended_angle_index: null,
     });
   });
 
@@ -88,6 +89,7 @@ describe("parseBrief", () => {
       cannot_do: [],
       angles: [],
       persona: null,
+      recommended_angle_index: null,
     });
   });
 });

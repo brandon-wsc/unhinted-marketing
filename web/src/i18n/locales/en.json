@@ -65,6 +65,33 @@
       "save": "Save",
       "saving": "Saving…",
       "saved": "Saved"
+    },
+    "connectedApps": {
+      "title": "Connected apps",
+      "empty": "No external AI apps are connected yet.",
+      "meta": "{{company}} · Connected {{date}} · Last used {{lastUsed}}",
+      "neverUsed": "never",
+      "revoke": "Revoke",
+      "revoking": "Revoking…"
+    }
+  },
+  "oauth": {
+    "consent": {
+      "title": "Connect an app",
+      "subtitle": "{{client}} wants to use Unhinted with your company.",
+      "scopesLabel": "It is asking to:",
+      "companyLabel": "Company",
+      "noCompanies": "You are not a member of any company.",
+      "imagesNote": "Approving this also lets the app generate images, which spends your token budget.",
+      "approve": "Connect",
+      "deny": "Deny",
+      "working": "Connecting…",
+      "invalidRequest": "This authorization link is invalid or expired.",
+      "scope": {
+        "knowledge_read": "Read your brand voice and product context",
+        "drafts_write": "Create and revise post drafts",
+        "images_generate": "Generate images"
+      }
     }
   },
   "chat": {
@@ -240,6 +267,7 @@
       "empty": "No chats yet",
       "noResults": "No chats match your search",
       "untitled": "Untitled chat",
+      "fromClient": "From {{client}}",
       "restoring": "Restoring chat…",
       "openFailed": "Could not open that chat",
       "createFailed": "Could not start a new chat",

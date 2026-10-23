@@ -109,7 +109,7 @@ function overlayStackHeight(el: HTMLElement): number {
   return Math.max(0, Math.round(wrap.bottom - top));
 }
 
-export function ChatPanel() {
+export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string }) {
   const { t } = useTranslation();
   const { user, accessToken } = useAuth();
   const { showError, showInfo } = useToast();
@@ -185,7 +185,7 @@ export function ChatPanel() {
     consumeStagedAttachments,
     restoreStagedAttachments,
     saveAttachment,
-  } = useSession(companyId);
+  } = useSession(companyId, requestedSessionId);
   const {
     questions,
     loading: questionsLoading,

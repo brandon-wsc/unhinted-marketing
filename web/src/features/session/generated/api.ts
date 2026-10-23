@@ -3805,6 +3805,7 @@ export type components = {
              * @default false
              */
             pinned: boolean;
+            origin?: components["schemas"]["SessionOrigin"] | null;
             /** Matched Snippet */
             matched_snippet?: string | null;
         };
@@ -3845,6 +3846,39 @@ export type components = {
             /** Recommended Image Format */
             recommended_image_format?: ("single" | "comic_4panel") | null;
             forked_from?: components["schemas"]["ForkOrigin"] | null;
+        };
+        /**
+         * SessionOrigin
+         * @description Provenance for sessions not started in our UI (ADR 0051 §11).
+         */
+        SessionOrigin: {
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "mcp";
+            /** Client Id */
+            client_id?: string | null;
+            /** Client Name */
+            client_name?: string | null;
+            auto_picks?: components["schemas"]["SessionOriginAutoPicks"] | null;
+        };
+        /**
+         * SessionOriginAutoPicks
+         * @description What auto mode answered at the gates (ADR 0051 §11).
+         */
+        SessionOriginAutoPicks: {
+            /** Angle Index */
+            angle_index?: number | null;
+            /** Persona */
+            persona?: string | null;
+            /** Image Format */
+            image_format?: string | null;
+            /**
+             * Image Approved
+             * @default false
+             */
+            image_approved: boolean;
         };
         /** SessionResearch */
         SessionResearch: {
@@ -3887,6 +3921,7 @@ export type components = {
              * Format: date-time
              */
             updated_at: string;
+            origin?: components["schemas"]["SessionOrigin"] | null;
         };
         /** SessionTrace */
         SessionTrace: {

@@ -12,6 +12,7 @@ import { DashboardPage } from "@/pages/dashboard";
 import { InviteAcceptPage } from "@/pages/invite-accept";
 import { LegacyAdminRedirect } from "@/pages/legacy-admin-redirect";
 import { LoginPage } from "@/pages/login";
+import { OAuthConsentPage } from "@/pages/oauth-consent";
 import { RegisterPage } from "@/pages/register";
 import { SetupPage } from "@/pages/setup";
 import { SystemPage } from "@/pages/system";
@@ -33,6 +34,8 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/setup" element={<SetupPage />} />
                   <Route path="/invite/:token" element={<InviteAcceptPage />} />
                   <Route path="/" element={<DashboardPage />} />
+                  <Route path="/sessions/:sessionId" element={<DashboardPage />} />
+                  <Route path="/oauth/consent" element={<OAuthConsentPage />} />
                   <Route path="/account" element={<AccountPage />} />
                   <Route path="/settings" element={<CompanySettingsPage />} />
                   <Route path="/system" element={<SystemPage />} />

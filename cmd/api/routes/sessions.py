@@ -100,6 +100,7 @@ from schemas.session import (
     SessionListResponse,
     SessionMediaListResponse,
     SessionMessagesResponse,
+    SessionOrigin,
     SessionResponse,
     StopSessionRequest,
     StopSessionResponse,
@@ -115,6 +116,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
+def _session_origin(session: Session) -> SessionOrigin | None:
+    raw = session.origin
+    if not isinstance(raw, dict) or raw.get("kind") != "mcp":
+        return None
+    try:
+        return SessionOrigin.model_validate(raw)
+    except Exception:
+        return None
+
+
 def _session_response(session: Session) -> SessionResponse:
     return SessionResponse(
         id=session.id,
@@ -124,6 +135,7 @@ def _session_response(session: Session) -> SessionResponse:
         status=session.status,
         created_at=session.created_at,
         updated_at=session.updated_at,
+        origin=_session_origin(session),
     )
 
 
@@ -263,6 +275,7 @@ async def list_sessions(
                         _draft_text((session.state or {}).get("draft")),
                         _draft_text(draft_copy),
                     ),
+                    origin=_session_origin(session),
                 )
                 for session, preview, match_content, draft_copy in rows
             ]
@@ -280,6 +293,7 @@ async def list_sessions(
                 updated_at=session.updated_at,
                 title=_display_title(session, preview),
                 pinned=bool(session.pinned),
+                origin=_session_origin(session),
             )
             for session, preview in rows
         ]
@@ -428,6 +442,7 @@ async def update_session(
         updated_at=session.updated_at,
         title=_display_title(session, preview),
         pinned=bool(session.pinned),
+        origin=_session_origin(session),
     )
 
 
