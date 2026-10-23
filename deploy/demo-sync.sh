@@ -31,6 +31,10 @@ git fetch origin main
 
 if git show-ref --verify --quiet refs/heads/main; then
   git checkout main
+  if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]; then
+    echo "demo-sync: already at origin/main — nothing to do"
+    exit 0
+  fi
   git merge --ff-only origin/main
 else
   git checkout -b main --track origin/main
@@ -41,4 +45,9 @@ echo "demo-sync: building on-prem stack from main @ ${sha}"
 
 cd "$ROOT/deploy"
 # "$@" are Compose global options (-f, --env-file) and must precede `up`.
+# Gate the rebuild: a broken compose on main must fail here, not mid-deploy.
+if ! docker compose "$@" config -q; then
+  echo "demo-sync: compose failed validation — aborting, stack left untouched" >&2
+  exit 1
+fi
 exec docker compose "$@" up -d --build
