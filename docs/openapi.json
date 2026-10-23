@@ -215,8 +215,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/ConnectedApp"
                   },
                   "type": "array",
                   "title": "Response List Connected Apps Api Auth Me Connected Apps Get"
@@ -5961,8 +5960,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
                   "title": "Response Mcp Endpoint Api Mcp Post"
                 }
               }
@@ -6122,11 +6119,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Consent Api Oauth Authorize Post"
-                }
+                "schema": {}
               }
             }
           },
@@ -6173,11 +6166,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Authorize Request Details Api Oauth Authorize Request Get"
-                }
+                "schema": {}
               }
             }
           },
@@ -6207,11 +6196,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Token Api Oauth Token Post"
-                }
+                "schema": {}
               }
             }
           }
@@ -7681,6 +7666,62 @@
         ],
         "title": "ConfirmSessionResponse"
       },
+      "ConnectedApp": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "client_id": {
+            "type": "string",
+            "title": "Client Id"
+          },
+          "client_name": {
+            "type": "string",
+            "title": "Client Name"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "client_id",
+          "client_name",
+          "company_id",
+          "scopes",
+          "created_at",
+          "last_used_at"
+        ],
+        "title": "ConnectedApp",
+        "description": "GET /api/auth/me/connected-apps row — one live grant."
+      },
       "ConsentRequest": {
         "properties": {
           "request_id": {
@@ -7689,8 +7730,15 @@
             "title": "Request Id"
           },
           "company_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Company Id"
           },
           "approve": {
@@ -7701,11 +7749,10 @@
         "type": "object",
         "required": [
           "request_id",
-          "company_id",
           "approve"
         ],
         "title": "ConsentRequest",
-        "description": "POST /api/oauth/authorize body — the SPA consent decision (§3)."
+        "description": "POST /api/oauth/authorize body — the SPA consent decision (§3).\n\n``company_id`` is required only when approving; a deny needs no company."
       },
       "CreateSessionRequest": {
         "properties": {
@@ -9100,13 +9147,18 @@
           "version": {
             "type": "string",
             "title": "Version"
+          },
+          "web_base_url": {
+            "type": "string",
+            "title": "Web Base Url"
           }
         },
         "type": "object",
         "required": [
           "deployment_mode",
           "app_env",
-          "version"
+          "version",
+          "web_base_url"
         ],
         "title": "MetaResponse"
       },

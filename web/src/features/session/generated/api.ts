@@ -2463,8 +2463,36 @@ export type components = {
             error_kind?: string | null;
         };
         /**
+         * ConnectedApp
+         * @description GET /api/auth/me/connected-apps row — one live grant.
+         */
+        ConnectedApp: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Client Id */
+            client_id: string;
+            /** Client Name */
+            client_name: string;
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /** Scopes */
+            scopes: string[];
+            /** Created At */
+            created_at: string;
+            /** Last Used At */
+            last_used_at: string | null;
+        };
+        /**
          * ConsentRequest
          * @description POST /api/oauth/authorize body — the SPA consent decision (§3).
+         *
+         *     ``company_id`` is required only when approving; a deny needs no company.
          */
         ConsentRequest: {
             /**
@@ -2472,11 +2500,8 @@ export type components = {
              * Format: uuid
              */
             request_id: string;
-            /**
-             * Company Id
-             * Format: uuid
-             */
-            company_id: string;
+            /** Company Id */
+            company_id?: string | null;
             /** Approve */
             approve: boolean;
         };
@@ -2951,6 +2976,8 @@ export type components = {
             app_env: string;
             /** Version */
             version: string;
+            /** Web Base Url */
+            web_base_url: string;
         };
         /** NodeStepDetail */
         NodeStepDetail: {
@@ -4704,9 +4731,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["ConnectedApp"][];
                 };
             };
         };
@@ -8021,9 +8046,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": unknown;
                 };
             };
         };
@@ -8085,9 +8108,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -8118,9 +8139,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -8149,9 +8168,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": unknown;
                 };
             };
         };
