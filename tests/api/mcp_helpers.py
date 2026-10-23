@@ -18,9 +18,10 @@ tests/api/bdd/features/mcp.feature):
   client_name, scopes: list[str])`` → grant row with ``.id`` (table
   ``oauth_grants``, FK to ``users`` so ``clean_db``'s TRUNCATE … CASCADE
   clears it). The caller commits.
-- ``internal.mcp.tokens.create_mcp_access_token(grant)`` → JWT string,
-  ``typ="mcp_access"`` (web ``access`` tokens are refused at ``/api/mcp``;
-  MCP tokens are refused by every other ``/api`` route).
+- ``internal.mcp.tokens.create_mcp_access_token(grant)`` → ``(token, exp)``;
+  the JWT carries ``type="mcp_access"`` (web ``access`` tokens are refused at
+  ``/api/mcp``; MCP tokens are refused by every other ``/api`` route) and
+  ``aud`` = the install's MCP URL (RFC 8707).
 - ``DELETE /api/auth/me/connected-apps/{grant_id}`` (web bearer) → 204;
   the next MCP call with that grant's token is 401.
 - ``sessions.origin`` JSONB: ``{"kind": "mcp", "grant_id", "client_id",
@@ -158,7 +159,8 @@ async def issue_mcp_token(
             scopes=scopes,
         )
         await db.commit()
-        return grant.id, create_mcp_access_token(grant)
+        token, _expires = create_mcp_access_token(grant)
+        return grant.id, token
 
 
 async def fetch_session(session_id: uuid.UUID):

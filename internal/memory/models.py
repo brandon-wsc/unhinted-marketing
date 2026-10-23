@@ -125,6 +125,34 @@ class RefreshToken(Base):
     user: Mapped["User"] = relationship(back_populates="refresh_tokens")
 
 
+class OAuthGrant(Base):
+    """ADR 0051 — one user consenting one external client to one company.
+
+    Access tokens carry only the grant id; revocation, membership and
+    ``is_active`` are re-checked live per call, so this row is the real gate.
+    """
+
+    __tablename__ = "oauth_grants"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Client ID Metadata Document URL (CIMD) that identified the app.
+    client_id: Mapped[str] = mapped_column(String(500), nullable=False)
+    client_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    # Subset of {"knowledge:read", "drafts:write", "images:generate"}.
+    scopes: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class RawNewsEvent(Base):
     __tablename__ = "raw_news_events"
 
@@ -239,6 +267,9 @@ class Session(Base):
         Boolean, default=False, server_default="false", nullable=False
     )
     state: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # ADR 0051 §11 — None for UI turns; {"kind": "mcp", grant_id, client_id,
+    # client_name, auto_picks?} for sessions an external app started.
+    origin: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Fork lineage (ADR 0017). forked_from_message_id has no FK: messages
     # cascade-delete with their session, and the lineage label must survive that.
     forked_from_session_id: Mapped[uuid.UUID | None] = mapped_column(

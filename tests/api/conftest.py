@@ -49,6 +49,7 @@ TRUNCATE_TABLES = (
     "storage_migrations",
     "storage_configs",
     "instance_settings",
+    "oauth_grants",
     "refresh_tokens",
     "organization_members",
     "entities",

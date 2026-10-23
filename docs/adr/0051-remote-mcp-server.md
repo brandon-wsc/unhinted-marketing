@@ -50,14 +50,14 @@ Target clients are consumer AI apps, which connect from their cloud to a public 
 
   | Claim | Value |
   |---|---|
-  | `typ` | `"mcp_access"` |
+  | `type` | `"mcp_access"` (codebase convention, as in `access`/`refresh`) |
   | `aud` | MCP resource URL |
   | `sub` | user ID |
   | `cid` | company ID |
   | `gid` | grant ID |
   | `scope` | granted scopes |
 
-  The TTL is short. The separate `typ` means a web `access` token cannot call `/api/mcp`, and an MCP token cannot call any other `/api` route (`decode_token(..., TOKEN_TYPE_ACCESS)` already rejects it).
+  The TTL is short (`mcp_access_expire_minutes`, 15 default). The separate `type` means a web `access` token cannot call `/api/mcp`, and an MCP token cannot call any other `/api` route (`decode_token(..., TOKEN_TYPE_ACCESS)` already rejects it).
 - **Refresh tokens** rotate and are stored hashed, following the existing `refresh_tokens` family pattern.
 - **Every MCP request** re-checks four things: the grant is not revoked, the user is active, the membership still exists, and the role is read live (never from the token). Revocation therefore takes effect on the next call.
 - `/account` ([ADR 0046](./0046-account-settings-profile.md)) lists the user's connected apps with revoke.
