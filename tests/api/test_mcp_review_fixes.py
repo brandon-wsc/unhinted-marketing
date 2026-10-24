@@ -392,6 +392,30 @@ async def test_revise_while_turn_in_flight_is_a_tool_error(client) -> None:
         tools._pending_turns.pop(sid, None)
 
 
+async def test_cancel_kills_the_adapter_pending_task(client) -> None:
+    """cancel_post_draft must stop our own background task, not just the
+    registry turn — an auto-drive in the park→resume window could otherwise
+    keep going (e.g. auto-approve the image) after Stop."""
+    ctx, _body = await _ctx(client)
+    async with open_session() as db:
+        session = await repos.create_session(
+            db, user_id=ctx.claims.user_id, company_id=ctx.claims.company_id
+        )
+        await db.commit()
+        sid = session.id
+
+    pending = asyncio.get_running_loop().create_task(asyncio.sleep(60))
+    tools._pending_turns[sid] = tools._PendingTurn(task=pending, grant_id=ctx.claims.grant_id)
+
+    result = await tools.cancel_post_draft(ctx, SessionToolArgs(session_id=sid))
+
+    assert result.status == "cancelled"
+    assert pending.cancelled()
+    assert not tools._is_turn_pending(sid)
+    state = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
+    assert state.status != "running"
+
+
 async def test_concurrent_grant_cap_refuses_extra_drafts(client) -> None:
     ctx, _body = await _ctx(client)
     holders = []

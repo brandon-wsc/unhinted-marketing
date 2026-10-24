@@ -447,6 +447,16 @@ async def revise_post_draft(ctx: McpContext, args: RevisePostDraftArgs) -> TurnS
 
 async def cancel_post_draft(ctx: McpContext, args: SessionToolArgs) -> DraftCancelled:
     """Stop semantics (ADR 0004): cancel in-flight, discard the parked turn."""
+    # Kill the adapter's own background task first — an auto-drive sitting in
+    # the park→resume window could otherwise fire resume_image right after
+    # stop_session_turn ran. Done callbacks pop the record; pop eagerly too so
+    # get_post_draft stops reporting `running` immediately.
+    rec = _pending_turns.get(args.session_id)
+    if rec is not None and not rec.task.done():
+        rec.task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, TimeoutError):
+            await asyncio.wait_for(asyncio.shield(rec.task), timeout=10.0)
+        _pending_turns.pop(args.session_id, None)
     async with open_session() as db:
         session = await _load_session(db, ctx, args.session_id)
         await service.stop_session_turn(db, session)
