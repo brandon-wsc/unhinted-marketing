@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 MAX_METADATA_BYTES = 32 * 1024
 FETCH_TIMEOUT_SECONDS = 5.0
@@ -110,28 +110,39 @@ def _loopback_host_key(hostname: str) -> str | None:
     return None
 
 
-def _http_loopback_key(uri: str) -> tuple[str, str, str] | None:
-    """``(host, path, query)`` for an http loopback redirect, ignoring port.
+def _http_loopback_key(uri: str) -> tuple[str, str, str, bool] | None:
+    """``(host, path, query, has_query_mark)`` for an http loopback redirect.
 
     ``None`` unless the URI is one we will treat as port-flexible: scheme
-    ``http``, no userinfo, no fragment, and a loopback host. Path and query
-    stay in the key so they still have to match exactly.
+    ``http``, no userinfo, no fragment, no control characters, a syntactic
+    port, and a loopback host. ``urlsplit`` keeps ``;params`` inside the
+    path, and a bare ``?`` is not the same as no query — so path and query
+    still have to match exactly.
     """
-    if not isinstance(uri, str) or any(char in uri for char in "\r\n\\"):
+    if not isinstance(uri, str) or any(
+        ord(char) <= 0x20 or ord(char) == 0x7F or char == "\\" for char in uri
+    ):
         return None
-    parsed = urlparse(uri)
+    if "#" in uri:
+        return None
+    try:
+        parsed = urlsplit(uri)
+        # urlsplit reports a loopback hostname even when the port is junk.
+        parsed.port
+    except ValueError:
+        return None
     if parsed.scheme.lower() != "http":
         return None
-    if parsed.username is not None or parsed.password is not None or parsed.fragment:
+    if parsed.username is not None or parsed.password is not None:
         return None
-    # urlparse can still report a loopback hostname when userinfo used a trick
-    # the username property missed. Refuse the netloc outright.
-    if "@" in parsed.netloc or not parsed.hostname:
+    # An empty port ("localhost:") does not raise above but is not a port.
+    # A stray "@" means userinfo the username property missed — refuse both.
+    if parsed.netloc.endswith(":") or "@" in parsed.netloc or not parsed.hostname:
         return None
     host_key = _loopback_host_key(parsed.hostname)
     if host_key is None:
         return None
-    return (host_key, parsed.path, parsed.query)
+    return (host_key, parsed.path, parsed.query, "?" in uri)
 
 
 def redirect_uri_allowed(doc: dict, redirect_uri: str) -> bool:

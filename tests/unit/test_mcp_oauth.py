@@ -135,6 +135,19 @@ def test_claude_code_callback_rejects_lookalikes_and_other_parts():
         "http://[::1]:3118/callback",
         "http://2130706433:3118/callback",
         "http://localhost:3118\\@evil.test/callback",
+        # Malformed input must return False, never raise through to a 500.
+        "http://[::1/callback",
+        "http://localhost:notaport/callback",
+        "http://localhost:99999/callback",
+        "http://localhost:/callback",
+        # ;params are part of the path — they stay exact too.
+        "http://localhost:3118/callback;extra",
+        # A literal fragment/query mark is not the same URI as its absence.
+        "http://localhost:3118/callback#",
+        "http://localhost:3118/callback?",
+        # Characters the URL parser strips or refuses outright.
+        "http://local\thost:3118/callback",
+        "http://local host:3118/callback",
     )
     for uri in rejected:
         assert not redirect_uri_allowed(_CLAUDE_CODE_CIMD, uri), uri
@@ -154,6 +167,13 @@ def test_loopback_port_exception_keeps_path_query_and_host():
     assert redirect_uri_allowed(v6, "http://[0:0:0:0:0:0:0:1]:3118/callback")
     assert not redirect_uri_allowed(v6, "http://[::ffff:127.0.0.1]:3118/callback")
     assert not redirect_uri_allowed(v6, "http://127.0.0.1:3118/callback")
+
+    # ;params live inside the path — they take the port exception like any
+    # other exact path, and a params difference is still a mismatch.
+    params = {"redirect_uris": ["http://localhost/cb;keep"]}
+    assert redirect_uri_allowed(params, "http://localhost:4545/cb;keep")
+    assert not redirect_uri_allowed(params, "http://localhost:4545/cb")
+    assert not redirect_uri_allowed(params, "http://localhost:4545/cb;other")
 
 
 def test_https_callback_stays_exact_including_grok():
