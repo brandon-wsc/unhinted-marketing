@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { formatWorkedDuration, workedDurationLocale } from "@/lib/format-worked-duration";
 
 describe("workedDurationLocale", () => {
-  it("treats zh* as zh-HK", () => {
+  it("treats zh* as zh-HK except Simplified locales", () => {
     expect(workedDurationLocale("zh-HK")).toBe("zh-HK");
+    expect(workedDurationLocale("zh-TW")).toBe("zh-HK");
     expect(workedDurationLocale("zh")).toBe("zh-HK");
+    expect(workedDurationLocale("zh-CN")).toBe("zh-CN");
+    expect(workedDurationLocale("zh-Hans")).toBe("zh-CN");
     expect(workedDurationLocale("en")).toBe("en");
     expect(workedDurationLocale("en-US")).toBe("en");
   });
@@ -30,6 +33,7 @@ describe("formatWorkedDuration", () => {
     expect(formatWorkedDuration(3_600_000, "zh-HK")).toBe("1小時");
     expect(formatWorkedDuration(3_600_000, "en")).toBe("1h");
     expect(formatWorkedDuration(3_723_000, "zh-HK")).toBe("1小時2分");
+    expect(formatWorkedDuration(3_723_000, "zh-CN")).toBe("1小时2分");
     expect(formatWorkedDuration(3_723_000, "en")).toBe("1h 2m");
   });
 });

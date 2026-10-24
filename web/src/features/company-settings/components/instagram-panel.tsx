@@ -273,7 +273,7 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
     if (!account?.expires_at) return t("common.notAvailable");
     const stamp = new Date(account.expires_at);
     if (Number.isNaN(stamp.getTime())) return t("common.notAvailable");
-    return stamp.toLocaleDateString(i18n.language === "en" ? "en" : "zh-HK", {
+    return stamp.toLocaleDateString(i18n.language, {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -492,10 +492,11 @@ export function InstagramPanel({ companyId }: InstagramPanelProps) {
                     >
                       <CalendarIcon className="mr-2 size-4" />
                       {manualExpires
-                        ? manualExpires.toLocaleDateString(
-                            i18n.language === "en" ? "en" : "zh-HK",
-                            { year: "numeric", month: "2-digit", day: "2-digit" },
-                          )
+                        ? manualExpires.toLocaleDateString(i18n.language, {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                          })
                         : t("settings.instagram.pickDate")}
                     </Button>
                   </PopoverTrigger>
