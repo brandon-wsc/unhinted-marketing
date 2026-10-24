@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.jwt import generate_refresh_token, hash_refresh_token
@@ -41,8 +41,10 @@ REFRESH_TTL = timedelta(days=30)
 # Double-submit cookie set on the /authorize redirect: only the browser that
 # started the flow may read or answer its consent request (§3).
 REQUEST_COOKIE = "mcp_oauth_request"
-# Scopes the PRM advertises — `images:generate` is opt-in at consent.
-DEFAULT_SCOPES = ["knowledge:read", "drafts:write"]
+# `images:generate` is opt-in at consent (the only step-up scope today).
+STEP_UP_SCOPES = frozenset({"images:generate"})
+# Scopes the PRM advertises.
+DEFAULT_SCOPES = sorted(KNOWN_SCOPES - STEP_UP_SCOPES)
 
 
 class OAuthError(Exception):
@@ -71,6 +73,13 @@ def parse_scope(scope: str | None) -> list[str]:
     return sorted(set(requested))
 
 
+async def sweep_expired_oauth_rows(db: AsyncSession) -> None:
+    """Drop dead pending rows — authorize requests and single-use codes."""
+    now = datetime.now(UTC)
+    await db.execute(delete(OAuthAuthRequest).where(OAuthAuthRequest.expires_at < now))
+    await db.execute(delete(OAuthCode).where(OAuthCode.expires_at < now))
+
+
 async def issue_auth_request(
     db: AsyncSession,
     *,
@@ -83,6 +92,7 @@ async def issue_auth_request(
     resource: str | None,
 ) -> OAuthAuthRequest:
     """Validate the /authorize query; a failure surfaces as an OAuth error."""
+    await sweep_expired_oauth_rows(db)
     try:
         clean_client_id = await validate_client_id(client_id)
     except ClientMetadataError as exc:
@@ -135,8 +145,20 @@ async def complete_consent(
     approve: bool,
 ) -> str:
     """Consent → redirect URL with code+state+iss (RFC 9207) or error."""
-    request = live_request(await db.get(OAuthAuthRequest, request_id))
-    request.consumed_at = datetime.now(UTC)
+    # Atomic consume — a second concurrent consent finds the row already
+    # stamped instead of racing into a duplicate code/grant upsert.
+    request = await db.scalar(
+        update(OAuthAuthRequest)
+        .where(
+            OAuthAuthRequest.id == request_id,
+            OAuthAuthRequest.consumed_at.is_(None),
+            OAuthAuthRequest.expires_at > datetime.now(UTC),
+        )
+        .values(consumed_at=datetime.now(UTC))
+        .returning(OAuthAuthRequest)
+    )
+    if request is None:
+        raise OAuthError("invalid_request", "authorization request expired or unknown")
     query = {"state": request.state, "iss": get_snapshot().web_base_url}
     if not approve:
         query["error"] = "access_denied"
@@ -239,12 +261,23 @@ async def exchange_code(
         or row.expires_at < datetime.now(UTC)
         or row.client_id != client_id
         or row.redirect_uri != redirect_uri
-        or row.resource != (resource or "")
         or not code_verifier
         or not pkce_verifier_matches(code_verifier, row.code_challenge)
     ):
         raise OAuthError("invalid_grant", "authorization code failed verification")
-    row.consumed_at = datetime.now(UTC)
+    # RFC 8707 — when the client omits `resource` at the token call, the
+    # code's bound value stands; a supplied one must still match.
+    if resource is not None and str(resource).strip() != row.resource:
+        raise OAuthError("invalid_target", "resource does not match the code")
+    consumed = await db.scalar(
+        update(OAuthCode)
+        .where(OAuthCode.id == row.id, OAuthCode.consumed_at.is_(None))
+        .values(consumed_at=datetime.now(UTC))
+        .returning(OAuthCode)
+    )
+    if consumed is None:
+        raise OAuthError("invalid_grant", "authorization code already used")
+    row = consumed
 
     try:
         client_doc = await fetch_client_metadata(client_id)

@@ -18,8 +18,11 @@ review found missing:
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from sqlalchemy import func, select
@@ -255,9 +258,9 @@ async def test_auto_drive_rechecks_cap_at_every_gate(client, monkeypatch) -> Non
     monkeypatch.setattr(tools, "enforce_member_token_limit", counted)
 
     result = await tools.start_post_draft(ctx, StartPostDraftArgs(brief="中秋推廣", auto=True))
-    task = tools._pending_turns.get(result.session_id)
-    if task is not None:  # may already be done + popped by _on_turn_done
-        await asyncio.wait_for(asyncio.shield(task), timeout=30)
+    rec = tools._pending_turns.get(result.session_id)
+    if rec is not None:  # may already be done + popped by _on_turn_done
+        await asyncio.wait_for(asyncio.shield(rec.task), timeout=30)
 
     # start turn + angle gate + image gate — each a turn boundary.
     assert calls == 3
@@ -269,7 +272,6 @@ async def test_auto_drive_rechecks_cap_at_every_gate(client, monkeypatch) -> Non
         assert picks["angle_index"] == STUB_RECOMMENDED_ANGLE
         assert picks["image_approved"] is True
     tools._pending_turns.clear()
-    tools._pending_grants.clear()
 
 
 # --- B1: draft status mapping ---------------------------------------------------
@@ -285,7 +287,7 @@ async def test_pending_spawn_reports_running_not_ready(client) -> None:
         sid = session.id
 
     pending = asyncio.get_running_loop().create_task(asyncio.sleep(60))
-    tools._pending_turns[sid] = pending
+    tools._pending_turns[sid] = tools._PendingTurn(task=pending, grant_id=None)
     try:
         result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
         assert result.status == "running"
@@ -378,7 +380,7 @@ async def test_revise_while_turn_in_flight_is_a_tool_error(client) -> None:
         sid = session.id
 
     pending = asyncio.get_running_loop().create_task(asyncio.sleep(60))
-    tools._pending_turns[sid] = pending
+    tools._pending_turns[sid] = tools._PendingTurn(task=pending, grant_id=None)
     try:
         with pytest.raises(ToolRefusal) as exc:
             await tools.revise_post_draft(
@@ -397,8 +399,9 @@ async def test_concurrent_grant_cap_refuses_extra_drafts(client) -> None:
         for _ in range(tools.GRANT_MAX_CONCURRENT):
             sid = uuid.uuid4()
             task = asyncio.get_running_loop().create_task(asyncio.sleep(60))
-            tools._pending_turns[sid] = task
-            tools._pending_grants[sid] = ctx.claims.grant_id
+            tools._pending_turns[sid] = tools._PendingTurn(
+                task=task, grant_id=ctx.claims.grant_id
+            )
             holders.append((sid, task))
         with pytest.raises(ToolRefusal) as exc:
             await tools.start_post_draft(ctx, StartPostDraftArgs(brief="中秋推廣"))
@@ -407,7 +410,6 @@ async def test_concurrent_grant_cap_refuses_extra_drafts(client) -> None:
         for sid, task in holders:
             task.cancel()
             tools._pending_turns.pop(sid, None)
-            tools._pending_grants.pop(sid, None)
 
 
 # --- B2: OAuth error shape + headers + last_used_at -----------------------------
@@ -505,6 +507,63 @@ async def test_consent_post_requires_the_flow_cookie(client) -> None:
     redirect = res.json()["redirect"]
     assert redirect.startswith("https://claude.example/callback?")
     assert "code=" in redirect and "state=state-123" in redirect
+
+
+async def test_consent_and_code_are_single_use_and_token_may_omit_resource(client) -> None:
+    body = await register_user(client, email="consent-single-use@example.com")
+    company_id = body["user"]["organizations"][0]["id"]
+
+    verifier = "pkce-verifier-0123456789abcdef"
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+        .rstrip(b"=")
+        .decode()
+    )
+    async with open_session() as db:
+        req = OAuthAuthRequest(
+            client_id=TEST_CLIENT_ID,
+            client_name=TEST_CLIENT_NAME,
+            redirect_uri="https://claude.example/callback",
+            scope="knowledge:read drafts:write",
+            state="state-123",
+            code_challenge=challenge,
+            resource=oauth.mcp_resource_url(),
+            expires_at=datetime.now(UTC) + oauth.AUTH_REQUEST_TTL,
+        )
+        db.add(req)
+        await db.commit()
+        request_id = req.id
+
+    client.cookies.set(oauth.REQUEST_COOKIE, str(request_id))
+    payload = {"request_id": str(request_id), "company_id": company_id, "approve": True}
+    res = await client.post(
+        "/api/oauth/authorize", json=payload, headers=auth_header(body["access_token"])
+    )
+    assert res.status_code == 200
+    code = parse_qs(urlparse(res.json()["redirect"]).query)["code"][0]
+
+    # The consent request is consumed — a repeat submit is refused.
+    res = await client.post(
+        "/api/oauth/authorize", json=payload, headers=auth_header(body["access_token"])
+    )
+    assert res.status_code == 400
+
+    # RFC 8707 — omitting `resource` stands for the code's bound value.
+    token_payload = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": TEST_CLIENT_ID,
+        "redirect_uri": "https://claude.example/callback",
+        "code_verifier": verifier,
+    }
+    res = await client.post("/api/oauth/token", data=token_payload)
+    assert res.status_code == 200, res.text
+    assert res.json()["access_token"]
+
+    # … and the code is single-use.
+    res = await client.post("/api/oauth/token", data=token_payload)
+    assert res.status_code == 400
+    assert res.json()["error"] == "invalid_grant"
 
 
 async def test_authorize_redirect_sets_the_flow_cookie(client, monkeypatch) -> None:

@@ -44,10 +44,12 @@ def challenge_header(*, scope: str | None = None, error: str | None = None) -> s
 
 
 def auth_challenge() -> HTTPException:
+    from internal.mcp.oauth import DEFAULT_SCOPES
+
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated",
-        headers={"WWW-Authenticate": challenge_header()},
+        headers={"WWW-Authenticate": challenge_header(scope=" ".join(DEFAULT_SCOPES))},
     )
 
 

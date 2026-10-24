@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
+from internal.auth.rate_limit import enforce_auth_rate_limit
 from internal.config import settings
 from internal.mcp import oauth
 from internal.memory import repos
@@ -52,6 +53,7 @@ def _require_flow_cookie(http_request: Request, request_id: uuid.UUID) -> None:
 
 @router.get("/authorize", response_model=None)
 async def authorize(
+    http_request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     *,
     client_id: str,
@@ -64,10 +66,12 @@ async def authorize(
     resource: str | None = None,
 ) -> RedirectResponse | JSONResponse:
     """Client opens the browser here; we redirect to the SPA consent page."""
+    # Unauthenticated + outbound metadata fetch — keep the window tight.
+    enforce_auth_rate_limit(http_request, bucket="oauth_authorize")
     if response_type != "code":
         raise HTTPException(status_code=400, detail="response_type must be code")
     try:
-        request = await oauth.issue_auth_request(
+        auth_request = await oauth.issue_auth_request(
             db,
             client_id=client_id,
             redirect_uri=redirect_uri,
@@ -80,10 +84,10 @@ async def authorize(
         await db.commit()
     except oauth.OAuthError as exc:
         return _oauth_error(exc)
-    response = RedirectResponse(oauth.consent_url(request), status_code=302)
+    response = RedirectResponse(oauth.consent_url(auth_request), status_code=302)
     response.set_cookie(
         key=oauth.REQUEST_COOKIE,
-        value=str(request.id),
+        value=str(auth_request.id),
         httponly=True,
         secure=settings.refresh_cookie_secure,
         samesite="lax",
@@ -157,6 +161,7 @@ async def consent(
 @router.post("/token", response_model=None)
 async def token(request: Request, db: Annotated[AsyncSession, Depends(get_db)]) -> JSONResponse:
     """Public endpoint — form-encoded per RFC 6749; PKCE is the client auth."""
+    enforce_auth_rate_limit(request, bucket="oauth_token")
     form = await request.form()
     grant_type = str(form.get("grant_type") or "")
     try:
