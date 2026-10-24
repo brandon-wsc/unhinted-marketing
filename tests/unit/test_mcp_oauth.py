@@ -19,7 +19,15 @@ from internal.mcp.clients import (
     validate_client_id,
 )
 from internal.mcp.grants import KNOWN_SCOPES
-from internal.mcp.oauth import pkce_verifier_matches
+from internal.mcp.oauth import (
+    DEFAULT_SCOPES,
+    STEP_UP_SCOPES,
+    OAuthError,
+    merge_consent_scopes,
+    parse_scope,
+    pkce_verifier_matches,
+    step_up_scopes_for,
+)
 
 
 def _verifier_for(challenge: str) -> str:
@@ -227,3 +235,45 @@ def test_authorization_server_metadata_advertises_cimd(monkeypatch):
         "scopes_supported": sorted(KNOWN_SCOPES),
     }
     assert "registration_endpoint" not in response.json()
+
+def test_default_scopes_exclude_images_step_up():
+    """PRM defaults stay without images:generate (ADR 0051 §5)."""
+    assert "images:generate" in STEP_UP_SCOPES
+    assert "images:generate" not in DEFAULT_SCOPES
+    assert set(DEFAULT_SCOPES) == KNOWN_SCOPES - STEP_UP_SCOPES
+
+
+def test_parse_scope_absent_uses_prm_defaults():
+    assert parse_scope(None) == list(DEFAULT_SCOPES)
+    assert parse_scope("") == list(DEFAULT_SCOPES)
+
+
+def test_parse_scope_rejects_unknown():
+    with pytest.raises(OAuthError) as exc:
+        parse_scope("drafts:write publish:write")
+    assert exc.value.error == "invalid_scope"
+
+
+def test_step_up_scopes_for_omits_already_requested():
+    assert step_up_scopes_for(["knowledge:read", "drafts:write"]) == ["images:generate"]
+    assert step_up_scopes_for(["knowledge:read", "drafts:write", "images:generate"]) == []
+
+
+def test_merge_consent_scopes_opt_in_adds_images():
+    requested = ["drafts:write", "knowledge:read"]
+    assert merge_consent_scopes(requested, []) == requested
+    assert merge_consent_scopes(requested, None) == requested
+    assert merge_consent_scopes(requested, ["images:generate"]) == [
+        "drafts:write",
+        "images:generate",
+        "knowledge:read",
+    ]
+
+
+def test_merge_consent_scopes_rejects_unknown_and_non_step_up():
+    with pytest.raises(OAuthError) as unknown:
+        merge_consent_scopes(["drafts:write"], ["publish:write"])
+    assert unknown.value.error == "invalid_scope"
+    with pytest.raises(OAuthError) as not_step:
+        merge_consent_scopes(["knowledge:read"], ["drafts:write"])
+    assert not_step.value.error == "invalid_scope"

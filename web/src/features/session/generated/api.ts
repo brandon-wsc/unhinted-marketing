@@ -2501,6 +2501,8 @@ export type components = {
          * @description POST /api/oauth/authorize body — the SPA consent decision (§3).
          *
          *     ``company_id`` is required only when approving; a deny needs no company.
+         *     ``extra_scopes`` are step-up scopes the user opts into at consent
+         *     (ADR 0051 §5); the server validates them against ``STEP_UP_SCOPES``.
          */
         ConsentRequest: {
             /**
@@ -2512,6 +2514,8 @@ export type components = {
             company_id?: string | null;
             /** Approve */
             approve: boolean;
+            /** Extra Scopes */
+            extra_scopes?: string[];
         };
         /** CreateSessionRequest */
         CreateSessionRequest: {

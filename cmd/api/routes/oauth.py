@@ -115,11 +115,13 @@ async def authorize_request_details(
         oauth.live_request(request)
     except oauth.OAuthError as exc:
         return _oauth_error(exc)
+    requested = request.scope.split()
     return ConsentDetails(
         client_id=request.client_id,
         client_name=request.client_name or request.client_id,
         client_host=urlparse(request.client_id).hostname,
-        scopes=request.scope.split(),
+        scopes=requested,
+        step_up_scopes=oauth.step_up_scopes_for(requested),
         companies=[
             ConsentDetailsCompany(id=m.organization_id, name=m.organization.name)
             for m in user.memberships
@@ -156,6 +158,7 @@ async def consent(
             user_id=user.id,
             company_id=company_id,
             approve=approve,
+            extra_scopes=body.extra_scopes,
         )
         await db.commit()
     except oauth.OAuthError as exc:

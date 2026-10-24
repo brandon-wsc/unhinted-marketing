@@ -103,6 +103,7 @@
       "companyLabel": "公司",
       "noCompanies": "你尚未加入任何公司。",
       "imagesNote": "核准此項也會讓 app 生成圖片，會使用你的 token 額度。",
+      "imagesOptIn": "同時允許生成圖片",
       "approve": "連接",
       "deny": "拒絕",
       "working": "連接中…",

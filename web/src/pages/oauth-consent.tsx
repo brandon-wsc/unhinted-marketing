@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -22,6 +23,7 @@ type ConsentDetails = {
   client_name: string;
   client_host: string;
   scopes: string[];
+  step_up_scopes: string[];
   companies: { id: string; name: string }[];
 };
 
@@ -34,6 +36,7 @@ export function OAuthConsentPage() {
   const requestId = params.get("request_id") ?? "";
   const [details, setDetails] = useState<ConsentDetails | null>(null);
   const [companyId, setCompanyId] = useState("");
+  const [includeImages, setIncludeImages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<"approve" | "deny" | null>(null);
 
@@ -83,12 +86,14 @@ export function OAuthConsentPage() {
     setSubmitting(approve ? "approve" : "deny");
     setError(null);
     try {
+      const extraScopes = approve && includeImages ? (["images:generate"] as const) : ([] as const);
       const res = await apiJson<{ redirect: string }>(accessToken, `${API_BASE}/oauth/authorize`, {
         method: "POST",
         json: {
           request_id: requestId,
           company_id: companyId || null,
           approve,
+          extra_scopes: [...extraScopes],
         },
       });
       window.location.assign(res.redirect);
@@ -99,6 +104,7 @@ export function OAuthConsentPage() {
   }
 
   const asksImages = details?.scopes.includes("images:generate") ?? false;
+  const canOptInImages = details?.step_up_scopes.includes("images:generate") ?? false;
 
   return (
     <AppShell mainClassName="flex items-center justify-center overflow-y-auto">
@@ -144,6 +150,25 @@ export function OAuthConsentPage() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   {t("oauth.consent.imagesNote")}
                 </p>
+              )}
+              {canOptInImages && (
+                <label
+                  htmlFor="oauth-consent-images"
+                  className="mt-3 flex items-start gap-2 text-sm text-foreground"
+                >
+                  <Checkbox
+                    id="oauth-consent-images"
+                    className="mt-0.5"
+                    checked={includeImages}
+                    onCheckedChange={(checked) => setIncludeImages(checked === true)}
+                  />
+                  <span>
+                    <span className="font-medium">{t("oauth.consent.imagesOptIn")}</span>
+                    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                      {t("oauth.consent.imagesNote")}
+                    </span>
+                  </span>
+                </label>
               )}
             </div>
             <div className="space-y-1.5">
