@@ -33,7 +33,7 @@ Target clients are consumer AI apps, which connect from their cloud to a public 
 - Required protocol checks:
   - PKCE `S256`;
   - exact `redirect_uri` match against the client metadata;
-  - an RFC 8707 `resource` parameter, which must equal the MCP URL;
+  - an RFC 8707 `resource` parameter, which must equal the MCP URL. At the token call a client that omits `resource` stands for the value bound into the code; a supplied one must match it;
   - `iss` in the authorization response (RFC 9207).
 
 ### 3. Consent
@@ -89,12 +89,12 @@ Request and result shapes live in `schemas/mcp.py` and are exported like other c
 | `get_brand_context()` | `knowledge:read` | Read-only digest: voice, `roast_level`, product names and one-line summaries. No raw catalog or `search_document` dump. |
 | `start_post_draft(brief, context?, auto=false, persona?, image_format?)` | `drafts:write` | Create a session, then the first turn (`run_session_turn`) |
 | `get_post_draft(session_id)` | `drafts:write` | Session state: the source of truth for MCP clients |
-| `choose_angle(session_id, angle_index \| feedback, persona?, image_format?)` | `drafts:write` | `choose_angle_turn`; `feedback` = the "none fit" (都唔啱) re-brief ([ADR 0028](./0028-angle-pick-before-draft.md) §3) |
+| `choose_angle(session_id, angle_index \| angle \| feedback, persona?, image_format?)` | `drafts:write` | `choose_angle_turn`; `angle` = a free-text pick the gate resolves like a typed answer; `feedback` = the "none fit" (都唔啱) re-brief ([ADR 0028](./0028-angle-pick-before-draft.md) §3) |
 | `approve_image(session_id)` | `images:generate` | `resume_image_turn` |
 | `revise_post_draft(session_id, instruction)` | `drafts:write` | `POST /messages` semantics, including parked-image revise ([ADR 0036](./0036-image-direction-new-script.md)) |
 | `cancel_post_draft(session_id)` | `drafts:write` | Stop ([ADR 0004](./0004-stop-discard-and-image-resume.md)) |
 
-Results carry `status`: `running` | `awaiting_angle_pick` | `awaiting_image_ok` | `awaiting_reply` | `ready` | `failed` | `cancelled`. Results **never** include `approval_token`. `awaiting_reply` covers turns that end outside a park or preview — the assistant asked a clarifying question or simply replied; it carries the last assistant `message` and the client answers via `revise_post_draft`.
+Results carry `status`: `running` | `awaiting_angle_pick` | `awaiting_image_ok` | `awaiting_reply` | `ready` | `failed` | `cancelled`. Results **never** include `approval_token`. `awaiting_reply` covers turns that end outside a park or preview — the assistant asked a clarifying question or simply replied; it carries the last assistant `message` and the client answers via `revise_post_draft`. `cancelled` is the immediate `cancel_post_draft` acknowledgement, not a pollable state: Stop restores the pre-turn state, so a later `get_post_draft` reports whatever the session now shows (`awaiting_reply`, `ready`, …).
 
 ### 8. Long turns: return immediately, poll for state
 
@@ -123,7 +123,7 @@ Results carry `status`: `running` | `awaiting_angle_pick` | `awaiting_image_ok` 
 ### 11. Provenance
 
 - A new `sessions.origin` JSONB column (Alembic migration) stores `{kind: "mcp", grant_id, client_id, client_name, auto_picks?}`. `auto_picks` records the angle index, persona, format, and whether the image was auto-approved.
-- The session list shows a source badge, e.g. 「來自 Claude」 (from Claude). The angle card and preview show auto picks, so the user can revise ([ADR 0036](./0036-image-direction-new-script.md)) or Discard before Confirm.
+- The session list shows a source badge, e.g. 「來自 Claude」 (from Claude). The chat timeline and the preview show the auto picks, so the user can revise ([ADR 0036](./0036-image-direction-new-script.md)) or Discard before Confirm.
 
 ### 12. Confirm stays in our UI
 
@@ -134,9 +134,10 @@ Results carry `status`: `running` | `awaiting_angle_pick` | `awaiting_image_ok` 
 
 ### 13. Untrusted input and abuse limits
 
-- `brief` and `context` enter as user-turn content. They are size-capped to `PostMessageRequest` limits and treated as data, not instructions.
+- `brief` and `context` enter as user-turn content. Their **combined** length is capped at the `PostMessageRequest` limit (8000 chars) and they are treated as data, not instructions.
 - External context is **never a citation source**. Preview source signals stay limited to our signals ([ADR 0045](./0045-honest-citations-preview-identity-sse-h2.md)).
 - Per-grant rate limits apply to mutating tools, plus a cap on concurrently running sessions per grant. These are in addition to ADR 0041 token caps.
+- The unauthenticated `/api/oauth/authorize` and `/api/oauth/token` endpoints are rate-limited like other auth endpoints — `authorize` triggers an outbound client-metadata fetch, so it must not be a free request amplifier. Expired `oauth_auth_requests` and `oauth_codes` rows are swept on each authorize call.
 
 ## Consequences
 
