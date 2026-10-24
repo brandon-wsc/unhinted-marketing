@@ -45,6 +45,7 @@ import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { apiDownloadAttachment } from "@/features/session/api";
 import { AnglePickCard } from "@/features/session/components/angle-pick-card";
+import { AutoPicksNote } from "@/features/session/components/auto-picks-note";
 import { InterruptCard } from "@/features/session/components/interrupt-card";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
@@ -758,6 +759,8 @@ export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string 
                 );
               })
             )}
+            {/* ADR 0051 §11 — record of what an external client auto-picked. */}
+            {session?.origin?.auto_picks && <AutoPicksNote origin={session.origin} />}
             {/* Fallback if anchor message was replaced / missing — keep cards visible. */}
             {agentActions.some(
               (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
@@ -1080,6 +1083,7 @@ export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string 
     draft && previewMode ? (
       <PreviewPanel
         draft={draft}
+        origin={session?.origin}
         confirmed={confirmed}
         confirmReceipt={confirmReceipt}
         draftSaving={draftSaving}

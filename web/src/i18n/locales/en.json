@@ -98,6 +98,7 @@
     "consent": {
       "title": "Connect an app",
       "subtitle": "{{client}} wants to use Unhinted with your company.",
+      "appLabel": "Connecting app",
       "scopesLabel": "It is asking to:",
       "companyLabel": "Company",
       "noCompanies": "You are not a member of any company.",
@@ -264,6 +265,12 @@
         "working": "Drafting…"
       },
       "imageOkMessage": "Looks good — please generate the image."
+    },
+    "autoPicks": {
+      "title": "Auto-picked by {{client}}",
+      "angle": "angle {{index}}",
+      "imageApproved": "image approved",
+      "unknownClient": "an external app"
     },
     "error": {
       "sendFailed": "Failed to send the message. Please try again.",

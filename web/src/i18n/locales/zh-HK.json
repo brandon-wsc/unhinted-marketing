@@ -98,6 +98,7 @@
     "consent": {
       "title": "連接應用",
       "subtitle": "{{client}} 想用你嘅公司連接 Unhinted。",
+      "appLabel": "連接中嘅應用",
       "scopesLabel": "佢想做到嘅嘢：",
       "companyLabel": "公司",
       "noCompanies": "你未係任何公司嘅成員。",
@@ -264,6 +265,12 @@
         "working": "寫緊稿…"
       },
       "imageOkMessage": "得，幫手出圖啦。"
+    },
+    "autoPicks": {
+      "title": "{{client}} 自動揀咗",
+      "angle": "角度 {{index}}",
+      "imageApproved": "已批准出圖",
+      "unknownClient": "外部應用"
     },
     "error": {
       "sendFailed": "送唔出去喎，再試一次啦。",

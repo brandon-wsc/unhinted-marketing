@@ -12,6 +12,7 @@ import {
   apiPromoteVoiceExemplar,
   type CompanyGovernanceSettings,
 } from "@/features/company-settings/api";
+import { AutoPicksNote } from "@/features/session/components/auto-picks-note";
 import { EditCopyDialog } from "@/features/session/components/edit-copy-dialog";
 import { EditImageDialog } from "@/features/session/components/edit-image-dialog";
 import {
@@ -31,6 +32,7 @@ import type {
   ConfirmSessionResponse,
   DraftCopy,
   PreviewDraft,
+  Session,
   SourceSignal,
 } from "@/features/session/types";
 import { useAsyncData } from "@/hooks/use-async-data";
@@ -49,6 +51,8 @@ const MEDIA_URL_ERRORS = new Set([
 
 type Props = {
   draft: PreviewDraft;
+  /** ADR 0051 §11 — MCP-origin sessions show what auto mode picked. */
+  origin?: Session["origin"];
   confirmed: boolean;
   confirmReceipt: ConfirmSessionResponse | null;
   draftSaving: boolean;
@@ -80,6 +84,7 @@ type Props = {
 
 export function PreviewPanel({
   draft,
+  origin,
   confirmed,
   confirmReceipt,
   draftSaving,
@@ -272,6 +277,7 @@ export function PreviewPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-5 px-4 py-5">
+          {origin?.auto_picks && <AutoPicksNote origin={origin} />}
           <IgPreviewMock
             copy={local}
             accountName={accountName}

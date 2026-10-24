@@ -119,6 +119,16 @@ export function OAuthConsentPage() {
         )}
         {details && (
           <div className="mt-5 space-y-5">
+            {/* ADR 0051 §3 — the CIMD host is the app's verifiable identity. */}
+            <div className="rounded-lg border border-border bg-secondary px-3 py-2">
+              <p className="text-xs text-muted-foreground">{t("oauth.consent.appLabel")}</p>
+              <p className="truncate text-sm font-medium text-foreground">
+                {details.client_name || details.client_host}
+              </p>
+              {details.client_name && (
+                <p className="truncate text-xs text-muted-foreground">{details.client_host}</p>
+              )}
+            </div>
             <div>
               <p className="text-sm font-medium text-foreground">
                 {t("oauth.consent.scopesLabel")}
