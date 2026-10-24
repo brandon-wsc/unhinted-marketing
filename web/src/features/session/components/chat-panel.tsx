@@ -46,6 +46,9 @@ import { useToast } from "@/context/toast-context";
 import { apiDownloadAttachment } from "@/features/session/api";
 import { AnglePickCard } from "@/features/session/components/angle-pick-card";
 import { AutoPicksNote } from "@/features/session/components/auto-picks-note";
+import { EditCopyDialog } from "@/features/session/components/edit-copy-dialog";
+import { EditImageDialog } from "@/features/session/components/edit-image-dialog";
+import { toEditableCopy } from "@/features/session/components/ig-preview-mock";
 import { InterruptCard } from "@/features/session/components/interrupt-card";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
@@ -210,6 +213,10 @@ export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string 
   });
   const [pagedPane, setPagedPane] = useState<PagedPane>("chat");
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  // Parked image gate (ADR 0036 §4): edit dialogs open straight from the
+  // interrupt card — saving re-stages/re-parks instead of generating.
+  const [editCopyOpen, setEditCopyOpen] = useState(false);
+  const [editImageOpen, setEditImageOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerObsRef = useRef<{
     resize: ResizeObserver;
@@ -640,6 +647,9 @@ export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string 
       onResume={() => void onResumeImageGen()}
       onDiscard={() => void onStopTurn()}
       plan={draft ? imagePlanSummary(draft) : null}
+      copyPreview={draft?.copy.caption ?? null}
+      onEditCopy={draft ? () => setEditCopyOpen(true) : undefined}
+      onEditPlan={draft ? () => setEditImageOpen(true) : undefined}
     />
   );
 
@@ -1106,28 +1116,53 @@ export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string 
     ) : null;
 
   return (
-    <SessionShell
-      shellRef={shellRef}
-      layoutMode={layoutMode}
-      pagedPane={pagedPane}
-      previewReady={previewMode}
-      historyCollapsed={historyCollapsed}
-      shellWidth={shellWidth}
-      chatRatio={getSessionChatRatio()}
-      onChatRatioChange={setSessionChatRatio}
-      history={historySidebar}
-      historyPage={
-        <SessionHistorySidebar
-          collapsed={false}
-          onToggle={() => undefined}
-          pageMode
-          onBack={goToChat}
-          {...historyProps}
-        />
-      }
-      chat={chatColumn}
-      preview={previewPane}
-    />
+    <>
+      <SessionShell
+        shellRef={shellRef}
+        layoutMode={layoutMode}
+        pagedPane={pagedPane}
+        previewReady={previewMode}
+        historyCollapsed={historyCollapsed}
+        shellWidth={shellWidth}
+        chatRatio={getSessionChatRatio()}
+        onChatRatioChange={setSessionChatRatio}
+        history={historySidebar}
+        historyPage={
+          <SessionHistorySidebar
+            collapsed={false}
+            onToggle={() => undefined}
+            pageMode
+            onBack={goToChat}
+            {...historyProps}
+          />
+        }
+        chat={chatColumn}
+        preview={previewPane}
+      />
+      {draft && (
+        <>
+          <EditImageDialog
+            open={editImageOpen}
+            onOpenChange={setEditImageOpen}
+            draft={draft}
+            busy={draftSaving || confirming}
+            parked={awaitingImageOk}
+            onSavePlan={onSavePlan}
+            onRegenImage={onRegenImage}
+            onAddImage={onAddImage}
+            onRemoveImage={onRemoveImage}
+            onUploadImage={onUploadImage}
+          />
+          <EditCopyDialog
+            open={editCopyOpen}
+            onOpenChange={setEditCopyOpen}
+            copy={toEditableCopy(draft)}
+            busy={draftSaving || confirming}
+            onSave={onApplyDraft}
+          />
+        </>
+      )}
+    </>
   );
 }
 

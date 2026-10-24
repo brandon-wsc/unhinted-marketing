@@ -63,6 +63,56 @@ describe("InterruptCard", () => {
     expect(screen.getByText("beat 2")).toBeInTheDocument();
   });
 
+  it("opens the copy and plan editors from the card", async () => {
+    const onEditCopy = vi.fn();
+    const onEditPlan = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <InterruptCard
+        sending={false}
+        onResume={vi.fn()}
+        onDiscard={vi.fn()}
+        copyPreview="今晚約埋老友打邊爐"
+        onEditCopy={onEditCopy}
+        onEditPlan={onEditPlan}
+        plan={{ format: "single", prompt: "draw the stall", beats: [] }}
+      />,
+    );
+    expect(screen.getByText("chat.agent.interrupt.copy")).toBeInTheDocument();
+    expect(screen.getByText("今晚約埋老友打邊爐")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "chat.agent.interrupt.editCopy" }));
+    expect(onEditCopy).toHaveBeenCalledOnce();
+
+    const planBtn = screen.getByRole("button", { name: "chat.agent.interrupt.editPlan" });
+    await user.click(planBtn);
+    expect(onEditPlan).toHaveBeenCalledOnce();
+    // The pencil is a separate hit target — it must not toggle the details.
+    expect(planBtn.closest("details")).not.toHaveAttribute("open");
+  });
+
+  it("disables the edit pencils while generating", () => {
+    render(
+      <InterruptCard
+        sending={true}
+        onResume={vi.fn()}
+        onDiscard={vi.fn()}
+        copyPreview="cap"
+        onEditCopy={vi.fn()}
+        onEditPlan={vi.fn()}
+        plan={{ format: "single", prompt: "x", beats: [] }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "chat.agent.interrupt.editCopy" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "chat.agent.interrupt.editPlan" })).toBeDisabled();
+  });
+
+  it("hides the copy row when no edit handler is provided", () => {
+    render(<InterruptCard sending={false} onResume={vi.fn()} onDiscard={vi.fn()} />);
+    expect(screen.queryByText("chat.agent.interrupt.copy")).toBeNull();
+    expect(screen.queryByRole("button", { name: "chat.agent.interrupt.editPlan" })).toBeNull();
+  });
+
   it("discards the pending version", async () => {
     const onDiscard = vi.fn();
     const user = userEvent.setup();

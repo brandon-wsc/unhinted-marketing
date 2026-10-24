@@ -130,6 +130,8 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   draft: PreviewDraft;
   busy: boolean;
+  /** Parked awaiting Execute — plan fields stay editable; pixel/media mutations are off. */
+  parked?: boolean;
   onSavePlan: (
     imageId: string,
     plan: Record<string, unknown>,
@@ -145,6 +147,7 @@ export function EditImageDialog({
   onOpenChange,
   draft,
   busy,
+  parked = false,
   onSavePlan,
   onRegenImage,
   onAddImage,
@@ -239,7 +242,7 @@ export function EditImageDialog({
   }
 
   async function handleGenerate() {
-    if (!selected || busy) return;
+    if (!selected || busy || parked) return;
     if (planDirty) {
       const saved = await onSavePlan(selected.id, planToPayload(planFields));
       if (saved) onOpenChange(false);
@@ -249,7 +252,7 @@ export function EditImageDialog({
   }
 
   async function handleAddImage() {
-    if (busy) return;
+    if (busy || parked) return;
     const format = planFields.format;
     const prevIds = new Set(mediaList.map((m) => m.id));
     const result = await onAddImage(format);
@@ -264,7 +267,7 @@ export function EditImageDialog({
   }
 
   async function handleDelete() {
-    if (!selected || !canDelete || busy) return;
+    if (!selected || !canDelete || busy || parked) return;
     const idx = mediaList.findIndex((m) => m.id === selected.id);
     const result = await onRemoveImage(selected.id);
     if (!result || typeof result !== "object" || !("media" in result)) return;
@@ -279,7 +282,7 @@ export function EditImageDialog({
   }
 
   async function handleUploadFile(file: File | undefined) {
-    if (!selected || !file || busy) return;
+    if (!selected || !file || busy || parked) return;
     if (!file.type.startsWith("image/")) return;
     const seq = selected.seq;
     const result = await onUploadImage(selected.id, file);
@@ -320,7 +323,11 @@ export function EditImageDialog({
           <div
             role="button"
             tabIndex={0}
-            className="flex h-full cursor-pointer flex-col items-center justify-center gap-2 px-6 text-center"
+            aria-disabled={busy || parked || !selected || undefined}
+            className={
+              "flex h-full flex-col items-center justify-center gap-2 px-6 text-center " +
+              (parked ? "cursor-not-allowed opacity-50" : "cursor-pointer")
+            }
             onDragOver={(e) => {
               e.preventDefault();
               setDragOver(true);
@@ -328,12 +335,12 @@ export function EditImageDialog({
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             onClick={() => {
-              if (!busy && selected) fileInputRef.current?.click();
+              if (!busy && !parked && selected) fileInputRef.current?.click();
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                if (!busy && selected) fileInputRef.current?.click();
+                if (!busy && !parked && selected) fileInputRef.current?.click();
               }
             }}
           >
@@ -345,7 +352,7 @@ export function EditImageDialog({
               accept="image/jpeg,image/png,image/webp,image/gif"
               className="sr-only"
               tabIndex={-1}
-              disabled={busy || !selected}
+              disabled={busy || parked || !selected}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
@@ -473,7 +480,9 @@ export function EditImageDialog({
       <DialogContent className="flex max-h-[min(92dvh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
         <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-12 text-left">
           <DialogTitle>{t("preview.media.editTitle")}</DialogTitle>
-          <DialogDescription>{t("preview.media.editHint")}</DialogDescription>
+          <DialogDescription>
+            {parked ? t("preview.media.editHintParked") : t("preview.media.editHint")}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 py-4">
@@ -483,6 +492,7 @@ export function EditImageDialog({
               media={mediaList}
               selectedId={selected?.id ?? null}
               busy={busy}
+              addDisabled={parked}
               onSelect={(m) => {
                 setSelectedId(m.id);
                 setPlanFields(planFromMedia(m));
@@ -499,7 +509,7 @@ export function EditImageDialog({
                 <Button
                   type="button"
                   size="sm"
-                  disabled={!selected || busy}
+                  disabled={!selected || busy || parked}
                   onClick={() => void handleGenerate()}
                 >
                   {hasRenderable ? (
@@ -514,7 +524,7 @@ export function EditImageDialog({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={busy}
+                    disabled={busy || parked}
                     onClick={() => void handleDelete()}
                   >
                     <Trash2 className="size-4 text-destructive" />
