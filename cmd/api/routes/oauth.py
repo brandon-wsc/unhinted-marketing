@@ -142,7 +142,12 @@ async def consent(
     company_id = body.company_id
     if approve and company_id is None:
         raise HTTPException(status_code=400, detail="company_id is required to approve")
-    if approve and not await repos.user_has_org_access(db, user.id, company_id):
+    # Same shape as the GET list: grants bind companies only, so a non-company
+    # org id must not be approvable through the POST even if membership exists.
+    if approve and (
+        await repos.get_company(db, company_id) is None
+        or not await repos.user_has_org_access(db, user.id, company_id)
+    ):
         raise HTTPException(status_code=403, detail="not a member of that company")
     try:
         redirect = await oauth.complete_consent(

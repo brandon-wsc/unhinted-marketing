@@ -160,9 +160,11 @@ async def complete_consent(
     if request is None:
         raise OAuthError("invalid_request", "authorization request expired or unknown")
     query = {"state": request.state, "iss": get_snapshot().web_base_url}
+    # The client metadata's redirect_uri may already carry its own query.
+    sep = "&" if "?" in request.redirect_uri else "?"
     if not approve:
         query["error"] = "access_denied"
-        return f"{request.redirect_uri}?{urlencode(query)}"
+        return f"{request.redirect_uri}{sep}{urlencode(query)}"
 
     code = secrets.token_urlsafe(32)
     db.add(
@@ -179,7 +181,7 @@ async def complete_consent(
         )
     )
     query["code"] = code
-    return f"{request.redirect_uri}?{urlencode(query)}"
+    return f"{request.redirect_uri}{sep}{urlencode(query)}"
 
 
 async def _upsert_grant(
