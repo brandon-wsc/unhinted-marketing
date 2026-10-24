@@ -86,8 +86,7 @@ export function OAuthConsentPage() {
     setSubmitting(approve ? "approve" : "deny");
     setError(null);
     try {
-      const extraScopes =
-        approve && includeImages ? (["images:generate"] as const) : ([] as const);
+      const extraScopes = approve && includeImages ? (["images:generate"] as const) : ([] as const);
       const res = await apiJson<{ redirect: string }>(accessToken, `${API_BASE}/oauth/authorize`, {
         method: "POST",
         json: {
