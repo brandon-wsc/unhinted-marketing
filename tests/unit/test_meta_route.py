@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from cmd.api.main import create_app
 from internal.config import Settings, settings
+from internal.instance.config import get_snapshot
 
 
 @asynccontextmanager
@@ -31,6 +32,7 @@ def test_meta_reports_baked_deployment_mode() -> None:
         "deployment_mode": settings.deployment_mode,
         "app_env": settings.app_env,
         "version": body["version"],
+        "web_base_url": get_snapshot().web_base_url.rstrip("/"),
     }
     assert body["deployment_mode"] in ("cloud", "onprem")
     assert body["version"]

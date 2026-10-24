@@ -46,13 +46,23 @@ class MemberTokenLimitExceeded(SessionGuardError):
 
 
 async def require_owned_session(
-    db: AsyncSession, session_id: uuid.UUID, user_id: uuid.UUID
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    user_id: uuid.UUID,
+    *,
+    company_id: uuid.UUID | None = None,
 ) -> Session:
-    """Fetch the session and assert it belongs to ``user_id``."""
+    """Fetch the session and assert it belongs to ``user_id``.
+
+    ``company_id`` binds the check to one company (ADR 0051 §6 — an MCP
+    grant covers a single company even when the user belongs to several).
+    """
     session = await repos.get_session(db, session_id)
     if not session:
         raise SessionNotFoundError()
     if session.user_id != user_id:
+        raise SessionAccessDeniedError()
+    if company_id is not None and session.company_id != company_id:
         raise SessionAccessDeniedError()
     return session
 

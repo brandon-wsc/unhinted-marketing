@@ -1,6 +1,6 @@
 # ADR 0029 — Bundled angle + persona gate
 
-- **Status:** Accepted
+- **Status:** Accepted (gate answer may come from an MCP client: [ADR 0051](./0051-remote-mcp-server.md) §9)
 - **Date:** 2026-09-19
 - **Supersedes:** [ADR 0028](./0028-angle-pick-before-draft.md) (park still fires after brainstorm; the card now answers two fields in one submit)
 

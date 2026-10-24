@@ -606,6 +606,44 @@ async def test_brainstormer_mock_llm_matches_brief_contract(
 
 
 @pytest.mark.asyncio
+async def test_brainstormer_validates_recommended_angle_index(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0051 §10 — index passes through in range; out of range reads null."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+
+    async def fake_complete_json(**_kwargs):
+        return BriefOut(
+            can_do=["寫帖"],
+            cannot_do=["未 Confirm 唔發佈"],
+            angles=["角度甲", "角度乙"],
+            recommended_angle_index=1,
+            summary="s",
+        ).model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    state = _base_state(company_context={"name": "Acme"}, ranked_signals=[])
+    out = await N.brainstormer(state)
+    assert out["brief"]["recommended_angle_index"] == 1
+    assert N.recommended_angle_index(out) == 1
+    assert N.angle_pick_payload(out)["recommended_angle_index"] == 1
+
+    async def fake_out_of_range(**_kwargs):
+        return BriefOut(
+            can_do=["寫帖"],
+            cannot_do=["未 Confirm 唔發佈"],
+            angles=["角度甲"],
+            recommended_angle_index=7,
+            summary="s",
+        ).model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_out_of_range)
+    out = await N.brainstormer(state)
+    assert out["brief"]["recommended_angle_index"] is None
+    assert N.angle_pick_payload(out)["recommended_angle_index"] is None
+
+
+@pytest.mark.asyncio
 async def test_brainstormer_payload_includes_sticky_image_format(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

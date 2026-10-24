@@ -78,6 +78,7 @@ describe("parseBrief", () => {
       cannot_do: [],
       angles: ["a"],
       persona: "founder",
+      recommended_angle_index: null,
     });
   });
 
@@ -88,6 +89,7 @@ describe("parseBrief", () => {
       cannot_do: [],
       angles: [],
       persona: null,
+      recommended_angle_index: null,
     });
   });
 });
@@ -132,6 +134,7 @@ describe("anglePickParkFromEvents", () => {
       angles: [],
       personas: [],
       recommendedPersona: null,
+      recommendedAngleIndex: null,
       recommendedImageFormat: null,
     });
   });
@@ -145,6 +148,7 @@ describe("anglePickParkFromEvents", () => {
             awaiting: true,
             angles: ["甲", "乙"],
             recommended_persona: "hk_youth",
+            recommended_angle_index: 1,
             recommended_image_format: "comic_4panel",
           },
         },
@@ -154,6 +158,7 @@ describe("anglePickParkFromEvents", () => {
       angles: ["甲", "乙"],
       personas: [],
       recommendedPersona: "hk_youth",
+      recommendedAngleIndex: 1,
       recommendedImageFormat: "comic_4panel",
     });
   });

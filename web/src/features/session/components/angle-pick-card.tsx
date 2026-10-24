@@ -18,6 +18,7 @@ type Props = {
   angles: string[];
   personas?: AudiencePersonaOption[];
   recommendedPersona?: string | null;
+  recommendedAngleIndex?: number | null;
   recommendedImageFormat?: ImageFormat | null;
   sending: boolean;
   onPick: (angle: number | string, persona?: string, imageFormat?: ImageFormat) => void;
@@ -39,12 +40,18 @@ function fallbackFormat(recommended: ImageFormat | null | undefined): ImageForma
   return recommended === "comic_4panel" ? "comic_4panel" : "single";
 }
 
+// ADR 0051 — the brief's recommended angle becomes the pre-selected row.
+function initialActive(angles: string[], index: number | null | undefined): number {
+  return index != null && index >= 0 && index < angles.length ? index : 0;
+}
+
 const EMPTY_PERSONAS: AudiencePersonaOption[] = [];
 
 export function AnglePickCard({
   angles,
   personas = EMPTY_PERSONAS,
   recommendedPersona = null,
+  recommendedAngleIndex = null,
   recommendedImageFormat = null,
   sending,
   onPick,
@@ -52,7 +59,7 @@ export function AnglePickCard({
   const { t } = useTranslation();
   const [other, setOther] = useState("");
   // 0..angles.length-1 = options; angles.length = the "other" input row.
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(() => initialActive(angles, recommendedAngleIndex));
   const [persona, setPersona] = useState(() => fallbackPersona(personas, recommendedPersona));
   const [imageFormat, setImageFormat] = useState<ImageFormat>(() =>
     fallbackFormat(recommendedImageFormat),
@@ -60,13 +67,19 @@ export function AnglePickCard({
   const listRef = useRef<HTMLUListElement>(null);
   const otherInputRef = useRef<HTMLInputElement>(null);
 
-  // Focus the first option when the card appears with fresh angles.
+  // Focus the recommended option when the card appears with fresh angles.
   useEffect(() => {
-    setActive(0);
+    const initial = initialActive(angles, recommendedAngleIndex);
+    setActive(initial);
     setPersona(fallbackPersona(personas, recommendedPersona));
     setImageFormat(fallbackFormat(recommendedImageFormat));
-    if (angles.length > 0) listRef.current?.querySelector("button")?.focus();
-  }, [angles, personas, recommendedPersona, recommendedImageFormat]);
+    if (angles.length > 0) {
+      const items = Array.from(
+        listRef.current?.querySelectorAll<HTMLElement>(":scope > li > button") ?? [],
+      );
+      items[initial]?.focus();
+    }
+  }, [angles, personas, recommendedPersona, recommendedAngleIndex, recommendedImageFormat]);
 
   if (angles.length === 0) return null;
 

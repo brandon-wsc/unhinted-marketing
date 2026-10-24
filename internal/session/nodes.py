@@ -263,6 +263,16 @@ def recommended_persona_slug(state: SessionState | dict[str, Any]) -> str | None
     return personas[0]["slug"] if personas else None
 
 
+def recommended_angle_index(state: SessionState | dict[str, Any]) -> int | None:
+    """ADR 0051 §10 — brief's 0-based strongest-angle index; out of range = None."""
+    brief = state.get("brief") or {}
+    idx = brief.get("recommended_angle_index")
+    offered = offered_angles(brief)
+    if isinstance(idx, int) and not isinstance(idx, bool) and 0 <= idx < len(offered):
+        return idx
+    return None
+
+
 def recommended_image_format(state: SessionState | dict[str, Any]) -> str:
     """Sticky chosen_image_format, else state.image_format, else single."""
     sticky = str(state.get("chosen_image_format") or "").strip()
@@ -281,6 +291,7 @@ def angle_pick_payload(state: SessionState | dict[str, Any]) -> dict[str, Any]:
         "angles": offered_angles(state.get("brief")),
         "personas": offered_personas(state.get("audience_catalog")),
         "recommended_persona": recommended_persona_slug(state),
+        "recommended_angle_index": recommended_angle_index(state),
         "image_format_options": list(IMAGE_FORMAT_OPTIONS),
         "recommended_image_format": recommended_image_format(state),
     }
@@ -989,6 +1000,14 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
     )
     if parsed:
         brief = parsed.model_dump()
+        # ADR 0051 §10 — index is validated here; out of range reads as null.
+        idx = brief.get("recommended_angle_index")
+        if (
+            not isinstance(idx, int)
+            or isinstance(idx, bool)
+            or not (0 <= idx < len(offered_angles(brief)))
+        ):
+            brief["recommended_angle_index"] = None
     else:
         titles = [s.get("title") for s in signals[:3] if s.get("title")]
         topic = titles[0] if titles else "香港熱話"
@@ -996,6 +1015,7 @@ async def brainstormer(state: SessionState) -> dict[str, Any]:
             "can_do": [f"圍繞「{topic}」寫一則社交貼文", "加入品牌語氣同 CTA"],
             "cannot_do": ["未按 Confirm 前唔可以真正發佈", "唔好捏造未有 signal 支撐嘅數據"],
             "angles": [f"用「{topic}」連結品牌價值", "短片/靜態圖配合熱搜節奏"],
+            "recommended_angle_index": 0,
             "persona": catalog[0].get("slug") if catalog else None,
             "summary": f"基於近期 HK signals，建議做一則同「{topic}」相關嘅 grounded post。",
         }

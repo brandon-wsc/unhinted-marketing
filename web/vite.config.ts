@@ -28,6 +28,9 @@ export default defineConfig({
     proxy: {
       // Single reserved API prefix (ADR 0006) — SPA owns all other paths.
       "/api": { target: "http://localhost:8000", changeOrigin: true },
+      // RFC-required root discovery paths (ADR 0051 §8) — the one ADR 0006
+      // exception. Scoped to oauth-* so acme-challenge/security.txt stay SPA-owned.
+      "/.well-known/oauth": { target: "http://localhost:8000", changeOrigin: true },
     },
   },
   test: {

@@ -19,6 +19,24 @@ class CreateSessionRequest(BaseModel):
     initial_message: str | None = Field(default=None, max_length=8000)
 
 
+class SessionOriginAutoPicks(BaseModel):
+    """What auto mode answered at the gates (ADR 0051 §11)."""
+
+    angle_index: int | None = None
+    persona: str | None = None
+    image_format: str | None = None
+    image_approved: bool = False
+
+
+class SessionOrigin(BaseModel):
+    """Provenance for sessions not started in our UI (ADR 0051 §11)."""
+
+    kind: Literal["mcp"]
+    client_id: str | None = None
+    client_name: str | None = None
+    auto_picks: SessionOriginAutoPicks | None = None
+
+
 class SessionResponse(BaseModel):
     id: uuid.UUID
     company_id: uuid.UUID
@@ -27,6 +45,7 @@ class SessionResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    origin: SessionOrigin | None = None
 
 
 class SessionListItem(BaseModel):
@@ -39,6 +58,7 @@ class SessionListItem(BaseModel):
     updated_at: datetime
     title: str | None = None
     pinned: bool = False
+    origin: SessionOrigin | None = None
     # Only set on search (?q=): context around the first matching message.
     matched_snippet: str | None = None
 
@@ -125,6 +145,7 @@ class SessionMessagesResponse(BaseModel):
     awaiting_angle_pick: bool = False
     personas: list[AudiencePersonaOption] = Field(default_factory=list)
     recommended_persona: str | None = None
+    recommended_angle_index: int | None = None
     image_format_options: list[Literal["single", "comic_4panel"]] = Field(default_factory=list)
     # Locked format at either park (angle_gate or image) so a reload keeps the toggle.
     recommended_image_format: Literal["single", "comic_4panel"] | None = None

@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://unhinted:unhinted@localhost:5432/unhinted"
     jwt_secret: str = "change-me-to-a-long-random-secret-at-least-32-chars"
     jwt_access_expire_minutes: int = 15
+    # ADR 0051 — external-app tokens are short-lived; the grant row is the real gate.
+    mcp_access_expire_minutes: int = 15
     jwt_refresh_expire_days: int = 7
     api_host: str = "0.0.0.0"
     api_port: int = 8000

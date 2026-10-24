@@ -45,6 +45,7 @@ import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
 import { apiDownloadAttachment } from "@/features/session/api";
 import { AnglePickCard } from "@/features/session/components/angle-pick-card";
+import { AutoPicksNote } from "@/features/session/components/auto-picks-note";
 import { InterruptCard } from "@/features/session/components/interrupt-card";
 import { PreviewPanel } from "@/features/session/components/preview-panel";
 import { RecommendedQuestions } from "@/features/session/components/recommended-questions";
@@ -109,13 +110,17 @@ function overlayStackHeight(el: HTMLElement): number {
   return Math.max(0, Math.round(wrap.bottom - top));
 }
 
-export function ChatPanel() {
+export function ChatPanel({ requestedSessionId }: { requestedSessionId?: string }) {
   const { t } = useTranslation();
   const { user, accessToken } = useAuth();
   const { showError, showInfo } = useToast();
-  const companyId = user?.organizations[0]?.id;
-  const canPromoteExemplar =
-    user?.organizations[0]?.role === "owner" || user?.organizations[0]?.role === "admin";
+  // ADR 0051 §12 — a /sessions/:id deep link can point at a company other than
+  // organizations[0]; the loaded session's company becomes the UI context so a
+  // user on several companies never confirms a post under the wrong org.
+  const [sessionCompanyId, setSessionCompanyId] = useState<string | undefined>();
+  const companyId = sessionCompanyId ?? user?.organizations[0]?.id;
+  const sessionOrgRole = user?.organizations.find((o) => o.id === companyId)?.role;
+  const canPromoteExemplar = sessionOrgRole === "owner" || sessionOrgRole === "admin";
   const {
     session,
     messages,
@@ -137,6 +142,7 @@ export function ChatPanel() {
     angleOptions,
     anglePersonas,
     recommendedPersona,
+    recommendedAngleIndex,
     recommendedImageFormat,
     canRetryAnglePick,
     draft,
@@ -184,7 +190,7 @@ export function ChatPanel() {
     consumeStagedAttachments,
     restoreStagedAttachments,
     saveAttachment,
-  } = useSession(companyId);
+  } = useSession(companyId, requestedSessionId, setSessionCompanyId);
   const {
     questions,
     loading: questionsLoading,
@@ -621,6 +627,7 @@ export function ChatPanel() {
       angles={angleOptions}
       personas={anglePersonas}
       recommendedPersona={recommendedPersona}
+      recommendedAngleIndex={recommendedAngleIndex}
       recommendedImageFormat={recommendedImageFormat}
       sending={sending || stopping}
       onPick={(angle, persona, imageFormat) => void onPickAngle(angle, persona, imageFormat)}
@@ -752,6 +759,8 @@ export function ChatPanel() {
                 );
               })
             )}
+            {/* ADR 0051 §11 — record of what an external client auto-picked. */}
+            {session?.origin?.auto_picks && <AutoPicksNote origin={session.origin} />}
             {/* Fallback if anchor message was replaced / missing — keep cards visible. */}
             {agentActions.some(
               (a) => !a.afterMessageId || !messages.some((m) => m.id === a.afterMessageId),
@@ -1074,6 +1083,7 @@ export function ChatPanel() {
     draft && previewMode ? (
       <PreviewPanel
         draft={draft}
+        origin={session?.origin}
         confirmed={confirmed}
         confirmReceipt={confirmReceipt}
         draftSaving={draftSaving}

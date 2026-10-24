@@ -1,6 +1,6 @@
 # ADR 0030 — Image format rides the bundled angle gate
 
-- **Status:** Accepted (§6 late format switch superseded by [ADR 0036](./0036-image-direction-new-script.md))
+- **Status:** Accepted (§6 late format switch superseded by [ADR 0036](./0036-image-direction-new-script.md); gate answer may come from an MCP client: [ADR 0051](./0051-remote-mcp-server.md) §9)
 - **Date:** 2026-09-19
 - **Supersedes:** [ADR 0029](./0029-angle-persona-bundled-gate.md) §4 park condition only (gate now parks at ≥1 angle; no single-angle fast path). Otherwise extends ADR 0029; does not change [ADR 0004](./0004-stop-discard-and-image-resume.md) image-park semantics.
 

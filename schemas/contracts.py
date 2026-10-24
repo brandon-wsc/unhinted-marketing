@@ -74,6 +74,8 @@ class SessionBriefData(BaseModel):
     can_do: list[str] = Field(default_factory=list)
     cannot_do: list[str] = Field(default_factory=list)
     angles: list[str] = Field(default_factory=list)
+    # ADR 0051 §10 — 0-based index of the strongest angle; None = no pick.
+    recommended_angle_index: int | None = None
     persona: str | None = None
     summary: str = ""
 
@@ -124,9 +126,8 @@ class DraftAwaitingAnglePickData(BaseModel):
     angles: list[str] = Field(default_factory=list)
     personas: list[AudiencePersonaOption] = Field(default_factory=list)
     recommended_persona: str | None = None
-    image_format_options: list[Literal["single", "comic_4panel"]] = Field(
-        default_factory=list
-    )
+    recommended_angle_index: int | None = None
+    image_format_options: list[Literal["single", "comic_4panel"]] = Field(default_factory=list)
     recommended_image_format: Literal["single", "comic_4panel"] | None = None
 
 

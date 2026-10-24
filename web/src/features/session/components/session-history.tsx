@@ -207,6 +207,11 @@ export function SessionHistorySidebar({
                 ) : null}
                 {title}
               </span>
+              {s.origin?.kind === "mcp" && s.origin.client_name ? (
+                <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                  {t("chat.history.fromClient", { client: s.origin.client_name })}
+                </span>
+              ) : null}
               {searchMode && s.matched_snippet ? (
                 <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                   {s.matched_snippet}

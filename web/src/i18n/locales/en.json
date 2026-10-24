@@ -65,6 +65,53 @@
       "save": "Save",
       "saving": "Saving…",
       "saved": "Saved"
+    },
+    "connectAi": {
+      "title": "Connect an AI app",
+      "description": "Let an external AI app (Claude, ChatGPT…) use Unhinted with your company's voice and products. It drafts, you confirm publishing here.",
+      "urlLabel": "Your MCP server URL",
+      "steps": {
+        "claude": {
+          "1": "In Claude, open Customize → Connectors → Add → Custom → Web.",
+          "2": "Name it (e.g. “Unhinted”) and paste your MCP server URL.",
+          "3": "Finish sign-in on the Unhinted consent page — pick your company and approve."
+        },
+        "chatgpt": {
+          "1": "In ChatGPT, open Plugins → “+” → Add custom MCP server.",
+          "2": "Enter a name and paste your MCP server URL under Server URL.",
+          "3": "Choose OAuth authentication, then approve on the Unhinted consent page."
+        }
+      },
+      "geminiNote": "Gemini is not supported yet — its connected-apps flow requires Dynamic Client Registration, which we don't ship.",
+      "footer": "You'll sign in and pick one company during setup. Connected apps appear below — revoke access anytime."
+    },
+    "connectedApps": {
+      "title": "Connected apps",
+      "empty": "No external AI apps are connected yet.",
+      "meta": "{{company}} · Connected {{date}} · Last used {{lastUsed}}",
+      "neverUsed": "never",
+      "revoke": "Revoke",
+      "revoking": "Revoking…"
+    }
+  },
+  "oauth": {
+    "consent": {
+      "title": "Connect an app",
+      "subtitle": "{{client}} wants to use Unhinted with your company.",
+      "appLabel": "Connecting app",
+      "scopesLabel": "It is asking to:",
+      "companyLabel": "Company",
+      "noCompanies": "You are not a member of any company.",
+      "imagesNote": "Approving this also lets the app generate images, which spends your token budget.",
+      "approve": "Connect",
+      "deny": "Deny",
+      "working": "Connecting…",
+      "invalidRequest": "This authorization link is invalid or expired.",
+      "scope": {
+        "knowledge_read": "Read your brand voice and product context",
+        "drafts_write": "Create and revise post drafts",
+        "images_generate": "Generate images"
+      }
     }
   },
   "chat": {
@@ -219,6 +266,12 @@
       },
       "imageOkMessage": "Looks good — please generate the image."
     },
+    "autoPicks": {
+      "title": "Auto-picked by {{client}}",
+      "angle": "angle {{index}}",
+      "imageApproved": "image approved",
+      "unknownClient": "an external app"
+    },
     "error": {
       "sendFailed": "Failed to send the message. Please try again.",
       "stopFailed": "Could not stop the turn. Please try again.",
@@ -240,6 +293,7 @@
       "empty": "No chats yet",
       "noResults": "No chats match your search",
       "untitled": "Untitled chat",
+      "fromClient": "From {{client}}",
       "restoring": "Restoring chat…",
       "openFailed": "Could not open that chat",
       "createFailed": "Could not start a new chat",

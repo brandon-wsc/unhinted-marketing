@@ -44,6 +44,7 @@ import {
   newStagedAttachment,
   OUTCOME_NODE,
   parseAgentProgress,
+  parseAngleIndex,
   parseBrief,
   parseConfirmReceipt,
   parseDraftCopy,
@@ -106,6 +107,7 @@ type LiveChatSnapshot = {
   angleOptions: string[];
   anglePersonas: AudiencePersonaOption[];
   recommendedPersona: string | null;
+  recommendedAngleIndex: number | null;
   recommendedImageFormat: ImageFormat | null;
   lastAnglePick: number | string | null;
   lastPersonaPick: string | null;
@@ -120,7 +122,13 @@ type LiveChatSnapshot = {
 // REST is the source of truth: POST /messages returns the full transcript plus
 // turn events. SSE is an enhancement layer (live assistant messages, mode
 // changes, later agent progress) that merges into the same state with dedupe.
-export function useSession(companyId: string | undefined) {
+export function useSession(
+  companyId: string | undefined,
+  requestedSessionId?: string,
+  // ADR 0051 §12 — a /sessions/:id deep link may point at another company than
+  // organizations[0]; the loaded session's company becomes the UI context.
+  onSessionCompany?: (companyId: string) => void,
+) {
   const { accessToken, refreshAccessToken } = useAuth();
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -152,6 +160,7 @@ export function useSession(companyId: string | undefined) {
   const [angleOptions, setAngleOptions] = useState<string[]>([]);
   const [anglePersonas, setAnglePersonas] = useState<AudiencePersonaOption[]>([]);
   const [recommendedPersona, setRecommendedPersona] = useState<string | null>(null);
+  const [recommendedAngleIndex, setRecommendedAngleIndex] = useState<number | null>(null);
   const [recommendedImageFormat, setRecommendedImageFormat] = useState<ImageFormat | null>(null);
   // Last pick attempted at the gate — Retry re-issues it; a typed send while
   // parked IS a pick, so re-sending the stale start prompt would be feedback.
@@ -257,6 +266,7 @@ export function useSession(companyId: string | undefined) {
     angleOptions,
     anglePersonas,
     recommendedPersona,
+    recommendedAngleIndex,
     recommendedImageFormat,
     lastAnglePick,
     lastPersonaPick,
@@ -337,6 +347,7 @@ export function useSession(companyId: string | undefined) {
     setAngleOptions(snap.angleOptions);
     setAnglePersonas(snap.anglePersonas);
     setRecommendedPersona(snap.recommendedPersona);
+    setRecommendedAngleIndex(snap.recommendedAngleIndex);
     setRecommendedImageFormat(snap.recommendedImageFormat);
     lastAnglePickRef.current = snap.lastAnglePick;
     setLastAnglePick(snap.lastAnglePick);
@@ -437,6 +448,7 @@ export function useSession(companyId: string | undefined) {
     setAngleOptions([]);
     setAnglePersonas([]);
     setRecommendedPersona(null);
+    setRecommendedAngleIndex(null);
     setRecommendedImageFormat(null);
     setLastAnglePick(null);
     setLastPersonaPick(null);
@@ -677,6 +689,7 @@ export function useSession(companyId: string | undefined) {
         const rec =
           typeof data.recommended_persona === "string" ? data.recommended_persona.trim() : "";
         setRecommendedPersona(rec || null);
+        setRecommendedAngleIndex(parseAngleIndex(data.recommended_angle_index));
         setRecommendedImageFormat(parseImageFormat(data.recommended_image_format));
         setInterruptAfterMessageId(lastUserMessageId());
         return;
@@ -839,6 +852,8 @@ export function useSession(companyId: string | undefined) {
             const briefPersona = (state?.brief as { persona?: unknown } | undefined)?.persona;
             const rec = sticky || (typeof briefPersona === "string" ? briefPersona.trim() : "");
             setRecommendedPersona(rec || null);
+            const snapBrief = state?.brief as { recommended_angle_index?: unknown } | undefined;
+            setRecommendedAngleIndex(parseAngleIndex(snapBrief?.recommended_angle_index));
             setRecommendedImageFormat(
               parseImageFormat(state?.chosen_image_format) ?? parseImageFormat(state?.image_format),
             );
@@ -969,6 +984,7 @@ export function useSession(companyId: string | undefined) {
       awaiting_angle_pick?: boolean;
       personas?: unknown;
       recommended_persona?: string | null;
+      recommended_angle_index?: number | null;
       recommended_image_format?: string | null;
       forked_from?: ForkOrigin | null;
     }) => {
@@ -1001,6 +1017,7 @@ export function useSession(companyId: string | undefined) {
         const rec =
           typeof res.recommended_persona === "string" ? res.recommended_persona.trim() : "";
         setRecommendedPersona(rec || null);
+        setRecommendedAngleIndex(parseAngleIndex(res.recommended_angle_index));
         setRecommendedImageFormat(lockedFormat);
       }
       const parked = parkedImage || parkedAngle;
@@ -1116,6 +1133,9 @@ export function useSession(companyId: string | undefined) {
       const seq = ++sessionNavSeq.current;
       const res = await apiGetSessionMessages(accessToken, targetSessionId);
       if (seq !== sessionNavSeq.current) return;
+      if (res.session.company_id && res.session.company_id !== companyId) {
+        onSessionCompany?.(res.session.company_id);
+      }
       captureLiveChat(sessionIdRef.current);
       stashComposerDraft(composerDraftsRef.current, sessionIdRef.current, currentComposerDraft());
       const live = liveChatBySessionRef.current.get(targetSessionId);
@@ -1133,12 +1153,13 @@ export function useSession(companyId: string | undefined) {
       } else {
         applyHydratedSession(res);
       }
-      setRememberedSessionId(companyId, res.session.id);
+      setRememberedSessionId(res.session.company_id ?? companyId, res.session.id);
       void refreshHistory();
     },
     [
       accessToken,
       companyId,
+      onSessionCompany,
       currentComposerDraft,
       captureLiveChat,
       restoreLiveChat,
@@ -1286,7 +1307,9 @@ export function useSession(companyId: string | undefined) {
     }
     if (restoreAttemptedRef.current === companyId) return;
     restoreAttemptedRef.current = companyId;
-    const remembered = getRememberedSessionId(companyId);
+    // ADR 0051 §12 — an explicit /sessions/:id deep link wins over the
+    // remembered chat for this company.
+    const remembered = requestedSessionId ?? getRememberedSessionId(companyId);
     if (!remembered) {
       setRestoring(false);
       void refreshHistory();
@@ -1302,7 +1325,15 @@ export function useSession(companyId: string | undefined) {
         setRestoring(false);
         void refreshHistory();
       });
-  }, [companyId, accessToken, openSession, refreshHistory, startNewChat]);
+  }, [companyId, accessToken, requestedSessionId, openSession, refreshHistory, startNewChat]);
+
+  // A later deep-link navigation (different session id while already mounted)
+  // routes through openSession; the restore effect above owns the first mount.
+  useEffect(() => {
+    if (!requestedSessionId || requestedSessionId === sessionIdRef.current) return;
+    if (restoreAttemptedRef.current !== companyId) return;
+    void openSession(requestedSessionId).catch(() => {});
+  }, [requestedSessionId, companyId, openSession]);
 
   const stopTurn = useCallback(
     async (mode: "discard" | "interrupt" = "discard") => {
@@ -1358,6 +1389,7 @@ export function useSession(companyId: string | undefined) {
               ? hydrated.recommended_persona.trim()
               : "";
           setRecommendedPersona(rec || null);
+          setRecommendedAngleIndex(parseAngleIndex(hydrated.recommended_angle_index));
           setRecommendedImageFormat(lockedFormat);
         }
         const parked = parkedImage || parkedAngle;
@@ -1774,6 +1806,7 @@ export function useSession(companyId: string | undefined) {
             angleOptions: offscreenPark.angles,
             anglePersonas: offscreenPark.personas,
             recommendedPersona: offscreenPark.recommendedPersona,
+            recommendedAngleIndex: offscreenPark.recommendedAngleIndex,
             recommendedImageFormat: offscreenPark.recommendedImageFormat,
             lastAnglePick: anglePickText,
             lastPersonaPick: lastPersonaPickRef.current,
@@ -1800,6 +1833,7 @@ export function useSession(companyId: string | undefined) {
           if (anglePark.angles.length > 0) setAngleOptions(anglePark.angles);
           setAnglePersonas(anglePark.personas);
           setRecommendedPersona(anglePark.recommendedPersona);
+          setRecommendedAngleIndex(anglePark.recommendedAngleIndex);
           setRecommendedImageFormat(anglePark.recommendedImageFormat);
         }
         if (!res.interrupted) setInterruptAfterMessageId(null);
@@ -1961,6 +1995,7 @@ export function useSession(companyId: string | undefined) {
         if (anglePark.angles.length > 0) setAngleOptions(anglePark.angles);
         setAnglePersonas(anglePark.personas);
         setRecommendedPersona(anglePark.recommendedPersona);
+        setRecommendedAngleIndex(anglePark.recommendedAngleIndex);
         setRecommendedImageFormat(anglePark.recommendedImageFormat);
       }
       if (!res.interrupted) setInterruptAfterMessageId(null);
@@ -2342,6 +2377,7 @@ export function useSession(companyId: string | undefined) {
     angleOptions,
     anglePersonas,
     recommendedPersona,
+    recommendedAngleIndex,
     recommendedImageFormat,
     lastImageFormatPick,
     canRetryAnglePick: awaitingAnglePick && lastAnglePick !== null,
