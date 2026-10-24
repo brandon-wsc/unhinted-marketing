@@ -216,8 +216,8 @@ async def list_connected_apps(
             client_name=g.client_name,
             company_id=g.company_id,
             scopes=list(g.scopes or []),
-            created_at=g.created_at.isoformat(),
-            last_used_at=g.last_used_at.isoformat() if g.last_used_at else None,
+            created_at=g.created_at,
+            last_used_at=g.last_used_at,
         )
         for g in grants
     ]

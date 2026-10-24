@@ -8,9 +8,10 @@ stays a UI click (ADR 0003).
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from schemas.contracts import DraftAwaitingAnglePickData, DraftCopy, PreviewMediaItem
 
@@ -32,6 +33,13 @@ class StartPostDraftArgs(BaseModel):
     auto: bool = False
     persona: str | None = None
     image_format: Literal["single", "comic_4panel"] | None = None
+
+    @model_validator(mode="after")
+    def _composed_fits_message(self) -> StartPostDraftArgs:
+        """brief + context land in one user turn — PostMessageRequest's cap."""
+        if len(self.brief) + len(self.context or "") > 8000:
+            raise ValueError("brief + context must fit one message (8000 chars)")
+        return self
 
 
 class SessionToolArgs(BaseModel):
@@ -190,8 +198,8 @@ class ConnectedApp(BaseModel):
     client_name: str
     company_id: uuid.UUID
     scopes: list[str]
-    created_at: str
-    last_used_at: str | None
+    created_at: datetime
+    last_used_at: datetime | None
 
 
 class OAuthTokenResponse(BaseModel):

@@ -15,8 +15,10 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.memory.models import OAuthGrant, OAuthRefreshToken
+from schemas.mcp import MCP_TOOL_SCOPES
 
-KNOWN_SCOPES = frozenset({"knowledge:read", "drafts:write", "images:generate"})
+# The whole scope universe — derived from the tool map, the single source.
+KNOWN_SCOPES = frozenset(MCP_TOOL_SCOPES.values())
 
 
 async def issue_grant(

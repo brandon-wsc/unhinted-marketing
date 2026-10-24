@@ -55,9 +55,15 @@ def _check_grant_rate(ctx: McpContext, name: str) -> None:
     if str(name) not in MUTATING_TOOLS:
         return
     now = time.monotonic()
-    win = _rate_windows.setdefault(ctx.claims.grant_id, deque())
-    while win and now - win[0] > 60.0:
-        win.popleft()
+    win = _rate_windows.get(ctx.claims.grant_id)
+    if win is not None:
+        while win and now - win[0] > 60.0:
+            win.popleft()
+        if not win:  # evict — an idle grant must not leak its deque forever
+            _rate_windows.pop(ctx.claims.grant_id, None)
+            win = None
+    if win is None:
+        win = _rate_windows.setdefault(ctx.claims.grant_id, deque())
     if len(win) >= RATE_LIMIT_MUTATING:
         raise ToolRefusal("rate_limited", "Rate limit reached — slow down and retry shortly")
     win.append(now)

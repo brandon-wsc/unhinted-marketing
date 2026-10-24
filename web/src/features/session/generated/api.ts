@@ -2483,7 +2483,10 @@ export type components = {
             company_id: string;
             /** Scopes */
             scopes: string[];
-            /** Created At */
+            /**
+             * Created At
+             * Format: date-time
+             */
             created_at: string;
             /** Last Used At */
             last_used_at: string | null;

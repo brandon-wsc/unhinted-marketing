@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import logging
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,39 +89,46 @@ def _confirm_url(session_id: uuid.UUID) -> str:
     return f"{get_snapshot().web_base_url}/sessions/{session_id}"
 
 
+@dataclass
+class _PendingTurn:
+    """A spawned background turn plus the grant it bills concurrency to."""
+
+    task: asyncio.Task
+    grant_id: uuid.UUID | None
+
+
 # Turns spawned by this adapter, keyed by session. The registry only knows a
 # turn once `run_session_turn` calls `begin()` — this map closes the gap
 # between `create_task` and `begin`, and covers the whole auto-drive run.
-_pending_turns: dict[uuid.UUID, asyncio.Task] = {}
-# §13 — session → grant, so a grant can't run too many drafts at once.
-_pending_grants: dict[uuid.UUID, uuid.UUID] = {}
+# `grant_id` is what the §13 concurrent-draft cap counts.
+_pending_turns: dict[uuid.UUID, _PendingTurn] = {}
 GRANT_MAX_CONCURRENT = 3
 
 
 def _is_turn_pending(session_id: uuid.UUID) -> bool:
-    task = _pending_turns.get(session_id)
-    return task is not None and not task.done()
+    rec = _pending_turns.get(session_id)
+    return rec is not None and not rec.task.done()
 
 
 def _grant_running_count(grant_id: uuid.UUID) -> int:
     return sum(
-        1 for sid, gid in _pending_grants.items() if gid == grant_id and _is_turn_pending(sid)
+        1
+        for rec in _pending_turns.values()
+        if rec.grant_id == grant_id and not rec.task.done()
     )
 
 
 def _spawn_turn(session_id: uuid.UUID, coro, grant_id: uuid.UUID | None = None) -> asyncio.Task:
     task = asyncio.create_task(coro)
-    _pending_turns[session_id] = task
-    if grant_id is not None:
-        _pending_grants[session_id] = grant_id
+    _pending_turns[session_id] = _PendingTurn(task=task, grant_id=grant_id)
     task.add_done_callback(lambda done: _on_turn_done(session_id, done))
     return task
 
 
 def _on_turn_done(session_id: uuid.UUID, task: asyncio.Task) -> None:
-    if _pending_turns.get(session_id) is task:
+    rec = _pending_turns.get(session_id)
+    if rec is not None and rec.task is task:
         _pending_turns.pop(session_id, None)
-        _pending_grants.pop(session_id, None)
     if task.cancelled():
         return
     exc = task.exception()
