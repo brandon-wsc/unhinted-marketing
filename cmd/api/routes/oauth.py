@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.deps import get_current_user
+from internal.config import settings
 from internal.mcp import oauth
 from internal.memory import repos
 from internal.memory.database import get_db
@@ -41,6 +42,12 @@ def _oauth_error(exc: oauth.OAuthError) -> JSONResponse:
         content=OAuthErrorBody(error=exc.error, error_description=exc.description).model_dump(),
         headers=_NO_STORE,
     )
+
+
+def _require_flow_cookie(http_request: Request, request_id: uuid.UUID) -> None:
+    """The pending request is only visible to the browser that started it."""
+    if http_request.cookies.get(oauth.REQUEST_COOKIE) != str(request_id):
+        raise HTTPException(status_code=404, detail="Authorization request not found")
 
 
 @router.get("/authorize", response_model=None)
@@ -73,12 +80,23 @@ async def authorize(
         await db.commit()
     except oauth.OAuthError as exc:
         return _oauth_error(exc)
-    return RedirectResponse(oauth.consent_url(request), status_code=302)
+    response = RedirectResponse(oauth.consent_url(request), status_code=302)
+    response.set_cookie(
+        key=oauth.REQUEST_COOKIE,
+        value=str(request.id),
+        httponly=True,
+        secure=settings.refresh_cookie_secure,
+        samesite="lax",
+        max_age=int(oauth.AUTH_REQUEST_TTL.total_seconds()),
+        path="/api/oauth",
+    )
+    return response
 
 
 @router.get("/authorize/request", response_model=None)
 async def authorize_request_details(
     request_id: uuid.UUID,
+    http_request: Request,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ConsentDetails | JSONResponse:
@@ -87,6 +105,7 @@ async def authorize_request_details(
 
     from internal.memory.models import OAuthAuthRequest
 
+    _require_flow_cookie(http_request, request_id)
     request = await db.get(OAuthAuthRequest, request_id)
     try:
         oauth.live_request(request)
@@ -108,11 +127,13 @@ async def authorize_request_details(
 @router.post("/authorize", response_model=None)
 async def consent(
     body: ConsentRequest,
+    http_request: Request,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ConsentResult | JSONResponse:
     """Approve or deny — plain HTTP on the web session, no LLM (ADR 0003)."""
     request_id = body.request_id
+    _require_flow_cookie(http_request, request_id)
     approve = body.approve
     company_id = body.company_id
     if approve and company_id is None:

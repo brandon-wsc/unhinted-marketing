@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import func, select
@@ -30,7 +31,13 @@ from internal.mcp.errors import ToolRefusal
 from internal.mcp.tokens import McpAccessClaims, create_mcp_access_token
 from internal.memory import repos
 from internal.memory.database import open_session
-from internal.memory.models import LlmCallRecord, OAuthRefreshToken, Session, SessionMessage
+from internal.memory.models import (
+    LlmCallRecord,
+    OAuthAuthRequest,
+    OAuthRefreshToken,
+    Session,
+    SessionMessage,
+)
 from internal.session import service
 from internal.session.graph import set_session_graph
 from internal.session.guards import MemberTokenLimitExceeded
@@ -40,7 +47,7 @@ from schemas.mcp import (
     SessionToolArgs,
     StartPostDraftArgs,
 )
-from tests.api.helpers import join_org, register_user
+from tests.api.helpers import auth_header, join_org, register_user
 from tests.api.mcp_helpers import (
     STUB_RECOMMENDED_ANGLE,
     TEST_CLIENT_ID,
@@ -248,7 +255,7 @@ async def test_auto_drive_rechecks_cap_at_every_gate(client, monkeypatch) -> Non
     monkeypatch.setattr(tools, "enforce_member_token_limit", counted)
 
     result = await tools.start_post_draft(ctx, StartPostDraftArgs(brief="中秋推廣", auto=True))
-    task = tools._pending_turns.get(uuid.UUID(str(result["session_id"])))
+    task = tools._pending_turns.get(result.session_id)
     if task is not None:  # may already be done + popped by _on_turn_done
         await asyncio.wait_for(asyncio.shield(task), timeout=30)
 
@@ -257,7 +264,7 @@ async def test_auto_drive_rechecks_cap_at_every_gate(client, monkeypatch) -> Non
 
     # §11 — auto_picks records the *effective* values.
     async with open_session() as db:
-        session = await repos.get_session(db, uuid.UUID(str(result["session_id"])))
+        session = await repos.get_session(db, result.session_id)
         picks = (session.origin or {}).get("auto_picks") or {}
         assert picks["angle_index"] == STUB_RECOMMENDED_ANGLE
         assert picks["image_approved"] is True
@@ -281,7 +288,7 @@ async def test_pending_spawn_reports_running_not_ready(client) -> None:
     tools._pending_turns[sid] = pending
     try:
         result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
-        assert result["status"] == "running"
+        assert result.status == "running"
     finally:
         pending.cancel()
         tools._pending_turns.pop(sid, None)
@@ -297,8 +304,8 @@ async def test_turn_failure_reports_failed(client) -> None:
         await db.commit()
         sid = session.id
     result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
-    assert result["status"] == "failed"
-    assert "in progress" in result["error"]
+    assert result.status == "failed"
+    assert "in progress" in result.error
 
 
 async def test_manual_edit_after_failed_turn_reports_ready(client) -> None:
@@ -315,7 +322,7 @@ async def test_manual_edit_after_failed_turn_reports_ready(client) -> None:
 
     await tools._record_turn_error(sid, RuntimeError("provider down"))
     failed = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
-    assert failed["status"] == "failed"
+    assert failed.status == "failed"
 
     async with open_session() as db:
         session = await repos.get_session(db, sid)
@@ -323,7 +330,7 @@ async def test_manual_edit_after_failed_turn_reports_ready(client) -> None:
         await db.commit()
 
     result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
-    assert result["status"] == "ready"
+    assert result.status == "ready"
 
 
 async def test_ready_carries_the_latest_assistant_message(client) -> None:
@@ -342,8 +349,8 @@ async def test_ready_carries_the_latest_assistant_message(client) -> None:
         sid = session.id
 
     result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
-    assert result["status"] == "ready"
-    assert result["message"] == "要唔要加優惠碼？"
+    assert result.status == "ready"
+    assert result.message == "要唔要加優惠碼？"
 
 
 async def test_no_park_no_preview_reports_awaiting_reply(client) -> None:
@@ -357,8 +364,8 @@ async def test_no_park_no_preview_reports_awaiting_reply(client) -> None:
         await db.commit()
         sid = session.id
     result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
-    assert result["status"] == "awaiting_reply"
-    assert result["message"] == "想推廣邊類產品？"
+    assert result.status == "awaiting_reply"
+    assert result.message == "想推廣邊類產品？"
 
 
 async def test_revise_while_turn_in_flight_is_a_tool_error(client) -> None:
@@ -438,3 +445,94 @@ async def test_notification_gets_http_202(client) -> None:
         headers=rpc_headers("notifications/initialized", token=token),
     )
     assert res.status_code == 202
+
+
+# --- consent request binding (double-submit cookie) ---------------------------
+
+
+async def _seed_auth_request() -> uuid.UUID:
+    """A pending authorize request, as issue_auth_request would persist it."""
+    async with open_session() as db:
+        req = OAuthAuthRequest(
+            client_id=TEST_CLIENT_ID,
+            client_name=TEST_CLIENT_NAME,
+            redirect_uri="https://claude.example/callback",
+            scope="knowledge:read drafts:write",
+            state="state-123",
+            code_challenge="challenge-abc",
+            resource=oauth.mcp_resource_url(),
+            expires_at=datetime.now(UTC) + oauth.AUTH_REQUEST_TTL,
+        )
+        db.add(req)
+        await db.commit()
+        return req.id
+
+
+async def test_consent_details_require_the_flow_cookie(client) -> None:
+    body = await register_user(client, email="consent-reader@example.com")
+    request_id = await _seed_auth_request()
+    url = f"/api/oauth/authorize/request?request_id={request_id}"
+
+    res = await client.get(url, headers=auth_header(body["access_token"]))
+    assert res.status_code == 404
+
+    client.cookies.set(oauth.REQUEST_COOKIE, str(request_id))
+    res = await client.get(url, headers=auth_header(body["access_token"]))
+    assert res.status_code == 200
+    assert res.json()["client_id"] == TEST_CLIENT_ID
+
+
+async def test_consent_post_requires_the_flow_cookie(client) -> None:
+    body = await register_user(client, email="consent-approver@example.com")
+    company_id = body["user"]["organizations"][0]["id"]
+    request_id = await _seed_auth_request()
+    payload = {
+        "request_id": str(request_id),
+        "company_id": company_id,
+        "approve": True,
+    }
+
+    res = await client.post(
+        "/api/oauth/authorize", json=payload, headers=auth_header(body["access_token"])
+    )
+    assert res.status_code == 404
+
+    client.cookies.set(oauth.REQUEST_COOKIE, str(request_id))
+    res = await client.post(
+        "/api/oauth/authorize", json=payload, headers=auth_header(body["access_token"])
+    )
+    assert res.status_code == 200
+    redirect = res.json()["redirect"]
+    assert redirect.startswith("https://claude.example/callback?")
+    assert "code=" in redirect and "state=state-123" in redirect
+
+
+async def test_authorize_redirect_sets_the_flow_cookie(client, monkeypatch) -> None:
+    async def ok_client_id(cid: str) -> str:
+        return cid
+
+    async def ok_doc(cid: str) -> dict:
+        return {
+            "client_id": TEST_CLIENT_ID,
+            "client_name": TEST_CLIENT_NAME,
+            "redirect_uris": ["https://claude.example/callback"],
+        }
+
+    monkeypatch.setattr(oauth, "validate_client_id", ok_client_id)
+    monkeypatch.setattr(oauth, "fetch_client_metadata", ok_doc)
+
+    res = await client.get(
+        "/api/oauth/authorize",
+        params={
+            "client_id": TEST_CLIENT_ID,
+            "redirect_uri": "https://claude.example/callback",
+            "code_challenge": "challenge-abc",
+            "code_challenge_method": "S256",
+            "resource": oauth.mcp_resource_url(),
+            "state": "state-123",
+        },
+    )
+    assert res.status_code == 302, res.text
+    assert "/oauth/consent?request_id=" in res.headers["location"]
+    cookie = res.cookies.get(oauth.REQUEST_COOKIE)
+    assert cookie and cookie in res.headers["location"]

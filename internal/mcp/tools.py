@@ -24,11 +24,24 @@ from internal.session import service
 from internal.session.guards import enforce_member_token_limit, require_owned_session
 from internal.session.nodes import angle_pick_payload
 from internal.session.turn_registry import session_turn_registry
+from schemas.contracts import DraftCopy, PreviewMediaItem
 from schemas.mcp import (
+    AwaitingAnglePick,
+    AwaitingImageOk,
+    AwaitingReply,
+    BrandContextResult,
+    BrandProductSummary,
     ChooseAngleArgs,
+    DraftCancelled,
+    DraftFailed,
+    DraftReady,
+    PostDraftState,
+    ReadyPreview,
     RevisePostDraftArgs,
     SessionToolArgs,
     StartPostDraftArgs,
+    TurnStarted,
+    VoiceDigest,
 )
 
 from .auth import McpContext
@@ -42,7 +55,7 @@ TURN_ERROR_KEY = "mcp_turn_error"
 TURN_ERROR_REVISION_KEY = "mcp_turn_error_revision"
 
 
-async def get_brand_context(ctx: McpContext) -> dict[str, Any]:
+async def get_brand_context(ctx: McpContext) -> BrandContextResult:
     """Read-only digest — voice + product names, never a raw catalog dump."""
     from internal.session.voice import voice_pack
 
@@ -51,18 +64,17 @@ async def get_brand_context(ctx: McpContext) -> dict[str, Any]:
         products = await repos.list_products(
             db, company_id=ctx.claims.company_id, owner_scope="org"
         )
-    return {
-        "company_name": company.name if company else "",
-        "voice": voice_pack(company.profile if company else None),
-        "products": [_product_summary(p) for p in (products or [])],
-    }
+    return BrandContextResult(
+        company_name=company.name if company else "",
+        voice=VoiceDigest.model_validate(voice_pack(company.profile if company else None)),
+        products=[BrandProductSummary(name=p.name, summary=_product_summary(p)) for p in (products or [])],
+    )
 
 
-def _product_summary(p: Any) -> dict[str, str]:
-    """Name + one-line summary from profile notes/description (ADR 0051 §7)."""
+def _product_summary(p: Any) -> str:
+    """One-line summary from profile notes/description (ADR 0051 §7)."""
     profile = p.profile if isinstance(getattr(p, "profile", None), dict) else {}
-    summary = str(profile.get("notes") or profile.get("description") or "").strip()
-    return {"name": p.name, "summary": summary[:200]}
+    return str(profile.get("notes") or profile.get("description") or "").strip()[:200]
 
 
 async def _load_session(db: AsyncSession, ctx: McpContext, session_id: uuid.UUID) -> Session:
@@ -250,7 +262,7 @@ async def _record_auto_picks(session_id: uuid.UUID, picks: dict[str, Any]) -> No
         await db.commit()
 
 
-async def start_post_draft(ctx: McpContext, args: StartPostDraftArgs) -> dict[str, Any]:
+async def start_post_draft(ctx: McpContext, args: StartPostDraftArgs) -> TurnStarted:
     """Create the grant-owned session, then run turns in the background."""
     if _grant_running_count(ctx.claims.grant_id) >= GRANT_MAX_CONCURRENT:
         raise ToolRefusal(
@@ -293,42 +305,32 @@ async def start_post_draft(ctx: McpContext, args: StartPostDraftArgs) -> dict[st
             ),
             grant_id=ctx.claims.grant_id,
         )
-    return {"session_id": session.id, "status": "running"}
+    return TurnStarted(session_id=session.id)
 
 
-async def _awaiting_angle_payload(session: Session) -> dict[str, Any]:
-    payload = angle_pick_payload(session.state or {})
-    payload.pop("awaiting", None)
-    return payload
-
-
-async def get_post_draft(ctx: McpContext, args: SessionToolArgs) -> dict[str, Any]:
+async def get_post_draft(ctx: McpContext, args: SessionToolArgs) -> PostDraftState:
     """The client source of truth (§8): status + the payload for that status."""
     async with open_session() as db:
         session = await _load_session(db, ctx, args.session_id)
 
         if session_turn_registry.is_busy(session.id) or _is_turn_pending(session.id):
-            return {"session_id": session.id, "status": "running"}
+            return TurnStarted(session_id=session.id)
 
         state = session.state or {}
         kind = await service.session_park_kind(session)
-        result: dict[str, Any] = {"session_id": session.id}
         if kind == GATE_ANGLE:
-            return {
-                **result,
-                "status": "awaiting_angle_pick",
-                **await _awaiting_angle_payload(session),
-            }
+            return AwaitingAnglePick.model_validate(
+                {**angle_pick_payload(state), "session_id": session.id}
+            )
         if kind == GATE_IMAGE:
-            return {
-                **result,
-                "status": "awaiting_image_ok",
-                "copy": state.get("draft"),
-                "image_plan": state.get("image_plan"),
-            }
+            return AwaitingImageOk(
+                session_id=session.id,
+                copy=DraftCopy.model_validate(state.get("draft") or {}),
+                image_plan=state.get("image_plan"),
+            )
         error = _live_turn_error(state) or state.get("error")
         if error:
-            return {**result, "status": "failed", "error": str(error)}
+            return DraftFailed(session_id=session.id, error=str(error))
 
         messages = await repos.list_session_messages(db, session.id)
         preview = await service.latest_preview_payload(db, session)
@@ -337,25 +339,22 @@ async def get_post_draft(ctx: McpContext, args: SessionToolArgs) -> dict[str, An
     last = next((m for m in reversed(messages) if m.role == "assistant"), None)
     if preview:
         # §12 — approval_token never leaves the server.
-        return {
-            **result,
-            "status": "ready",
-            "confirm_url": _confirm_url(session.id),
-            "message": last.content if last else None,
-            "preview": {
-                "copy": preview.get("copy"),
-                "image_url": preview.get("image_url"),
-                "media": preview.get("media"),
-            },
-        }
+        return DraftReady(
+            session_id=session.id,
+            confirm_url=_confirm_url(session.id),
+            message=last.content if last else None,
+            preview=ReadyPreview(
+                copy=DraftCopy.model_validate(preview.get("copy") or {}),
+                image_url=preview.get("image_url"),
+                media=[
+                    PreviewMediaItem.model_validate(m) for m in (preview.get("media") or [])
+                ],
+            ),
+        )
 
     # Turn ended without a park or preview — the assistant asked or said
     # something. Surface it so the client can answer via revise_post_draft.
-    return {
-        **result,
-        "status": "awaiting_reply",
-        "message": last.content if last else None,
-    }
+    return AwaitingReply(session_id=session.id, message=last.content if last else None)
 
 
 def _assert_not_busy(session_id: uuid.UUID) -> None:
@@ -368,7 +367,7 @@ def _assert_not_busy(session_id: uuid.UUID) -> None:
 
 async def _spawn_resume(
     ctx: McpContext, args: SessionToolArgs, expected_park: str, runner
-) -> dict[str, Any]:
+) -> TurnStarted:
     """Shared prelude for choose/approve: guard + park check + background turn."""
     async with open_session() as db:
         session = await _load_session(db, ctx, args.session_id)
@@ -383,10 +382,10 @@ async def _spawn_resume(
         session_id = session.id
 
     _spawn_turn(session_id, runner(session_id), grant_id=ctx.claims.grant_id)
-    return {"session_id": session_id, "status": "running"}
+    return TurnStarted(session_id=session_id)
 
 
-async def choose_angle(ctx: McpContext, args: ChooseAngleArgs) -> dict[str, Any]:
+async def choose_angle(ctx: McpContext, args: ChooseAngleArgs) -> TurnStarted:
     if args.angle_index is None and not (args.angle or args.feedback):
         raise ToolRefusal("invalid_params", "Provide angle_index, angle or feedback")
 
@@ -409,7 +408,7 @@ async def choose_angle(ctx: McpContext, args: ChooseAngleArgs) -> dict[str, Any]
     return await _spawn_resume(ctx, args, GATE_ANGLE, run)
 
 
-async def approve_image(ctx: McpContext, args: SessionToolArgs) -> dict[str, Any]:
+async def approve_image(ctx: McpContext, args: SessionToolArgs) -> TurnStarted:
     async def run(session_id: uuid.UUID) -> None:
         async with open_session() as db:
             session = await repos.get_session(db, session_id)
@@ -422,7 +421,7 @@ async def approve_image(ctx: McpContext, args: SessionToolArgs) -> dict[str, Any
     return await _spawn_resume(ctx, args, GATE_IMAGE, run)
 
 
-async def revise_post_draft(ctx: McpContext, args: RevisePostDraftArgs) -> dict[str, Any]:
+async def revise_post_draft(ctx: McpContext, args: RevisePostDraftArgs) -> TurnStarted:
     """A revise message — plain turn, typed angle pick, or image-park re-script."""
     session_id = args.session_id
     async with open_session() as db:
@@ -435,13 +434,13 @@ async def revise_post_draft(ctx: McpContext, args: RevisePostDraftArgs) -> dict[
         _run_session_turn_bg(session_id, user_content=args.instruction),
         grant_id=ctx.claims.grant_id,
     )
-    return {"session_id": session_id, "status": "running"}
+    return TurnStarted(session_id=session_id)
 
 
-async def cancel_post_draft(ctx: McpContext, args: SessionToolArgs) -> dict[str, Any]:
+async def cancel_post_draft(ctx: McpContext, args: SessionToolArgs) -> DraftCancelled:
     """Stop semantics (ADR 0004): cancel in-flight, discard the parked turn."""
     async with open_session() as db:
         session = await _load_session(db, ctx, args.session_id)
         await service.stop_session_turn(db, session)
         await db.commit()
-    return {"session_id": args.session_id, "status": "cancelled"}
+    return DraftCancelled(session_id=args.session_id)

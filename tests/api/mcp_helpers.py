@@ -29,7 +29,8 @@ tests/api/bdd/features/mcp.feature):
   "persona", "image_format", "image_approved": bool}``.
 - Tool results: ``structuredContent`` carries ``session_id`` + ``status``
   (``running`` | ``awaiting_angle_pick`` | ``awaiting_image_ok`` | ``ready``
-  | ``failed`` | ``cancelled``). ``awaiting_angle_pick`` adds the angle-park
+  | ``failed`` | ``cancelled``) — result shapes live in ``schemas/mcp.py``
+  (``PostDraftState`` union). ``awaiting_angle_pick`` adds the angle-park
   payload incl. ``recommended_angle_index``; ``ready`` adds ``preview`` and
   ``confirm_url`` = ``{web_base_url}/sessions/{id}``. ``approval_token``
   never appears. Guard refusals are tool errors (``isError: true``) whose

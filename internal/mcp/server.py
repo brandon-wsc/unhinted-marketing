@@ -64,7 +64,7 @@ def _check_grant_rate(ctx: McpContext, name: str) -> None:
 
 
 class _Tool(BaseModel):
-    handler: Callable[..., Awaitable[dict]]
+    handler: Callable[..., Awaitable[BaseModel]]
     args_model: type[BaseModel] | None
     description: str
 
@@ -158,8 +158,8 @@ def _tool_error_result(rpc_id: Any, reason: str, message: str, session_id: Any =
     )
 
 
-def _tool_result(rpc_id: Any, data: dict[str, Any]) -> dict:
-    clean = {k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in data.items()}
+def _tool_result(rpc_id: Any, data: BaseModel) -> dict:
+    clean = data.model_dump(mode="json", by_alias=True)
     return _rpc_result(
         rpc_id,
         {

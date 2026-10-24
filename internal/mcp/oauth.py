@@ -38,6 +38,9 @@ from schemas.mcp import OAuthTokenResponse
 AUTH_REQUEST_TTL = timedelta(minutes=10)
 AUTH_CODE_TTL = timedelta(seconds=60)
 REFRESH_TTL = timedelta(days=30)
+# Double-submit cookie set on the /authorize redirect: only the browser that
+# started the flow may read or answer its consent request (§3).
+REQUEST_COOKIE = "mcp_oauth_request"
 # Scopes the PRM advertises — `images:generate` is opt-in at consent.
 DEFAULT_SCOPES = ["knowledge:read", "drafts:write"]
 

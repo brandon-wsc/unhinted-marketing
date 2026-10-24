@@ -8,9 +8,11 @@ stays a UI click (ADR 0003).
 from __future__ import annotations
 
 import uuid
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from schemas.contracts import DraftAwaitingAnglePickData, DraftCopy, PreviewMediaItem
 
 # §5 scope table — the only mapping between tools and scopes.
 MCP_TOOL_SCOPES: dict[str, str] = {
@@ -46,6 +48,106 @@ class ChooseAngleArgs(SessionToolArgs):
 
 class RevisePostDraftArgs(SessionToolArgs):
     instruction: str = Field(min_length=1, max_length=8000)
+
+
+# --- tool results — what lands in tools/call structuredContent -----------------
+
+
+class VoiceDigest(BaseModel):
+    """``voice_pack()`` fields an external client may see (§7)."""
+
+    craft: str = ""
+    roast_level: int = 0
+    roast_level_label: str = ""
+    locale: str = "zh-HK"
+    forbidden_phrases: list[str] = Field(default_factory=list)
+    tone_notes: str | None = None
+    exemplar_captions: list[str] = Field(default_factory=list)
+
+
+class BrandProductSummary(BaseModel):
+    """Name + one-line summary — never a search_document dump (§7)."""
+
+    name: str
+    summary: str = ""
+
+
+class BrandContextResult(BaseModel):
+    company_name: str
+    voice: VoiceDigest
+    products: list[BrandProductSummary] = Field(default_factory=list)
+
+
+class DraftToolResult(BaseModel):
+    session_id: uuid.UUID
+
+
+class TurnStarted(DraftToolResult):
+    """Mutating tools — a background turn owns the session; poll get_post_draft."""
+
+    status: Literal["running"] = "running"
+
+
+class DraftCancelled(DraftToolResult):
+    status: Literal["cancelled"] = "cancelled"
+
+
+class AwaitingAnglePick(DraftToolResult, DraftAwaitingAnglePickData):
+    """The angle park verbatim — same payload the SSE event carries (§9)."""
+
+    status: Literal["awaiting_angle_pick"] = "awaiting_angle_pick"
+
+
+class AwaitingImageOk(DraftToolResult):
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: Literal["awaiting_image_ok"] = "awaiting_image_ok"
+    # JSON key stays `copy`; Python name avoids shadowing BaseModel.copy.
+    draft_copy: DraftCopy = Field(default_factory=DraftCopy, alias="copy")
+    # The executor's image plan is prompt-owned, not a stable contract.
+    image_plan: dict[str, Any] | None = None
+
+
+class ReadyPreview(BaseModel):
+    """Canonical draft + primary media — approval_token never leaves the server."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    draft_copy: DraftCopy = Field(alias="copy")
+    image_url: str | None = None
+    media: list[PreviewMediaItem] = Field(default_factory=list)
+
+
+class DraftReady(DraftToolResult):
+    status: Literal["ready"] = "ready"
+    confirm_url: str
+    message: str | None = None
+    preview: ReadyPreview
+
+
+class AwaitingReply(DraftToolResult):
+    """Turn ended outside a park or preview — answer via revise_post_draft."""
+
+    status: Literal["awaiting_reply"] = "awaiting_reply"
+    message: str | None = None
+
+
+class DraftFailed(DraftToolResult):
+    status: Literal["failed"] = "failed"
+    error: str
+
+
+PostDraftState = Annotated[
+    TurnStarted
+    | AwaitingAnglePick
+    | AwaitingImageOk
+    | DraftReady
+    | AwaitingReply
+    | DraftFailed
+    | DraftCancelled,
+    Field(discriminator="status"),
+]
+"""ADR 0051 §7 — every status get_post_draft can report."""
 
 
 class ConsentRequest(BaseModel):
