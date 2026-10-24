@@ -53,8 +53,9 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0048](./0048-scanned-pdf-ocr-transcript.md) | Scanned-PDF OCR via client transcript (`needs_ocr` + transcript contract) | Proposed |
 | [0049](./0049-browser-ocr-client-path.md) | Browser OCR client path (pdf.js + tesseract.js behind engine seam) | Proposed |
 | [0050](./0050-ingest-schedule-instance-settings.md) | Ingest schedule knobs in instance settings | Accepted |
-| [0051](./0051-remote-mcp-server.md) | Remote MCP server for consumer AI apps (OAuth grants, auto gates, Confirm stays UI) | Accepted |
+| [0051](./0051-remote-mcp-server.md) | Remote MCP server for consumer AI apps (OAuth grants, auto gates, Confirm stays UI) | Accepted (§2 amended by 0053) |
 | [0052](./0052-ui-locales-independent-of-draft-voice.md) | UI locales zh-TW / zh-CN; UI locale independent of draft voice | Accepted |
+| [0053](./0053-mcp-cimd-loopback-redirect.md) | MCP authorization server advertises CIMD; http loopback redirect may use any port | Accepted |
 
 ## Format
 

@@ -11,11 +11,14 @@ import hashlib
 
 import pytest
 
+from internal.instance.config import InstanceSnapshot
 from internal.mcp.clients import (
     ClientMetadataError,
+    redirect_uri_allowed,
     validate_client_document,
     validate_client_id,
 )
+from internal.mcp.grants import KNOWN_SCOPES
 from internal.mcp.oauth import pkce_verifier_matches
 
 
@@ -84,10 +87,123 @@ def test_client_document_client_id_must_match():
         )
 
 
-def test_redirect_uri_exact_match():
+def test_redirect_uri_exact_match_off_loopback():
+    """https and other non-loopback URIs stay byte-for-byte (ADR 0051)."""
     doc = {"redirect_uris": ["https://a.example/cb", "http://localhost:3000/cb"]}
-    from internal.mcp.clients import redirect_uri_allowed
 
     assert redirect_uri_allowed(doc, "https://a.example/cb")
     assert not redirect_uri_allowed(doc, "https://a.example/cb/")
     assert not redirect_uri_allowed(doc, "https://a.example/evil")
+    assert not redirect_uri_allowed(doc, "https://a.example:443/cb")
+    # The loopback entry still matches its own string, and any other port
+    # on that same host and path (ADR 0053). A different loopback host does not.
+    assert redirect_uri_allowed(doc, "http://localhost:3000/cb")
+    assert redirect_uri_allowed(doc, "http://localhost:4545/cb")
+    assert not redirect_uri_allowed(doc, "http://127.0.0.1:4545/cb")
+    assert not redirect_uri_allowed(doc, "http://localhost:4545/other")
+
+
+# Published 2026-10-24 at https://claude.ai/oauth/claude-code-client-metadata.
+# The CLI then sends http://localhost:<ephemeral-port>/callback (RFC 8252 §7.3
+# for the IP literal; Claude's connector docs ask servers to apply the same
+# port-agnostic match to the localhost name the CLI actually uses).
+_CLAUDE_CODE_CIMD = {
+    "redirect_uris": ["http://localhost/callback", "http://127.0.0.1/callback"],
+}
+
+
+def test_claude_code_ephemeral_localhost_callback_is_allowed():
+    assert redirect_uri_allowed(_CLAUDE_CODE_CIMD, "http://localhost/callback")
+    assert redirect_uri_allowed(_CLAUDE_CODE_CIMD, "http://localhost:3118/callback")
+    assert redirect_uri_allowed(_CLAUDE_CODE_CIMD, "http://127.0.0.1:3118/callback")
+    assert redirect_uri_allowed(_CLAUDE_CODE_CIMD, "HTTP://LOCALHOST:3118/callback")
+
+
+def test_claude_code_callback_rejects_lookalikes_and_other_parts():
+    rejected = (
+        "http://localhost:3118/callback/",
+        "http://localhost:3118/callback/extra",
+        "http://localhost:3118/Callback",
+        "https://localhost:3118/callback",
+        "http://localhost:3118/callback?next=1",
+        "http://localhost:3118/callback#frag",
+        "http://user@localhost:3118/callback",
+        "http://localhost.evil.test:3118/callback",
+        "http://localhost.localdomain:3118/callback",
+        "http://127.0.0.1.evil.test/callback",
+        "http://127.0.0.2:3118/callback",
+        "http://[::1]:3118/callback",
+        "http://2130706433:3118/callback",
+        "http://localhost:3118\\@evil.test/callback",
+    )
+    for uri in rejected:
+        assert not redirect_uri_allowed(_CLAUDE_CODE_CIMD, uri), uri
+
+
+def test_loopback_port_exception_keeps_path_query_and_host():
+    """A registered port does not pin the request port; nothing else moves."""
+    doc = {"redirect_uris": ["http://127.0.0.1:3000/cb?x=1"]}
+    assert redirect_uri_allowed(doc, "http://127.0.0.1:4545/cb?x=1")
+    assert redirect_uri_allowed(doc, "http://127.0.0.1/cb?x=1")
+    assert not redirect_uri_allowed(doc, "http://127.0.0.1:4545/cb")
+    assert not redirect_uri_allowed(doc, "http://127.0.0.1:4545/cb?x=2")
+    assert not redirect_uri_allowed(doc, "http://localhost:4545/cb?x=1")
+
+    v6 = {"redirect_uris": ["http://[::1]/callback"]}
+    assert redirect_uri_allowed(v6, "http://[::1]:3118/callback")
+    assert redirect_uri_allowed(v6, "http://[0:0:0:0:0:0:0:1]:3118/callback")
+    assert not redirect_uri_allowed(v6, "http://[::ffff:127.0.0.1]:3118/callback")
+    assert not redirect_uri_allowed(v6, "http://127.0.0.1:3118/callback")
+
+
+def test_https_callback_stays_exact_including_grok():
+    """Grok's CIMD (fetched 2026-10-24) is https with a trailing slash — exact.
+
+    ``https://localhost`` does not get the loopback port exception; that
+    exception is ``http`` only (RFC 8252).
+    """
+    doc = {
+        "redirect_uris": [
+            "https://grok.com/connectors-oauth-exchange-code/",
+            "https://console.x.ai/connectors-oauth-exchange-code/",
+        ]
+    }
+    assert redirect_uri_allowed(doc, "https://grok.com/connectors-oauth-exchange-code/")
+    assert not redirect_uri_allowed(doc, "https://grok.com/connectors-oauth-exchange-code")
+    assert not redirect_uri_allowed(doc, "https://grok.com/connectors-oauth-exchange-code/extra")
+    assert not redirect_uri_allowed(doc, "https://evil.example/connectors-oauth-exchange-code/")
+    hosted = {"redirect_uris": ["https://claude.ai/api/mcp/auth_callback"]}
+    assert redirect_uri_allowed(hosted, "https://claude.ai/api/mcp/auth_callback")
+    assert not redirect_uri_allowed(hosted, "https://claude.ai:443/api/mcp/auth_callback")
+    https_loopback = {"redirect_uris": ["https://localhost/callback"]}
+    assert redirect_uri_allowed(https_loopback, "https://localhost/callback")
+    assert not redirect_uri_allowed(https_loopback, "https://localhost:3118/callback")
+
+
+def test_authorization_server_metadata_advertises_cimd(monkeypatch):
+    """Claude selects CIMD only when both of these are present; no DCR endpoint."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from cmd.api.routes.mcp import discovery_router
+
+    monkeypatch.setattr(
+        "cmd.api.routes.mcp.get_snapshot",
+        lambda: InstanceSnapshot(web_base_url="https://install.example"),
+    )
+    app = FastAPI()
+    app.include_router(discovery_router)
+    response = TestClient(app).get("/.well-known/oauth-authorization-server")
+    assert response.status_code == 200
+    assert response.json() == {
+        "issuer": "https://install.example",
+        "authorization_endpoint": "https://install.example/api/oauth/authorize",
+        "token_endpoint": "https://install.example/api/oauth/token",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["none"],
+        "client_id_metadata_document_supported": True,
+        "scopes_supported": sorted(KNOWN_SCOPES),
+    }
+    assert "registration_endpoint" not in response.json()

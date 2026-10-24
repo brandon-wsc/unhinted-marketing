@@ -75,7 +75,13 @@ async def protected_resource_metadata() -> dict[str, Any]:
 
 @discovery_router.get("/.well-known/oauth-authorization-server")
 async def authorization_server_metadata() -> dict[str, Any]:
-    """RFC 8414 — issuer = web_base_url; CIMD means no registration endpoint."""
+    """RFC 8414 — issuer = web_base_url; CIMD, no registration endpoint.
+
+    MCP clients (Claude, Grok) select Client ID Metadata Documents only when
+    this document advertises ``client_id_metadata_document_supported`` and
+    public-client token auth. Missing the flag makes them fall through to
+    Dynamic Client Registration, which this server does not offer (ADR 0053).
+    """
     base = get_snapshot().web_base_url
     return {
         "issuer": base,
@@ -85,5 +91,6 @@ async def authorization_server_metadata() -> dict[str, Any]:
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"],
+        "client_id_metadata_document_supported": True,
         "scopes_supported": sorted(KNOWN_SCOPES),
     }

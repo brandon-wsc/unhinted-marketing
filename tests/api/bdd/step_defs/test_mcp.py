@@ -20,6 +20,7 @@ from internal.memory.models import LlmCallRecord, Session
 from internal.session.graph import ANGLE_GATE_NODE, set_session_graph
 from tests.api.helpers import auth_header, join_org, register_user, seed_preview_session
 from tests.api.mcp_helpers import (
+    AS_METADATA_PATH,
     CONNECTED_APP_PATH,
     MCP_TOOLS,
     PRM_PATH,
@@ -214,6 +215,11 @@ def fetch_prm(api, bdd_ctx) -> None:
     bdd_ctx["res"] = api.get(PRM_PATH)
 
 
+@when("the client fetches the authorization server metadata")
+def fetch_as_metadata(api, bdd_ctx) -> None:
+    bdd_ctx["res"] = api.get(AS_METADATA_PATH)
+
+
 @when(parsers.parse('the MCP token requests "{method} {path}"'))
 def mcp_token_requests_web_route(api, bdd_ctx, method: str, path: str) -> None:
     bdd_ctx["res"] = api.request(method, path, headers=auth_header(bdd_ctx["mcp_token"]))
@@ -319,6 +325,20 @@ def prm_authorization_server(bdd_ctx) -> None:
 @then(parsers.parse('the default scopes are "{scopes}"'))
 def prm_default_scopes(bdd_ctx, scopes: str) -> None:
     assert set(bdd_ctx["res"].json()["scopes_supported"]) == set(scopes.split())
+
+
+@then("the authorization server advertises client id metadata documents")
+def as_advertises_cimd(bdd_ctx) -> None:
+    body = bdd_ctx["res"].json()
+    # Claude (and MCP 2026-07-28) pick CIMD only when both are present.
+    assert body.get("client_id_metadata_document_supported") is True
+    assert body.get("token_endpoint_auth_methods_supported") == ["none"]
+    assert body.get("code_challenge_methods_supported") == ["S256"]
+
+
+@then("the authorization server does not offer dynamic client registration")
+def as_does_not_offer_dcr(bdd_ctx) -> None:
+    assert "registration_endpoint" not in bdd_ctx["res"].json()
 
 
 @then("the tools are exactly the ADR 0051 surface")

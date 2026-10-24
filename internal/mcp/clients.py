@@ -1,9 +1,16 @@
-"""Client ID Metadata Documents (ADR 0051 §2).
+"""Client ID Metadata Documents (ADR 0051 §2, amended by ADR 0053).
 
 The ``client_id`` is an HTTPS URL whose JSON document is the client's
 registration. Fetching is SSRF-guarded: https only, no private or loopback
-hosts, redirects refused, size and time capped. ``redirect_uri`` must be an
-exact string match against the document's list.
+hosts, redirects refused, size and time capped.
+
+``redirect_uri`` is an exact string match against that list, except an
+``http`` loopback URI (``localhost``, ``127.0.0.1``, ``[::1]``) may use any
+port. RFC 8252 §7.3 requires the port exception for the IP literals; Claude
+Code publishes portless ``http://localhost/callback`` and then redirects to
+``http://localhost:<ephemeral>/callback`` (ADR 0053). Scheme, host, path,
+and query stay exact. The fetch guard is unchanged — loopback is legal only
+as a client's redirect, never as a ``client_id`` we fetch.
 """
 
 from __future__ import annotations
@@ -82,9 +89,71 @@ def validate_client_document(doc: dict, client_id: str) -> dict:
     return doc
 
 
+# RFC 8252 §7.3 loopback IP literals, plus the ``localhost`` name Claude Code
+# actually sends. These are not aliases of each other.
+_LOOPBACK_V4 = ipaddress.ip_address("127.0.0.1")
+_LOOPBACK_V6 = ipaddress.ip_address("::1")
+
+
+def _loopback_host_key(hostname: str) -> str | None:
+    """``localhost``, ``127.0.0.1``, or ``::1``. Anything else is not loopback."""
+    if hostname == "localhost":
+        return "localhost"
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return None
+    if ip == _LOOPBACK_V4:
+        return "127.0.0.1"
+    if ip == _LOOPBACK_V6:
+        return "::1"
+    return None
+
+
+def _http_loopback_key(uri: str) -> tuple[str, str, str] | None:
+    """``(host, path, query)`` for an http loopback redirect, ignoring port.
+
+    ``None`` unless the URI is one we will treat as port-flexible: scheme
+    ``http``, no userinfo, no fragment, and a loopback host. Path and query
+    stay in the key so they still have to match exactly.
+    """
+    if not isinstance(uri, str) or any(char in uri for char in "\r\n\\"):
+        return None
+    parsed = urlparse(uri)
+    if parsed.scheme.lower() != "http":
+        return None
+    if parsed.username is not None or parsed.password is not None or parsed.fragment:
+        return None
+    # urlparse can still report a loopback hostname when userinfo used a trick
+    # the username property missed. Refuse the netloc outright.
+    if "@" in parsed.netloc or not parsed.hostname:
+        return None
+    host_key = _loopback_host_key(parsed.hostname)
+    if host_key is None:
+        return None
+    return (host_key, parsed.path, parsed.query)
+
+
 def redirect_uri_allowed(doc: dict, redirect_uri: str) -> bool:
-    """Exact string match — no prefix or wildcard matching."""
-    return redirect_uri in (doc.get("redirect_uris") or [])
+    """True when ``redirect_uri`` is registered on this client.
+
+    Non-loopback URIs compare as exact strings (ADR 0051). An ``http``
+    loopback URI may differ in port only (ADR 0053): ``localhost``,
+    ``127.0.0.1``, and ``[::1]`` are matched separately, and a registered
+    port does not pin the port the client listens on.
+    """
+    uris = doc.get("redirect_uris")
+    if not isinstance(uris, list):
+        return False
+    if redirect_uri in uris:
+        return True
+    requested = _http_loopback_key(redirect_uri)
+    if requested is None:
+        return False
+    return any(
+        isinstance(candidate, str) and _http_loopback_key(candidate) == requested
+        for candidate in uris
+    )
 
 
 async def fetch_client_metadata(client_id: str) -> dict:
