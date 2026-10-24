@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import en from "./en.json";
+import zhCN from "./zh-CN.json";
 import zhHK from "./zh-HK.json";
+import zhTW from "./zh-TW.json";
 
 function flattenKeys(value: unknown, prefix = ""): string[] {
   if (value === null || typeof value !== "object") {
@@ -16,7 +18,10 @@ function flattenKeys(value: unknown, prefix = ""): string[] {
 }
 
 describe("i18n locale catalogs", () => {
-  it("keeps the same keys across zh-HK and en", () => {
-    expect(flattenKeys(en).sort()).toEqual(flattenKeys(zhHK).sort());
+  it("keeps the same keys across all supported locales", () => {
+    const base = flattenKeys(zhHK).sort();
+    for (const catalog of [zhTW, zhCN, en]) {
+      expect(flattenKeys(catalog).sort()).toEqual(base);
+    }
   });
 });

@@ -15,7 +15,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 | Auth backend (JWT, register/login) | ✅ Done |
 | Auth DB tables + Alembic | ✅ Done |
 | React login / register / dashboard shell | ✅ Done |
-| i18n (zh-HK, en) | ✅ Done |
+| i18n (zh-HK, zh-TW, zh-CN, en) | ✅ Done |
 | Dark / light theme (manual switch, no system mode) | ✅ Done |
 | App header (logo + user menu — dropdown on desktop, dialog on mobile) | ✅ Done |
 | HK hot search ingestion | ✅ Done (Google Trends HK only) |
@@ -173,9 +173,10 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Tunable** — `entities.profile.roast_level` 0–3 (missing → 1); injected as `company_context.voice` in `load_context`
 - **Prompts** — `BRAINSTORM` / `EXECUTOR_POST` / `EDIT_COPY` / `REVIEWER` share craft block + few-shots; chat stays assistant voice
 
-**Decision (2026-08-22) — zh-HK Traditional Chinese voice (no `yue` locale):** → [VOICE.md](./VOICE.md)
+**Decision (2026-08-22) — zh-HK Traditional Chinese voice (no `yue` locale):** → [VOICE.md](./VOICE.md) · decoupled by [ADR 0052](./adr/0052-ui-locales-independent-of-draft-voice.md)
 
-- **Locale** — UI + draft locale is `zh-HK` 繁體中文（香港）only (+ `en`). Do not ship a separate 廣東話 / `yue` catalog.
+- **Draft voice** — draft/LLM output stays `zh-HK` 繁體中文（香港）only. Do not ship a separate 廣東話 / `yue` catalog.
+- **UI locale** — independent of draft voice: picker ships `zh-HK` (default, spoken 粵語 chrome), `zh-TW`, `zh-CN` (書面語), `en` (ADR 0052).
 - **Register** — spoken HK phrasing, 港式英文, and 標語文言 are **voice layers** inside `zh-HK`, not a second language picker.
 - **UI copy** — `zh-HK.json` uses that spoken register (chat empty states, tagline); errors / legal stay clear.
 
@@ -483,7 +484,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 **UX features:**
 
 - **Header:** Logo + brand name (top-left); user menu (top-right) with language, theme switch, logout — dropdown on desktop, dialog on mobile
-- **i18n:** `react-i18next`, locales `zh-HK` / `en` (default `zh-HK`); UI `zh-HK` follows the Traditional Chinese (Hong Kong) voice in [VOICE.md](./VOICE.md) — extensible via `SUPPORTED_LOCALES`
+- **i18n:** `react-i18next`, locales `zh-HK` (default) / `zh-TW` / `zh-CN` / `en`; UI `zh-HK` follows the Traditional Chinese (Hong Kong) voice in [VOICE.md](./VOICE.md), `zh-TW`/`zh-CN` are 書面語 catalogs — UI locale is independent of draft voice ([ADR 0052](./adr/0052-ui-locales-independent-of-draft-voice.md))
 - **Theme:** Light / dark manual switch (no system mode), persisted in `localStorage`
 - **Form memory:** Last user email / display name / org name from `localStorage` (not fake placeholders)
 - **Auth:** Access token in memory; refresh via cookie; auto-refresh on app load

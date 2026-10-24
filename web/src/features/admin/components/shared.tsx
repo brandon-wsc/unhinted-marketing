@@ -7,6 +7,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { useContainerWidth } from "@/hooks/use-container-width";
+import i18n from "@/i18n";
 
 /** Content-based split breakpoint for admin record pages (Penpot System master-detail). */
 export const ADMIN_SPLIT_MIN_WIDTH = 1100;
@@ -99,7 +100,7 @@ export function DetailSplit({
 }
 
 export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-HK", { hour12: false });
+  return new Date(iso).toLocaleString(i18n.language, { hour12: false });
 }
 
 export function shortId(id: string): string {

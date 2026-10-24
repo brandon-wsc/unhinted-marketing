@@ -1,0 +1,1099 @@
+{
+  "app": {
+    "name": "Unhinted",
+    "title": "Unhinted Marketing"
+  },
+  "common": {
+    "loading": "加载中…",
+    "email": "邮箱",
+    "password": "密码",
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
+    "notAvailable": "—",
+    "cancel": "取消",
+    "save": "保存",
+    "saving": "保存中…",
+    "close": "关闭",
+    "scrollLeft": "向左滚动",
+    "scrollRight": "向右滚动",
+    "clear": "清除",
+    "copy": "复制",
+    "copied": "已复制",
+    "noMatches": "没有匹配的选项"
+  },
+  "header": {
+    "menu": {
+      "guest": "访客",
+      "language": "语言",
+      "theme": "主题",
+      "close": "关闭"
+    }
+  },
+  "auth": {
+    "craftCorner": "老板开口，AI 发帖。",
+    "login": {
+      "title": "登录",
+      "subtitle": "登录以使用 Unhinted Marketing",
+      "subtitleInvite": "以 {{email}} 登录以加入 {{company}}",
+      "submit": "登录",
+      "submitting": "登录中…",
+      "noAccount": "还没有账户？",
+      "registerLink": "立即注册"
+    },
+    "register": {
+      "title": "创建账户",
+      "subtitle": "注册后会自动创建公司 workspace",
+      "subtitleInvite": "以 {{email}} 注册后即会加入 {{company}}",
+      "displayName": "昵称",
+      "organizationName": "公司名称（选填）",
+      "passwordHint": "密码（至少 8 个字符）",
+      "confirmPassword": "确认密码",
+      "submit": "创建账户",
+      "submitting": "创建中…",
+      "hasAccount": "已有账户？",
+      "loginLink": "返回登录"
+    },
+    "logout": "退出登录"
+  },
+  "account": {
+    "menuEntry": "账户",
+    "title": "账户",
+    "profile": {
+      "title": "个人资料",
+      "joined": "注册日期",
+      "organizations": "所属公司",
+      "save": "保存",
+      "saving": "保存中…",
+      "saved": "已保存"
+    },
+    "connectAi": {
+      "title": "连接 AI 应用",
+      "description": "让外部 AI 应用（Claude、ChatGPT 等）使用你公司的语气与产品资料，通过 Unhinted 起稿；发布仍需回到这里点击确认。",
+      "urlLabel": "你的 MCP 服务器地址",
+      "steps": {
+        "claude": {
+          "1": "在 Claude 打开 Customize → Connectors → Add → Custom → Web。",
+          "2": "为它命名（例如“Unhinted”），粘贴你的 MCP 服务器地址。",
+          "3": "在 Unhinted 授权页登录，选择公司，批准连接。"
+        },
+        "chatgpt": {
+          "1": "在 ChatGPT 打开 Plugins →“+”→ Add custom MCP server。",
+          "2": "输入名称，在 Server URL 粘贴你的 MCP 服务器地址。",
+          "3": "授权方式选择 OAuth，然后在 Unhinted 授权页批准。"
+        }
+      },
+      "geminiNote": "Gemini 暂不支持——它的 connected apps 流程需要 Dynamic Client Registration，我们未提供。",
+      "footer": "设置过程中会要求你登录并选择一家公司。已连接的 app 会列在下方，可随时撤销。"
+    },
+    "connectedApps": {
+      "title": "已连接应用",
+      "empty": "暂无外部 AI 应用连接。",
+      "meta": "{{company}} · 已连接 {{date}} · 上次使用 {{lastUsed}}",
+      "neverUsed": "从未",
+      "revoke": "撤销",
+      "revoking": "撤销中…"
+    }
+  },
+  "oauth": {
+    "consent": {
+      "title": "连接应用",
+      "subtitle": "{{client}} 想使用你的公司连接 Unhinted。",
+      "appLabel": "连接中的应用",
+      "scopesLabel": "它想要：",
+      "companyLabel": "公司",
+      "noCompanies": "你尚未加入任何公司。",
+      "imagesNote": "批准此项也会让 app 生成图片，会使用你的 token 额度。",
+      "approve": "连接",
+      "deny": "拒绝",
+      "working": "连接中…",
+      "invalidRequest": "此授权链接无效或已过期。",
+      "scope": {
+        "knowledge_read": "读取你的品牌语气与产品资料",
+        "drafts_write": "创建与修订草稿",
+        "images_generate": "生成图片"
+      }
+    }
+  },
+  "chat": {
+    "mobile": {
+      "back": "返回"
+    },
+    "empty": {
+      "title": "今天想发什么内容？",
+      "subtitle": "输入一句话开始——我会结合香港热门话题与你的公司资料，一起构思最值得发布的内容。"
+    },
+    "questions": {
+      "title": "试试这些问题",
+      "loading": "正在想问题…",
+      "generating": "正在挑选题目…",
+      "failed": "无法生成建议。",
+      "retry": "重试"
+    },
+    "input": {
+      "placeholder": "输入消息…"
+    },
+    "send": "发送",
+    "stop": "停止",
+    "stopping": "停止中…",
+    "shell": {
+      "resize": "调整对话与预览宽度"
+    },
+    "queue": {
+      "badge": "排队中",
+      "remove": "移出队列",
+      "edit": "编辑消息",
+      "more": "更多",
+      "full": "最多排 3 条——等这轮完成后再发送。",
+      "holdForImage": "现在发送会先修改草稿，再等图片生成。",
+      "holdForAngle": "排队的消息会等你选好角度或按停止后才发送。",
+      "interrupt": "再按 Enter 中断并发送——这轮已写的内容会保留。"
+    },
+    "attach": {
+      "add": "附加文件",
+      "badType": "仅支持 PDF / DOCX / TXT / MD",
+      "tooBig": "文件超过 20 MB",
+      "limit": "最多 10 个附件",
+      "uploadFailed": "上传失败",
+      "download": "下载原始文件",
+      "downloadFailed": "下载失败",
+      "save": "存入素材库",
+      "saved": "已存入素材库",
+      "saveFailed": "存入素材库失败",
+      "retry": "重试",
+      "remove": "移除",
+      "status": {
+        "processing": "处理中",
+        "ready": "已就绪",
+        "needsOcr": "需要 OCR",
+        "failed": "读取失败"
+      },
+      "ocr": {
+        "run": "在浏览器 OCR",
+        "cancel": "取消 OCR",
+        "loading": "准备中",
+        "submitting": "上传中"
+      },
+      "ocrFailed": "OCR 失败"
+    },
+    "live": "实时",
+    "offline": "未连接",
+    "message": {
+      "copy": "复制",
+      "copied": "已复制",
+      "fork": "复制对话",
+      "time": {
+        "s": "{{n}} 秒前",
+        "m": "{{n}} 分钟前",
+        "h": "{{n}} 小时前",
+        "d": "{{n}} 天前"
+      }
+    },
+    "fork": {
+      "divider": "复制自“{{title}}”",
+      "toOne": "已复制到“{{title}}”",
+      "toMany": "已复制到 {{n}} 个对话",
+      "failed": "无法复制此对话",
+      "noteStale": "新对话带的是该消息当时的草稿，之后的修改不包含在内",
+      "noteLater": "预览是在该消息之后才生成的，所以新对话没有草稿"
+    },
+    "agent": {
+      "actions": "进度",
+      "working": "处理中",
+      "workedFor": "耗时 {{duration}}",
+      "nodes": {
+        "running": {
+          "working": "处理中…",
+          "route_intent": "正在分析需求…",
+          "query_generator": "正在查询资料…",
+          "research_ingest": "正在整理市场资料…",
+          "load_context": "正在加载公司资料…",
+          "product_matcher": "正在匹配产品…",
+          "chat": "正在回复…",
+          "trend_searcher": "正在搜索香港热门话题…",
+          "brainstormer": "正在构思角度…",
+          "executor_post": "正在撰写帖子…",
+          "grounding_check": "正在核查信号依据…",
+          "reviewer": "正在审阅草稿…",
+          "edit_copy": "正在修改文案…",
+          "executor_image_plan": "正在规划图片…",
+          "executor_image_gen": "正在生成图片…"
+        },
+        "done": {
+          "working": "已处理",
+          "route_intent": "已分析需求",
+          "query_generator": "已查询资料",
+          "research_ingest": "已整理市场资料",
+          "load_context": "已加载公司资料",
+          "product_matcher": "已匹配产品",
+          "chat": "已回复",
+          "trend_searcher": "已搜索香港热门话题",
+          "brainstormer": "已构思角度",
+          "executor_post": "已撰写帖子",
+          "grounding_check": "已核查信号依据",
+          "reviewer": "已审阅草稿",
+          "edit_copy": "已修改文案",
+          "executor_image_plan": "已规划图片",
+          "executor_image_gen": "已生成图片"
+        }
+      },
+      "brief": {
+        "title": "内容大纲",
+        "canDo": "可以做",
+        "cannotDo": "不会做",
+        "angles": "角度"
+      },
+      "interrupt": {
+        "title": "草稿与图片计划已完成",
+        "subtitle": "格式已锁定。可以弃置，或生成图片。想变更格式需先重写草稿。",
+        "confirm": "生成图片",
+        "working": "生成中…",
+        "discard": "弃置",
+        "plan": "图片计划",
+        "formatLabel": "图片格式",
+        "formatSingle": "单图",
+        "formatComic": "四格漫画"
+      },
+      "anglePick": {
+        "title": "先选择角度、语气与图片",
+        "subtitle": "选好后才动笔。单图与漫画需要不同的草稿。",
+        "personaLabel": "语气／受众",
+        "formatLabel": "图片格式",
+        "optionsLabel": "内容角度",
+        "otherLabel": "自定义角度",
+        "otherPlaceholder": "或自行描述方向…",
+        "otherSubmit": "使用这个方向",
+        "working": "撰写中…"
+      },
+      "imageOkMessage": "好的，请帮忙生成图片。"
+    },
+    "autoPicks": {
+      "title": "{{client}} 已自动选择",
+      "angle": "角度 {{index}}",
+      "imageApproved": "已批准生成图片",
+      "unknownClient": "外部应用"
+    },
+    "error": {
+      "sendFailed": "消息发送失败，请再试一次。",
+      "stopFailed": "无法停止，请再试一次。",
+      "llmFailed": "AI 服务发生错误",
+      "retry": "重试",
+      "usageLimit": "你这个月的用量已达上限，此消息未发送。请联系 owner / admin 调整上限。"
+    },
+    "history": {
+      "open": "打开记录",
+      "collapse": "收起记录",
+      "title": "对话记录",
+      "subtitle": "继续旧对话，或开启新对话",
+      "close": "关闭",
+      "new": "新对话",
+      "search": "搜索对话…",
+      "clearSearch": "清除搜索",
+      "refresh": "刷新",
+      "loading": "加载记录中…",
+      "empty": "暂无对话",
+      "noResults": "找不到相关对话",
+      "untitled": "未命名对话",
+      "fromClient": "来自 {{client}}",
+      "restoring": "正在恢复对话…",
+      "openFailed": "无法打开这个对话",
+      "createFailed": "无法创建新对话",
+      "more": "更多选项",
+      "pin": "置顶",
+      "unpin": "取消置顶",
+      "rename": "重命名",
+      "delete": "删除",
+      "cancel": "取消",
+      "deleting": "删除中…",
+      "deleteTitle": "删除这个对话？",
+      "deleteBody": "对话与草稿将永久删除，无法恢复。",
+      "renameFailed": "重命名失败",
+      "pinFailed": "置顶更新失败",
+      "deleteFailed": "删除失败",
+      "group": {
+        "pinned": "置顶",
+        "today": "今天",
+        "yesterday": "昨天",
+        "week": "过去 7 天",
+        "older": "更早"
+      }
+    }
+  },
+  "preview": {
+    "title": "帖子预览",
+    "readyBanner": "预览已就绪——点击查看。",
+    "emptyMobile": "暂无预览——草稿完成后会显示在这里。",
+    "revision": "修订 {{n}}",
+    "dirty": "未保存",
+    "apply": "应用",
+    "applySaving": "保存中…",
+    "confirm": "确认发布",
+    "confirmWorking": "处理中…",
+    "confirmDone": "已发布",
+    "confirmReceipt": "发布状态：{{status}}",
+    "confirmHint": "在对话中说“可以发布”并不会真的发布。确认会使用已保存的修订（若有未保存变更会先自动保存）。",
+    "gate": {
+      "imageRequired": "Instagram 帖子需要图片",
+      "notConnected": "尚未连接 Instagram 账号。",
+      "openSettings": "前往设置"
+    },
+    "receipt": {
+      "publishedTitle": "已发布",
+      "publishedBody": "已发布到 Instagram",
+      "publishedBadge": "已发布",
+      "viewOnInstagram": "在 Instagram 上查看",
+      "failedTitle": "发布失败",
+      "failedHint": "尚未发布。修正图片或账号后再次确认。",
+      "retry": "再次确认",
+      "error": {
+        "token_expired": "Token 已过期，请到设置更新后再确认。",
+        "permission": "Instagram 权限不足，请检查账号设置后再确认。",
+        "platform_error": "Instagram 无法发布此帖子。请检查图片与账号后再确认；如果没有问题，请稍后再试。"
+      }
+    },
+    "exemplar": {
+      "save": "将文案保存为语气范例",
+      "working": "保存中…",
+      "hint": "公司最多保留 3 条范例，之后草稿可以参考其节奏。不会再次发布。",
+      "saved": "已存入公司语气范例。",
+      "already": "此文案已在语气范例中。"
+    },
+    "fields": {
+      "caption": "文案",
+      "hashtags": "Hashtags",
+      "cta": "CTA"
+    },
+    "copy": {
+      "edit": "编辑文案",
+      "editTitle": "编辑文案",
+      "editHint": "Caption、CTA、Hashtags 会一起保存为同一个修订版本。",
+      "empty": "请先输入文案…"
+    },
+    "media": {
+      "title": "图片计划",
+      "edit": "编辑图片",
+      "editTitle": "编辑图片",
+      "editHint": "变更 prompt 或格式会重写草稿与图片计划。在点击生成前不会重新绘制。",
+      "stageDirection": "更新草稿",
+      "empty": "暂无图片——请先新增一张再编辑计划。",
+      "prompt": "Prompt",
+      "additionalPrompt": "额外 Prompt",
+      "style": "风格",
+      "composition": "构图",
+      "panel": "第 {{n}} 格",
+      "formatSingle": "单图",
+      "formatComic": "四格漫画",
+      "savePlan": "保存计划",
+      "generate": "生成",
+      "regen": "重新生成",
+      "regenWorking": "生成中…",
+      "cancel": "取消",
+      "delete": "删除图片",
+      "uploadHint": "拖拽图片到这里，或点击上传。",
+      "add": "新增图片",
+      "scrollPrev": "向左查看更多图片",
+      "scrollNext": "向右查看更多图片",
+      "slot": "图片 {{n}}",
+      "pending": "等待输出"
+    },
+    "mock": {
+      "sponsored": "Instagram 预览",
+      "placeholder": "图片位置",
+      "more": "更多"
+    },
+    "awaiting": {
+      "title": "等待生成图片",
+      "slotEmpty": "图片尚未生成",
+      "slotGenerating": "生成中…",
+      "status": "请在对话中弃置或生成。",
+      "plan": "图片计划",
+      "formatSingle": "单图",
+      "formatComic": "四格漫画",
+      "generatingTitle": "正在生成图片"
+    },
+    "sources": {
+      "title": "来源",
+      "empty": "本次未使用市场来源"
+    },
+    "error": {
+      "saveFailed": "草稿保存失败，请再试一次。",
+      "confirmFailed": "确认失败，请再试一次。",
+      "imageRequired": "Instagram 帖子需要图片，请新增图片后再确认。",
+      "notConnected": "尚未连接 Instagram。请到公司设置粘贴 token。",
+      "mediaUrlNoBase": "尚未设置网站地址——发布需要公开 HTTPS 地址。请 admin 到 Platform → Instance 设置。",
+      "mediaUrlNotPublic": "图片 URL 是内网地址，Instagram 服务器无法访问。请 admin 在 Platform → Instance 设置公开 HTTPS 地址，或在 Settings → Storage 设置 public URL。",
+      "mediaUrlNotHttps": "图片 URL 不是 HTTPS——Instagram 需要公开 HTTPS 地址。请 admin 更新 Instance URL 或 storage public URL。",
+      "planFailed": "图片计划保存失败，请再试一次。",
+      "regenFailed": "重新生成图片失败，请再试一次。",
+      "addFailed": "新增图片失败，请再试一次。",
+      "removeFailed": "删除图片失败，请再试一次。",
+      "uploadFailed": "上传失败，请再试一次。"
+    },
+    "sendForApproval": "送审",
+    "approval": {
+      "parkedTitle": "等待审批",
+      "parkedHint": "已送交 owner / admin 审批。若要修改可直接改完再送审，新请求会取代此请求。",
+      "rejectedTitle": "已被拒绝",
+      "rejectedHint": "此发布请求已被拒绝。修改内容后可再次送审。"
+    }
+  },
+  "settings": {
+    "menuEntry": "公司设置",
+    "title": "公司设置",
+    "navLabel": "公司",
+    "nav": {
+      "voice": "语气",
+      "products": "产品",
+      "members": "成员",
+      "approvals": "审批",
+      "models": "模型",
+      "instagram": "Instagram",
+      "storage": "存储"
+    },
+    "noCompany": {
+      "title": "暂无公司",
+      "body": "注册账户时会自动创建公司 Workspace。",
+      "back": "返回首页"
+    },
+    "members": {
+      "title": "成员",
+      "subtitleEditor": "团队名单、邀请链接与公司名称。",
+      "subtitleMember": "团队名单与公司名称。",
+      "saved": "已保存。",
+      "companyName": "公司名称",
+      "roster": "成员",
+      "remove": "移除",
+      "removeTitle": "移除成员",
+      "removeBody": "确定要将 {{name}} 移出公司？对方会立即失去此公司的访问权限。",
+      "roles": {
+        "owner": "Owner",
+        "admin": "Admin",
+        "member": "Member"
+      },
+      "columns": {
+        "name": "姓名",
+        "member": "成员",
+        "email": "邮箱",
+        "role": "角色",
+        "joined": "加入日期",
+        "actions": "操作",
+        "usage": "本月用量",
+        "limit": "上限"
+      },
+      "invite": {
+        "title": "邀请同事",
+        "hint": "生成链接给同事；对方需以受邀邮箱注册或登录才能加入。",
+        "limitPlaceholder": "无上限",
+        "send": "发送邀请",
+        "sending": "发送邀请中…",
+        "copy": "复制链接",
+        "copied": "已复制",
+        "pasteHint": "可粘贴到 WhatsApp 或 Slack",
+        "invalidEmail": "请输入有效的邮箱",
+        "alreadyMember": "此邮箱已是成员",
+        "alreadyPending": "此邮箱已有待处理的邀请"
+      },
+      "pending": {
+        "title": "待处理的邀请",
+        "expires": "到期日",
+        "revoke": "撤销邀请"
+      },
+      "usage": {
+        "ofLimit": "{{used}} / {{limit}}",
+        "unlimited": "{{used}} / 无限",
+        "breakdown": "平台 {{platform}} · BYOK {{byok}}"
+      },
+      "limit": {
+        "title": "每月用量上限",
+        "field": "Token 上限",
+        "hint": "{{name}} 本月已使用 {{used}} token（仅计平台 key，BYOK 不计）。留空即无上限。",
+        "clear": "移除上限",
+        "invalid": "请输入大于 0 的整数"
+      },
+      "publishApproval": {
+        "title": "发布前需审批",
+        "hint": "开启后，member 确认发布会先进入审批队列，由 owner / admin 批准后才会真正发布。"
+      }
+    },
+    "voice": {
+      "title": "语气",
+      "subtitle": "设置品牌草稿的语气与避用词语，之后草稿会依此生成。",
+      "readOnly": "如需修改请联系公司负责人。",
+      "saved": "已保存。",
+      "roast": {
+        "label": "语气强度",
+        "hint": "越高越俏皮、笑点越多；一般使用默认值即可。",
+        "levels": {
+          "0": "0 稳妥",
+          "1": "1 轻松小编",
+          "2": "2 港式抽水",
+          "3": "3 抽水王"
+        }
+      },
+      "locale": {
+        "label": "语言地区",
+        "hint": "草稿主要使用的地区写法，例如 zh-HK。"
+      },
+      "forbidden": {
+        "label": "避用词语",
+        "hint": "最多 15 个，以逗号分隔。草稿会尽量避开。"
+      },
+      "tone": {
+        "label": "语气备注",
+        "hint": "选填。用简短句子描述你想要的感觉即可。"
+      },
+      "exemplars": {
+        "label": "范例文案",
+        "hint": "最多 3 条，不必填满。一条足以代表节奏即可。确认后也可以再保存。",
+        "slot": "范例 {{n}}",
+        "chars": "{{used}} / {{max}}",
+        "add": "新增范例",
+        "remove": "移除范例",
+        "empty": "暂无范例。"
+      }
+    },
+    "products": {
+      "title": "产品",
+      "tabs": {
+        "org": "公司",
+        "mine": "个人"
+      },
+      "import": "上传 CSV / Excel",
+      "importHint": "相同产品编号会更新现有数据。",
+      "addRow": "新增",
+      "activeCount": "{{count}} 项",
+      "empty": "暂无产品。",
+      "archive": "封存",
+      "propose": "加入公司",
+      "cancelRequest": "取消申请",
+      "alreadyPending": "此产品编号已有待审批的申请",
+      "statusActive": "使用中",
+      "coveredByCompany": "公司",
+      "personalOnly": "个人",
+      "coverTitle": "当两个清单有相同产品时",
+      "coverBody": "草稿会使用公司版本。你的个人版本仍会保留；之后可申请更新公司清单。",
+      "columns": {
+        "name": "名称",
+        "draftsUse": "草稿使用",
+        "status": "状态",
+        "action": "操作"
+      },
+      "detail": {
+        "title": "产品详情",
+        "addTitle": "新增产品",
+        "editTitle": "编辑产品"
+      },
+      "fields": {
+        "name": "名称",
+        "sku": "产品编号 (SKU)",
+        "notes": "内容／备注",
+        "notesHint": "选填。卖点、成分或其他草稿应知道的信息。",
+        "skuExists": "清单已有此编号（{{name}}）。确认后会更新该行。",
+        "skuTaken": "此产品编号已属于“{{name}}”。若要保存此行，请修改编号。",
+        "skuConflict": "此产品编号已被另一项产品使用。",
+        "nameExists": "另一项产品已使用此名称（{{sku}}）。只要产品编号不同，仍可新增。"
+      },
+      "overwrite": {
+        "title": "此产品编号已有人使用",
+        "body": "产品编号 {{sku}} 已属于“{{name}}”。可以覆盖该行、返回修改编号，或以系统生成的新编号当作新产品。",
+        "confirm": "更新",
+        "generate": "生成新编号",
+        "keepEditing": "返回修改"
+      },
+      "stats": {
+        "imported": "新增",
+        "updated": "更新",
+        "skipped": "跳过",
+        "errors": "问题"
+      }
+    },
+    "approvals": {
+      "title": "审批",
+      "subtitle": "审批成员想加入公司清单的个人产品资料。",
+      "emptyTitle": "暂无待审批项目",
+      "emptyBody": "当成员提交产品提案或发布审批请求时，会显示在这里。",
+      "proposedBy": "由 {{email}} 提出",
+      "approve": "批准",
+      "reject": "拒绝",
+      "detailTitle": "产品审批",
+      "columns": {
+        "product": "产品",
+        "sku": "SKU",
+        "note": "备注"
+      },
+      "products": "产品审批",
+      "productsEmpty": "暂无产品申请",
+      "publish": {
+        "title": "发布审批",
+        "empty": "暂无待审批的发布请求",
+        "detailTitle": "发布审批",
+        "hashtags": "Hashtags",
+        "cta": "CTA",
+        "imageAlt": "帖子图片",
+        "meta": "{{platform}} · 第 {{revision}} 版",
+        "approvePublish": "批准并发布",
+        "approveFailed": "发布失败（{{kind}}）。此请求已离开队列，成员可修改后再次送审。",
+        "columns": {
+          "caption": "内容",
+          "requester": "成员",
+          "platform": "平台"
+        }
+      }
+    },
+    "instagram": {
+      "title": "Instagram",
+      "subtitle": "确认发布时会使用这个专业账号。",
+      "publishUrlHint": "发布还需要 Instagram 服务器能访问图片——Instance URL 必须是公开 HTTPS，或在 Settings → Storage 使用 public URL。",
+      "igUserId": "Instagram 用户 ID",
+      "expiresAt": "到期（选填）",
+      "pickDate": "选择日期",
+      "tokenMasked": "Token",
+      "connected": "已连接",
+      "expiredTitle": "Token 已过期",
+      "rotate": "重新连接",
+      "disconnect": "解除连接",
+      "disconnectTitle": "解除 Instagram 连接？",
+      "disconnectBody": "之后确认发布时需要重新连接 Instagram。",
+      "disconnected": "已解除连接。",
+      "loadFailed": "无法加载 Instagram 设置。",
+      "saveFailed": "保存失败，请再试一次。",
+      "connect": "连接 Instagram",
+      "connectingTitle": "正在连接 Instagram…",
+      "connectingBody": "在新窗口完成授权后，这里会自动更新。若卡住可取消重试。",
+      "oauthFailed": "连接失败，请再试一次。",
+      "oauthAborted": "授权已取消或超时，请重新连接。",
+      "oauthNotConfigured": "尚未设置 Instagram Login——需要平台管理员在 平台 → Instance 输入 Meta app 凭证。",
+      "oauthModeUnavailable": "连接流程与当前的 OAuth 模式不符——请检查 平台 → Instance 的设置。",
+      "oauthNotProfessional": "此 Instagram 账号不是专业账号（Business／Creator）。发布前请先在 Instagram 转为专业账号。",
+      "oauthMissingPublish": "授权成功，但未批准发布权限。请重新连接并批准 instagram_business_content_publish。",
+      "oauthCsrfMismatch": "授权窗口与此浏览器 session 不符，请再次点击连接。",
+      "oauthRelayTicketExpired": "relay 交接 session 已过期，请再次点击连接。",
+      "needsAppTitle": "需要先创建 Meta app",
+      "needsAppStep1": "到 Meta for Developers 创建 app，加入 Instagram use case（API setup with Instagram login）。",
+      "needsAppStep2": "在 app 的 Instagram 设置中，将下方的 redirect URI 粘贴到 Valid OAuth Redirect URIs，并将你的 Instagram 专业账号加入此 app。",
+      "needsAppStep3": "在 平台 → Instance 输入 Instagram App ID 与 Secret，回来后再点击连接。",
+      "needsAppRedirectLabel": "Valid OAuth Redirect URIs",
+      "needsAppDeauthorizeLabel": "Deauthorize Callback URL",
+      "needsAppDataDeletionLabel": "Data Deletion Request URL",
+      "needsAppLiveNote": "转为 Live mode 还需要上面两个 URL，并在 App Settings → Basic 填写 Privacy Policy URL；转换前，只有已加入 app 的 Instagram 账号可以连接。",
+      "standardAccessNote": "连接你拥有或管理的 Instagram 账号只需要 Standard Access——不需 Meta App Review 与 Business Verification。",
+      "openInstanceSettings": "前往 平台 → Instance",
+      "needsAppViewerNote": "需要平台管理员先在 平台 → Instance 输入 Meta app 凭证。",
+      "readyCaption": "会通过此 instance 自己的 Meta app 连接。",
+      "readyCaptionRelay": "会通过供应商的托管 relay 连接——token 会经过供应商基础设施（仅做交接，不会存储）。",
+      "manualToggle": "高级：手动粘贴 token",
+      "accessToken": "Access token"
+    },
+    "storage": {
+      "title": "存储",
+      "subtitle": "预览图目前在本地；要移到 S3 可在这里迁移，上传不会中断。",
+      "badgeLocal": "本地",
+      "badgeS3": "S3",
+      "badgeDualWrite": "双写中",
+      "bucket": "Bucket",
+      "endpoint": "Endpoint",
+      "region": "Region",
+      "publicUrl": "Public URL",
+      "accessKey": "Access key",
+      "secret": "Secret",
+      "test": "测试连接",
+      "save": "保存",
+      "saved": "已保存。",
+      "testOk": "连接正常。",
+      "copyingLocked": "迁移期间无法修改设置。",
+      "start": "开始迁移到 S3",
+      "startHint": "目前使用本地。S3 设置已保存，可开始迁移。上传不会中断。",
+      "startDisabled": "请先保存 S3 设置，才能开始迁移。",
+      "copyingTitle": "正在迁移到 S3…",
+      "copyingBody": "已复制 {{copied}} / {{scanned}} · {{size}} · 跳过 {{orphans}} 个孤立文件。App 仍读取本地。",
+      "readyHint": "复制完成。目前仍是本地。在清除本地文件前都可改回。",
+      "flip": "改用 S3",
+      "flipTitle": "改用 S3？",
+      "flipBody": "预览将改为读取 S3。本地文件暂时保留，清除前都可改回。",
+      "flippingTitle": "正在改用 S3…",
+      "graceHint": "目前正在使用 S3。本地副本仍在，清除前都可改回本地。",
+      "rollback": "改回本地",
+      "clean": "清除本地文件",
+      "cleanTitle": "清除本地文件？",
+      "cleanBody": "将删除已存在 S3 的本地副本。之后无法一键改回本地。",
+      "cleaningTitle": "正在清除本地文件…",
+      "doneHint": "本地文件已清除。要回到本地需重新迁移。",
+      "tryAgain": "重试",
+      "failed": "迁移失败。",
+      "loadFailed": "无法加载存储设置。",
+      "saveFailed": "保存失败，请再试一次。"
+    },
+    "apiKeys": {
+      "title": "模型",
+      "subtitle": "使用自己的密钥与模型，设置 Cheap、Medium、Strong、Image 四个层级。成员看不到此页。",
+      "addModel": "新增模型",
+      "addKey": "新增密钥",
+      "addKeyHint": "加入后可稍后再选择模型与路由。",
+      "addModelHint": "保存后再到路由指派层级。",
+      "keys": {
+        "title": "密钥",
+        "empty": "暂无密钥。点击“新增密钥”加入第一组。",
+        "masked": "••••{{last4}}",
+        "columns": {
+          "label": "名称",
+          "key": "密钥",
+          "type": "类型",
+          "status": "状态"
+        }
+      },
+      "models": {
+        "title": "模型",
+        "empty": "暂无模型。用“新增模型”加入一组。",
+        "emptyNeedsKey": "请先加入密钥，再注册模型。",
+        "columns": {
+          "model": "模型",
+          "key": "密钥",
+          "capability": "用途",
+          "status": "状态"
+        },
+        "imageTestTitle": "测试会调用付费图像 API",
+        "imageTestBody": "这会实际调用一次图像 API，可能扣用你的 provider 用量。确定要测试？",
+        "imageTestConfirm": "确认测试"
+      },
+      "routing": {
+        "title": "路由",
+        "subtitle": "每个层级可选择公司模型，或留空使用平台默认。",
+        "platformDefault": "平台默认",
+        "helperOrg": "公司：{{modelId}}",
+        "helperEnv": "平台默认",
+        "slots": {
+          "cheap": "Cheap",
+          "medium": "Medium",
+          "strong": "Strong",
+          "image": "Image"
+        }
+      },
+      "status": {
+        "verified": "已验证",
+        "error": "错误",
+        "pending": "验证中"
+      },
+      "capability": {
+        "chat": "对话",
+        "image": "图像"
+      },
+      "providerType": {
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "openai_compatible": "OpenAI-compatible",
+        "gemini": "Gemini",
+        "vertex_ai": "Vertex AI（Express）"
+      },
+      "actions": {
+        "test": "测试",
+        "edit": "编辑",
+        "delete": "删除"
+      },
+      "wizard": {
+        "keyExisting": "密钥",
+        "label": "名称",
+        "providerType": "类型",
+        "apiKey": "API key",
+        "apiBase": "API base",
+        "apiBaseHint": "OpenAI-compatible endpoint，例如 https://openrouter.ai/api/v1",
+        "geminiKeyHint": "Google AI Studio 的密钥（generativelanguage.googleapis.com）。粘贴 Vertex Express 密钥会返回 401。",
+        "vertexKeyHint": "Vertex Express Mode 的密钥（aiplatform.googleapis.com）。不是 AI Studio 的 Gemini 密钥，也不是 OpenAI 格式。",
+        "modelId": "模型 ID",
+        "modelFetching": "正在获取模型列表…",
+        "modelFreeText": "此密钥不支持自动列表，输入模型 ID 即可。",
+        "modelTypedOk": "列表仅供参考。找不到也可以自行输入模型 ID。",
+        "capability": "用途"
+      },
+      "edit": {
+        "title": "编辑密钥",
+        "apiKeyRotate": "若要更换密钥请粘贴新的；留空则沿用当前的。",
+        "apiKeyPlaceholder": "留空 = 不变更"
+      },
+      "delete": {
+        "titleKey": "删除密钥",
+        "titleModel": "删除模型",
+        "bodyKey": "确定删除“{{label}}”？",
+        "bodyModel": "确定删除 {{modelId}}？",
+        "dependents": "仍有项目依赖此项：",
+        "modelsLabel": "模型：{{list}}",
+        "slotsLabel": "层级：{{list}}",
+        "force": "仍要删除"
+      },
+      "errors": {
+        "labelRequired": "请填写名称。",
+        "keyRequired": "请填写 API key。",
+        "apiBaseRequired": "OpenAI-compatible 需填写 API base。",
+        "modelRequired": "请填写模型 ID。"
+      }
+    }
+  },
+  "setup": {
+    "title": "设置你的 instance",
+    "stepIndicator": "步骤 {{step}} / {{total}} · {{label}}",
+    "stepLabels": {
+      "account": "账户",
+      "instance": "Instance",
+      "llm": "AI 模型"
+    },
+    "welcome": {
+      "title": "欢迎使用 Unhinted",
+      "subtitle": "此 instance 第一次启动，需先创建管理员账户。",
+      "itemAccount": "管理员账户",
+      "itemInstance": "网址与邀请邮件",
+      "itemLlm": "LLM 供应商",
+      "cta": "开始设置",
+      "footer": "全部设置之后都可在 平台 → Instance 修改。"
+    },
+    "account": {
+      "title": "创建管理员账户",
+      "subtitle": "第一位用户会成为平台 Superadmin"
+    },
+    "instance": {
+      "title": "Instance 设置",
+      "subtitle": "设置网站地址与邀请邮件方式——可跳过此步骤",
+      "baseUrl": "网站地址",
+      "baseUrlHint": "邀请链接、媒体 URL 与发布图片 URL 会使用此地址。已由浏览器检测——有需要再修改。Instagram 需要公开 HTTPS 地址。",
+      "emailBackend": "邀请邮件发送方式",
+      "emailLink": "只复制链接（手动发送）",
+      "emailSmtp": "SMTP（发送邀请邮件）",
+      "smtpHost": "SMTP host",
+      "smtpPort": "Port",
+      "smtpUser": "用户名",
+      "smtpPassword": "密码",
+      "smtpTls": "启用 TLS（STARTTLS）",
+      "emailFrom": "发件人地址",
+      "linkNote": "邀请会以链接形式提供复制——不会寄出邮件。之后可在“平台 → Instance”设置 SMTP。"
+    },
+    "llm": {
+      "title": "连接 AI 模型",
+      "subtitle": "设置对话与图像生成的默认模型——可跳过此步骤",
+      "provider": "提供商",
+      "apiKey": "API Key",
+      "apiBase": "Base URL",
+      "chatModel": "默认模型",
+      "chatModelHint": "会用于所有对话层级；之后可在“公司设置 → 模型”调整路由。",
+      "save": "保存并完成"
+    },
+    "done": {
+      "banner": "设置完成",
+      "title": "你的 instance 已准备就绪",
+      "subtitle": "现在可以开始使用——设置随时可在“设置”调整",
+      "nextTitle": "下一步",
+      "nextModels": "连接或调整模型——公司设置 → 模型",
+      "nextMembers": "邀请成员——公司设置 → 成员",
+      "nextInstance": "邮箱与网站地址——平台 → Instance",
+      "cta": "开始使用"
+    },
+    "next": "继续",
+    "skip": "跳过",
+    "submitting": "保存中…"
+  },
+  "system": {
+    "menuEntry": "平台",
+    "title": "平台",
+    "forbidden": {
+      "title": "未授权",
+      "body": "平台工具需要较高权限才能进入。",
+      "back": "返回首页"
+    },
+    "instance": {
+      "saved": "Instance 设置已保存。",
+      "readOnly": "只有 superadmin 能修改 instance 设置。",
+      "baseUrl": "Instance URL",
+      "baseUrlHint": "邀请链接、OAuth redirect 与发布图片 URL 都会使用此地址。Instagram connect 与发布需要 Meta 能访问的公开 HTTPS 地址。",
+      "baseUrlPrivateWarning": "这不像是公开 HTTPS 地址——Instagram connect 与发布都需要 Meta 能访问的地址（例如 tunnel 或公开 domain）。",
+      "emailBackend": "邀请邮件发送方式",
+      "smtpPasswordSet": "已保存（…{{last4}}）——输入新密码才会更新",
+      "metaSection": "Instagram app",
+      "metaAppId": "Instagram App ID",
+      "metaAppIdHint": "App Dashboard → Instagram → API setup with Instagram login（不是 Facebook App ID）。",
+      "metaAppIdChanged": "保存不同的 App ID 会清除已存的 secret——请记得在下方重新输入。",
+      "metaAppSecret": "Instagram App Secret",
+      "metaAppSecretSet": "已保存（…{{last4}}）——输入新 secret 才会更新",
+      "metaCallbackUrl": "OAuth redirect URI",
+      "metaCallbackHint": "在 Meta dashboard 的 Valid OAuth Redirect URIs 白名单加入此完整 URL。",
+      "metaCallbackMissing": "请先在上方设置 instance URL——redirect URI 会由它派生。",
+      "metaDeauthorizeUrl": "Deauthorize callback URL",
+      "metaDeauthorizeHint": "粘贴到 Meta app 的 Deauthorize Callback URL 字段——转 Live mode 必要。",
+      "metaDataDeletionUrl": "Data deletion request URL",
+      "metaDataDeletionHint": "粘贴到 Meta app 的 Data Deletion Request URL 字段——转 Live mode 必要。",
+      "metaMode": "OAuth 模式",
+      "metaModeByo": "自己的 Meta app（默认）",
+      "metaModeRelay": "托管连接（relay）",
+      "metaModeHint": "Relay 会经供应商的托管服务授权——属于 opt-in，token 会经过供应商基础设施。BYO 全部留在此 install。",
+      "metaRelayUrl": "Relay base URL",
+      "metaRelayUrlHint": "由 Unhinted 托管，每个 install 都预设此值。只读——想自行运行 relay 请设置 OAUTH_RELAY_URL。",
+      "metaInstanceId": "Instance ID",
+      "metaInstanceIdHint": "在 relay 注册此 slug（它会对应到此 install 的 URL）。自动生成，只读。",
+      "metaRelaySecret": "Relay secret",
+      "metaRelaySecretSet": "已保存（…{{last4}}）——输入新 secret 才会更新",
+      "metaRelaySecretHint": "由 relay 运营方在注册时发出——粘贴到这里。Relay 模式需先设置才能使用 Connect。",
+      "ingestSection": "信号采集",
+      "ingestHint": "后台 worker 多久采集一次香港信号并升级为主题。保存后约一分钟内生效，不需重启。",
+      "ingestEnabled": "定时信号采集与升级",
+      "hotSearchInterval": "热门搜索采集间隔（分钟）",
+      "questionsInterval": "推荐问题生成间隔（小时）",
+      "promoteWindow": "信号升级窗口（小时）",
+      "promoteRankMax": "Trends 排名升级上限"
+    }
+  },
+  "admin": {
+    "llmCalls": "LLM 调用记录",
+    "empty": "暂无记录——触发 LLM call 后会显示在这里",
+    "nodeStepsEmpty": "暂无 Node steps——执行完一个 Session turn 后会显示在这里",
+    "loadFailed": "加载失败",
+    "openNodeSteps": "查看此 Turn 的 Steps",
+    "openSessionTrace": "查看 Session Trace",
+    "openResearch": "查看 Research",
+    "tabs": {
+      "llm": "LLM 调用",
+      "steps": "Node steps",
+      "research": "Research",
+      "trace": "Session Trace",
+      "instance": "Instance"
+    },
+    "filters": {
+      "node": "节点",
+      "nodePlaceholder": "例如 reviewer",
+      "status": "状态",
+      "statusAll": "全部",
+      "fallbackOnly": "只显示 fallback",
+      "refresh": "刷新",
+      "sessionId": "Session ID",
+      "turnId": "Turn ID"
+    },
+    "table": {
+      "time": "时间",
+      "node": "节点",
+      "caller": "来源",
+      "kind": "类型",
+      "model": "模型",
+      "status": "状态",
+      "tokens": "Tokens",
+      "latency": "耗时",
+      "flags": "标记",
+      "seq": "序号",
+      "mode": "Mode",
+      "intent": "Intent",
+      "turnId": "Turn",
+      "outputKeys": "Output keys"
+    },
+    "badges": {
+      "parseFailed": "解析失败",
+      "fallback": "fallback"
+    },
+    "pagination": {
+      "prev": "上一页",
+      "next": "下一页",
+      "showing": "显示 {{from}}–{{to}}"
+    },
+    "detail": {
+      "title": "调用详情",
+      "close": "关闭",
+      "resize": "调整列表与详情宽度",
+      "session": "Session",
+      "user": "User",
+      "temperature": "Temperature",
+      "parseOk": "JSON 解析",
+      "ttft": "TTFT",
+      "usd": "估算成本",
+      "usdUnpriced": "无法估价",
+      "tokensPrompt": "输入",
+      "tokensCompletion": "输出",
+      "tokensTotal": "合计",
+      "tokensCached": "Cache",
+      "systemPrompt": "System prompt",
+      "userPrompt": "User prompt",
+      "response": "响应",
+      "error": "错误"
+    },
+    "nodeStepDetail": {
+      "title": "Node step 详情",
+      "output": "Output",
+      "llmCalls": "同 Turn / Node 的 LLM calls"
+    },
+    "sessionTrace": {
+      "placeholder": "粘贴 Session UUID…",
+      "load": "加载",
+      "empty": "输入 Session ID 开始查看 Trace",
+      "summary": "Session",
+      "title": "标题",
+      "messages": "消息",
+      "noMessages": "暂无消息",
+      "revisions": "Draft 修订",
+      "noRevisions": "暂无 Draft 修订",
+      "revision": "修订 {{n}}",
+      "grounding": "Signal grounding",
+      "pickRevision": "选择一个修订查看 Grounding",
+      "noSignals": "此修订没有 Source signals／找不到 Signal 列",
+      "turns": "Graph turns",
+      "noTurns": "暂无 Node-step／LLM turn 记录",
+      "llmCount": "{{n}} 个 LLM calls",
+      "llmTokens": " · {{n}} tok"
+    },
+    "research": {
+      "placeholder": "粘贴 Session UUID…",
+      "load": "加载",
+      "empty": "输入 Session ID 查看 Research（Semantic gate + Tavily∪PG）",
+      "noTurns": "此 Session 暂无 Research 相关 Node steps",
+      "turnDetail": "Turn 明细",
+      "semantic": "Semantic",
+      "rulePass": "rule_pass",
+      "needFacts": "need_facts",
+      "askClarify": "ask_clarify",
+      "entity": "entity",
+      "ingest": "ran ingest",
+      "querySource": "query_source",
+      "signalsTrusted": "signals_trusted",
+      "queries": "Search queries",
+      "noQueries": "暂无 Atomic queries",
+      "hits": "Hits",
+      "signals": "Signals（Tavily∪PG）",
+      "noSignals": "暂无 research_signals"
+    }
+  },
+  "theme": {
+    "label": "主题",
+    "light": "浅色",
+    "dark": "深色"
+  },
+  "invite": {
+    "loggedOutTitle": "有人邀请你加入团队",
+    "loggedOutBody": "请以 {{email}} 登录或注册，然后回到此页加入 {{company}}。",
+    "login": "登录",
+    "register": "创建新账户",
+    "once": "邀请链接只能使用一次",
+    "titleJoin": "加入团队",
+    "loggedInBody": "你目前以下列账户登录，即将加入 {{company}}：",
+    "replaceWarning": "加入 {{company}} 会取代你目前的个人公司。产品会移到“个人”。语气设置不会带过去。对话与草稿维持不变。",
+    "join": "加入公司",
+    "joining": "加入中…",
+    "home": "返回首页",
+    "mismatchTitle": "邮箱不匹配",
+    "mismatchBody": "你目前登录的邮箱与此邀请不匹配。",
+    "conflictTitle": "你已属于一家公司",
+    "conflictBody": "一个账户只能加入一家公司。请返回首页继续，或联系管理员。",
+    "invalidTitle": "邀请已失效",
+    "invalidBody": "链接可能已过期、已被撤销，或已使用过。请联系公司管理员重新发送。"
+  },
+  "errors": {
+    "displayNameRequired": "请填写昵称。",
+    "emailRequired": "请填写邮箱。",
+    "passwordRequired": "请填写密码。",
+    "confirmPasswordRequired": "请填写确认密码。",
+    "smtpHostRequired": "请填写 SMTP host。",
+    "chatModelRequired": "请填写默认模型。",
+    "loginFailed": "登录失败",
+    "registrationFailed": "注册失败",
+    "invalidEmail": "邮箱格式错误",
+    "passwordTooShort": "密码至少需要 8 个字符",
+    "passwordMismatch": "两次输入的密码不同",
+    "emailAlreadyRegistered": "此邮箱已注册",
+    "invalidCredentials": "邮箱或密码错误",
+    "accountDisabled": "此账户已被停用",
+    "invalidRefreshToken": "登录已过期，请重新登录",
+    "setupFailed": "设置失败，请再试一次",
+    "inviteRequired": "注册需要有效邀请",
+    "setupAlreadyCompleted": "初始设置已完成",
+    "requestFailed": "请求失败（{{status}}）"
+  }
+}

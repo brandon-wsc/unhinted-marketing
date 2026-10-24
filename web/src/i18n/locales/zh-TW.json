@@ -1,0 +1,1099 @@
+{
+  "app": {
+    "name": "Unhinted",
+    "title": "Unhinted Marketing"
+  },
+  "common": {
+    "loading": "載入中…",
+    "email": "電子郵件",
+    "password": "密碼",
+    "showPassword": "顯示密碼",
+    "hidePassword": "隱藏密碼",
+    "notAvailable": "—",
+    "cancel": "取消",
+    "save": "儲存",
+    "saving": "儲存中…",
+    "close": "關閉",
+    "scrollLeft": "向左捲動",
+    "scrollRight": "向右捲動",
+    "clear": "清除",
+    "copy": "複製",
+    "copied": "已複製",
+    "noMatches": "沒有符合的選項"
+  },
+  "header": {
+    "menu": {
+      "guest": "訪客",
+      "language": "語言",
+      "theme": "主題",
+      "close": "關閉"
+    }
+  },
+  "auth": {
+    "craftCorner": "老闆出聲，AI 發文。",
+    "login": {
+      "title": "登入",
+      "subtitle": "登入以使用 Unhinted Marketing",
+      "subtitleInvite": "以 {{email}} 登入以加入 {{company}}",
+      "submit": "登入",
+      "submitting": "登入中…",
+      "noAccount": "還沒有帳號？",
+      "registerLink": "立即註冊"
+    },
+    "register": {
+      "title": "建立帳號",
+      "subtitle": "註冊後會自動建立公司 workspace",
+      "subtitleInvite": "以 {{email}} 註冊後即會加入 {{company}}",
+      "displayName": "顯示名稱",
+      "organizationName": "公司名稱（選填）",
+      "passwordHint": "密碼（至少 8 個字元）",
+      "confirmPassword": "確認密碼",
+      "submit": "建立帳號",
+      "submitting": "建立中…",
+      "hasAccount": "已有帳號？",
+      "loginLink": "返回登入"
+    },
+    "logout": "登出"
+  },
+  "account": {
+    "menuEntry": "帳號",
+    "title": "帳號",
+    "profile": {
+      "title": "個人資料",
+      "joined": "註冊日期",
+      "organizations": "所屬公司",
+      "save": "儲存",
+      "saving": "儲存中…",
+      "saved": "已儲存"
+    },
+    "connectAi": {
+      "title": "連接 AI 應用",
+      "description": "讓外部 AI 應用（Claude、ChatGPT 等）使用你公司的語氣與產品資料，透過 Unhinted 起稿；發佈仍需回到這裡按確認。",
+      "urlLabel": "你的 MCP 伺服器網址",
+      "steps": {
+        "claude": {
+          "1": "在 Claude 開啟 Customize → Connectors → Add → Custom → Web。",
+          "2": "為它命名（例如「Unhinted」），貼上你的 MCP 伺服器網址。",
+          "3": "在 Unhinted 授權頁登入，選擇公司，核准連接。"
+        },
+        "chatgpt": {
+          "1": "在 ChatGPT 開啟 Plugins →「+」→ Add custom MCP server。",
+          "2": "輸入名稱，在 Server URL 貼上你的 MCP 伺服器網址。",
+          "3": "授權方式選擇 OAuth，然後在 Unhinted 授權頁核准。"
+        }
+      },
+      "geminiNote": "Gemini 暫不支援——它的 connected apps 流程需要 Dynamic Client Registration，我們未提供。",
+      "footer": "設定過程中會要求你登入並選擇一間公司。已連接的 app 會列在下方，可隨時撤銷。"
+    },
+    "connectedApps": {
+      "title": "已連接應用",
+      "empty": "尚無外部 AI 應用連接。",
+      "meta": "{{company}} · 已連接 {{date}} · 上次使用 {{lastUsed}}",
+      "neverUsed": "從未",
+      "revoke": "撤銷",
+      "revoking": "撤銷中…"
+    }
+  },
+  "oauth": {
+    "consent": {
+      "title": "連接應用",
+      "subtitle": "{{client}} 想使用你的公司連接 Unhinted。",
+      "appLabel": "連接中的應用",
+      "scopesLabel": "它想要：",
+      "companyLabel": "公司",
+      "noCompanies": "你尚未加入任何公司。",
+      "imagesNote": "核准此項也會讓 app 生成圖片，會使用你的 token 額度。",
+      "approve": "連接",
+      "deny": "拒絕",
+      "working": "連接中…",
+      "invalidRequest": "此授權連結無效或已過期。",
+      "scope": {
+        "knowledge_read": "讀取你的品牌語氣與產品資料",
+        "drafts_write": "建立與修訂草稿",
+        "images_generate": "生成圖片"
+      }
+    }
+  },
+  "chat": {
+    "mobile": {
+      "back": "返回"
+    },
+    "empty": {
+      "title": "今天想發什麼內容？",
+      "subtitle": "輸入一句話開始——我會結合香港熱門話題與你的公司資料，一起構思最值得發的內容。"
+    },
+    "questions": {
+      "title": "試試這些問題",
+      "loading": "正在想問題…",
+      "generating": "正在挑選題目…",
+      "failed": "無法產生建議。",
+      "retry": "重試"
+    },
+    "input": {
+      "placeholder": "輸入訊息…"
+    },
+    "send": "送出",
+    "stop": "停止",
+    "stopping": "停止中…",
+    "shell": {
+      "resize": "調整對話與預覽寬度"
+    },
+    "queue": {
+      "badge": "佇列中",
+      "remove": "移出佇列",
+      "edit": "編輯訊息",
+      "more": "更多",
+      "full": "最多排 3 則——等這輪完成後再送出。",
+      "holdForImage": "現在送出會先修改草稿，再等圖片生成。",
+      "holdForAngle": "排隊的訊息會等你選好角度或按停止後才送出。",
+      "interrupt": "再按 Enter 中斷並送出——這輪已寫的內容會保留。"
+    },
+    "attach": {
+      "add": "附加檔案",
+      "badType": "僅支援 PDF / DOCX / TXT / MD",
+      "tooBig": "檔案超過 20 MB",
+      "limit": "最多 10 個附件",
+      "uploadFailed": "上傳失敗",
+      "download": "下載原始檔",
+      "downloadFailed": "下載失敗",
+      "save": "存入素材庫",
+      "saved": "已存入素材庫",
+      "saveFailed": "存入素材庫失敗",
+      "retry": "重試",
+      "remove": "移除",
+      "status": {
+        "processing": "處理中",
+        "ready": "已就緒",
+        "needsOcr": "需要 OCR",
+        "failed": "讀取失敗"
+      },
+      "ocr": {
+        "run": "在瀏覽器 OCR",
+        "cancel": "取消 OCR",
+        "loading": "準備中",
+        "submitting": "上傳中"
+      },
+      "ocrFailed": "OCR 失敗"
+    },
+    "live": "即時",
+    "offline": "未連線",
+    "message": {
+      "copy": "複製",
+      "copied": "已複製",
+      "fork": "複製對話",
+      "time": {
+        "s": "{{n}} 秒前",
+        "m": "{{n}} 分鐘前",
+        "h": "{{n}} 小時前",
+        "d": "{{n}} 天前"
+      }
+    },
+    "fork": {
+      "divider": "複製自「{{title}}」",
+      "toOne": "已複製到「{{title}}」",
+      "toMany": "已複製到 {{n}} 個對話",
+      "failed": "無法複製此對話",
+      "noteStale": "新對話帶的是該訊息當時的草稿，之後的修改不包含在內",
+      "noteLater": "預覽是在該訊息之後才產生的，所以新對話沒有草稿"
+    },
+    "agent": {
+      "actions": "進度",
+      "working": "處理中",
+      "workedFor": "耗時 {{duration}}",
+      "nodes": {
+        "running": {
+          "working": "處理中…",
+          "route_intent": "正在分析需求…",
+          "query_generator": "正在查詢資料…",
+          "research_ingest": "正在整理市場資料…",
+          "load_context": "正在載入公司資料…",
+          "product_matcher": "正在比對產品…",
+          "chat": "正在回覆…",
+          "trend_searcher": "正在搜尋香港熱門話題…",
+          "brainstormer": "正在構思角度…",
+          "executor_post": "正在撰寫貼文…",
+          "grounding_check": "正在查核訊號依據…",
+          "reviewer": "正在審閱草稿…",
+          "edit_copy": "正在修改文案…",
+          "executor_image_plan": "正在規劃圖片…",
+          "executor_image_gen": "正在生成圖片…"
+        },
+        "done": {
+          "working": "已處理",
+          "route_intent": "已分析需求",
+          "query_generator": "已查詢資料",
+          "research_ingest": "已整理市場資料",
+          "load_context": "已載入公司資料",
+          "product_matcher": "已比對產品",
+          "chat": "已回覆",
+          "trend_searcher": "已搜尋香港熱門話題",
+          "brainstormer": "已構思角度",
+          "executor_post": "已撰寫貼文",
+          "grounding_check": "已查核訊號依據",
+          "reviewer": "已審閱草稿",
+          "edit_copy": "已修改文案",
+          "executor_image_plan": "已規劃圖片",
+          "executor_image_gen": "已生成圖片"
+        }
+      },
+      "brief": {
+        "title": "內容大綱",
+        "canDo": "可以做",
+        "cannotDo": "不會做",
+        "angles": "角度"
+      },
+      "interrupt": {
+        "title": "草稿與圖片計畫已完成",
+        "subtitle": "格式已鎖定。可以棄置，或生成圖片。想變更格式需先重寫草稿。",
+        "confirm": "生成圖片",
+        "working": "生成中…",
+        "discard": "棄置",
+        "plan": "圖片計畫",
+        "formatLabel": "圖片格式",
+        "formatSingle": "單圖",
+        "formatComic": "四格漫畫"
+      },
+      "anglePick": {
+        "title": "先選擇角度、語氣與圖片",
+        "subtitle": "選好後才動筆。單圖與漫畫需要不同的草稿。",
+        "personaLabel": "語氣／受眾",
+        "formatLabel": "圖片格式",
+        "optionsLabel": "內容角度",
+        "otherLabel": "自訂角度",
+        "otherPlaceholder": "或自行描述方向…",
+        "otherSubmit": "使用這個方向",
+        "working": "撰寫中…"
+      },
+      "imageOkMessage": "好的，請幫忙生成圖片。"
+    },
+    "autoPicks": {
+      "title": "{{client}} 已自動選擇",
+      "angle": "角度 {{index}}",
+      "imageApproved": "已核准生成圖片",
+      "unknownClient": "外部應用"
+    },
+    "error": {
+      "sendFailed": "訊息送出失敗，請再試一次。",
+      "stopFailed": "無法停止，請再試一次。",
+      "llmFailed": "AI 服務發生錯誤",
+      "retry": "重試",
+      "usageLimit": "你這個月的用量已達上限，此訊息未送出。請聯絡 owner / admin 調整上限。"
+    },
+    "history": {
+      "open": "開啟紀錄",
+      "collapse": "收合紀錄",
+      "title": "對話紀錄",
+      "subtitle": "繼續舊對話，或開啟新對話",
+      "close": "關閉",
+      "new": "新對話",
+      "search": "搜尋對話…",
+      "clearSearch": "清除搜尋",
+      "refresh": "重新整理",
+      "loading": "載入紀錄中…",
+      "empty": "尚無對話",
+      "noResults": "找不到相關對話",
+      "untitled": "未命名對話",
+      "fromClient": "來自 {{client}}",
+      "restoring": "正在恢復對話…",
+      "openFailed": "無法開啟這個對話",
+      "createFailed": "無法建立新對話",
+      "more": "更多選項",
+      "pin": "置頂",
+      "unpin": "取消置頂",
+      "rename": "重新命名",
+      "delete": "刪除",
+      "cancel": "取消",
+      "deleting": "刪除中…",
+      "deleteTitle": "刪除這個對話？",
+      "deleteBody": "對話與草稿將永久刪除，無法復原。",
+      "renameFailed": "重新命名失敗",
+      "pinFailed": "置頂更新失敗",
+      "deleteFailed": "刪除失敗",
+      "group": {
+        "pinned": "置頂",
+        "today": "今天",
+        "yesterday": "昨天",
+        "week": "過去 7 天",
+        "older": "更早"
+      }
+    }
+  },
+  "preview": {
+    "title": "貼文預覽",
+    "readyBanner": "預覽已就緒——點選查看。",
+    "emptyMobile": "尚無預覽——草稿完成後會顯示在這裡。",
+    "revision": "修訂 {{n}}",
+    "dirty": "未儲存",
+    "apply": "套用",
+    "applySaving": "儲存中…",
+    "confirm": "確認發佈",
+    "confirmWorking": "處理中…",
+    "confirmDone": "已發佈",
+    "confirmReceipt": "發佈狀態：{{status}}",
+    "confirmHint": "在對話中說「可以發佈」並不會真的發佈。確認會使用已儲存的修訂（若有未儲存變更會先自動儲存）。",
+    "gate": {
+      "imageRequired": "Instagram 貼文需要圖片",
+      "notConnected": "尚未連接 Instagram 帳號。",
+      "openSettings": "前往設定"
+    },
+    "receipt": {
+      "publishedTitle": "已發佈",
+      "publishedBody": "已發佈到 Instagram",
+      "publishedBadge": "已發佈",
+      "viewOnInstagram": "在 Instagram 上查看",
+      "failedTitle": "發佈失敗",
+      "failedHint": "尚未發佈。修正圖片或帳號後再次確認。",
+      "retry": "再次確認",
+      "error": {
+        "token_expired": "Token 已過期，請到設定更新後再確認。",
+        "permission": "Instagram 權限不足，請檢查帳號設定後再確認。",
+        "platform_error": "Instagram 無法發佈此貼文。請檢查圖片與帳號後再確認；若沒有問題，請稍後再試。"
+      }
+    },
+    "exemplar": {
+      "save": "將文案儲存為語氣範例",
+      "working": "儲存中…",
+      "hint": "公司最多保留 3 則範例，之後草稿可以參考其節奏。不會再次發佈。",
+      "saved": "已存入公司語氣範例。",
+      "already": "此文案已在語氣範例中。"
+    },
+    "fields": {
+      "caption": "文案",
+      "hashtags": "Hashtags",
+      "cta": "CTA"
+    },
+    "copy": {
+      "edit": "編輯文案",
+      "editTitle": "編輯文案",
+      "editHint": "Caption、CTA、Hashtags 會一起儲存為同一個修訂版本。",
+      "empty": "請先輸入文案…"
+    },
+    "media": {
+      "title": "圖片計畫",
+      "edit": "編輯圖片",
+      "editTitle": "編輯圖片",
+      "editHint": "變更 prompt 或格式會重寫草稿與圖片計畫。在按下生成前不會重新繪製。",
+      "stageDirection": "更新草稿",
+      "empty": "尚無圖片——請先新增一張再編輯計畫。",
+      "prompt": "Prompt",
+      "additionalPrompt": "額外 Prompt",
+      "style": "風格",
+      "composition": "構圖",
+      "panel": "第 {{n}} 格",
+      "formatSingle": "單圖",
+      "formatComic": "四格漫畫",
+      "savePlan": "儲存計畫",
+      "generate": "生成",
+      "regen": "重新生成",
+      "regenWorking": "生成中…",
+      "cancel": "取消",
+      "delete": "刪除圖片",
+      "uploadHint": "拖曳圖片到這裡，或點選上傳。",
+      "add": "新增圖片",
+      "scrollPrev": "向左檢視更多圖片",
+      "scrollNext": "向右檢視更多圖片",
+      "slot": "圖片 {{n}}",
+      "pending": "等待輸出"
+    },
+    "mock": {
+      "sponsored": "Instagram 預覽",
+      "placeholder": "圖片位置",
+      "more": "更多"
+    },
+    "awaiting": {
+      "title": "等待生成圖片",
+      "slotEmpty": "圖片尚未生成",
+      "slotGenerating": "生成中…",
+      "status": "請在對話中棄置或生成。",
+      "plan": "圖片計畫",
+      "formatSingle": "單圖",
+      "formatComic": "四格漫畫",
+      "generatingTitle": "正在生成圖片"
+    },
+    "sources": {
+      "title": "來源",
+      "empty": "本次未使用市場來源"
+    },
+    "error": {
+      "saveFailed": "草稿儲存失敗，請再試一次。",
+      "confirmFailed": "確認失敗，請再試一次。",
+      "imageRequired": "Instagram 貼文需要圖片，請新增圖片後再確認。",
+      "notConnected": "尚未連接 Instagram。請到公司設定貼上 token。",
+      "mediaUrlNoBase": "尚未設定網站網址——發佈需要公開 HTTPS 位址。請 admin 到 Platform → Instance 設定。",
+      "mediaUrlNotPublic": "圖片 URL 是內部網路位址，Instagram 伺服器無法存取。請 admin 在 Platform → Instance 設定公開 HTTPS 網址，或在 Settings → Storage 設定 public URL。",
+      "mediaUrlNotHttps": "圖片 URL 不是 HTTPS——Instagram 需要公開 HTTPS 位址。請 admin 更新 Instance URL 或 storage public URL。",
+      "planFailed": "圖片計畫儲存失敗，請再試一次。",
+      "regenFailed": "重新生成圖片失敗，請再試一次。",
+      "addFailed": "新增圖片失敗，請再試一次。",
+      "removeFailed": "刪除圖片失敗，請再試一次。",
+      "uploadFailed": "上傳失敗，請再試一次。"
+    },
+    "sendForApproval": "送審",
+    "approval": {
+      "parkedTitle": "等待審核",
+      "parkedHint": "已送交 owner / admin 審核。若要修改可直接改完再送審，新請求會取代此請求。",
+      "rejectedTitle": "已被拒絕",
+      "rejectedHint": "此發佈請求已被拒絕。修改內容後可再次送審。"
+    }
+  },
+  "settings": {
+    "menuEntry": "公司設定",
+    "title": "公司設定",
+    "navLabel": "公司",
+    "nav": {
+      "voice": "語氣",
+      "products": "產品",
+      "members": "成員",
+      "approvals": "審核",
+      "models": "模型",
+      "instagram": "Instagram",
+      "storage": "儲存"
+    },
+    "noCompany": {
+      "title": "尚無公司",
+      "body": "註冊帳號時會自動建立公司 Workspace。",
+      "back": "返回首頁"
+    },
+    "members": {
+      "title": "成員",
+      "subtitleEditor": "團隊名單、邀請連結與公司名稱。",
+      "subtitleMember": "團隊名單與公司名稱。",
+      "saved": "已儲存。",
+      "companyName": "公司名稱",
+      "roster": "成員",
+      "remove": "移除",
+      "removeTitle": "移除成員",
+      "removeBody": "確定要將 {{name}} 移出公司？對方會立即失去此公司的存取權。",
+      "roles": {
+        "owner": "Owner",
+        "admin": "Admin",
+        "member": "Member"
+      },
+      "columns": {
+        "name": "姓名",
+        "member": "成員",
+        "email": "電子郵件",
+        "role": "角色",
+        "joined": "加入日期",
+        "actions": "操作",
+        "usage": "本月用量",
+        "limit": "上限"
+      },
+      "invite": {
+        "title": "邀請同事",
+        "hint": "產生連結給同事；對方需以受邀電子郵件註冊或登入才能加入。",
+        "limitPlaceholder": "無上限",
+        "send": "發送邀請",
+        "sending": "發送邀請中…",
+        "copy": "複製連結",
+        "copied": "已複製",
+        "pasteHint": "可貼到 WhatsApp 或 Slack",
+        "invalidEmail": "請輸入有效的電子郵件",
+        "alreadyMember": "此電子郵件已是成員",
+        "alreadyPending": "此電子郵件已有待處理的邀請"
+      },
+      "pending": {
+        "title": "待處理的邀請",
+        "expires": "到期日",
+        "revoke": "撤銷邀請"
+      },
+      "usage": {
+        "ofLimit": "{{used}} / {{limit}}",
+        "unlimited": "{{used}} / 無限",
+        "breakdown": "平台 {{platform}} · BYOK {{byok}}"
+      },
+      "limit": {
+        "title": "每月用量上限",
+        "field": "Token 上限",
+        "hint": "{{name}} 本月已使用 {{used}} token（僅計平台 key，BYOK 不計）。留空即無上限。",
+        "clear": "移除上限",
+        "invalid": "請輸入大於 0 的整數"
+      },
+      "publishApproval": {
+        "title": "發佈前需審核",
+        "hint": "開啟後，member 確認發佈會先進入審核佇列，由 owner / admin 核准後才會真正發佈。"
+      }
+    },
+    "voice": {
+      "title": "語氣",
+      "subtitle": "設定品牌草稿的語氣與避用字詞，之後草稿會依此生成。",
+      "readOnly": "如需修改請聯絡公司負責人。",
+      "saved": "已儲存。",
+      "roast": {
+        "label": "語氣強度",
+        "hint": "越高越俏皮、笑點越多；一般使用預設值即可。",
+        "levels": {
+          "0": "0 穩妥",
+          "1": "1 輕鬆小編",
+          "2": "2 港式抽水",
+          "3": "3 抽水王"
+        }
+      },
+      "locale": {
+        "label": "語言地區",
+        "hint": "草稿主要使用的地區寫法，例如 zh-HK。"
+      },
+      "forbidden": {
+        "label": "避用字詞",
+        "hint": "最多 15 個，以逗號分隔。草稿會盡量避開。"
+      },
+      "tone": {
+        "label": "語氣備註",
+        "hint": "選填。用簡短句子描述你想要的感覺即可。"
+      },
+      "exemplars": {
+        "label": "範例文案",
+        "hint": "最多 3 則，不必填滿。一則足以代表節奏即可。確認後也可以再儲存。",
+        "slot": "範例 {{n}}",
+        "chars": "{{used}} / {{max}}",
+        "add": "新增範例",
+        "remove": "移除範例",
+        "empty": "尚無範例。"
+      }
+    },
+    "products": {
+      "title": "產品",
+      "tabs": {
+        "org": "公司",
+        "mine": "個人"
+      },
+      "import": "上傳 CSV / Excel",
+      "importHint": "相同產品編號會更新現有資料。",
+      "addRow": "新增",
+      "activeCount": "{{count}} 項",
+      "empty": "尚無產品。",
+      "archive": "封存",
+      "propose": "加入公司",
+      "cancelRequest": "取消申請",
+      "alreadyPending": "此產品編號已有待審核的申請",
+      "statusActive": "使用中",
+      "coveredByCompany": "公司",
+      "personalOnly": "個人",
+      "coverTitle": "當兩個清單有相同產品時",
+      "coverBody": "草稿會使用公司版本。你的個人版本仍會保留；之後可申請更新公司清單。",
+      "columns": {
+        "name": "名稱",
+        "draftsUse": "草稿使用",
+        "status": "狀態",
+        "action": "操作"
+      },
+      "detail": {
+        "title": "產品詳情",
+        "addTitle": "新增產品",
+        "editTitle": "編輯產品"
+      },
+      "fields": {
+        "name": "名稱",
+        "sku": "產品編號 (SKU)",
+        "notes": "內容／備註",
+        "notesHint": "選填。賣點、成分或其他草稿應知道的資訊。",
+        "skuExists": "清單已有此編號（{{name}}）。確認後會更新該列。",
+        "skuTaken": "此產品編號已屬於「{{name}}」。若要儲存此列，請修改編號。",
+        "skuConflict": "此產品編號已被另一項產品使用。",
+        "nameExists": "另一項產品已使用此名稱（{{sku}}）。只要產品編號不同，仍可新增。"
+      },
+      "overwrite": {
+        "title": "此產品編號已有人使用",
+        "body": "產品編號 {{sku}} 已屬於「{{name}}」。可以覆蓋該列、返回修改編號，或以系統產生的新編號當作新產品。",
+        "confirm": "更新",
+        "generate": "產生新編號",
+        "keepEditing": "返回修改"
+      },
+      "stats": {
+        "imported": "新增",
+        "updated": "更新",
+        "skipped": "略過",
+        "errors": "問題"
+      }
+    },
+    "approvals": {
+      "title": "審核",
+      "subtitle": "審核成員想加入公司清單的個人產品資料。",
+      "emptyTitle": "尚無待審核項目",
+      "emptyBody": "當成員送出產品提案或發佈審核請求時，會顯示在這裡。",
+      "proposedBy": "由 {{email}} 提出",
+      "approve": "核准",
+      "reject": "拒絕",
+      "detailTitle": "產品審核",
+      "columns": {
+        "product": "產品",
+        "sku": "SKU",
+        "note": "備註"
+      },
+      "products": "產品審核",
+      "productsEmpty": "尚無產品申請",
+      "publish": {
+        "title": "發佈審核",
+        "empty": "尚無待審核的發佈請求",
+        "detailTitle": "發佈審核",
+        "hashtags": "Hashtags",
+        "cta": "CTA",
+        "imageAlt": "貼文圖片",
+        "meta": "{{platform}} · 第 {{revision}} 版",
+        "approvePublish": "核准並發佈",
+        "approveFailed": "發佈失敗（{{kind}}）。此請求已離開佇列，成員可修改後再次送審。",
+        "columns": {
+          "caption": "內容",
+          "requester": "成員",
+          "platform": "平台"
+        }
+      }
+    },
+    "instagram": {
+      "title": "Instagram",
+      "subtitle": "確認發佈時會使用這個專業帳號。",
+      "publishUrlHint": "發佈還需要 Instagram 伺服器能存取圖片——Instance URL 必須是公開 HTTPS，或在 Settings → Storage 使用 public URL。",
+      "igUserId": "Instagram 使用者 ID",
+      "expiresAt": "到期（選填）",
+      "pickDate": "選擇日期",
+      "tokenMasked": "Token",
+      "connected": "已連接",
+      "expiredTitle": "Token 已過期",
+      "rotate": "重新連接",
+      "disconnect": "解除連接",
+      "disconnectTitle": "解除 Instagram 連接？",
+      "disconnectBody": "之後確認發佈時需要重新連接 Instagram。",
+      "disconnected": "已解除連接。",
+      "loadFailed": "無法載入 Instagram 設定。",
+      "saveFailed": "儲存失敗，請再試一次。",
+      "connect": "連接 Instagram",
+      "connectingTitle": "正在連接 Instagram…",
+      "connectingBody": "在新視窗完成授權後，這裡會自動更新。若卡住可取消重試。",
+      "oauthFailed": "連接失敗，請再試一次。",
+      "oauthAborted": "授權已取消或逾時，請重新連接。",
+      "oauthNotConfigured": "尚未設定 Instagram Login——需要平台管理員在 平台 → Instance 輸入 Meta app 憑證。",
+      "oauthModeUnavailable": "連接流程與目前的 OAuth 模式不符——請檢查 平台 → Instance 的設定。",
+      "oauthNotProfessional": "此 Instagram 帳號不是專業帳號（Business／Creator）。發佈前請先在 Instagram 轉為專業帳號。",
+      "oauthMissingPublish": "授權成功，但未核准發佈權限。請重新連接並核准 instagram_business_content_publish。",
+      "oauthCsrfMismatch": "授權視窗與此瀏覽器 session 不符，請再次點選連接。",
+      "oauthRelayTicketExpired": "relay 交接 session 已過期，請再次點選連接。",
+      "needsAppTitle": "需要先建立 Meta app",
+      "needsAppStep1": "到 Meta for Developers 建立 app，加入 Instagram use case（API setup with Instagram login）。",
+      "needsAppStep2": "在 app 的 Instagram 設定中，將下方的 redirect URI 貼到 Valid OAuth Redirect URIs，並將你的 Instagram 專業帳號加入此 app。",
+      "needsAppStep3": "在 平台 → Instance 輸入 Instagram App ID 與 Secret，回來後再點選連接。",
+      "needsAppRedirectLabel": "Valid OAuth Redirect URIs",
+      "needsAppDeauthorizeLabel": "Deauthorize Callback URL",
+      "needsAppDataDeletionLabel": "Data Deletion Request URL",
+      "needsAppLiveNote": "轉為 Live mode 還需要上面兩個 URL，並在 App Settings → Basic 填寫 Privacy Policy URL；轉換前，只有已加入 app 的 Instagram 帳號可以連接。",
+      "standardAccessNote": "連接你擁有或管理的 Instagram 帳號只需要 Standard Access——不需 Meta App Review 與 Business Verification。",
+      "openInstanceSettings": "前往 平台 → Instance",
+      "needsAppViewerNote": "需要平台管理員先在 平台 → Instance 輸入 Meta app 憑證。",
+      "readyCaption": "會透過此 instance 自己的 Meta app 連接。",
+      "readyCaptionRelay": "會透過供應商的代管 relay 連接——token 會經過供應商基礎設施（僅做交接，不會儲存）。",
+      "manualToggle": "進階：手動貼上 token",
+      "accessToken": "Access token"
+    },
+    "storage": {
+      "title": "儲存",
+      "subtitle": "預覽圖目前在本機；要移到 S3 可在這裡搬移，上傳不會中斷。",
+      "badgeLocal": "本機",
+      "badgeS3": "S3",
+      "badgeDualWrite": "雙寫中",
+      "bucket": "Bucket",
+      "endpoint": "Endpoint",
+      "region": "Region",
+      "publicUrl": "Public URL",
+      "accessKey": "Access key",
+      "secret": "Secret",
+      "test": "測試連線",
+      "save": "儲存",
+      "saved": "已儲存。",
+      "testOk": "連線正常。",
+      "copyingLocked": "搬移期間無法修改設定。",
+      "start": "開始搬移到 S3",
+      "startHint": "目前使用本機。S3 設定已儲存，可開始搬移。上傳不會中斷。",
+      "startDisabled": "請先儲存 S3 設定，才能開始搬移。",
+      "copyingTitle": "正在搬移到 S3…",
+      "copyingBody": "已複製 {{copied}} / {{scanned}} · {{size}} · 略過 {{orphans}} 個孤立檔案。App 仍讀取本機。",
+      "readyHint": "複製完成。目前仍是本機。在清除本機檔案前都可改回。",
+      "flip": "改用 S3",
+      "flipTitle": "改用 S3？",
+      "flipBody": "預覽將改為讀取 S3。本機檔案暫時保留，清除前都可改回。",
+      "flippingTitle": "正在改用 S3…",
+      "graceHint": "目前正在使用 S3。本機副本仍在，清除前都可改回本機。",
+      "rollback": "改回本機",
+      "clean": "清除本機檔案",
+      "cleanTitle": "清除本機檔案？",
+      "cleanBody": "將刪除已存在 S3 的本機副本。之後無法一鍵改回本機。",
+      "cleaningTitle": "正在清除本機檔案…",
+      "doneHint": "本機檔案已清除。要回到本機需重新搬移。",
+      "tryAgain": "重試",
+      "failed": "搬移失敗。",
+      "loadFailed": "無法載入儲存設定。",
+      "saveFailed": "儲存失敗，請再試一次。"
+    },
+    "apiKeys": {
+      "title": "模型",
+      "subtitle": "使用自己的金鑰與模型，設定 Cheap、Medium、Strong、Image 四個層級。成員看不到此頁。",
+      "addModel": "新增模型",
+      "addKey": "新增金鑰",
+      "addKeyHint": "加入後可稍後再選擇模型與路由。",
+      "addModelHint": "儲存後再到路由指派層級。",
+      "keys": {
+        "title": "金鑰",
+        "empty": "尚無金鑰。點選「新增金鑰」加入第一組。",
+        "masked": "••••{{last4}}",
+        "columns": {
+          "label": "名稱",
+          "key": "金鑰",
+          "type": "類型",
+          "status": "狀態"
+        }
+      },
+      "models": {
+        "title": "模型",
+        "empty": "尚無模型。用「新增模型」加入一組。",
+        "emptyNeedsKey": "請先加入金鑰，再註冊模型。",
+        "columns": {
+          "model": "模型",
+          "key": "金鑰",
+          "capability": "用途",
+          "status": "狀態"
+        },
+        "imageTestTitle": "測試會呼叫付費圖像 API",
+        "imageTestBody": "這會實際呼叫一次圖像 API，可能扣用你的 provider 用量。確定要測試？",
+        "imageTestConfirm": "確認測試"
+      },
+      "routing": {
+        "title": "路由",
+        "subtitle": "每個層級可選擇公司模型，或留空使用平台預設。",
+        "platformDefault": "平台預設",
+        "helperOrg": "公司：{{modelId}}",
+        "helperEnv": "平台預設",
+        "slots": {
+          "cheap": "Cheap",
+          "medium": "Medium",
+          "strong": "Strong",
+          "image": "Image"
+        }
+      },
+      "status": {
+        "verified": "已驗證",
+        "error": "錯誤",
+        "pending": "驗證中"
+      },
+      "capability": {
+        "chat": "對話",
+        "image": "圖像"
+      },
+      "providerType": {
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "openai_compatible": "OpenAI-compatible",
+        "gemini": "Gemini",
+        "vertex_ai": "Vertex AI（Express）"
+      },
+      "actions": {
+        "test": "測試",
+        "edit": "編輯",
+        "delete": "刪除"
+      },
+      "wizard": {
+        "keyExisting": "金鑰",
+        "label": "名稱",
+        "providerType": "類型",
+        "apiKey": "API key",
+        "apiBase": "API base",
+        "apiBaseHint": "OpenAI-compatible endpoint，例如 https://openrouter.ai/api/v1",
+        "geminiKeyHint": "Google AI Studio 的金鑰（generativelanguage.googleapis.com）。貼上 Vertex Express 金鑰會回傳 401。",
+        "vertexKeyHint": "Vertex Express Mode 的金鑰（aiplatform.googleapis.com）。不是 AI Studio 的 Gemini 金鑰，也不是 OpenAI 格式。",
+        "modelId": "模型 ID",
+        "modelFetching": "正在取得模型清單…",
+        "modelFreeText": "此金鑰不支援自動清單，輸入模型 ID 即可。",
+        "modelTypedOk": "清單僅供參考。找不到也可以自行輸入模型 ID。",
+        "capability": "用途"
+      },
+      "edit": {
+        "title": "編輯金鑰",
+        "apiKeyRotate": "若要更換金鑰請貼上新的；留空則沿用目前的。",
+        "apiKeyPlaceholder": "留空 = 不變更"
+      },
+      "delete": {
+        "titleKey": "刪除金鑰",
+        "titleModel": "刪除模型",
+        "bodyKey": "確定刪除「{{label}}」？",
+        "bodyModel": "確定刪除 {{modelId}}？",
+        "dependents": "仍有項目依賴此項：",
+        "modelsLabel": "模型：{{list}}",
+        "slotsLabel": "層級：{{list}}",
+        "force": "仍要刪除"
+      },
+      "errors": {
+        "labelRequired": "請填寫名稱。",
+        "keyRequired": "請填寫 API key。",
+        "apiBaseRequired": "OpenAI-compatible 需填寫 API base。",
+        "modelRequired": "請填寫模型 ID。"
+      }
+    }
+  },
+  "setup": {
+    "title": "設定你的 instance",
+    "stepIndicator": "步驟 {{step}} / {{total}} · {{label}}",
+    "stepLabels": {
+      "account": "帳號",
+      "instance": "Instance",
+      "llm": "AI 模型"
+    },
+    "welcome": {
+      "title": "歡迎使用 Unhinted",
+      "subtitle": "此 instance 第一次啟動，需先建立管理員帳號。",
+      "itemAccount": "管理員帳號",
+      "itemInstance": "網址與邀請電子郵件",
+      "itemLlm": "LLM 供應商",
+      "cta": "開始設定",
+      "footer": "全部設定之後都可在 平台 → Instance 修改。"
+    },
+    "account": {
+      "title": "建立管理員帳號",
+      "subtitle": "第一位使用者會成為平台 Superadmin"
+    },
+    "instance": {
+      "title": "Instance 設定",
+      "subtitle": "設定網站網址與邀請電子郵件方式——可略過此步驟",
+      "baseUrl": "網站網址",
+      "baseUrlHint": "邀請連結、媒體 URL 與發佈圖片 URL 會使用此位址。已由瀏覽器偵測——有需要再修改。Instagram 需要公開 HTTPS 位址。",
+      "emailBackend": "邀請電子郵件發送方式",
+      "emailLink": "只複製連結（手動傳送）",
+      "emailSmtp": "SMTP（發送邀請電子郵件）",
+      "smtpHost": "SMTP host",
+      "smtpPort": "Port",
+      "smtpUser": "使用者名稱",
+      "smtpPassword": "密碼",
+      "smtpTls": "啟用 TLS（STARTTLS）",
+      "emailFrom": "寄件者位址",
+      "linkNote": "邀請會以連結形式提供複製——不會寄出電子郵件。之後可在「平台 → Instance」設定 SMTP。"
+    },
+    "llm": {
+      "title": "連接 AI 模型",
+      "subtitle": "設定對話與圖像生成的預設模型——可略過此步驟",
+      "provider": "供應商",
+      "apiKey": "API Key",
+      "apiBase": "Base URL",
+      "chatModel": "預設模型",
+      "chatModelHint": "會用於所有對話層級；之後可在「公司設定 → 模型」調整路由。",
+      "save": "儲存並完成"
+    },
+    "done": {
+      "banner": "設定完成",
+      "title": "你的 instance 已準備就緒",
+      "subtitle": "現在可以開始使用——設定隨時可在「設定」調整",
+      "nextTitle": "下一步",
+      "nextModels": "連接或調整模型——公司設定 → 模型",
+      "nextMembers": "邀請成員——公司設定 → 成員",
+      "nextInstance": "電子郵件與網站網址——平台 → Instance",
+      "cta": "開始使用"
+    },
+    "next": "繼續",
+    "skip": "略過",
+    "submitting": "儲存中…"
+  },
+  "system": {
+    "menuEntry": "平台",
+    "title": "平台",
+    "forbidden": {
+      "title": "未授權",
+      "body": "平台工具需要較高權限才能進入。",
+      "back": "返回首頁"
+    },
+    "instance": {
+      "saved": "Instance 設定已儲存。",
+      "readOnly": "只有 superadmin 能修改 instance 設定。",
+      "baseUrl": "Instance URL",
+      "baseUrlHint": "邀請連結、OAuth redirect 與發佈圖片 URL 都會使用此位址。Instagram connect 與發佈需要 Meta 能存取的公開 HTTPS 位址。",
+      "baseUrlPrivateWarning": "這不像是公開 HTTPS 位址——Instagram connect 與發佈都需要 Meta 能存取的位址（例如 tunnel 或公開 domain）。",
+      "emailBackend": "邀請電子郵件發送方式",
+      "smtpPasswordSet": "已儲存（…{{last4}}）——輸入新密碼才會更新",
+      "metaSection": "Instagram app",
+      "metaAppId": "Instagram App ID",
+      "metaAppIdHint": "App Dashboard → Instagram → API setup with Instagram login（不是 Facebook App ID）。",
+      "metaAppIdChanged": "儲存不同的 App ID 會清除已存的 secret——請記得在下方重新輸入。",
+      "metaAppSecret": "Instagram App Secret",
+      "metaAppSecretSet": "已儲存（…{{last4}}）——輸入新 secret 才會更新",
+      "metaCallbackUrl": "OAuth redirect URI",
+      "metaCallbackHint": "在 Meta dashboard 的 Valid OAuth Redirect URIs 白名單加入此完整 URL。",
+      "metaCallbackMissing": "請先在上方設定 instance URL——redirect URI 會由它衍生。",
+      "metaDeauthorizeUrl": "Deauthorize callback URL",
+      "metaDeauthorizeHint": "貼到 Meta app 的 Deauthorize Callback URL 欄位——轉 Live mode 必要。",
+      "metaDataDeletionUrl": "Data deletion request URL",
+      "metaDataDeletionHint": "貼到 Meta app 的 Data Deletion Request URL 欄位——轉 Live mode 必要。",
+      "metaMode": "OAuth 模式",
+      "metaModeByo": "自己的 Meta app（預設）",
+      "metaModeRelay": "代管連接（relay）",
+      "metaModeHint": "Relay 會經供應商的代管服務授權——屬於 opt-in，token 會經過供應商基礎設施。BYO 全部留在此 install。",
+      "metaRelayUrl": "Relay base URL",
+      "metaRelayUrlHint": "由 Unhinted 代管，每個 install 都預設此值。唯讀——想自行運作 relay 請設定 OAUTH_RELAY_URL。",
+      "metaInstanceId": "Instance ID",
+      "metaInstanceIdHint": "在 relay 註冊此 slug（它會對應到此 install 的 URL）。自動產生，唯讀。",
+      "metaRelaySecret": "Relay secret",
+      "metaRelaySecretSet": "已儲存（…{{last4}}）——輸入新 secret 才會更新",
+      "metaRelaySecretHint": "由 relay 營運方在註冊時發出——貼到這裡。Relay 模式需先設定才能使用 Connect。",
+      "ingestSection": "訊號擷取",
+      "ingestHint": "背景 worker 多久擷取一次香港訊號並升級為主題。儲存後約一分鐘內生效，不需重啟。",
+      "ingestEnabled": "定時訊號擷取與升級",
+      "hotSearchInterval": "熱門搜尋擷取間隔（分鐘）",
+      "questionsInterval": "推薦問題生成間隔（小時）",
+      "promoteWindow": "訊號升級窗口（小時）",
+      "promoteRankMax": "Trends 排名升級上限"
+    }
+  },
+  "admin": {
+    "llmCalls": "LLM 呼叫紀錄",
+    "empty": "尚無紀錄——觸發 LLM call 後會顯示在這裡",
+    "nodeStepsEmpty": "尚無 Node steps——執行完一個 Session turn 後會顯示在這裡",
+    "loadFailed": "載入失敗",
+    "openNodeSteps": "檢視此 Turn 的 Steps",
+    "openSessionTrace": "檢視 Session Trace",
+    "openResearch": "檢視 Research",
+    "tabs": {
+      "llm": "LLM 呼叫",
+      "steps": "Node steps",
+      "research": "Research",
+      "trace": "Session Trace",
+      "instance": "Instance"
+    },
+    "filters": {
+      "node": "節點",
+      "nodePlaceholder": "例如 reviewer",
+      "status": "狀態",
+      "statusAll": "全部",
+      "fallbackOnly": "只顯示 fallback",
+      "refresh": "重新整理",
+      "sessionId": "Session ID",
+      "turnId": "Turn ID"
+    },
+    "table": {
+      "time": "時間",
+      "node": "節點",
+      "caller": "來源",
+      "kind": "類型",
+      "model": "模型",
+      "status": "狀態",
+      "tokens": "Tokens",
+      "latency": "耗時",
+      "flags": "標記",
+      "seq": "序號",
+      "mode": "Mode",
+      "intent": "Intent",
+      "turnId": "Turn",
+      "outputKeys": "Output keys"
+    },
+    "badges": {
+      "parseFailed": "解析失敗",
+      "fallback": "fallback"
+    },
+    "pagination": {
+      "prev": "上一頁",
+      "next": "下一頁",
+      "showing": "顯示 {{from}}–{{to}}"
+    },
+    "detail": {
+      "title": "呼叫詳情",
+      "close": "關閉",
+      "resize": "調整列表與詳情寬度",
+      "session": "Session",
+      "user": "User",
+      "temperature": "Temperature",
+      "parseOk": "JSON 解析",
+      "ttft": "TTFT",
+      "usd": "估算成本",
+      "usdUnpriced": "無法估價",
+      "tokensPrompt": "輸入",
+      "tokensCompletion": "輸出",
+      "tokensTotal": "合計",
+      "tokensCached": "Cache",
+      "systemPrompt": "System prompt",
+      "userPrompt": "User prompt",
+      "response": "回應",
+      "error": "錯誤"
+    },
+    "nodeStepDetail": {
+      "title": "Node step 詳情",
+      "output": "Output",
+      "llmCalls": "同 Turn / Node 的 LLM calls"
+    },
+    "sessionTrace": {
+      "placeholder": "貼上 Session UUID…",
+      "load": "載入",
+      "empty": "輸入 Session ID 開始檢視 Trace",
+      "summary": "Session",
+      "title": "標題",
+      "messages": "訊息",
+      "noMessages": "尚無訊息",
+      "revisions": "Draft 修訂",
+      "noRevisions": "尚無 Draft 修訂",
+      "revision": "修訂 {{n}}",
+      "grounding": "Signal grounding",
+      "pickRevision": "選擇一個修訂查看 Grounding",
+      "noSignals": "此修訂沒有 Source signals／找不到 Signal 列",
+      "turns": "Graph turns",
+      "noTurns": "尚無 Node-step／LLM turn 紀錄",
+      "llmCount": "{{n}} 個 LLM calls",
+      "llmTokens": " · {{n}} tok"
+    },
+    "research": {
+      "placeholder": "貼上 Session UUID…",
+      "load": "載入",
+      "empty": "輸入 Session ID 查看 Research（Semantic gate + Tavily∪PG）",
+      "noTurns": "此 Session 尚無 Research 相關 Node steps",
+      "turnDetail": "Turn 明細",
+      "semantic": "Semantic",
+      "rulePass": "rule_pass",
+      "needFacts": "need_facts",
+      "askClarify": "ask_clarify",
+      "entity": "entity",
+      "ingest": "ran ingest",
+      "querySource": "query_source",
+      "signalsTrusted": "signals_trusted",
+      "queries": "Search queries",
+      "noQueries": "尚無 Atomic queries",
+      "hits": "Hits",
+      "signals": "Signals（Tavily∪PG）",
+      "noSignals": "尚無 research_signals"
+    }
+  },
+  "theme": {
+    "label": "主題",
+    "light": "淺色",
+    "dark": "深色"
+  },
+  "invite": {
+    "loggedOutTitle": "有人邀請你加入團隊",
+    "loggedOutBody": "請以 {{email}} 登入或註冊，然後回到此頁加入 {{company}}。",
+    "login": "登入",
+    "register": "建立新帳號",
+    "once": "邀請連結只能使用一次",
+    "titleJoin": "加入團隊",
+    "loggedInBody": "你目前以下列帳號登入，即將加入 {{company}}：",
+    "replaceWarning": "加入 {{company}} 會取代你目前的個人公司。產品會移到「個人」。語氣設定不會帶過去。對話與草稿維持不變。",
+    "join": "加入公司",
+    "joining": "加入中…",
+    "home": "返回首頁",
+    "mismatchTitle": "電子郵件不符",
+    "mismatchBody": "你目前登入的電子郵件與此邀請不符。",
+    "conflictTitle": "你已屬於一間公司",
+    "conflictBody": "一個帳號只能加入一間公司。請返回首頁繼續，或聯絡管理員。",
+    "invalidTitle": "邀請已失效",
+    "invalidBody": "連結可能已過期、已被撤銷，或已使用過。請聯絡公司管理員重新發送。"
+  },
+  "errors": {
+    "displayNameRequired": "請填寫顯示名稱。",
+    "emailRequired": "請填寫電子郵件。",
+    "passwordRequired": "請填寫密碼。",
+    "confirmPasswordRequired": "請填寫確認密碼。",
+    "smtpHostRequired": "請填寫 SMTP host。",
+    "chatModelRequired": "請填寫預設模型。",
+    "loginFailed": "登入失敗",
+    "registrationFailed": "註冊失敗",
+    "invalidEmail": "電子郵件格式錯誤",
+    "passwordTooShort": "密碼至少需要 8 個字元",
+    "passwordMismatch": "兩次輸入的密碼不同",
+    "emailAlreadyRegistered": "此電子郵件已註冊",
+    "invalidCredentials": "電子郵件或密碼錯誤",
+    "accountDisabled": "此帳號已被停用",
+    "invalidRefreshToken": "登入已過期，請重新登入",
+    "setupFailed": "設定失敗，請再試一次",
+    "inviteRequired": "註冊需要有效邀請",
+    "setupAlreadyCompleted": "初始設定已完成",
+    "requestFailed": "請求失敗（{{status}}）"
+  }
+}

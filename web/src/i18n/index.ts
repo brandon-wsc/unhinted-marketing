@@ -3,7 +3,9 @@ import { initReactI18next } from "react-i18next";
 
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/i18n/locales";
 import en from "@/i18n/locales/en.json";
+import zhCN from "@/i18n/locales/zh-CN.json";
 import zhHK from "@/i18n/locales/zh-HK.json";
+import zhTW from "@/i18n/locales/zh-TW.json";
 
 const STORAGE_KEY = "unhinted-locale";
 
@@ -21,6 +23,8 @@ function resolveInitialLocale(): string {
 void i18n.use(initReactI18next).init({
   resources: {
     "zh-HK": { translation: zhHK },
+    "zh-TW": { translation: zhTW },
+    "zh-CN": { translation: zhCN },
     en: { translation: en },
   },
   lng: resolveInitialLocale(),

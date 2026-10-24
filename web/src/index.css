@@ -7,6 +7,13 @@
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/cjk/dist/*.js";
 
+/* zh-CN UI swaps the CJK face to Noto Sans SC (Simplified glyphs); other locales keep HK. */
+@layer base {
+  html[lang="zh-CN"] {
+    --font-sans: "IBM Plex Sans", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
 /* Tailwind v4 Preflight dropped pointer on buttons; keep web-app affordance. */
 @layer base {
   button:not(:disabled),
