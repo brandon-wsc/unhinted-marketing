@@ -73,6 +73,32 @@ def parse_scope(scope: str | None) -> list[str]:
     return sorted(set(requested))
 
 
+def step_up_scopes_for(requested: list[str]) -> list[str]:
+    """Step-up scopes the consent UI may offer beyond what the client asked."""
+    return sorted(STEP_UP_SCOPES - set(requested))
+
+
+def merge_consent_scopes(
+    requested: list[str], extra_scopes: list[str] | None = None
+) -> list[str]:
+    """Union authorize-time scopes with user-chosen step-up at consent.
+
+    Extras must be in ``STEP_UP_SCOPES`` (and therefore known). Unknown or
+    non-step-up extras raise ``invalid_scope`` — consent cannot invent
+    publish-class or other scopes that do not exist as step-up.
+    """
+    extras = [s for s in (extra_scopes or []) if s]
+    unknown = set(extras) - KNOWN_SCOPES
+    if unknown:
+        raise OAuthError("invalid_scope", f"unknown scopes: {sorted(unknown)}")
+    not_step_up = set(extras) - STEP_UP_SCOPES
+    if not_step_up:
+        raise OAuthError(
+            "invalid_scope", f"not step-up scopes: {sorted(not_step_up)}"
+        )
+    return sorted(set(requested) | set(extras))
+
+
 async def sweep_expired_oauth_rows(db: AsyncSession) -> None:
     """Drop dead pending rows — authorize requests and single-use codes."""
     now = datetime.now(UTC)
@@ -144,8 +170,14 @@ async def complete_consent(
     user_id: uuid.UUID,
     company_id: uuid.UUID | None,
     approve: bool,
+    extra_scopes: list[str] | None = None,
 ) -> str:
     """Consent → redirect URL with code+state+iss (RFC 9207) or error."""
+    # Reject bad step-up extras before consuming so a bad POST leaves the
+    # pending authorize row reusable.
+    if approve:
+        merge_consent_scopes([], extra_scopes)
+
     # Atomic consume — a second concurrent consent finds the row already
     # stamped instead of racing into a duplicate code/grant upsert.
     request = await db.scalar(
@@ -167,6 +199,9 @@ async def complete_consent(
         query["error"] = "access_denied"
         return f"{request.redirect_uri}{sep}{urlencode(query)}"
 
+    granted_scope = " ".join(
+        merge_consent_scopes(request.scope.split(), extra_scopes)
+    )
     code = secrets.token_urlsafe(32)
     db.add(
         OAuthCode(
@@ -175,7 +210,7 @@ async def complete_consent(
             company_id=company_id,
             client_id=request.client_id,
             redirect_uri=request.redirect_uri,
-            scope=request.scope,
+            scope=granted_scope,
             resource=request.resource,
             code_challenge=request.code_challenge,
             expires_at=datetime.now(UTC) + AUTH_CODE_TTL,

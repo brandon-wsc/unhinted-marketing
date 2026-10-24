@@ -162,11 +162,14 @@ class ConsentRequest(BaseModel):
     """POST /api/oauth/authorize body — the SPA consent decision (§3).
 
     ``company_id`` is required only when approving; a deny needs no company.
+    ``extra_scopes`` are step-up scopes the user opts into at consent
+    (ADR 0051 §5); the server validates them against ``STEP_UP_SCOPES``.
     """
 
     request_id: uuid.UUID
     company_id: uuid.UUID | None = None
     approve: bool
+    extra_scopes: list[str] = Field(default_factory=list)
 
 
 class ConsentResult(BaseModel):
@@ -181,12 +184,17 @@ class ConsentDetailsCompany(BaseModel):
 
 
 class ConsentDetails(BaseModel):
-    """GET /api/oauth/authorize/request response — the consent page's data."""
+    """GET /api/oauth/authorize/request response — the consent page's data.
+
+    ``scopes`` are what the client already requested. ``step_up_scopes`` are
+    opt-in scopes the consent UI may offer (not already in ``scopes``).
+    """
 
     client_id: str
     client_name: str
     client_host: str | None
     scopes: list[str]
+    step_up_scopes: list[str] = Field(default_factory=list)
     companies: list[ConsentDetailsCompany]
 
 

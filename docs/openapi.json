@@ -7746,6 +7746,13 @@
           "approve": {
             "type": "boolean",
             "title": "Approve"
+          },
+          "extra_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Extra Scopes"
           }
         },
         "type": "object",
@@ -7754,7 +7761,7 @@
           "approve"
         ],
         "title": "ConsentRequest",
-        "description": "POST /api/oauth/authorize body — the SPA consent decision (§3).\n\n``company_id`` is required only when approving; a deny needs no company."
+        "description": "POST /api/oauth/authorize body — the SPA consent decision (§3).\n\n``company_id`` is required only when approving; a deny needs no company.\n``extra_scopes`` are step-up scopes the user opts into at consent\n(ADR 0051 §5); the server validates them against ``STEP_UP_SCOPES``."
       },
       "CreateSessionRequest": {
         "properties": {

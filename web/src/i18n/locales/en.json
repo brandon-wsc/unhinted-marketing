@@ -103,6 +103,7 @@
       "companyLabel": "Company",
       "noCompanies": "You are not a member of any company.",
       "imagesNote": "Approving this also lets the app generate images, which spends your token budget.",
+      "imagesOptIn": "Also allow image generation",
       "approve": "Connect",
       "deny": "Deny",
       "working": "Connecting…",

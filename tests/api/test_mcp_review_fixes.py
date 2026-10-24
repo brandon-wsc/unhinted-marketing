@@ -619,3 +619,148 @@ async def test_authorize_redirect_sets_the_flow_cookie(client, monkeypatch) -> N
     assert "/oauth/consent?request_id=" in res.headers["location"]
     cookie = res.cookies.get(oauth.REQUEST_COOKIE)
     assert cookie and cookie in res.headers["location"]
+
+
+# --- consent step-up opt-in for images:generate (ADR 0051 §5) ----------------
+
+
+async def test_consent_details_expose_step_up_scopes(client) -> None:
+    """PRM-default clients see images:generate as opt-in, not already granted."""
+    body = await register_user(client, email="consent-stepup-details@example.com")
+    request_id = await _seed_auth_request()
+    client.cookies.set(oauth.REQUEST_COOKIE, str(request_id))
+    res = await client.get(
+        f"/api/oauth/authorize/request?request_id={request_id}",
+        headers=auth_header(body["access_token"]),
+    )
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    assert set(payload["scopes"]) == {"knowledge:read", "drafts:write"}
+    assert payload["step_up_scopes"] == ["images:generate"]
+
+
+async def test_consent_details_omit_step_up_when_already_requested(client) -> None:
+    body = await register_user(client, email="consent-stepup-already@example.com")
+    async with open_session() as db:
+        req = OAuthAuthRequest(
+            client_id=TEST_CLIENT_ID,
+            client_name=TEST_CLIENT_NAME,
+            redirect_uri="https://claude.example/callback",
+            scope="knowledge:read drafts:write images:generate",
+            state="state-123",
+            code_challenge="challenge-abc",
+            resource=oauth.mcp_resource_url(),
+            expires_at=datetime.now(UTC) + oauth.AUTH_REQUEST_TTL,
+        )
+        db.add(req)
+        await db.commit()
+        request_id = req.id
+    client.cookies.set(oauth.REQUEST_COOKIE, str(request_id))
+    res = await client.get(
+        f"/api/oauth/authorize/request?request_id={request_id}",
+        headers=auth_header(body["access_token"]),
+    )
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    assert "images:generate" in payload["scopes"]
+    assert payload["step_up_scopes"] == []
+
+
+async def _approve_and_exchange(
+    client, *, body: dict, request_id, company_id: str, extra_scopes: list[str]
+) -> dict:
+    verifier = "pkce-verifier-stepup-0123456789ab"
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+        .rstrip(b"=")
+        .decode()
+    )
+    async with open_session() as db:
+        req = await db.get(OAuthAuthRequest, request_id)
+        assert req is not None
+        req.code_challenge = challenge
+        await db.commit()
+
+    client.cookies.set(oauth.REQUEST_COOKIE, str(request_id))
+    res = await client.post(
+        "/api/oauth/authorize",
+        json={
+            "request_id": str(request_id),
+            "company_id": company_id,
+            "approve": True,
+            "extra_scopes": extra_scopes,
+        },
+        headers=auth_header(body["access_token"]),
+    )
+    assert res.status_code == 200, res.text
+    code = parse_qs(urlparse(res.json()["redirect"]).query)["code"][0]
+    token_res = await client.post(
+        "/api/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": TEST_CLIENT_ID,
+            "redirect_uri": "https://claude.example/callback",
+            "code_verifier": verifier,
+        },
+    )
+    assert token_res.status_code == 200, token_res.text
+    return token_res.json()
+
+
+async def test_consent_approve_with_images_opt_in_grants_scope(client) -> None:
+    body = await register_user(client, email="consent-stepup-on@example.com")
+    company_id = body["user"]["organizations"][0]["id"]
+    request_id = await _seed_auth_request()
+    token = await _approve_and_exchange(
+        client,
+        body=body,
+        request_id=request_id,
+        company_id=company_id,
+        extra_scopes=["images:generate"],
+    )
+    assert set(token["scope"].split()) == {
+        "drafts:write",
+        "images:generate",
+        "knowledge:read",
+    }
+
+
+async def test_consent_approve_without_opt_in_omits_images(client) -> None:
+    body = await register_user(client, email="consent-stepup-off@example.com")
+    company_id = body["user"]["organizations"][0]["id"]
+    request_id = await _seed_auth_request()
+    token = await _approve_and_exchange(
+        client,
+        body=body,
+        request_id=request_id,
+        company_id=company_id,
+        extra_scopes=[],
+    )
+    assert set(token["scope"].split()) == {"drafts:write", "knowledge:read"}
+    assert "images:generate" not in token["scope"].split()
+
+
+async def test_consent_rejects_non_step_up_extra_scopes(client) -> None:
+    body = await register_user(client, email="consent-stepup-bad@example.com")
+    company_id = body["user"]["organizations"][0]["id"]
+    request_id = await _seed_auth_request()
+    client.cookies.set(oauth.REQUEST_COOKIE, str(request_id))
+    res = await client.post(
+        "/api/oauth/authorize",
+        json={
+            "request_id": str(request_id),
+            "company_id": company_id,
+            "approve": True,
+            "extra_scopes": ["drafts:write"],
+        },
+        headers=auth_header(body["access_token"]),
+    )
+    assert res.status_code == 400, res.text
+    assert res.json()["error"] == "invalid_scope"
+    # Pending request must still be usable after the rejected opt-in.
+    res = await client.get(
+        f"/api/oauth/authorize/request?request_id={request_id}",
+        headers=auth_header(body["access_token"]),
+    )
+    assert res.status_code == 200, res.text
