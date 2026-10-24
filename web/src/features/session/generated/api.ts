@@ -1871,7 +1871,12 @@ export type paths = {
         };
         /**
          * Authorization Server Metadata
-         * @description RFC 8414 — issuer = web_base_url; CIMD means no registration endpoint.
+         * @description RFC 8414 — issuer = web_base_url; CIMD, no registration endpoint.
+         *
+         *     MCP clients (Claude, Grok) select Client ID Metadata Documents only when
+         *     this document advertises ``client_id_metadata_document_supported`` and
+         *     public-client token auth. Missing the flag makes them fall through to
+         *     Dynamic Client Registration, which this server does not offer (ADR 0053).
          */
         get: operations["authorization_server_metadata__well_known_oauth_authorization_server_get"];
         put?: never;

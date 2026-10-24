@@ -18,6 +18,12 @@ Feature: Remote MCP server for consumer AI apps (ADR 0051)
     And the metadata names an authorization server
     And the default scopes are "knowledge:read drafts:write"
 
+  Scenario: authorization server metadata advertises CIMD without dynamic registration
+    When the client fetches the authorization server metadata
+    Then the response status is 200
+    And the authorization server advertises client id metadata documents
+    And the authorization server does not offer dynamic client registration
+
   # --- token isolation + revocation (§4) ----------------------------------
 
   Scenario: a web session token cannot call the MCP endpoint

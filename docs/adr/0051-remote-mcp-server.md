@@ -1,6 +1,6 @@
 # ADR 0051 — Remote MCP server for consumer AI apps
 
-- **Status:** Accepted
+- **Status:** Accepted (§2 CIMD advertisement and loopback `redirect_uri` ports amended by [ADR 0053](./0053-mcp-cimd-loopback-redirect.md))
 - **Date:** 2026-10-23
 - **Supersedes:** —
 - **Amends:** [ADR 0006](./0006-api-path-prefix-and-spa-proxy.md) (root `/.well-known/oauth-*` exception, §2); [ADR 0029](./0029-angle-persona-bundled-gate.md) / [ADR 0030](./0030-image-format-in-bundled-gate.md) (a gate answer may come from an MCP client; brief gains `recommended_angle_index`, §9–§10)
@@ -29,10 +29,10 @@ Target clients are consumer AI apps, which connect from their cloud to a public 
 
 - Protected Resource Metadata is served at `/.well-known/oauth-protected-resource/api/mcp` (RFC 9728 path insertion). Authorization Server Metadata is served at `/.well-known/oauth-authorization-server` (RFC 8414). A 401 from `/api/mcp` carries `WWW-Authenticate: Bearer resource_metadata=…, scope=…`.
 - **ADR 0006 exception:** the spec fixes these well-known paths at the domain root. `web/nginx.conf`, `deploy/azure/nginx/default.conf.template`, and the Vite dev proxy therefore route the `/.well-known/oauth-` prefix to the API. No other API route may live outside `/api`.
-- **Client registration:** Client ID Metadata Documents are the primary path. The `client_id` is an HTTPS URL, and we fetch and validate its metadata. Dynamic Client Registration (RFC 7591) is enabled only if a target client still requires it at implementation time; verify each target app before shipping. No pre-registration UI.
+- **Client registration:** Client ID Metadata Documents are the primary path. The `client_id` is an HTTPS URL, and we fetch and validate its metadata. Dynamic Client Registration (RFC 7591) is enabled only if a target client still requires it at implementation time; verify each target app before shipping. No pre-registration UI. Authorization-server metadata advertises `client_id_metadata_document_supported: true` and does not expose `registration_endpoint` ([ADR 0053](./0053-mcp-cimd-loopback-redirect.md)) — Claude and Grok both select CIMD from that flag and do not need DCR.
 - Required protocol checks:
   - PKCE `S256`;
-  - exact `redirect_uri` match against the client metadata;
+  - exact `redirect_uri` match against the client metadata, except an `http` loopback redirect (`localhost`, `127.0.0.1`, `[::1]`) whose port may differ ([ADR 0053](./0053-mcp-cimd-loopback-redirect.md));
   - an RFC 8707 `resource` parameter, which must equal the MCP URL. At the token call a client that omits `resource` stands for the value bound into the code; a supplied one must match it;
   - `iss` in the authorization response (RFC 9207).
 

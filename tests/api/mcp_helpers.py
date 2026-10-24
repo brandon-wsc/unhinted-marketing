@@ -10,6 +10,11 @@ tests/api/bdd/features/mcp.feature):
   ``resource`` ends with ``/api/mcp``; ``authorization_servers`` non-empty;
   ``scopes_supported`` = ``knowledge:read`` + ``drafts:write`` only
   (``images:generate`` is step-up, ADR 0051 §5).
+- ``GET /.well-known/oauth-authorization-server`` — RFC 8414 metadata with
+  ``client_id_metadata_document_supported: true`` and
+  ``token_endpoint_auth_methods_supported: ["none"]``, and no
+  ``registration_endpoint`` (ADR 0053). Clients that see both CIMD signals
+  skip Dynamic Client Registration.
 - 401 from ``/api/mcp`` carries ``WWW-Authenticate: Bearer
   resource_metadata="…/.well-known/oauth-protected-resource/api/mcp"``.
   Missing scope on a tool → HTTP 403 with ``error="insufficient_scope"``
@@ -52,6 +57,7 @@ from internal.session.graph import ANGLE_GATE_NODE, IMAGE_PARK_NODE
 MCP_PATH = "/api/mcp"
 PROTOCOL_VERSION = "2026-07-28"
 PRM_PATH = "/.well-known/oauth-protected-resource/api/mcp"
+AS_METADATA_PATH = "/.well-known/oauth-authorization-server"
 CONNECTED_APP_PATH = "/api/auth/me/connected-apps/{grant_id}"
 
 TEST_CLIENT_ID = "https://claude.example/oauth/client-metadata.json"

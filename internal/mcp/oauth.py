@@ -101,6 +101,7 @@ async def issue_auth_request(
         doc = await fetch_client_metadata(clean_client_id)
     except ClientMetadataError as exc:
         raise OAuthError("invalid_client", exc.message) from exc
+    # ADR 0053 — loopback http URIs may use any port; everything else is exact.
     if not redirect_uri_allowed(doc, redirect_uri or ""):
         raise OAuthError("invalid_request", "redirect_uri not in client metadata")
     if (code_challenge_method or "").upper() != "S256" or not code_challenge:
@@ -262,6 +263,9 @@ async def exchange_code(
         or row.consumed_at is not None
         or row.expires_at < datetime.now(UTC)
         or row.client_id != client_id
+        # Bound to the authorize-time URI, including the ephemeral loopback
+        # port. Do not re-run the CIMD port exception here — a code issued
+        # for one port must not redeem on another.
         or row.redirect_uri != redirect_uri
         or not code_verifier
         or not pkce_verifier_matches(code_verifier, row.code_challenge)
