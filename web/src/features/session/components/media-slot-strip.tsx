@@ -10,6 +10,8 @@ type Props = {
   media: PreviewMediaItem[];
   selectedId: string | null;
   busy?: boolean;
+  /** Keep slot switching live while the add button is disabled (image park). */
+  addDisabled?: boolean;
   onSelect: (item: PreviewMediaItem) => void;
   onAdd: () => void;
 };
@@ -24,7 +26,7 @@ function readScrollState(el: HTMLDivElement | null) {
 }
 
 /** Horizontal media slot strip: ScrollArea (hidden bar) + chevrons + add icon. */
-export function MediaSlotStrip({ media, selectedId, busy, onSelect, onAdd }: Props) {
+export function MediaSlotStrip({ media, selectedId, busy, addDisabled, onSelect, onAdd }: Props) {
   const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
@@ -115,7 +117,7 @@ export function MediaSlotStrip({ media, selectedId, busy, onSelect, onAdd }: Pro
             variant="outline"
             size="icon"
             className="size-8 shrink-0"
-            disabled={busy}
+            disabled={busy || addDisabled}
             aria-label={t("preview.media.add")}
             onClick={onAdd}
           >
