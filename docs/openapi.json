@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Unhinted Marketing API",
+    "title": "Unhinted API",
     "version": "1.0.0-beta"
   },
   "paths": {

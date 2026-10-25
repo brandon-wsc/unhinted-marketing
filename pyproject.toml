@@ -1,7 +1,7 @@
 [project]
 name = "unhinted-marketing"
 version = "1.0.0b0"
-description = "AI marketing assistant for HK market signals"
+description = "Unhinted — AI social content assistant for Hong Kong businesses"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"

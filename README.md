@@ -5,7 +5,7 @@ Unhinted is an open-source AI social content assistant for Hong Kong businesses:
 [**unhinted.hk**](https://unhinted.hk) · [**Live Demo**](https://demo.unhinted.hk) (account approval required) · [**Docs**](docs/GETTING_STARTED.md)
 
 > **你有生意要忙，唔使日日由零諗出咩。**  
-> Unhinted 幫你由香港熱話搵切入點，結合產品賣點，寫成地道廣東話社交內容。你揀方向、改稿，確認先發佈。
+> Unhinted 幫你由香港熱話搵切入點，結合產品賣點，寫成有你品牌語氣嘅社交內容。你揀方向、改稿，確認先發佈。
 
 The LLM owns the recommend/draft loop only; publishing is a traditional Confirm → HTTP flow. Unhinted is in public beta (pre-release `v1.0.0-beta.*` builds).
 

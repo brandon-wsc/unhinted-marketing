@@ -1,4 +1,4 @@
-# Agent brief — Unhinted Marketing
+# Agent brief — Unhinted
 
 Short map for coding agents. Prefer these sources over inventing parallel docs or shapes.
 

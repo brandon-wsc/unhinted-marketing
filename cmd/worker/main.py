@@ -383,7 +383,7 @@ async def _cmd_connect_social_account(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Unhinted marketing workers")
+    parser = argparse.ArgumentParser(description="Unhinted workers")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("serve", help="Run the job-queue worker service (ADR 0039)")

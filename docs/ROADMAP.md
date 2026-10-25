@@ -1,4 +1,4 @@
-# Unhinted Marketing Agent — Roadmap
+# Unhinted — Roadmap
 
 > **Stack:** Python (FastAPI) · LangGraph · PostgreSQL (+ pgvector) · React (Tailwind + shadcn/ui)  
 > **Market focus (MVP):** Hong Kong hot search & trends  

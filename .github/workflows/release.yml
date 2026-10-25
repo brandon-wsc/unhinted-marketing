@@ -98,7 +98,7 @@ jobs:
           mkdir -p out
 
           cat > out/compose.header <<'HDR'
-          # Unhinted Marketing — standalone all-in-one install (prebuilt images,
+          # Unhinted — standalone all-in-one install (prebuilt images,
           # no repo checkout). Bundled pgvector Postgres; zero .env required.
           #
           #   docker compose -f compose.yaml up -d   →  http://localhost:8484
@@ -112,7 +112,7 @@ jobs:
           HDR
 
           cat > out/compose.external-db.header <<'HDR'
-          # Unhinted Marketing — standalone install against your own Postgres
+          # Unhinted — standalone install against your own Postgres
           # (prebuilt images, no repo checkout). Postgres must have pgvector.
           #
           #   cp env.example .env   # set DATABASE_URL + JWT_SECRET +
