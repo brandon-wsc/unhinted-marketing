@@ -66,6 +66,17 @@
       "saving": "保存中…",
       "saved": "已保存"
     },
+    "password": {
+      "title": "密码",
+      "currentLabel": "当前密码",
+      "verify": "验证",
+      "verifying": "验证中…",
+      "newLabel": "新密码",
+      "confirmLabel": "确认新密码",
+      "submit": "修改密码",
+      "saving": "保存中…",
+      "saved": "密码已修改"
+    },
     "connectAi": {
       "title": "连接 AI 应用",
       "description": "让外部 AI 应用（Claude、ChatGPT 等）使用你公司的语气与产品资料，通过 Unhinted 起稿；发布仍需回到这里点击确认。",
@@ -1101,6 +1112,9 @@
     "setupFailed": "设置失败，请再试一次",
     "inviteRequired": "注册需要有效邀请",
     "setupAlreadyCompleted": "初始设置已完成",
-    "requestFailed": "请求失败（{{status}}）"
+    "requestFailed": "请求失败（{{status}}）",
+    "currentPasswordRequired": "请填写当前密码。",
+    "currentPasswordIncorrect": "当前密码不正确",
+    "passwordUnchanged": "新密码不能与当前密码相同"
   }
 }

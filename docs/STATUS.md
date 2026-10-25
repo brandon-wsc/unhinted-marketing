@@ -103,6 +103,8 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-10-24) — MCP authorization server advertises CIMD; loopback redirect ports:** → [ADR 0053](./adr/0053-mcp-cimd-loopback-redirect.md). `/.well-known/oauth-authorization-server` sets `client_id_metadata_document_supported: true` next to `token_endpoint_auth_methods_supported: ["none"]` and still has no `registration_endpoint`. Claude and Grok select CIMD from those two signals; missing the flag made them demand Dynamic Client Registration. `redirect_uri` stays an exact string match except an `http` loopback (`localhost`, `127.0.0.1`, `[::1]`), where any port is accepted so Claude Code's portless CIMD (`http://localhost/callback`) covers `http://localhost:<ephemeral>/callback`. Scheme, host, path, and query stay exact; the token request is bound to the authorize-time URI, port included. CIMD fetch SSRF guards are unchanged.
 
+**Decision (2026-10-25) — Self-service change password (verify current first):** → [ADR 0055](./adr/0055-self-service-change-password.md). `POST /api/auth/me/verify-password` + `POST /api/auth/me/password` (bearer, auth-limiter buckets `verify_password` / `change_password`): the server re-verifies the current password on every change (no capability grant between the two UI steps), rejects <8 chars and `new == current`, then re-hashes in place — no migration, existing sessions stay valid. `/account` gets a two-step Password panel next to Profile; wrong current password is a field error, not client-only gating. HTTP-only, outside the session graph.
+
 **Decision (2026-09-26) — Demo / local CD tracks `main`, separate from customer releases:** → [ADR 0037](./adr/0037-demo-local-cd.md)
 
 - **Demo / local hosts** fast-forward a dedicated checkout to `origin/main` and `docker compose up -d --build` from `deploy/` (`deploy/demo-sync.sh`). Images are built from that commit with `DEPLOYMENT_MODE=onprem` — the same compose shape as a customer install (SPA + API + migrate)
@@ -326,7 +328,7 @@ BYOK / Trace / Meta stay deferred. No full Vercel AI SDK `useChat` — thin `use
 | `docs/STATUS.md` | ✅ | This file |
 | `.env.example` | ✅ | Includes LLM keys / `LLM_API_BASE` |
 | `pyproject.toml` + Python skeleton | ✅ | FastAPI, SQLAlchemy, Alembic, JWT, LangGraph |
-| Auth API | ✅ | `/api/auth/register`, `/login`, `/refresh`, `/logout`, `GET/PATCH /me` ([ADR 0046](./adr/0046-account-settings-profile.md); profile UI at `/account`) |
+| Auth API | ✅ | `/api/auth/register`, `/login`, `/refresh`, `/logout`, `GET/PATCH /me` ([ADR 0046](./adr/0046-account-settings-profile.md); profile UI at `/account`), `POST /me/verify-password` + `POST /me/password` ([ADR 0055](./adr/0055-self-service-change-password.md); two-step change-password panel) |
 | Alembic `8791b607d5bc` (auth) | ✅ | `users`, `entities`, `organization_members`, `refresh_tokens` |
 | React web app | ✅ | Vite + React 19 + Tailwind v4 |
 | README | ✅ | Project intro; setup in GETTING_STARTED |

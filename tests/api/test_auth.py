@@ -124,3 +124,114 @@ async def test_patch_me_rejects_blank_name(client) -> None:
 async def test_patch_me_requires_auth(client) -> None:
     res = await client.patch("/api/auth/me", json={"display_name": "Nope"})
     assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_verify_password_accepts_current(client) -> None:
+    data = await register_user(client)
+    res = await client.post(
+        "/api/auth/me/verify-password",
+        headers=auth_header(data["access_token"]),
+        json={"password": "password123"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json() == {"message": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_verify_password_rejects_wrong(client) -> None:
+    data = await register_user(client)
+    res = await client.post(
+        "/api/auth/me/verify-password",
+        headers=auth_header(data["access_token"]),
+        json={"password": "wrong-password"},
+    )
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Current password is incorrect"
+
+
+@pytest.mark.asyncio
+async def test_verify_password_requires_auth(client) -> None:
+    res = await client.post("/api/auth/me/verify-password", json={"password": "password123"})
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_change_password_success_and_relogin(client) -> None:
+    data = await register_user(client)
+    email = data["user"]["email"]
+    access = data["access_token"]
+
+    res = await client.post(
+        "/api/auth/me/password",
+        headers=auth_header(access),
+        json={"current_password": "password123", "new_password": "newpassword456"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json() == {"message": "Password changed"}
+
+    # Old password no longer logs in; new one does.
+    old_login = await client.post("/api/auth/login", json={"email": email, "password": "password123"})
+    assert old_login.status_code == 401
+    new_login = await client.post(
+        "/api/auth/login", json={"email": email, "password": "newpassword456"}
+    )
+    assert new_login.status_code == 200
+
+    # Verify now accepts only the new password.
+    old_check = await client.post(
+        "/api/auth/me/verify-password",
+        headers=auth_header(access),
+        json={"password": "password123"},
+    )
+    assert old_check.status_code == 401
+    new_check = await client.post(
+        "/api/auth/me/verify-password",
+        headers=auth_header(access),
+        json={"password": "newpassword456"},
+    )
+    assert new_check.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_change_password_rejects_wrong_current(client) -> None:
+    data = await register_user(client)
+    res = await client.post(
+        "/api/auth/me/password",
+        headers=auth_header(data["access_token"]),
+        json={"current_password": "wrong-password", "new_password": "newpassword456"},
+    )
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Current password is incorrect"
+
+
+@pytest.mark.asyncio
+async def test_change_password_rejects_same_as_current(client) -> None:
+    data = await register_user(client)
+    res = await client.post(
+        "/api/auth/me/password",
+        headers=auth_header(data["access_token"]),
+        json={"current_password": "password123", "new_password": "password123"},
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"] == "New password must be different from the current password"
+
+
+@pytest.mark.asyncio
+async def test_change_password_rejects_short_new(client) -> None:
+    data = await register_user(client)
+    res = await client.post(
+        "/api/auth/me/password",
+        headers=auth_header(data["access_token"]),
+        json={"current_password": "password123", "new_password": "short"},
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_change_password_requires_auth(client) -> None:
+    res = await client.post(
+        "/api/auth/me/password",
+        json={"current_password": "password123", "new_password": "newpassword456"},
+    )
+    assert res.status_code == 401

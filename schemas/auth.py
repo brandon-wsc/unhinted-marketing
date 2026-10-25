@@ -23,6 +23,17 @@ class UserUpdate(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
 
 
+class VerifyPasswordRequest(BaseModel):
+    # ADR 0055: step 1 of the two-step change-password flow.
+    password: str = Field(min_length=1, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    # ADR 0055: step 2 — server re-checks current_password before saving.
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class OrganizationSummary(BaseModel):
     id: uuid.UUID
     name: str

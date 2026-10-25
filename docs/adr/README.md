@@ -57,6 +57,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0052](./0052-ui-locales-independent-of-draft-voice.md) | UI locales zh-TW / zh-CN; UI locale independent of draft voice | Accepted |
 | [0053](./0053-mcp-cimd-loopback-redirect.md) | MCP authorization server advertises CIMD; http loopback redirect may use any port | Accepted |
 | [0054](./0054-comic-line-default-image-scene-logic.md) | Comic-line default image style (photoreal opt-in); product scene logic | Accepted |
+| [0055](./0055-self-service-change-password.md) | Self-service change password (verify current first, two-step UI) | Accepted |
 
 ## Format
 

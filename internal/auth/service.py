@@ -128,6 +128,29 @@ async def logout_user(db: AsyncSession, *, raw_refresh_token: str) -> None:
         await db.commit()
 
 
+def verify_user_password(user: User, password: str) -> None:
+    """ADR 0055 — gate for the change-password flow; 401 when wrong."""
+    if not verify_password(password, user.password_hash):
+        raise AuthError("Current password is incorrect", status_code=401)
+
+
+async def change_password(
+    db: AsyncSession, user: User, *, current_password: str, new_password: str
+) -> User:
+    """ADR 0055 — self-service password change; verify current, then hash + save."""
+    verify_user_password(user, current_password)
+    if len(new_password) < 8:
+        raise AuthError("Password must be at least 8 characters", status_code=422)
+    if new_password == current_password:
+        raise AuthError(
+            "New password must be different from the current password", status_code=422
+        )
+    user.password_hash = hash_password(new_password)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 async def update_display_name(db: AsyncSession, user: User, display_name: str) -> User:
     """ADR 0046 — self-service rename; name is global across orgs."""
     name = display_name.strip()

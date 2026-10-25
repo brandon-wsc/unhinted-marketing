@@ -66,6 +66,17 @@
       "saving": "儲存緊…",
       "saved": "已儲存"
     },
+    "password": {
+      "title": "密碼",
+      "currentLabel": "現有密碼",
+      "verify": "驗證",
+      "verifying": "驗證緊…",
+      "newLabel": "新密碼",
+      "confirmLabel": "確認新密碼",
+      "submit": "更改密碼",
+      "saving": "儲存緊…",
+      "saved": "密碼已更改"
+    },
     "connectAi": {
       "title": "連接 AI 應用",
       "description": "俾外部 AI 應用（Claude、ChatGPT 等）用你公司嘅語氣同產品資料經 Unhinted 起稿；發佈依然要返嚟呢度撳確認。",
@@ -1093,7 +1104,7 @@
     "registrationFailed": "註冊失敗",
     "invalidEmail": "電郵格式唔啱",
     "passwordTooShort": "密碼最少需要 8 個字",
-    "passwordMismatch": "兩次輸入嘅密碼唔同",
+    "passwordMismatch": "密碼唔一致",
     "emailAlreadyRegistered": "呢個電郵已經註冊過",
     "invalidCredentials": "電郵或者密碼唔啱",
     "accountDisabled": "呢個帳戶已被停用",
@@ -1101,6 +1112,9 @@
     "setupFailed": "設定失敗，請再試一次",
     "inviteRequired": "註冊需要有效嘅邀請",
     "setupAlreadyCompleted": "初始設定已經完成",
-    "requestFailed": "請求失敗（{{status}}）"
+    "requestFailed": "請求失敗（{{status}}）",
+    "currentPasswordRequired": "要填現有密碼。",
+    "currentPasswordIncorrect": "現有密碼唔啱",
+    "passwordUnchanged": "新密碼唔可以同現有密碼一樣"
   }
 }

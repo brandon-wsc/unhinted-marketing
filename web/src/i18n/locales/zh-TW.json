@@ -66,6 +66,17 @@
       "saving": "儲存中…",
       "saved": "已儲存"
     },
+    "password": {
+      "title": "密碼",
+      "currentLabel": "目前的密碼",
+      "verify": "驗證",
+      "verifying": "驗證中…",
+      "newLabel": "新密碼",
+      "confirmLabel": "確認新密碼",
+      "submit": "變更密碼",
+      "saving": "儲存中…",
+      "saved": "密碼已變更"
+    },
     "connectAi": {
       "title": "連接 AI 應用",
       "description": "讓外部 AI 應用（Claude、ChatGPT 等）使用你公司的語氣與產品資料，透過 Unhinted 起稿；發佈仍需回到這裡按確認。",
@@ -1101,6 +1112,9 @@
     "setupFailed": "設定失敗，請再試一次",
     "inviteRequired": "註冊需要有效邀請",
     "setupAlreadyCompleted": "初始設定已完成",
-    "requestFailed": "請求失敗（{{status}}）"
+    "requestFailed": "請求失敗（{{status}}）",
+    "currentPasswordRequired": "請填寫目前的密碼。",
+    "currentPasswordIncorrect": "目前的密碼不正確",
+    "passwordUnchanged": "新密碼不可與目前的密碼相同"
   }
 }
