@@ -43,7 +43,10 @@ const DEFAULT_COMIC_PANELS = [
 const COMIC_COMPOSITION = "2x2 comic grid, equal panels, reading L→R then top→bottom";
 const COMIC_STYLE = "clean line comic, contemporary HK urban";
 const SINGLE_COMPOSITION = "subject centered, negative space for optional caption overlay";
-const SINGLE_STYLE = "bright, contemporary, editorial";
+const SINGLE_STYLE =
+  "clean line contemporary Hong Kong comic illustration, natural daylight, flat natural colors, not photoreal";
+// Pre-comic single default — stored plans still carry it.
+const LEGACY_SINGLE_STYLE = "bright, contemporary, editorial";
 const COMIC_VEHICLE =
   /4-panel|four-panel|4\s*panel|comic strip|2x2 comic|comic grid|4\s*格|四格|漫畫分格/i;
 // Composition/style only — broader than COMIC_VEHICLE (layout vocabulary like
@@ -51,14 +54,14 @@ const COMIC_VEHICLE =
 const COMIC_LAYOUT = /\bpanels?\b|\bgrids?\b|\bgutters?\b|2x2|panel order|格仔|分格/i;
 const INSPIRED_BY = /inspired by:\s*(.+?)(?:,\s*(?:clear gutters|no logos)|$)/i;
 const SINGLE_PROMPT =
-  "Clean modern social media image, Hong Kong urban mood, no logos, no unreadable text";
+  "Clean-line Hong Kong comic illustration, single panel, no logos, no unreadable text";
 
 // Mirrors _single_prompt_from_comic in internal/session/image_format.py —
 // keeps the "inspired by" seed when dropping the comic vehicle.
 function singlePromptFromComic(prompt: string): string {
   const seed = INSPIRED_BY.exec(prompt)?.[1]?.trim().replace(/,+$/, "");
   return seed
-    ? `Clean modern social media image, Hong Kong urban mood, inspired by: ${seed}, no logos, no unreadable text`
+    ? `Clean-line Hong Kong comic illustration, single panel, inspired by: ${seed}, no logos, no unreadable text`
     : SINGLE_PROMPT;
 }
 
@@ -211,7 +214,10 @@ export function EditImageDialog({
             prev.composition.trim() && !/subject centered/i.test(prev.composition)
               ? prev.composition
               : COMIC_COMPOSITION,
-          style: prev.style.trim() && prev.style !== SINGLE_STYLE ? prev.style : COMIC_STYLE,
+          style:
+            prev.style.trim() && prev.style !== SINGLE_STYLE && prev.style !== LEGACY_SINGLE_STYLE
+              ? prev.style
+              : COMIC_STYLE,
         };
       }
       return {
@@ -224,8 +230,13 @@ export function EditImageDialog({
           COMIC_LAYOUT.test(prev.composition)
             ? SINGLE_COMPOSITION
             : prev.composition,
+        // Comic line art is the single default too — only drop grid/strip vocabulary.
         style:
-          /comic/i.test(prev.style) || COMIC_LAYOUT.test(prev.style) ? SINGLE_STYLE : prev.style,
+          prev.style === COMIC_STYLE ||
+          COMIC_VEHICLE.test(prev.style) ||
+          COMIC_LAYOUT.test(prev.style)
+            ? SINGLE_STYLE
+            : prev.style,
         prompt: COMIC_VEHICLE.test(prev.prompt) ? singlePromptFromComic(prev.prompt) : prev.prompt,
       };
     });

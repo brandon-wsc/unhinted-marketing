@@ -55,11 +55,18 @@ from internal.session.fast_rules import (
 )
 from internal.session.harness import ChatDeps, stream_chat_reply
 from internal.session.image_format import (
+    COMIC_COMPOSITION,
+    COMIC_STYLE,
+    DEFAULT_COMIC_PANELS,
     DEFAULT_IMAGE_FORMAT,
     IMAGE_FORMAT_OPTIONS,
+    SINGLE_COMPOSITION,
+    SINGLE_STYLE,
     compose_generation_prompt,
+    default_avoid,
     image_format_from_text,
     lock_brief_to_format,
+    merge_default_avoid,
     normalize_image_format,
 )
 from internal.session.io import (
@@ -1307,7 +1314,7 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
         ImagePlanOut,
     )
     if parsed:
-        plan = parsed.model_dump()
+        plan = merge_default_avoid(parsed.model_dump())
         plan["format"] = normalize_image_format(plan.get("format") or fmt)
         if plan["format"] != "comic_4panel":
             plan["panels"] = []
@@ -1315,34 +1322,33 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
 
     company = _slim_company(state).get("name") or "brand"
     caption = ((state.get("draft") or {}).get("caption") or "")[:120]
+    seed = caption or "market trends"
     if fmt == "comic_4panel":
         plan = {
             "format": "comic_4panel",
             "prompt": (
-                f"4-panel comic strip for {company}, Hong Kong everyday scenes "
-                f"inspired by: {caption or 'market trends'}, clear gutters, "
+                f"4-panel clean-line comic strip for {company}, Hong Kong everyday scenes "
+                f"inspired by: {seed}, clear gutters, natural daylight, "
+                "in panel 4 a character holds the product in hand, "
                 "no logos, no unreadable text"
             ),
-            "composition": "2x2 comic grid, equal panels, reading L→R then top→bottom",
-            "style": "clean line comic, contemporary HK urban",
-            "avoid": ["logos", "watermarks", "real celebrity faces", "dense readable text"],
-            "panels": [
-                {"index": 1, "beat": "hook scene — instant everyday recognition; no product"},
-                {"index": 2, "beat": "escalate human friction / absurdity"},
-                {"index": 3, "beat": "peak pain — still no hard sell"},
-                {"index": 4, "beat": "product as soft remedy; attitude, not feature list"},
-            ],
+            "composition": COMIC_COMPOSITION,
+            "style": COMIC_STYLE,
+            "avoid": default_avoid(COMIC_STYLE),
+            "panels": [dict(p) for p in DEFAULT_COMIC_PANELS],
         }
     else:
         plan = {
             "format": "single",
             "prompt": (
-                f"Clean modern social media image for {company}, Hong Kong urban mood, "
-                f"inspired by: {caption or 'market trends'}, no logos, no unreadable text"
+                f"Clean-line contemporary Hong Kong comic illustration for {company}, "
+                f"single vertical 4:5 panel, inspired by: {seed}, "
+                "a character clearly holds the product in hand, harsh noon daylight, "
+                "flat natural colors, no logos, no unreadable text"
             ),
-            "composition": "subject centered, negative space for optional caption overlay",
-            "style": "bright, contemporary, editorial",
-            "avoid": ["logos", "watermarks", "real celebrity faces"],
+            "composition": SINGLE_COMPOSITION,
+            "style": SINGLE_STYLE,
+            "avoid": default_avoid(SINGLE_STYLE),
             "panels": [],
         }
     return {"image_plan": plan, "image_format": fmt}

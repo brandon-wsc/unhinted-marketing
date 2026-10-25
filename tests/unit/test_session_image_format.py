@@ -1,12 +1,14 @@
 """Tests for image format helpers."""
 
 from internal.session.image_format import (
+    COMIC_STYLE,
     SINGLE_COMPOSITION,
     SINGLE_STYLE,
     adapt_plan_to_format,
     compose_generation_prompt,
     image_format_from_text,
     lock_brief_to_format,
+    merge_default_avoid,
     normalize_image_format,
     plan_direction_changed,
 )
@@ -170,6 +172,42 @@ def test_adapt_plan_keeps_custom_single_prompt() -> None:
     assert adapted["prompt"] == "Warm street photo of a milk tea cup"
     assert adapted["composition"] == "tight crop on the cup"
     assert adapted["style"] == "film still"
+
+
+def test_adapt_plan_comic_line_style_survives_switch_to_single() -> None:
+    """Comic line art is the single default too — only grid vocabulary is dropped."""
+    adapted = adapt_plan_to_format(
+        {**_COMIC_PLAN, "style": "clean line HK urban comic, bold ink"},
+        "single",
+        previous_format="comic_4panel",
+    )
+    assert adapted["style"] == "clean line HK urban comic, bold ink"
+    assert adapt_plan_to_format(_COMIC_PLAN, "single")["style"] == SINGLE_STYLE
+
+
+def test_adapt_plan_legacy_single_style_to_comic() -> None:
+    adapted = adapt_plan_to_format(
+        {"format": "single", "prompt": "x", "style": "bright, contemporary, editorial"},
+        "comic_4panel",
+    )
+    assert adapted["style"] == COMIC_STYLE
+
+
+def test_merge_default_avoid_dedupes_and_respects_photo_opt_in() -> None:
+    merged = merge_default_avoid({"style": SINGLE_STYLE, "avoid": ["LOGOS", " "]})
+    assert merged["avoid"][0] == "LOGOS"
+    assert sum(a.lower() == "logos" for a in merged["avoid"]) == 1
+    assert "photoreal street photo" in merged["avoid"]
+    assert "glowing cyan or blue tint on drinks" in merged["avoid"]
+    photo = merge_default_avoid({"style": "寫實街拍 phone photo"})
+    assert "photoreal street photo" not in photo["avoid"]
+    assert "floating props or product with no holder" in photo["avoid"]
+
+
+def test_compose_generation_prompt_adds_scene_logic() -> None:
+    prompt = compose_generation_prompt({"format": "single", "prompt": "iced tea break"})
+    assert "held by a character's hand" in prompt
+    assert compose_generation_prompt({"format": "single"}) == ""
 
 
 def test_plan_direction_changed() -> None:

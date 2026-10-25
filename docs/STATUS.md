@@ -188,6 +188,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Where** — same `executor_image_plan` / `executor_image_gen`; plan schema gains `format` + optional `panels[]`
 - **Image format:** `single` (default) or `comic_4panel` via Generate-image chips / `POST /resume-image` body; revise text「4格」also sets format
 - **Comic craft:** panels 1–3 situational empathy (no product); panel 4 soft remedy — see [VOICE.md](./VOICE.md) §5 Unhinted Market
+- **Visual language (2026-10-25):** both formats default to clean-line HK comic / illustration; photoreal is opt-in; products need a holder (no floating / ground-only props) — [ADR 0054](./adr/0054-comic-line-default-image-scene-logic.md)
 
 **Decision (2026-08-05) — Append-only preview images:** → [ADR 0008](./adr/0008-preview-images-append-only.md)
 

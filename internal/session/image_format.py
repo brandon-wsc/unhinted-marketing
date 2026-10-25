@@ -40,7 +40,40 @@ DEFAULT_COMIC_PANELS: tuple[dict[str, Any], ...] = (
 COMIC_COMPOSITION = "2x2 comic grid, equal panels, reading L→R then top→bottom"
 COMIC_STYLE = "clean line comic, contemporary HK urban"
 SINGLE_COMPOSITION = "subject centered, negative space for optional caption overlay"
-SINGLE_STYLE = "bright, contemporary, editorial"
+SINGLE_STYLE = (
+    "clean line contemporary Hong Kong comic illustration, natural daylight, "
+    "flat natural colors, not photoreal"
+)
+# Pre-comic single default — stored plans still carry it.
+_LEGACY_SINGLE_STYLE = "bright, contemporary, editorial"
+SCENE_LOGIC = (
+    "Scene logic: any product shown is clearly held by a character's hand at a "
+    "natural chest/waist height (condensation OK on iced drinks) — never floating "
+    "with no holder and never set alone on the ground."
+)
+SCENE_AVOID: tuple[str, ...] = (
+    "floating props or product with no holder",
+    "product alone on the ground or pavement with no owner",
+    "haze, fog, smoke, heat shimmer or rippling air",
+    "teal-orange or amber-cyan color grade",
+    "glowing cyan or blue tint on drinks",
+    "steam on iced drinks",
+    "sweat stains or wet pavement as the focal point",
+    "logos",
+    "watermarks",
+    "real celebrity faces",
+    "dense readable text",
+)
+PHOTOREAL_AVOID: tuple[str, ...] = (
+    "photoreal street photo",
+    "cinematic film grain look",
+)
+# Photoreal stays opt-in: a planner style that asks for it keeps it.
+_PHOTO_OPT_IN = re.compile(
+    r"(photo|documentary|cinematic|film still|寫實|街拍|實拍|相片|照片)",
+    re.I,
+)
+_NEGATED = re.compile(r"\b(?:not|no|non|avoid)[\s-]+[\w-]+|(?:唔要|唔好|不要|避免)\S{1,4}", re.I)
 _COMIC_VEHICLE = re.compile(
     r"(4-panel|four-panel|4\s*panel|comic strip|2x2 comic|comic grid|"
     r"4\s*格|四格|漫畫分格)",
@@ -101,13 +134,34 @@ def _single_prompt_from_comic(prompt: str) -> str:
         inspired = match.group(1).strip().rstrip(",")
     if inspired:
         return (
-            "Clean modern social media image, Hong Kong urban mood, "
+            "Clean-line Hong Kong comic illustration, single panel, "
             f"inspired by: {inspired}, no logos, no unreadable text"
         )
     return (
-        "Clean modern social media image, Hong Kong urban mood, "
+        "Clean-line Hong Kong comic illustration, single panel, "
         "no logos, no unreadable text"
     )
+
+
+def default_avoid(style: Any = "") -> list[str]:
+    """Scene-logic bans always; photoreal bans unless the style opts in."""
+    text = _NEGATED.sub("", style) if isinstance(style, str) else ""
+    photo = bool(_PHOTO_OPT_IN.search(text))
+    return [*SCENE_AVOID, *(() if photo else PHOTOREAL_AVOID)]
+
+
+def merge_default_avoid(plan: dict[str, Any]) -> dict[str, Any]:
+    """Append default bans the planner left out (case-insensitive dedupe)."""
+    out = dict(plan)
+    raw = out.get("avoid")
+    avoid = [str(a).strip() for a in raw if str(a).strip()] if isinstance(raw, list) else []
+    seen = {a.lower() for a in avoid}
+    for item in default_avoid(out.get("style")):
+        if item.lower() not in seen:
+            avoid.append(item)
+            seen.add(item.lower())
+    out["avoid"] = avoid
+    return out
 
 
 def adapt_plan_to_format(
@@ -137,7 +191,7 @@ def adapt_plan_to_format(
         if not composition or "subject centered" in composition.lower():
             out["composition"] = COMIC_COMPOSITION
         style = str(out.get("style") or "").strip()
-        if not style or style == SINGLE_STYLE:
+        if not style or style in (SINGLE_STYLE, _LEGACY_SINGLE_STYLE):
             out["style"] = COMIC_STYLE
         return out
 
@@ -150,8 +204,10 @@ def adapt_plan_to_format(
     ):
         out["composition"] = SINGLE_COMPOSITION
     style = str(out.get("style") or "").strip()
+    # Comic line art is the single default too — only drop grid/strip vocabulary.
     if (
-        (style and ("comic" in style.lower() or _COMIC_LAYOUT.search(style)))
+        style == COMIC_STYLE
+        or (style and (_COMIC_VEHICLE.search(style) or _COMIC_LAYOUT.search(style)))
         or (switched and not style)
     ):
         out["style"] = SINGLE_STYLE
@@ -226,7 +282,7 @@ def compose_generation_prompt(plan: dict[str, Any]) -> str:
             if beats:
                 parts.append("Panel beats: " + " | ".join(beats))
     if base:
-        parts.append(base)
+        parts.extend((base, SCENE_LOGIC))
     if composition:
         parts.append(f"Composition: {composition}")
     if style:
