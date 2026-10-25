@@ -1,6 +1,6 @@
 # Getting Started
 
-Local development setup for Unhinted Marketing Agent. For current feature status see [STATUS.md](./STATUS.md); for architecture see [ROADMAP.md](./ROADMAP.md).
+Local development setup for Unhinted. For current feature status see [STATUS.md](./STATUS.md); for architecture see [ROADMAP.md](./ROADMAP.md).
 
 ---
 

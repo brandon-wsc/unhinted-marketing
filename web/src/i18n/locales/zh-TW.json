@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Unhinted",
-    "title": "Unhinted Marketing"
+    "title": "Unhinted"
   },
   "common": {
     "loading": "載入中…",
@@ -33,7 +33,7 @@
     "craftCorner": "老闆出聲，AI 發文。",
     "login": {
       "title": "登入",
-      "subtitle": "登入以使用 Unhinted Marketing",
+      "subtitle": "登入以使用 Unhinted",
       "subtitleInvite": "以 {{email}} 登入以加入 {{company}}",
       "submit": "登入",
       "submitting": "登入中…",

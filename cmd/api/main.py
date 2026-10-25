@@ -83,7 +83,7 @@ def create_app(*, lifespan_fn: Any = lifespan) -> FastAPI:
     assert_jwt_secret_safe()
     assert_byok_encryption_key_safe()
     application = FastAPI(
-        title="Unhinted Marketing API",
+        title="Unhinted API",
         version="1.0.0-beta",
         lifespan=lifespan_fn,
     )

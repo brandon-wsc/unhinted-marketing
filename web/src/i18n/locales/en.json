@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Unhinted",
-    "title": "Unhinted Marketing"
+    "title": "Unhinted"
   },
   "common": {
     "loading": "Loading…",
@@ -33,7 +33,7 @@
     "craftCorner": "Boss yaps. Agent posts.",
     "login": {
       "title": "Sign in",
-      "subtitle": "Sign in to access the Unhinted Marketing Dashboard",
+      "subtitle": "Sign in to access the Unhinted Dashboard",
       "subtitleInvite": "Sign in as {{email}} to join {{company}}",
       "submit": "Sign in",
       "submitting": "Signing in…",

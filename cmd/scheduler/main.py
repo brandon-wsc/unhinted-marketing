@@ -130,7 +130,7 @@ async def run_scheduler(*, once: bool = False) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Unhinted marketing scheduler")
+    parser = argparse.ArgumentParser(description="Unhinted scheduler")
     parser.add_argument("--once", action="store_true", help="Enqueue one cycle and exit")
     args = parser.parse_args()
     asyncio.run(run_scheduler(once=args.once))

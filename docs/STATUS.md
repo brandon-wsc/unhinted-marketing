@@ -1,4 +1,4 @@
-# Unhinted Marketing — Project Status
+# Unhinted — Project Status
 
 > **Last updated:** 2026-10-04 
 > **Overall:** Phase 0–1 complete · Phase 2 **soft-complete** (UI-ready) · Phase 3 UI **~80%** · Craft: default HK editor voice + `roast_level` ([VOICE.md](./VOICE.md)) · Company settings Voice + Products + Members + Approvals (K1/K3/K3b/K6) · Preview media append-only ([ADR 0008](./adr/0008-preview-images-append-only.md)) · Security: auth rate limit + confirm user-private idempotency · Observability: LLM call records + platform levels ([ADR 0005](./adr/0005-platform-levels-and-llm-records.md)) · Backend pytest ✅ · Frontend Vitest Tier 1/2 ✅ · CI ✅  

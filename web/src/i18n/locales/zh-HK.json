@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Unhinted",
-    "title": "Unhinted Marketing"
+    "title": "Unhinted"
   },
   "common": {
     "loading": "載入緊…",
@@ -33,7 +33,7 @@
     "craftCorner": "腦細要Growth 我哋秒Post",
     "login": {
       "title": "登入",
-      "subtitle": "用你個帳戶入 Unhinted Marketing",
+      "subtitle": "用你個帳戶入 Unhinted",
       "subtitleInvite": "用 {{email}} 登入以加入 {{company}}",
       "submit": "登入",
       "submitting": "登入緊…",

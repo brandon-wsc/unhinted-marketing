@@ -1,20 +1,32 @@
-# Unhinted Marketing Agent
+# Unhinted
 
-[**unhinted.hk**](https://unhinted.hk) · [**Live Demo**](https://demo.unhinted.hk) · [**Docs**](docs/GETTING_STARTED.md)
+Unhinted is an open-source AI social content assistant for Hong Kong businesses: it turns Hong Kong trending topics plus your product selling points into Cantonese, Instagram-style posts in your brand voice, and nothing is published until a human confirms.
 
-AI marketing assistant for the Hong Kong market — background signal ingestion plus user-guided content preview and publish. The LLM owns the recommend/draft loop only; publishing is a traditional Confirm → HTTP flow.
+[**unhinted.hk**](https://unhinted.hk) · [**Live Demo**](https://demo.unhinted.hk) (account approval required) · [**Docs**](docs/GETTING_STARTED.md)
 
 > **你有生意要忙，唔使日日由零諗出咩。**  
-> Unhinted 幫你由香港熱話搵切入點，結合產品賣點，寫成地道廣東話社交內容。你揀方向、改稿，確認先發佈。
+> Unhinted 幫你由香港熱話搵切入點，結合產品賣點，寫成有你品牌語氣嘅社交內容。你揀方向、改稿，確認先發佈。
+
+The LLM owns the recommend/draft loop only; publishing is a traditional Confirm → HTTP flow. Unhinted is in public beta (pre-release `v1.0.0-beta.*` builds).
 
 ![Unhinted Workspace](docs/images/workspace-preview.png)
 
 ## Why Unhinted?
 
 - **HK-Native Voice**: Local Cantonese phrasing tailored to your brand tone — from corporate safe to sarcastic (港式抽水).
-- **Trend-to-Post Ingestion**: Matches real-time Hong Kong market signals (news, Google Trends, social feeds) with your catalog.
+- **Trend-to-Post Ingestion**: Matches Hong Kong market signals (Google Trends HK, RSS news, web search) with your catalog.
 - **Confirm ≠ Chat ([ADR 0003](docs/adr/0003-confirm-without-llm.md))**: Zero risk of AI hallucinations publishing directly. Saying "可以出" in chat will never publish; only an explicit user click on the Confirm button triggers the HTTP publish endpoint.
 - **Self-Hosted & Private**: Single-command Docker deployment with PostgreSQL (pgvector). Your product catalog, brand settings, and credentials stay in your own infrastructure.
+
+## Unhinted vs. a generic chatbot for HK Instagram
+
+A general-purpose chatbot can write a caption from a prompt. Unhinted is built around the specific workflow of an HK brand posting to Instagram:
+
+- **Starts from Hong Kong signals** — background workers ingest Google Trends HK and RSS news into PostgreSQL, and chat research can add web search results, so drafts begin from what Hong Kong is talking about rather than a blank prompt.
+- **Grounded in your brand** — each company keeps its own brand voice settings and product catalog (pgvector retrieval), and drafts are written against both.
+- **Angle before draft** — the session pauses on a set of editorial angles for you to pick before any copy is written ([ADR 0028](docs/adr/0028-angle-pick-before-draft.md)).
+- **Instagram-layout preview** — drafts render in a phone-style Instagram feed mock with caption, hashtags, CTA, and images you can edit before publishing.
+- **Confirm-before-publish, self-hosted** — publishing only happens through an explicit Confirm button and an HTTP endpoint, never from chat ([ADR 0003](docs/adr/0003-confirm-without-llm.md)), on infrastructure you run yourself.
 
 ## How it works
 
