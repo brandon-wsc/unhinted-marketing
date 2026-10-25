@@ -10,18 +10,21 @@ from internal.auth.invites import hash_invite_token, normalize_invite_email
 from internal.auth.rate_limit import enforce_auth_rate_limit
 from internal.auth.service import (
     AuthError,
+    change_password,
     get_user_with_memberships,
     login_user,
     logout_user,
     refresh_session,
     register_user,
     update_display_name,
+    verify_user_password,
 )
 from internal.config import settings
 from internal.memory import repos
 from internal.memory.database import get_db
 from internal.memory.models import User
 from schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     MessageResponse,
     OrganizationSummary,
@@ -29,6 +32,7 @@ from schemas.auth import (
     TokenResponse,
     UserResponse,
     UserUpdate,
+    VerifyPasswordRequest,
 )
 from schemas.mcp import ConnectedApp
 
@@ -198,6 +202,39 @@ async def patch_me(
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return _user_response(user)
+
+
+@router.post("/me/verify-password", response_model=MessageResponse)
+async def verify_me_password(
+    body: VerifyPasswordRequest,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> MessageResponse:
+    """ADR 0055 — step 1: confirm the current password before unlocking step 2."""
+    enforce_auth_rate_limit(request, bucket="verify_password")
+    try:
+        verify_user_password(user, body.password)
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    return MessageResponse(message="ok")
+
+
+@router.post("/me/password", response_model=MessageResponse)
+async def change_me_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MessageResponse:
+    """ADR 0055 — step 2: the server re-checks current_password before saving."""
+    enforce_auth_rate_limit(request, bucket="change_password")
+    try:
+        await change_password(
+            db, user, current_password=body.current_password, new_password=body.new_password
+        )
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    return MessageResponse(message="Password changed")
 
 
 @router.get("/me/connected-apps")

@@ -6,6 +6,8 @@ const API_ERROR_KEYS: Record<string, string> = {
   "Passwords do not match": "errors.passwordMismatch",
   "Email already registered": "errors.emailAlreadyRegistered",
   "Invalid email or password": "errors.invalidCredentials",
+  "Current password is incorrect": "errors.currentPasswordIncorrect",
+  "New password must be different from the current password": "errors.passwordUnchanged",
   "Account is disabled": "errors.accountDisabled",
   "Invalid refresh token": "errors.invalidRefreshToken",
   invite_required: "errors.inviteRequired",

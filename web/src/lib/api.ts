@@ -1,4 +1,5 @@
 import { API_BASE } from "@/lib/api-base";
+import { apiJson } from "@/lib/api-fetch";
 import { parseApiErrorResponse } from "@/lib/parse-api-error";
 
 export type Organization = {
@@ -86,4 +87,26 @@ export async function apiMe(accessToken: string): Promise<User> {
   });
   if (!res.ok) throw new Error(await parseApiErrorResponse(res));
   return res.json();
+}
+
+/** ADR 0055 step 1 — prove the current password before unlocking step 2. */
+export async function apiVerifyPassword(
+  accessToken: string | null,
+  password: string,
+): Promise<void> {
+  await apiJson(accessToken, `${API_BASE}/auth/me/verify-password`, {
+    method: "POST",
+    json: { password },
+  });
+}
+
+/** ADR 0055 step 2 — the server re-checks current_password before saving. */
+export async function apiChangePassword(
+  accessToken: string | null,
+  input: { current_password: string; new_password: string },
+): Promise<void> {
+  await apiJson(accessToken, `${API_BASE}/auth/me/password`, {
+    method: "POST",
+    json: input,
+  });
 }

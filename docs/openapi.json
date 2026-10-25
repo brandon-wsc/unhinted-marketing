@@ -200,6 +200,100 @@
         ]
       }
     },
+    "/api/auth/me/verify-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verify Me Password",
+        "description": "ADR 0055 — step 1: confirm the current password before unlocking step 2.",
+        "operationId": "verify_me_password_api_auth_me_verify_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/schemas__auth__MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/me/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change Me Password",
+        "description": "ADR 0055 — step 2: the server re-checks current_password before saving.",
+        "operationId": "change_me_password_api_auth_me_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/schemas__auth__MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/auth/me/connected-apps": {
       "get": {
         "tags": [
@@ -7170,6 +7264,28 @@
         "type": "object",
         "title": "ByokRoutingUpdate"
       },
+      "ChangePasswordRequest": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "ChangePasswordRequest"
+      },
       "ChooseAngleRequest": {
         "properties": {
           "angle_index": {
@@ -13081,6 +13197,21 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VerifyPasswordRequest": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "VerifyPasswordRequest"
       },
       "schemas__auth__MessageResponse": {
         "properties": {

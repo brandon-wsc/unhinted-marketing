@@ -66,6 +66,17 @@
       "saving": "Saving…",
       "saved": "Saved"
     },
+    "password": {
+      "title": "Password",
+      "currentLabel": "Current password",
+      "verify": "Verify",
+      "verifying": "Verifying…",
+      "newLabel": "New password",
+      "confirmLabel": "Confirm new password",
+      "submit": "Change password",
+      "saving": "Saving…",
+      "saved": "Password changed"
+    },
     "connectAi": {
       "title": "Connect an AI app",
       "description": "Let an external AI app (Claude, ChatGPT…) use Unhinted with your company's voice and products. It drafts, you confirm publishing here.",
@@ -1101,6 +1112,9 @@
     "setupFailed": "Setup failed. Please try again.",
     "inviteRequired": "Registration requires a valid invitation.",
     "setupAlreadyCompleted": "Setup has already been completed.",
-    "requestFailed": "Request failed ({{status}})"
+    "requestFailed": "Request failed ({{status}})",
+    "currentPasswordRequired": "Enter your current password.",
+    "currentPasswordIncorrect": "Current password is incorrect",
+    "passwordUnchanged": "New password must be different from the current password"
   }
 }

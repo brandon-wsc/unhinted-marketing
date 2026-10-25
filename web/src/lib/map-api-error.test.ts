@@ -15,6 +15,12 @@ describe("mapApiError", () => {
     );
     expect(mapApiError("Email already registered", t)).toBe("i18n:errors.emailAlreadyRegistered");
     expect(mapApiError("Invalid email or password", t)).toBe("i18n:errors.invalidCredentials");
+    expect(mapApiError("Current password is incorrect", t)).toBe(
+      "i18n:errors.currentPasswordIncorrect",
+    );
+    expect(mapApiError("New password must be different from the current password", t)).toBe(
+      "i18n:errors.passwordUnchanged",
+    );
     expect(mapApiError("This email already belongs to a member of this company", t)).toBe(
       "i18n:settings.members.invite.alreadyMember",
     );

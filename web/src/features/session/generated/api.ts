@@ -93,6 +93,46 @@ export type paths = {
         patch: operations["patch_me_api_auth_me_patch"];
         trace?: never;
     };
+    "/api/auth/me/verify-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Me Password
+         * @description ADR 0055 — step 1: confirm the current password before unlocking step 2.
+         */
+        post: operations["verify_me_password_api_auth_me_verify_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Me Password
+         * @description ADR 0055 — step 2: the server re-checks current_password before saving.
+         */
+        post: operations["change_me_password_api_auth_me_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/me/connected-apps": {
         parameters: {
             query?: never;
@@ -2244,6 +2284,13 @@ export type components = {
             strong_model_id?: string | null;
             /** Image Model Id */
             image_model_id?: string | null;
+        };
+        /** ChangePasswordRequest */
+        ChangePasswordRequest: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
         };
         /**
          * ChooseAngleRequest
@@ -4525,6 +4572,11 @@ export type components = {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** VerifyPasswordRequest */
+        VerifyPasswordRequest: {
+            /** Password */
+            password: string;
+        };
         /** MessageResponse */
         schemas__auth__MessageResponse: {
             /** Message */
@@ -4715,6 +4767,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_me_password_api_auth_me_verify_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["schemas__auth__MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_me_password_api_auth_me_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["schemas__auth__MessageResponse"];
                 };
             };
             /** @description Validation Error */
