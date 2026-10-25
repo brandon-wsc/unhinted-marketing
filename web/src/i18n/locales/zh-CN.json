@@ -860,6 +860,7 @@
       "emailBackend": "邀请邮件发送方式",
       "emailLink": "只复制链接（手动发送）",
       "emailSmtp": "SMTP（发送邀请邮件）",
+      "emailConsole": "Console（只写入日志，不发送）",
       "smtpHost": "SMTP host",
       "smtpPort": "Port",
       "smtpUser": "用户名",

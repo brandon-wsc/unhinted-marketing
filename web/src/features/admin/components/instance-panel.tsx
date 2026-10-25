@@ -200,7 +200,11 @@ export function InstancePanel() {
           <SelectContent>
             <SelectItem value="link">{t("setup.instance.emailLink")}</SelectItem>
             <SelectItem value="smtp">{t("setup.instance.emailSmtp")}</SelectItem>
-            <SelectItem value="console">{t("setup.instance.emailConsole")}</SelectItem>
+            {emailBackend === "console" && (
+              <SelectItem value="console" disabled>
+                {t("setup.instance.emailConsole")}
+              </SelectItem>
+            )}
           </SelectContent>
         </Select>
       </FormField>

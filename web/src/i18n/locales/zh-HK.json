@@ -860,6 +860,7 @@
       "emailBackend": "邀請電郵發送方式",
       "emailLink": "只複製連結（手動傳送）",
       "emailSmtp": "SMTP（發送邀請電郵）",
+      "emailConsole": "Console（只寫入日誌，不發送）",
       "smtpHost": "SMTP host",
       "smtpPort": "Port",
       "smtpUser": "使用者名稱",
