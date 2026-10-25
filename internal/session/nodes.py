@@ -237,6 +237,18 @@ def _wants_image_change(text: str) -> bool:
     return False
 
 
+def _image_still_pending(state: SessionState | dict[str, Any]) -> bool:
+    """An image was already demanded for this version and never generated.
+
+    ``EditOut.need_image`` only means "this edit changes the picture" — a
+    reviewer-retry caption edit must not silently drop the image pipeline
+    ``executor_post`` already owed the draft. The ``hold_image_park`` revise
+    (ADR 0036) decides from the edit alone: a caption-only answer keeps the
+    locked plan via ``hold_locked_plan``.
+    """
+    return bool(state.get("need_image")) and not state.get("hold_image_park")
+
+
 def offered_angles(brief: dict[str, Any] | None) -> list[str]:
     """Non-empty angle strings from a brief — the ADR 0028 pick options."""
     return [a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()]
@@ -1268,7 +1280,9 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
                 "cta": parsed.cta,
             },
             "source_signal_ids": refs,
-            "need_image": parsed.need_image or _wants_image_change(user),
+            "need_image": parsed.need_image
+            or _wants_image_change(user)
+            or _image_still_pending(state),
             "grounding_ok": True,
         }
         fmt = image_format_from_text(user)
@@ -1285,7 +1299,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     draft["caption"] = caption
     out: dict[str, Any] = {
         "draft": draft,
-        "need_image": _wants_image_change(user),
+        "need_image": _wants_image_change(user) or _image_still_pending(state),
         "grounding_ok": True,
     }
     fmt = image_format_from_text(user)
