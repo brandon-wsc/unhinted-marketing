@@ -860,6 +860,7 @@
       "emailBackend": "Invite email delivery",
       "emailLink": "Link only (copy links manually)",
       "emailSmtp": "SMTP (send invite emails)",
+      "emailConsole": "Console (log invites, no email sent)",
       "smtpHost": "SMTP host",
       "smtpPort": "Port",
       "smtpUser": "Username",
