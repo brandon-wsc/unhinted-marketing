@@ -15,7 +15,7 @@ The SPA shipped with two locale catalogs — `zh-HK` (default, spoken 粵語 chr
 - **UI locale ≠ draft voice.** Switching the picker changes chrome only. Company Voice `locale` / `voice_pack` defaults, VOICE.md, and `internal/session/prompts.py` are untouched; a session started under any UI locale still produces HK Cantonese Traditional drafts.
 - Noto Sans SC joins the Google Fonts link and replaces Noto Sans HK in `--font-sans` under `html[lang="zh-CN"]`; other locales keep Noto Sans HK.
 - Locale-conditional formatting follows `i18n.language` (date pickers, admin timestamps); worked-duration units pick Traditional or Simplified hour glyphs to match.
-- Picker labels: 繁體中文（香港）/ 繁體中文（書面）/ 简体中文 / English — label wording is cosmetic and does not need a superseding ADR.
+- Picker labels: 繁體中文（香港）/ 繁體中文（台灣）/ 简体中文 / English — label wording is cosmetic and does not need a superseding ADR.
 
 ## Consequences
 
