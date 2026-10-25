@@ -16,12 +16,14 @@ describe("ConnectAppCard", () => {
     expect(input).toHaveValue(`${window.location.origin}/api/mcp`);
   });
 
-  it("offers Claude and ChatGPT steps plus a Gemini note", () => {
+  it("offers Claude, ChatGPT and CLI-agent steps; Gemini is a footnote, not a tab", () => {
     render(<ConnectAppCard />);
     expect(screen.getByRole("tab", { name: "Claude" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "ChatGPT" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Gemini" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "account.connectAi.agentsTab" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Gemini" })).not.toBeInTheDocument();
     // Default tab is Claude — its first step is visible.
     expect(screen.getByText("account.connectAi.steps.claude.1")).toBeInTheDocument();
+    expect(screen.getByText("account.connectAi.geminiNote")).toBeInTheDocument();
   });
 });

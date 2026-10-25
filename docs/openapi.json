@@ -325,6 +325,53 @@
         ]
       }
     },
+    "/api/auth/me/mcp-tokens": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Mint Mcp Token",
+        "description": "ADR 0056 — self-issued static bearer for headless MCP clients.",
+        "operationId": "mint_mcp_token_api_auth_me_mcp_tokens_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintPersonalTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MintedPersonalToken"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/auth/me/connected-apps/{grant_id}": {
       "delete": {
         "tags": [
@@ -7825,6 +7872,38 @@
               }
             ],
             "title": "Last Used At"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "oauth",
+              "pat"
+            ],
+            "title": "Kind",
+            "default": "oauth"
+          },
+          "token_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Prefix"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
           }
         },
         "type": "object",
@@ -9286,6 +9365,66 @@
           "web_base_url"
         ],
         "title": "MetaResponse"
+      },
+      "MintPersonalTokenRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Days"
+          },
+          "extra_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Extra Scopes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "company_id"
+        ],
+        "title": "MintPersonalTokenRequest",
+        "description": "POST /api/auth/me/mcp-tokens body (ADR 0056 §6).\n\n``extra_scopes`` is the step-up opt-in, validated against\n``STEP_UP_SCOPES`` exactly like consent extras — the default scope set\nis not a parameter."
+      },
+      "MintedPersonalToken": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "app": {
+            "$ref": "#/components/schemas/ConnectedApp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "app"
+        ],
+        "title": "MintedPersonalToken",
+        "description": "POST /api/auth/me/mcp-tokens response — ``token`` is shown once."
       },
       "NodeStepDetail": {
         "properties": {

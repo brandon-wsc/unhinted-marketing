@@ -51,6 +51,7 @@ TRUNCATE_TABLES = (
     "instance_settings",
     "oauth_auth_requests",
     "oauth_codes",
+    "mcp_personal_tokens",
     "oauth_grants",
     "refresh_tokens",
     "organization_members",

@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from schemas.contracts import DraftAwaitingAnglePickData, DraftCopy, PreviewMediaItem
 
@@ -208,6 +208,40 @@ class ConnectedApp(BaseModel):
     scopes: list[str]
     created_at: datetime
     last_used_at: datetime | None
+    # ADR 0056 — "pat" rows are personal access tokens; token_prefix is the
+    # display hint and expires_at the optional deadline (None = never).
+    kind: Literal["oauth", "pat"] = "oauth"
+    token_prefix: str | None = None
+    expires_at: datetime | None = None
+
+
+class MintPersonalTokenRequest(BaseModel):
+    """POST /api/auth/me/mcp-tokens body (ADR 0056 §6).
+
+    ``extra_scopes`` is the step-up opt-in, validated against
+    ``STEP_UP_SCOPES`` exactly like consent extras — the default scope set
+    is not a parameter.
+    """
+
+    name: str = Field(min_length=1, max_length=200)
+    company_id: uuid.UUID
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)
+    extra_scopes: list[str] = Field(default_factory=list)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("name must not be blank")
+        return value
+
+
+class MintedPersonalToken(BaseModel):
+    """POST /api/auth/me/mcp-tokens response — ``token`` is shown once."""
+
+    token: str
+    app: ConnectedApp
 
 
 class OAuthTokenResponse(BaseModel):

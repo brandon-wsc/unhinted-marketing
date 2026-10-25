@@ -153,6 +153,26 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/me/mcp-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint Mcp Token
+         * @description ADR 0056 — self-issued static bearer for headless MCP clients.
+         */
+        post: operations["mint_mcp_token_api_auth_me_mcp_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/me/connected-apps/{grant_id}": {
         parameters: {
             query?: never;
@@ -2542,6 +2562,16 @@ export type components = {
             created_at: string;
             /** Last Used At */
             last_used_at: string | null;
+            /**
+             * Kind
+             * @default oauth
+             * @enum {string}
+             */
+            kind: "oauth" | "pat";
+            /** Token Prefix */
+            token_prefix?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
         };
         /**
          * ConsentRequest
@@ -3037,6 +3067,36 @@ export type components = {
             version: string;
             /** Web Base Url */
             web_base_url: string;
+        };
+        /**
+         * MintPersonalTokenRequest
+         * @description POST /api/auth/me/mcp-tokens body (ADR 0056 §6).
+         *
+         *     ``extra_scopes`` is the step-up opt-in, validated against
+         *     ``STEP_UP_SCOPES`` exactly like consent extras — the default scope set
+         *     is not a parameter.
+         */
+        MintPersonalTokenRequest: {
+            /** Name */
+            name: string;
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /** Expires In Days */
+            expires_in_days?: number | null;
+            /** Extra Scopes */
+            extra_scopes?: string[];
+        };
+        /**
+         * MintedPersonalToken
+         * @description POST /api/auth/me/mcp-tokens response — ``token`` is shown once.
+         */
+        MintedPersonalToken: {
+            /** Token */
+            token: string;
+            app: components["schemas"]["ConnectedApp"];
         };
         /** NodeStepDetail */
         NodeStepDetail: {
@@ -4862,6 +4922,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConnectedApp"][];
+                };
+            };
+        };
+    };
+    mint_mcp_token_api_auth_me_mcp_tokens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MintPersonalTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MintedPersonalToken"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

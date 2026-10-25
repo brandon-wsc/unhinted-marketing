@@ -217,6 +217,29 @@ class OAuthRefreshToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class McpPersonalToken(Base):
+    """ADR 0056 — static bearer for headless MCP clients.
+
+    The row only resolves token -> grant; identity, scopes, membership and
+    revocation all live on ``oauth_grants``, so the ADR 0051 live re-checks
+    apply unchanged.
+    """
+
+    __tablename__ = "mcp_personal_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    grant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("oauth_grants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    token_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class RawNewsEvent(Base):
     __tablename__ = "raw_news_events"
 

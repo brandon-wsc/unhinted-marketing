@@ -91,10 +91,15 @@
           "1": "在 ChatGPT 打开 Plugins →“+”→ Add custom MCP server。",
           "2": "输入名称，在 Server URL 粘贴你的 MCP 服务器地址。",
           "3": "授权方式选择 OAuth，然后在 Unhinted 授权页批准。"
+        },
+        "agents": {
+          "1": "在下方“已连接应用”创建一个访问 token 并立即复制——只显示一次。",
+          "2": "在 agent 的 MCP 配置中指向服务器地址，加上静态 bearer header："
         }
       },
       "geminiNote": "Gemini 暂不支持——它的 connected apps 流程需要 Dynamic Client Registration，我们未提供。",
-      "footer": "设置过程中会要求你登录并选择一家公司。已连接的 app 会列在下方，可随时撤销。"
+      "footer": "设置过程中会要求你登录并选择一家公司。已连接的 app 会列在下方，可随时撤销。",
+      "agentsTab": "Hermes / CLI"
     },
     "connectedApps": {
       "title": "已连接应用",
@@ -103,6 +108,24 @@
       "neverUsed": "从未",
       "revoke": "撤销",
       "revoking": "撤销中…"
+    },
+    "personalTokens": {
+      "title": "创建 token",
+      "nameLabel": "名称",
+      "namePlaceholder": "例如 Hermes 机器人",
+      "lifetimeLabel": "有效期",
+      "lifetime": {
+        "never": "永不过期",
+        "30": "30 天",
+        "90": "90 天",
+        "365": "365 天"
+      },
+      "create": "创建",
+      "creating": "创建中…",
+      "tokenHint": "立即复制——此 token 只显示一次。",
+      "expiresMeta": "{{date}} 到期",
+      "neverExpires": "永不过期",
+      "patBadge": "Token"
     }
   },
   "oauth": {
