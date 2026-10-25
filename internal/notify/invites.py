@@ -11,6 +11,14 @@ from internal.instance.config import get_snapshot
 
 logger = logging.getLogger(__name__)
 
+# Implicit TLS (SMTPS). Cloudflare Email Sending only supports this on :465 —
+# not STARTTLS on :587. See https://developers.cloudflare.com/email-service/api/send-emails/smtp/
+_IMPLICIT_TLS_PORTS = frozenset({465})
+
+
+def _use_implicit_tls(port: int) -> bool:
+    return port in _IMPLICIT_TLS_PORTS
+
 
 async def send_invite_email(
     *,
@@ -56,8 +64,12 @@ async def _send_smtp(*, to_email: str, subject: str, body: str) -> None:
         msg["To"] = to_email
         msg["Subject"] = subject
         msg.set_content(body)
-        with smtplib.SMTP(snap.smtp_host, snap.smtp_port, timeout=30) as smtp:
-            if snap.smtp_tls:
+        # Port 465 opens TLS immediately (Cloudflare Email Sending, etc.) —
+        # no STARTTLS; smtp_tls only applies to upgrade ports like 587.
+        implicit_tls = _use_implicit_tls(snap.smtp_port)
+        smtp_cls = smtplib.SMTP_SSL if implicit_tls else smtplib.SMTP
+        with smtp_cls(snap.smtp_host, snap.smtp_port, timeout=30) as smtp:
+            if not implicit_tls and snap.smtp_tls:
                 smtp.starttls()
             if snap.smtp_user:
                 smtp.login(snap.smtp_user, snap.smtp_password or "")
