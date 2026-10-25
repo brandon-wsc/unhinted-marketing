@@ -28,10 +28,10 @@ environment containing the same four roles as the compose package:
 
 | Container Apps resource | Compose counterpart | Notes |
 |-------------------------|--------------------|-------|
-| `web` app — external ingress :80 | `web` | Stock GHCR nginx image |
-| `api` app — internal ingress :8000 | `api` | Not reachable from the internet |
-| `scheduler` app — no ingress | `scheduler` | Pinned to 1 replica |
-| `worker` app — no ingress | `worker` | Pinned to 1 replica |
+| `web` app — external ingress :80 | `web` | Stock GHCR nginx image; minReplicas=0 |
+| `api` app — internal ingress :8000 | `api` | Not reachable from the internet; minReplicas=0 |
+| `scheduler` app — no ingress | `scheduler` | maxReplicas=1; minReplicas=0 (scale to zero) |
+| `worker` app — no ingress | `worker` | maxReplicas=1; minReplicas=0 (scale to zero) |
 | `migrate` **Job** (Manual trigger) | `migrate` one-shot | `alembic upgrade head`, started by the post-provision hook |
 
 Postgres is **external** — `DATABASE_URL` points at Neon (or any managed
@@ -74,15 +74,15 @@ latest release.
 ## Consequences
 
 - `azd up` is the whole bring-up; `azd down` tears it down. Cost is driven by
-  replica-hours — web/api minReplicas=1 avoids cold starts during demos
-  (idle-rate billing); scaling to zero is a one-line Bicep change if the
-  host sleeps for long stretches.
+  replica-hours — web/api/scheduler/worker all use minReplicas=0 (scale to
+  zero when idle) to cut demo cost; maxReplicas stays 1. Expect cold starts
+  on first request after idle.
 - First boot seeds `instance_settings` from `WEB_BASE_URL` (ADR 0026) — set
   it to the final public URL before the first boot or fix it later in
   Platform → Instance.
 - Custom domain + cert: ACA managed certificates are free; only DNS records
   (CNAME + `asuid` TXT) are needed.
-- Single-point-of-failure is accepted (1 replica each, no zone redundancy,
+- Single-point-of-failure is accepted (maxReplicas=1 each when scaled, no zone redundancy,
   no HA Postgres) — it is a demo.
 - Migration ordering is looser than compose's `service_completed_successfully`
   gate: the post-provision hook runs the migrate job after provisioning;

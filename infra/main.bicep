@@ -220,7 +220,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       volumes: [appdataVolume]
-      scale: { minReplicas: 1, maxReplicas: 1 }
+      scale: { minReplicas: 0, maxReplicas: 1 }
     }
   }
 }
@@ -266,7 +266,7 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       volumes: [{ name: 'nginxconf', storageType: 'AzureFile', storageName: 'nginxconf' }]
-      scale: { minReplicas: 1, maxReplicas: 1 }
+      scale: { minReplicas: 0, maxReplicas: 1 }
     }
   }
 }
@@ -291,7 +291,7 @@ resource schedulerApp 'Microsoft.App/containerApps@2024-03-01' = {
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
         }
       ]
-      scale: { minReplicas: 1, maxReplicas: 1 }
+      scale: { minReplicas: 0, maxReplicas: 1 }
     }
   }
 }
@@ -316,7 +316,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       volumes: [appdataVolume]
-      scale: { minReplicas: 1, maxReplicas: 1 }
+      scale: { minReplicas: 0, maxReplicas: 1 }
     }
   }
 }
