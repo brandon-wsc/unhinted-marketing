@@ -44,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/context/auth-context";
+import { useToast } from "@/context/toast-context";
 import {
   ApiStatusError,
   apiCreateInvite,
@@ -91,6 +92,7 @@ export function MembersPanel({
 }: MembersPanelProps) {
   const { t } = useTranslation();
   const { accessToken } = useAuth();
+  const { showInfo } = useToast();
   const [savedFlash, setSavedFlash] = useFlash<boolean>();
   const [name, setName] = useState(companyName);
   const [savingName, setSavingName] = useState(false);
@@ -268,6 +270,7 @@ export function MembersPanel({
       setInviteUrl(created.invite_url);
       setInviteEmail("");
       setInviteLimit("");
+      showInfo(t("settings.members.invite.sent"));
       await reload();
     } catch (err) {
       setInviteUrl(null);
