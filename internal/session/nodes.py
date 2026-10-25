@@ -1343,7 +1343,7 @@ async def executor_image_plan(state: SessionState) -> dict[str, Any]:
             "prompt": (
                 f"Clean-line contemporary Hong Kong comic illustration for {company}, "
                 f"single vertical 4:5 panel, inspired by: {seed}, "
-                "a character clearly holds the product in hand, harsh noon daylight, "
+                "a character clearly holds the product in hand, natural daylight, "
                 "flat natural colors, no logos, no unreadable text"
             ),
             "composition": SINGLE_COMPOSITION,
