@@ -42,7 +42,7 @@ export function ConnectAppCard() {
         <TabsList>
           <TabsTrigger value="claude">Claude</TabsTrigger>
           <TabsTrigger value="chatgpt">ChatGPT</TabsTrigger>
-          <TabsTrigger value="gemini">Gemini</TabsTrigger>
+          <TabsTrigger value="agents">{t("account.connectAi.agentsTab")}</TabsTrigger>
         </TabsList>
         {(["claude", "chatgpt"] as const).map((app) => (
           <TabsContent key={app} value={app}>
@@ -53,10 +53,18 @@ export function ConnectAppCard() {
             </ol>
           </TabsContent>
         ))}
-        <TabsContent value="gemini">
-          <p className="text-sm text-muted-foreground">{t("account.connectAi.geminiNote")}</p>
+        <TabsContent value="agents" className="space-y-2">
+          <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+            <li>{t("account.connectAi.steps.agents.1")}</li>
+            <li>{t("account.connectAi.steps.agents.2")}</li>
+          </ol>
+          <pre className="overflow-x-auto rounded-md bg-secondary p-3 text-xs text-foreground">{`{
+  "url": "${mcpUrl}",
+  "headers": { "Authorization": "Bearer unh_…" }
+}`}</pre>
         </TabsContent>
       </Tabs>
+      <p className="text-xs text-muted-foreground">{t("account.connectAi.geminiNote")}</p>
       <p className="text-xs text-muted-foreground">{t("account.connectAi.footer")}</p>
     </section>
   );

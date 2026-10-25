@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -34,7 +34,7 @@ from schemas.auth import (
     UserUpdate,
     VerifyPasswordRequest,
 )
-from schemas.mcp import ConnectedApp
+from schemas.mcp import ConnectedApp, MintedPersonalToken, MintPersonalTokenRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -237,6 +237,21 @@ async def change_me_password(
     return MessageResponse(message="Password changed")
 
 
+def _connected_app(grant, pat=None) -> ConnectedApp:
+    return ConnectedApp(
+        id=grant.id,
+        client_id=grant.client_id,
+        client_name=grant.client_name,
+        company_id=grant.company_id,
+        scopes=list(grant.scopes or []),
+        created_at=grant.created_at,
+        last_used_at=grant.last_used_at,
+        kind="pat" if pat is not None else "oauth",
+        token_prefix=pat.token_prefix if pat is not None else None,
+        expires_at=pat.expires_at if pat is not None else None,
+    )
+
+
 @router.get("/me/connected-apps")
 async def list_connected_apps(
     user: Annotated[User, Depends(get_current_user)],
@@ -244,20 +259,46 @@ async def list_connected_apps(
 ) -> list[ConnectedApp]:
     """ADR 0051 §4 — non-revoked MCP grants for the /account page."""
     from internal.mcp import grants as grant_repo
+    from internal.mcp import personal_tokens
 
     grants = await grant_repo.list_connected_apps(db, user.id)
-    return [
-        ConnectedApp(
-            id=g.id,
-            client_id=g.client_id,
-            client_name=g.client_name,
-            company_id=g.company_id,
-            scopes=list(g.scopes or []),
-            created_at=g.created_at,
-            last_used_at=g.last_used_at,
+    pats = await personal_tokens.list_pats(db, user.id)
+    return [_connected_app(g, pats.get(g.id)) for g in grants]
+
+
+@router.post("/me/mcp-tokens", status_code=201)
+async def mint_mcp_token(
+    body: MintPersonalTokenRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MintedPersonalToken:
+    """ADR 0056 — self-issued static bearer for headless MCP clients."""
+    from internal.mcp import oauth, personal_tokens
+
+    if not await repos.user_has_org_access(db, user.id, body.company_id):
+        raise HTTPException(status_code=403, detail="Not a member of this company")
+    try:
+        scopes = oauth.merge_consent_scopes(list(oauth.DEFAULT_SCOPES), body.extra_scopes)
+    except oauth.OAuthError as exc:
+        raise HTTPException(status_code=400, detail=exc.description) from exc
+    expires_at = (
+        datetime.now(UTC) + timedelta(days=body.expires_in_days)
+        if body.expires_in_days is not None
+        else None
+    )
+    try:
+        grant, row, token = await personal_tokens.mint_pat(
+            db,
+            user_id=user.id,
+            company_id=body.company_id,
+            name=body.name,
+            scopes=scopes,
+            expires_at=expires_at,
         )
-        for g in grants
-    ]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await db.commit()
+    return MintedPersonalToken(token=token, app=_connected_app(grant, row))
 
 
 @router.delete("/me/connected-apps/{grant_id}", status_code=204)

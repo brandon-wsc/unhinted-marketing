@@ -75,6 +75,39 @@ class McpContext:
         return set(self.grant.scopes or [])
 
 
+async def _resolve_grant(
+    db: AsyncSession, token: str
+) -> tuple[McpAccessClaims, OAuthGrant] | None:
+    """PAT (ADR 0056) or mcp_access JWT (ADR 0051) → verified claims + live grant."""
+    from internal.mcp import grants as grant_repo
+    from internal.mcp import personal_tokens
+
+    if personal_tokens.is_pat(token):
+        row = await personal_tokens.resolve_pat(db, token)
+        if row is None:
+            return None
+        grant = await grant_repo.get_active_grant(db, row.grant_id)
+        if grant is None:
+            return None
+        return (
+            McpAccessClaims(
+                user_id=grant.user_id,
+                company_id=grant.company_id,
+                grant_id=grant.id,
+                scopes=list(grant.scopes or []),
+            ),
+            grant,
+        )
+    try:
+        claims = verify_mcp_access_token(token)
+    except McpTokenError:
+        return None
+    grant = await grant_repo.get_active_grant(db, claims.grant_id)
+    if grant is None or grant.user_id != claims.user_id or grant.company_id != claims.company_id:
+        return None
+    return claims, grant
+
+
 async def get_mcp_context(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -83,14 +116,10 @@ async def get_mcp_context(
 
     if not credentials or credentials.scheme.lower() != "bearer":
         raise auth_challenge()
-    try:
-        claims = verify_mcp_access_token(credentials.credentials)
-    except McpTokenError as exc:
-        raise auth_challenge() from exc
-
-    grant = await grant_repo.get_active_grant(db, claims.grant_id)
-    if grant is None or grant.user_id != claims.user_id or grant.company_id != claims.company_id:
+    resolved = await _resolve_grant(db, credentials.credentials)
+    if resolved is None:
         raise auth_challenge()
+    claims, grant = resolved
 
     user = await get_user_with_memberships(db, claims.user_id)
     if user is None or not user.is_active:
