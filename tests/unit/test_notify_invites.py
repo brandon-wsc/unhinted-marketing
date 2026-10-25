@@ -44,7 +44,36 @@ async def test_send_smtp_port_465_uses_smtp_ssl() -> None:
 
     smtp_ssl.assert_called_once_with("smtp.mx.cloudflare.net", 465, timeout=30)
     smtp_plain.assert_not_called()
+    ssl_smtp.starttls.assert_not_called()
     ssl_smtp.login.assert_called_once_with("api_token", "cf-token")
+    ssl_smtp.send_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_smtp_port_465_ignores_smtp_tls_flag() -> None:
+    ssl_smtp = MagicMock()
+    ssl_cm = MagicMock()
+    ssl_cm.__enter__.return_value = ssl_smtp
+    ssl_cm.__exit__.return_value = False
+
+    with (
+        patch.object(
+            invites,
+            "get_snapshot",
+            return_value=_snap(smtp_port=465, smtp_tls=False),
+        ),
+        patch.object(invites.smtplib, "SMTP_SSL", return_value=ssl_cm) as smtp_ssl,
+        patch.object(invites.smtplib, "SMTP") as smtp_plain,
+    ):
+        await invites._send_smtp(
+            to_email="member@example.com",
+            subject="x",
+            body="y",
+        )
+
+    smtp_ssl.assert_called_once_with("smtp.mx.cloudflare.net", 465, timeout=30)
+    smtp_plain.assert_not_called()
+    ssl_smtp.starttls.assert_not_called()
     ssl_smtp.send_message.assert_called_once()
 
 
