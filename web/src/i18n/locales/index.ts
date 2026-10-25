@@ -9,7 +9,7 @@ export const DEFAULT_LOCALE: SupportedLocale = "zh-HK";
  */
 export const LOCALE_LABELS: Record<SupportedLocale, string> = {
   "zh-HK": "繁體中文（香港）",
-  "zh-TW": "繁體中文（書面）",
+  "zh-TW": "繁體中文（台灣）",
   "zh-CN": "简体中文",
   en: "English",
 };
