@@ -234,6 +234,13 @@ class ParkingSessionGraph:
         elif self._next == (IMAGE_PARK_NODE,):
             self.resumes.append(IMAGE_PARK_NODE)
             values["image_url"] = "placeholder://stub-image"
+            # persist_preview: a generated image always lands on a new
+            # revision + approval token — never mutates the staged row.
+            values["revision"] = int(self._values.get("revision") or 0) + 1
+            values["approval_token"] = "stub-approved-token"
+            values["mode"] = "PREVIEW"
+            values["need_image"] = False
+            values["pending_confirm"] = False
             self._next = ()
         self._values = values
         return values

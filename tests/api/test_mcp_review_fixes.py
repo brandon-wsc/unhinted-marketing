@@ -274,6 +274,30 @@ async def test_auto_drive_rechecks_cap_at_every_gate(client, monkeypatch) -> Non
     tools._pending_turns.clear()
 
 
+async def test_auto_drive_ready_preview_carries_image(client) -> None:
+    """auto + images:generate → ready with image_url + media (§10, §12).
+
+    Regression: a ready draft must carry its generated media — reaching
+    ``ready`` with ``image_url`` null and ``media`` empty meant the image
+    pipeline was skipped entirely.
+    """
+    ctx, _body = await _ctx(
+        client, scopes=["knowledge:read", "drafts:write", "images:generate"]
+    )
+    set_session_graph(ParkingSessionGraph())
+
+    result = await tools.start_post_draft(ctx, StartPostDraftArgs(brief="中秋推廣", auto=True))
+    rec = tools._pending_turns.get(result.session_id)
+    if rec is not None:
+        await asyncio.wait_for(asyncio.shield(rec.task), timeout=30)
+
+    state = await tools.get_post_draft(ctx, SessionToolArgs(session_id=result.session_id))
+    assert state.status == "ready"
+    assert state.preview.image_url == "placeholder://stub-image"
+    assert [m.url for m in state.preview.media] == ["placeholder://stub-image"]
+    tools._pending_turns.clear()
+
+
 # --- B1: draft status mapping ---------------------------------------------------
 
 

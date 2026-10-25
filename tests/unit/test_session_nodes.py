@@ -1019,6 +1019,89 @@ async def test_edit_copy_filters_citations_and_need_image(
 
 
 @pytest.mark.asyncio
+async def test_edit_copy_review_retry_keeps_pending_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caption-only reviewer retry must not drop the image the draft is owed.
+
+    EditOut.need_image means "this edit changes the picture" — executor_post
+    already set need_image=True, so the answer stays True and the turn still
+    reaches executor_image_plan / the image park.
+    """
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    EH.set_edit_model_override(
+        TestModel(
+            call_tools=[],
+            custom_output_args={
+                "caption": "改短啲嘅 caption",
+                "hashtags": ["#a"],
+                "cta": "go",
+                "need_image": False,
+                "source_signal_ids": [],
+            },
+        )
+    )
+    out = await N.edit_copy(
+        _base_state(
+            need_image=True,
+            draft={"caption": "原稿", "hashtags": ["#a"], "cta": "go"},
+            messages=[{"role": "user", "content": "寫一則 IG caption"}],
+            reviewer_feedback="縮短至 3 句內",
+        )
+    )
+    assert out["need_image"] is True
+
+
+@pytest.mark.asyncio
+async def test_edit_copy_fallback_keeps_pending_image(no_llm: None) -> None:
+    """Parse-miss fallback takes the same pending-image path."""
+    out = await N.edit_copy(
+        _base_state(
+            need_image=True,
+            draft={"caption": "原稿", "hashtags": ["#a"], "cta": "go"},
+            messages=[{"role": "user", "content": "寫一則 IG caption"}],
+            reviewer_feedback="縮短至 3 句內",
+        )
+    )
+    assert out["need_image"] is True
+
+
+@pytest.mark.asyncio
+async def test_edit_copy_hold_park_caption_edit_stays_caption_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0036 — a caption-only edit while image-parked keeps the locked plan.
+
+    The parked version has need_image=True in state; hold_image_park exempts
+    it from the pending-image carryover so hold_locked_plan can re-park.
+    """
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    EH.set_edit_model_override(
+        TestModel(
+            call_tools=[],
+            custom_output_args={
+                "caption": "改短啲嘅 caption",
+                "hashtags": ["#a"],
+                "cta": "go",
+                "need_image": False,
+                "source_signal_ids": [],
+            },
+        )
+    )
+    out = await N.edit_copy(
+        _base_state(
+            mode=MODE_PREVIEW,
+            need_image=True,
+            hold_image_park=True,
+            draft={"caption": "原稿", "hashtags": ["#a"], "cta": "go"},
+            messages=[{"role": "user", "content": "短啲"}],
+            reviewer_feedback="",
+        )
+    )
+    assert out["need_image"] is False
+
+
+@pytest.mark.asyncio
 async def test_executor_image_plan_fallback(no_llm: None) -> None:
     out = await N.executor_image_plan(
         _base_state(

@@ -28,6 +28,94 @@ async def _skip_research(_state: dict) -> dict:
 
 
 @pytest.mark.asyncio
+async def test_reviewer_retry_keeps_image_pipeline(
+    client, db_session, monkeypatch
+) -> None:
+    """A reviewer-reject caption fix must not drop the pending image.
+
+    Regression (prod session ca0d0471): ``edit_copy`` mapped
+    ``EditOut.need_image`` — "does this edit change the picture" — straight
+    onto the graph's "draft still owes an image" flag, so a reviewer-retry
+    landed ``persist_preview`` with ``image_url=None`` and empty media.
+    """
+    calls = {"review": 0}
+
+    async def _fail_once_reviewer(state: dict) -> dict:
+        calls["review"] += 1
+        passed = calls["review"] > 1
+        return {
+            "reviewer_passed": passed,
+            "reviewer_feedback": "" if passed else "縮短 caption",
+            "review_attempts": int(state.get("review_attempts") or 0),
+        }
+
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: False)
+    monkeypatch.setattr("internal.llm.router.has_llm_credentials", lambda: False)
+    monkeypatch.setattr(N, "reviewer", _fail_once_reviewer)
+    monkeypatch.setattr(N, "fast_rule_checker", _skip_research)
+    set_session_graph(None)
+
+    data = await register_user(client)
+    headers = auth_header(data["access_token"])
+    company_id = data["user"]["organizations"][0]["id"]
+
+    try:
+        created = await client.post(
+            "/api/sessions", headers=headers, json={"company_id": company_id}
+        )
+        assert created.status_code == 201, created.text
+        session_id = created.json()["id"]
+
+        brief = await client.post(
+            f"/api/sessions/{session_id}/messages",
+            headers=headers,
+            json={"content": "幫我做一個凍美式 IG post"},
+        )
+        assert brief.status_code == 200, brief.text
+        assert brief.json()["interrupted"] is True
+        assert any(
+            ev["type"] == "draft.awaiting_angle_pick"
+            for ev in brief.json()["events"]
+        )
+
+        picked = await client.post(
+            f"/api/sessions/{session_id}/choose-angle",
+            headers=headers,
+            json={"angle_index": 0},
+        )
+        assert picked.status_code == 200, picked.text
+        assert calls["review"] == 2
+        assert picked.json()["interrupted"] is True
+        assert any(
+            ev["type"] == "draft.awaiting_image_ok"
+            for ev in picked.json()["events"]
+        )
+
+        done = await client.post(
+            f"/api/sessions/{session_id}/resume-image",
+            headers=headers,
+            json={},
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["interrupted"] is False
+        preview = next(
+            ev for ev in done.json()["events"] if ev["type"] == "preview.updated"
+        )
+        assert preview["data"]["image_url"]
+        assert preview["data"]["media"]
+
+        db_session.expire_all()
+        final = await repos.get_latest_preview_draft(
+            db_session, uuid.UUID(session_id)
+        )
+        assert final is not None
+        assert final.image_url
+        assert final.media_ids
+    finally:
+        set_session_graph(None)
+
+
+@pytest.mark.asyncio
 async def test_chat_direction_change_stages_script_then_execute(
     client, db_session, monkeypatch
 ) -> None:
