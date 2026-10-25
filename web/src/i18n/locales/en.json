@@ -490,6 +490,7 @@
         "limitPlaceholder": "Unlimited",
         "send": "Send invite",
         "sending": "Sending…",
+        "sent": "Invite sent",
         "copy": "Copy link",
         "copied": "Copied",
         "pasteHint": "Paste into WhatsApp or Slack",

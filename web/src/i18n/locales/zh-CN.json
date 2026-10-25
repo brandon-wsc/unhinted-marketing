@@ -490,6 +490,7 @@
         "limitPlaceholder": "无上限",
         "send": "发送邀请",
         "sending": "发送邀请中…",
+        "sent": "邀请已发送",
         "copy": "复制链接",
         "copied": "已复制",
         "pasteHint": "可粘贴到 WhatsApp 或 Slack",
