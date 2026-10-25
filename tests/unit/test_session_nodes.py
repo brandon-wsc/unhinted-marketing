@@ -15,6 +15,7 @@ from internal.session.context import session_db
 from internal.session.io import (
     BriefOut,
     DraftOut,
+    ImagePlanOut,
     IntentRoute,
     QueryGenOut,
     ResearchFlags,
@@ -1025,10 +1026,17 @@ async def test_executor_image_plan_fallback(no_llm: None) -> None:
             company_context={"name": "Acme"},
         )
     )
-    assert "prompt" in out["image_plan"]
-    assert "Acme" in out["image_plan"]["prompt"]
-    assert out["image_plan"]["format"] == "single"
+    plan = out["image_plan"]
+    assert "Acme" in plan["prompt"]
+    assert plan["format"] == "single"
     assert out["image_format"] == "single"
+    assert "comic illustration" in plan["style"]
+    assert "not photoreal" in plan["style"]
+    assert "editorial" not in plan["style"]
+    assert "holds the product" in plan["prompt"]
+    avoid = " | ".join(plan["avoid"])
+    for ban in ("haze", "photoreal", "no holder", "on the ground", "cyan", "logos"):
+        assert ban in avoid
 
 
 @pytest.mark.asyncio
@@ -1040,9 +1048,68 @@ async def test_executor_image_plan_comic_fallback(no_llm: None) -> None:
             image_format="comic_4panel",
         )
     )
-    assert out["image_plan"]["format"] == "comic_4panel"
-    assert len(out["image_plan"]["panels"]) == 4
+    plan = out["image_plan"]
+    assert plan["format"] == "comic_4panel"
+    assert len(plan["panels"]) == 4
+    assert "no product" in plan["panels"][0]["beat"]
+    assert "soft remedy" in plan["panels"][3]["beat"]
     assert out["image_format"] == "comic_4panel"
+    assert "clean line" in plan["style"]
+    avoid = " | ".join(plan["avoid"])
+    for ban in ("haze", "photoreal", "no holder", "on the ground", "steam on iced"):
+        assert ban in avoid
+
+
+@pytest.mark.asyncio
+async def test_executor_image_plan_llm_merges_scene_avoids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    seen: dict[str, str] = {}
+
+    async def fake_complete_json(**kwargs):
+        seen["system"] = kwargs["system"]
+        return ImagePlanOut(
+            format="single",
+            prompt="Office worker holding iced lemon tea at chest height",
+            style="clean line HK urban comic, natural daylight",
+            avoid=["Logos"],
+            panels=[{"index": 1, "beat": "stray"}],
+        ).model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    out = await N.executor_image_plan(_base_state(draft={"caption": "凍檸茶"}))
+    plan = out["image_plan"]
+    assert "Scene logic" in seen["system"]
+    assert "not photoreal" in seen["system"]
+    assert plan["panels"] == []
+    assert plan["style"] == "clean line HK urban comic, natural daylight"
+    assert plan["avoid"][0] == "Logos"
+    assert sum(a.lower() == "logos" for a in plan["avoid"]) == 1
+    avoid = " | ".join(plan["avoid"])
+    for ban in ("haze", "photoreal", "no holder", "on the ground", "cyan"):
+        assert ban in avoid
+
+
+@pytest.mark.asyncio
+async def test_executor_image_plan_llm_photoreal_opt_in_keeps_style(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+
+    async def fake_complete_json(**_kwargs):
+        return ImagePlanOut(
+            format="single",
+            prompt="Phone photo of a hand holding iced milk tea in Mong Kok",
+            style="phone documentary photo, natural daylight",
+        ).model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    out = await N.executor_image_plan(_base_state(draft={"caption": "街拍奶茶"}))
+    avoid = " | ".join(out["image_plan"]["avoid"])
+    assert "photoreal" not in avoid
+    assert "no holder" in avoid
+    assert "haze" in avoid
 
 
 @pytest.mark.asyncio

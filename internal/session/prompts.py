@@ -261,6 +261,20 @@ Rules:
   * Panel 4: product appears as soft remedy (情緒出口／化解危機／從容感); logo may be subtle; NO feature list or PR copy painted in the art.
   * Beats are short visual moments (HK everyday), not readable paragraphs in the drawing.
   * Prompt must encode this 1–3 empathy → 4 remedy arc in English for the image model.
+- Visual language (both formats): clean-line contemporary Hong Kong comic / illustration,
+  natural daylight, flat natural colors — not photoreal, not cinematic editorial.
+  * Default single style seed: "clean line HK urban comic, natural daylight, character holding the product, no haze, no photoreal".
+  * Photoreal / phone-photo / documentary / cinematic only when the brief or user explicitly asks
+    (e.g. 寫實、街拍、實拍、documentary, phone photo); then say so in "style".
+- Scene logic — every product / featured object needs an owner and a spatial reason:
+  * Prefer a character's hand holding the product at natural chest/waist height; condensation OK on iced drinks.
+  * Never a product floating in the foreground with no holder, alone on pavement/ground "for placement",
+    or orphan props with no cause in the scene.
+  * Heat / humidity: small natural damp on clothing is OK; sweat stains or wet pavement marks must not be
+    composition anchors; no steam on iced drinks.
+- "avoid" must cover: photoreal street photo / cinematic film grain (unless photoreal was asked for);
+  haze, fog, smoke, heat shimmer, rippling air; teal-orange or amber↔cyan grade; glowing cyan/blue tint on drinks;
+  floating props; product on the ground with no owner; logos; dense readable text; real celebrity faces.
 - Match caption mood; prefer lived scene over stock "corporate success".
 - No watermarks or real celebrity faces. Avoid dense readable text in panels.
 """
