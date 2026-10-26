@@ -117,7 +117,7 @@ export function parseAgentProgress(data: Record<string, unknown>): AgentProgress
 }
 
 /** Internal graph nodes — keep out of the chat action trail. */
-const INTERNAL_AGENT_NODES = new Set(["fast_rule_checker", "persist_preview"]);
+const INTERNAL_AGENT_NODES = new Set(["fast_rule_checker", "persist_preview", "thread_recap"]);
 
 export function isUserFacingAgentNode(node: string): boolean {
   return !INTERNAL_AGENT_NODES.has(node);

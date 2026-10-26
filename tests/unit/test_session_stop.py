@@ -532,7 +532,13 @@ async def test_persist_resume_keeps_turn_discard_and_emits_parked_on_llm_error()
             session,
             user_msg=None,
             message_dicts=[],
-            values={"error": err.message, "messages": [], "draft": session.state["draft"]},
+            values={
+                "error": err.message,
+                "messages": [],
+                "draft": session.state["draft"],
+                "thread_summary": "old recap",
+                "summary_upto": 8,
+            },
             still_interrupted=True,
             parked_node="executor_image_gen",
             progress_events=[],
@@ -544,6 +550,8 @@ async def test_persist_resume_keeps_turn_discard_and_emits_parked_on_llm_error()
 
     assert session.state["awaiting_image_ok"] is True
     assert session.state["turn_discard"] == discard
+    assert session.state["thread_summary"] == "old recap"
+    assert session.state["summary_upto"] == 8
     types = [e["type"] for e in published]
     assert "llm.failed" in types
     assert "draft.awaiting_image_ok" in types

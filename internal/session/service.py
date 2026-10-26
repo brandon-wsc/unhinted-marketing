@@ -410,6 +410,9 @@ def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str,
         # ADR 0047 — last persisted digests carry over; run_session_turn
         # refreshes them from the attachment_sessions join each message turn.
         "attachments": list(state.get("attachments") or []),
+        # ADR 0057 — rolling recap pair; summary_upto counts folded messages.
+        "thread_summary": state.get("thread_summary") or "",
+        "summary_upto": state.get("summary_upto") or 0,
     }
 
 
@@ -947,6 +950,9 @@ async def _persist_after_invoke(
         # ADR 0047 — digest list hydrated this turn; resume paths without a
         # fresh hydration fall back to the persisted digests.
         "attachments": values.get("attachments") or (session.state or {}).get("attachments") or [],
+        # ADR 0057 — rolling recap pair; folds older turns for routing context.
+        "thread_summary": values.get("thread_summary") or "",
+        "summary_upto": values.get("summary_upto") or 0,
         # UI hydrate: interrupt_before angle_gate / executor_image_gen
         "awaiting_image_ok": parked_node == IMAGE_PARK_NODE,
         "awaiting_angle_pick": parked_node == ANGLE_GATE_NODE,

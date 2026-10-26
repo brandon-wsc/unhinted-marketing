@@ -77,3 +77,7 @@ class SessionState(TypedDict, total=False):
     # ADR 0047 §5/§13 — attachment digests hydrated per turn from the
     # attachment_sessions join: {id, filename, status, doc_profile subset}.
     attachments: NotRequired[list[dict[str, Any]]]
+    # ADR 0057 — rolling recap of messages older than the raw window;
+    # summary_upto counts leading messages already folded in.
+    thread_summary: NotRequired[str]
+    summary_upto: NotRequired[int]

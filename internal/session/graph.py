@@ -59,6 +59,9 @@ def build_session_graph(*, checkpointer: Any | None = None):
 
     # LLM nodes get an ADR 0005 record context; non-LLM nodes stay plain.
     g.add_node("fast_rule_checker", N.fast_rule_checker)
+    # ADR 0057: folds aged-out transcript turns into thread_summary; LLM node
+    # with a deterministic no-op trigger under the threshold.
+    g.add_node("thread_recap", _with_llm_record_context("thread_recap", N.thread_recap))
     g.add_node("route_intent", _with_llm_record_context("route_intent", N.route_intent))
     g.add_node(
         "query_generator", _with_llm_record_context("query_generator", N.query_generator)
@@ -90,7 +93,8 @@ def build_session_graph(*, checkpointer: Any | None = None):
     g.add_node("_reviewer_fail_bump", _wrap_reviewer_fail)
 
     g.add_edge(START, "fast_rule_checker")
-    g.add_edge("fast_rule_checker", "route_intent")
+    g.add_edge("fast_rule_checker", "thread_recap")
+    g.add_edge("thread_recap", "route_intent")
     g.add_conditional_edges(
         "route_intent",
         N.route_after_intent,

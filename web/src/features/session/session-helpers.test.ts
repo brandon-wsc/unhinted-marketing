@@ -287,6 +287,7 @@ describe("isUserFacingAgentNode", () => {
   it("hides internal graph nodes", () => {
     expect(isUserFacingAgentNode("fast_rule_checker")).toBe(false);
     expect(isUserFacingAgentNode("persist_preview")).toBe(false);
+    expect(isUserFacingAgentNode("thread_recap")).toBe(false);
     expect(isUserFacingAgentNode("route_intent")).toBe(true);
   });
 });
