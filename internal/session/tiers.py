@@ -4,6 +4,7 @@ from internal.llm.router import ModelTier
 
 NODE_MODEL_TIERS: dict[str, ModelTier | None] = {
     "fast_rule_checker": None,
+    "thread_recap": ModelTier.CHEAP,
     "route_intent": ModelTier.CHEAP,
     "query_generator": ModelTier.CHEAP,
     "research_ingest": None,

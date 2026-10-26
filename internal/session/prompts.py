@@ -24,6 +24,7 @@ Graph intent (intent):
 - revise: session is in PREVIEW and user wants copy or image changes, wants to pivot direction, or wants to rethink/redo from scratch (e.g. 「完全唔啱 feel，由頭再諗過」, 「改短啲」, 「轉第個方向」). Any request to alter, redo, or replace the current preview draft is revise (never chat)
 - confirm_intent: user says they are ready to publish (e.g. 可以出, confirm, publish) — acknowledge only, never publish. Questions ABOUT publish state (「出咗未」, 「出咗咩」) or statements that it already happened (「我出咗啦」) are chat, not confirm_intent — only an explicit go-ahead counts
 - Follow-up: if recent_thread has a prior user question and this turn is only a short sense/IP pick (e.g. "Chiikawa", "真兔"), keep intent=chat unless they clearly ask to draft a post
+- thread_summary is a stale rolling recap of turns older than recent_thread — use it only to resolve what earlier topic the user may mean; it never overrides the current message and is not a source of facts
 
 Research (independent of graph intent — chat vs start does not decide search):
 - need_facts is a TOPIC gate, not a knowledge check. You cannot know parametric knowledge or confidence. NEVER set need_facts false because the line is a statement, looks like chitchat-with-a-noun, is creative/brainstorming, or "general knowledge could answer".
@@ -71,6 +72,7 @@ Rules:
     → ["Chiikawa Usagi", "Chiikawa Usagi favorite food", "ちいかわ うさぎ"]
     NOT ["Chiikawa Hong Kong"]
 - recent_thread is prior user/assistant turns. If last_user_message is a short sense pick, write queries from the PRIOR question + this sense. Still 1–3 queries this turn — do not loop search.
+- thread_summary is a stale recap of turns older than recent_thread — consult it when last_user_message points further back than recent_thread reaches; still write 1–3 atomic queries for THIS turn only.
 - Each query: 1–8 words. Preserve brand/IP spelling. Product-class queries must not repeat the entity unless the user named a branded SKU.
 - Do not paste the raw chat dump; do not include "help me" / "write a post"
 - If ambiguous entity, still emit split best-effort queries (do not refuse)
@@ -91,6 +93,7 @@ Reply helpfully in the user's language (prefer zh-HK Traditional Chinese when th
 Tone: clear, warm, concise — assistant voice, not meme-account voice.
 Do not draft a full publish-ready post unless they clearly ask to start — suggest they pick a trend question or say they want a post.
 Keep replies concise (2–5 sentences). You may call query_market_trends for current HK signals; do not invent rankings. Never publish or confirm a post. No emoji spam.
+The payload may include thread_summary — a stale rolling recap of turns older than the live history. Treat it as background for what the user may be referring to; answer from the latest message and live fields, and never cite it as a current fact.
 
 Attachments:
 - The payload may list "attachments" — digest chips for files the user uploaded (id, filename, title, kind_guess, status, partial). To read content, call read_attachment(attachment_id, query=... or section=...) for a few text slices — at most 3 reads per turn; it is read-only and can never publish or save a file.
@@ -106,6 +109,14 @@ Grounding:
 - If product_clarify is true and product_candidates are provided, ask which product/SKU to use (list names briefly) — do not invent SKUs or prices.
 - If primary_product is provided, stay consistent with its search_document facts.
 - If no research_signals and the user asked for current market facts, say you do not have grounded signals yet — do not hallucinate numbers.
+"""
+
+THREAD_RECAP = """You maintain a rolling summary of an earlier chat transcript for a Hong Kong marketing assistant session.
+Input is JSON: {"prior_summary": "...", "new_messages": [...]} — the prior recap (may be empty) plus older turns that just aged out of the live window.
+Return an updated 3–6 sentence recap in the same language mix as the content (usually zh-HK / Cantonese-English code-mix).
+Keep only what still matters later: topics the user asked about, decisions and picks they made, things they rejected or disliked, stated preferences, named products/signals/IP, and open threads they may return to.
+Drop chit-chat, resolved questions, and anything contradicted by newer messages.
+Return the summary text only — no JSON, no labels, no preamble.
 """
 
 _CRAFT_BLOCK = """

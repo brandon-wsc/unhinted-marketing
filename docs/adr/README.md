@@ -59,6 +59,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0054](./0054-comic-line-default-image-scene-logic.md) | Comic-line default image style (photoreal opt-in); product scene logic | Accepted |
 | [0055](./0055-self-service-change-password.md) | Self-service change password (verify current first, two-step UI) | Accepted |
 | [0056](./0056-mcp-personal-access-tokens.md) | Personal access tokens for headless MCP clients | Accepted |
+| [0057](./0057-thread-recap-summary.md) | Rolling thread recap for long sessions | Accepted |
 
 ## Format
 

@@ -470,6 +470,68 @@ async def fast_rule_checker(state: SessionState) -> dict[str, Any]:
     }
 
 
+# ADR 0057 — rolling recap of messages older than the raw window.
+RECAP_RAW_TAIL = 16
+RECAP_MIN_NEW = 8
+RECAP_MSG_CHARS = 400
+
+
+def _recap_due(state: SessionState) -> tuple[int, int]:
+    """(prefix_len, summary_upto) — an LLM call is due once the gap hits RECAP_MIN_NEW."""
+    messages = state.get("messages") or []
+    prefix_len = max(0, len(messages) - RECAP_RAW_TAIL)
+    upto = state.get("summary_upto") or 0
+    if not isinstance(upto, int) or upto < 0:
+        upto = 0
+    return prefix_len, min(upto, prefix_len)
+
+
+@agent_progress("thread_recap")
+async def thread_recap(state: SessionState) -> dict[str, Any]:
+    """Fold aged-out transcript turns into thread_summary (ADR 0057).
+
+    Deterministic trigger: no LLM call until RECAP_MIN_NEW messages have aged
+    past the raw window since summary_upto. Recap failures degrade to a no-op
+    — it is context enhancement, never a turn blocker.
+    """
+    messages = state.get("messages") or []
+    prefix_len, upto = _recap_due(state)
+    if prefix_len - upto < RECAP_MIN_NEW or not has_llm_credentials():
+        return {}
+    new_msgs = [
+        {
+            "role": str(m.get("role") or ""),
+            "content": str(m.get("content") or "")[:RECAP_MSG_CHARS],
+        }
+        for m in messages[upto:prefix_len]
+        if str(m.get("role") or "") in ("user", "assistant") and str(m.get("content") or "").strip()
+    ]
+    if not new_msgs:
+        # Degenerate content — still mark the fold point so the same empty
+        # slice is not retried every turn.
+        return {"summary_upto": prefix_len}
+    payload = json.dumps(
+        {
+            "prior_summary": str(state.get("thread_summary") or ""),
+            "new_messages": new_msgs,
+        },
+        ensure_ascii=False,
+    )
+    try:
+        summary = await complete_text(
+            tier=NODE_MODEL_TIERS["thread_recap"] or ModelTier.CHEAP,
+            system=prompts.THREAD_RECAP,
+            user=payload,
+        )
+    except Exception:
+        logger.warning("thread_recap failed — keeping prior summary", exc_info=True)
+        return {}
+    summary = (summary or "").strip()
+    if not summary:
+        return {}
+    return {"thread_summary": summary, "summary_upto": prefix_len}
+
+
 @agent_progress("route_intent")
 async def route_intent(state: SessionState) -> dict[str, Any]:
     rule_pass = state.get("research_rule_pass")
@@ -480,6 +542,7 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
         "has_draft": bool((state.get("draft") or {}).get("caption")),
         "last_user_message": _last_user_text(state),
         "recent_thread": _recent_thread(state),
+        "thread_summary": str(state.get("thread_summary") or ""),
         "research_rule_pass": bool(rule_pass),
     }
     parsed = await _parse_llm_json(
@@ -536,6 +599,7 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
     payload = {
         "last_user_message": user,
         "recent_thread": _recent_thread(state),
+        "thread_summary": str(state.get("thread_summary") or ""),
         "research": research,
         "entity_surface": entity,
         "company": _slim_company(state).get("name"),
@@ -765,6 +829,7 @@ async def _chat_stream(state: SessionState, user: str) -> str | None:
         {
             "history": history,
             "latest": user,
+            "thread_summary": str(state.get("thread_summary") or ""),
             "ask_clarify": bool(research.get("ask_clarify") or research.get("ambiguous")),
             "entity_surface": research.get("entity_surface") or "",
             "research_signals": (state.get("research_signals") or [])[:8],
@@ -826,6 +891,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
                         {
                             "history": history,
                             "latest": user,
+                            "thread_summary": str(state.get("thread_summary") or ""),
                             "ask_clarify": bool(
                                 research.get("ask_clarify") or research.get("ambiguous")
                             ),
