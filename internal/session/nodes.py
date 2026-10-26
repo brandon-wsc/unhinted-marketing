@@ -109,10 +109,10 @@ def _last_user_text(state: SessionState) -> str:
     return ""
 
 
-def _recent_thread(state: SessionState, *, limit: int = 6) -> list[dict[str, str]]:
-    """Trimmed user/assistant turns for follow-up routing and query rewrite."""
+def _trim_thread(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """User/assistant turns only, non-empty, content capped at 400 chars."""
     out: list[dict[str, str]] = []
-    for m in (state.get("messages") or [])[-limit:]:
+    for m in messages:
         role = str(m.get("role") or "")
         if role not in ("user", "assistant"):
             continue
@@ -121,6 +121,11 @@ def _recent_thread(state: SessionState, *, limit: int = 6) -> list[dict[str, str
             continue
         out.append({"role": role, "content": content[:400]})
     return out
+
+
+def _recent_thread(state: SessionState, *, limit: int = 6) -> list[dict[str, str]]:
+    """Trimmed user/assistant turns for follow-up routing and query rewrite."""
+    return _trim_thread((state.get("messages") or [])[-limit:])
 
 
 def _is_follow_up(state: SessionState) -> bool:
@@ -471,8 +476,10 @@ async def fast_rule_checker(state: SessionState) -> dict[str, Any]:
 
 
 # ADR 0057 — rolling recap of messages older than the raw window.
-RECAP_RAW_TAIL = 16
+# Invariant: thread_summary + the live window = the whole transcript.
+RECAP_RAW_TAIL = 8
 RECAP_MIN_NEW = 8
+RECAP_MAX_FOLD = 40
 RECAP_MSG_CHARS = 400
 
 
@@ -484,6 +491,26 @@ def _recap_due(state: SessionState) -> tuple[int, int]:
     if not isinstance(upto, int) or upto < 0:
         upto = 0
     return prefix_len, min(upto, prefix_len)
+
+
+def _live_messages(state: SessionState) -> list[dict]:
+    """The unsummarized tail ``messages[summary_upto:]`` — the consumers' raw window.
+
+    Capped at RECAP_RAW_TAIL + RECAP_MIN_NEW - 1 so a recap that keeps failing
+    degrades to a fixed window instead of growing with the transcript.
+    """
+    messages = state.get("messages") or []
+    _, upto = _recap_due(state)
+    return list(messages[max(upto, len(messages) - (RECAP_RAW_TAIL + RECAP_MIN_NEW - 1)) :])
+
+
+def _live_thread(state: SessionState) -> list[dict[str, str]]:
+    """Trimmed live window for route_intent / query_generator payloads."""
+    return _trim_thread(_live_messages(state))
+
+
+def _thread_summary(state: SessionState) -> str:
+    return str(state.get("thread_summary") or "")
 
 
 @agent_progress("thread_recap")
@@ -503,7 +530,9 @@ async def thread_recap(state: SessionState) -> dict[str, Any]:
             "role": str(m.get("role") or ""),
             "content": str(m.get("content") or "")[:RECAP_MSG_CHARS],
         }
-        for m in messages[upto:prefix_len]
+        # First fold on an old session caps at RECAP_MAX_FOLD — the overflow
+        # before that is dropped, not summarized; summary_upto still advances.
+        for m in messages[max(upto, prefix_len - RECAP_MAX_FOLD) : prefix_len]
         if str(m.get("role") or "") in ("user", "assistant") and str(m.get("content") or "").strip()
     ]
     if not new_msgs:
@@ -512,7 +541,7 @@ async def thread_recap(state: SessionState) -> dict[str, Any]:
         return {"summary_upto": prefix_len}
     payload = json.dumps(
         {
-            "prior_summary": str(state.get("thread_summary") or ""),
+            "prior_summary": _thread_summary(state),
             "new_messages": new_msgs,
         },
         ensure_ascii=False,
@@ -541,8 +570,8 @@ async def route_intent(state: SessionState) -> dict[str, Any]:
         "mode": state.get("mode", MODE_CHAT),
         "has_draft": bool((state.get("draft") or {}).get("caption")),
         "last_user_message": _last_user_text(state),
-        "recent_thread": _recent_thread(state),
-        "thread_summary": str(state.get("thread_summary") or ""),
+        "recent_thread": _live_thread(state),
+        "thread_summary": _thread_summary(state),
         "research_rule_pass": bool(rule_pass),
     }
     parsed = await _parse_llm_json(
@@ -598,8 +627,8 @@ async def query_generator(state: SessionState) -> dict[str, Any]:
 
     payload = {
         "last_user_message": user,
-        "recent_thread": _recent_thread(state),
-        "thread_summary": str(state.get("thread_summary") or ""),
+        "recent_thread": _live_thread(state),
+        "thread_summary": _thread_summary(state),
         "research": research,
         "entity_surface": entity,
         "company": _slim_company(state).get("name"),
@@ -822,14 +851,14 @@ def _chat_attachment_digests(state: SessionState) -> list[dict[str, Any]]:
 
 async def _chat_stream(state: SessionState, user: str) -> str | None:
     """Stream the chat reply via the Pydantic AI harness (ADR 0019)."""
-    history = (state.get("messages") or [])[-8:]
+    history = _live_messages(state)
     research = state.get("research") or {}
     pack = _voice_pack(state)
     payload = json.dumps(
         {
             "history": history,
             "latest": user,
-            "thread_summary": str(state.get("thread_summary") or ""),
+            "thread_summary": _thread_summary(state),
             "ask_clarify": bool(research.get("ask_clarify") or research.get("ambiguous")),
             "entity_surface": research.get("entity_surface") or "",
             "research_signals": (state.get("research_signals") or [])[:8],
@@ -881,7 +910,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
         except Exception:
             logger.exception("chat LLM stream failed — retrying without stream")
             try:
-                history = (state.get("messages") or [])[-8:]
+                history = _live_messages(state)
                 research = state.get("research") or {}
                 pack = _voice_pack(state)
                 reply = await complete_text(
@@ -891,7 +920,7 @@ async def chat(state: SessionState) -> dict[str, Any]:
                         {
                             "history": history,
                             "latest": user,
-                            "thread_summary": str(state.get("thread_summary") or ""),
+                            "thread_summary": _thread_summary(state),
                             "ask_clarify": bool(
                                 research.get("ask_clarify") or research.get("ambiguous")
                             ),

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -77,7 +79,7 @@ async def test_recap_incremental_slice_only(llm_ok: None, monkeypatch: pytest.Mo
         return "updated recap"
 
     monkeypatch.setattr(N, "complete_text", fake_complete_text)
-    # summary_upto=8 already folded; 32 msgs → prefix_len 16 → only msgs[8:16] go in.
+    # RECAP_MIN_NEW msgs already folded; only the newly-aged slice goes in.
     msgs = _msgs(N.RECAP_RAW_TAIL + 2 * N.RECAP_MIN_NEW)
     out = await N.thread_recap(
         _state(messages=msgs, summary_upto=N.RECAP_MIN_NEW, thread_summary="old recap")
@@ -92,7 +94,7 @@ async def test_recap_incremental_slice_only(llm_ok: None, monkeypatch: pytest.Mo
 async def test_recap_waits_for_min_new(llm_ok: None, monkeypatch: pytest.MonkeyPatch) -> None:
     complete = AsyncMock(side_effect=AssertionError("must not call LLM"))
     monkeypatch.setattr(N, "complete_text", complete)
-    # 30 msgs → prefix_len 14, gap 14-8=6 < RECAP_MIN_NEW
+    # Gap since the last fold is 6 < RECAP_MIN_NEW.
     out = await N.thread_recap(
         _state(
             messages=_msgs(N.RECAP_RAW_TAIL + N.RECAP_MIN_NEW + 6),
@@ -200,3 +202,142 @@ async def test_chat_payload_includes_thread_summary(monkeypatch: pytest.MonkeyPa
     payload = json.loads(captured["user"])
     assert payload["thread_summary"] == "之前傾過出帖"
     assert out["messages"][-1]["content"] == "收到"
+
+
+def test_live_window_is_unsummarized_tail() -> None:
+    msgs = _msgs(20)
+    state = _state(messages=msgs, summary_upto=8)
+    assert N._live_messages(state) == msgs[8:]
+    assert N._live_thread(state) == [
+        {"role": m["role"], "content": m["content"]} for m in msgs[8:]
+    ]
+
+
+def test_live_window_clamps_stale_summary_upto() -> None:
+    msgs = _msgs(20)
+    # summary_upto beyond the transcript clamps to prefix_len (len - raw tail).
+    state = _state(messages=msgs, summary_upto=100)
+    assert N._live_messages(state) == msgs[len(msgs) - N.RECAP_RAW_TAIL :]
+
+
+def test_live_window_without_summary_is_whole_transcript() -> None:
+    msgs = _msgs(10)
+    assert N._live_messages(_state(messages=msgs)) == msgs
+
+
+def test_live_window_capped_when_recap_keeps_failing() -> None:
+    msgs = _msgs(60)
+    cap = N.RECAP_RAW_TAIL + N.RECAP_MIN_NEW - 1
+    assert N._live_messages(_state(messages=msgs)) == msgs[-cap:]
+
+
+@pytest.mark.asyncio
+async def test_route_intent_recent_thread_is_live_tail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    captured: dict[str, str] = {}
+
+    async def fake_complete_json(**kwargs):
+        captured["user"] = kwargs["user"]
+        return IntentRoute(intent="chat", rationale="x").model_dump_json()
+
+    monkeypatch.setattr(N, "complete_json", fake_complete_json)
+    msgs = _msgs(14)
+    await N.route_intent(_state(research_rule_pass=True, messages=msgs))
+    payload = json.loads(captured["user"])
+    assert payload["recent_thread"] == [
+        {"role": m["role"], "content": m["content"]} for m in msgs
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chat_history_is_live_tail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    captured: dict[str, str] = {}
+
+    async def fake_stream(*, user_prompt, session_id, deps):
+        captured["user"] = user_prompt
+        return "收到"
+
+    monkeypatch.setattr(N, "stream_chat_reply", fake_stream)
+    msgs = _msgs(20)
+    await N.chat(_state(messages=msgs, summary_upto=8))
+    payload = json.loads(captured["user"])
+    assert payload["history"] == msgs[8:]
+
+
+@pytest.mark.asyncio
+async def test_query_generator_fallback_hint_stays_last_six(
+    no_llm: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_fallback(entity, user, *, max_len: int = 160):
+        captured["entity"] = entity
+        captured["hint"] = user
+        return ["q-fallback"]
+
+    monkeypatch.setattr(N, "fallback_search_queries", fake_fallback)
+    msgs = [
+        {"role": "user", "content": "oldest-topic-xyzzy"},
+        {"role": "assistant", "content": "ans-0"},
+        *_msgs(6, start=10),
+    ]
+    out = await N.query_generator(
+        _state(
+            messages=msgs,
+            research={"entity_surface": "Chiikawa", "need_facts": True},
+        )
+    )
+    assert out["research"]["query_source"] == N.QUERY_SOURCE_FALLBACK
+    assert captured["entity"] == "Chiikawa"
+    # The hint joins prior user turns from the last-6 window only.
+    assert "oldest-topic-xyzzy" not in captured["hint"]
+    assert "msg-10" in captured["hint"]
+
+
+@pytest.mark.asyncio
+async def test_recap_first_fold_capped(llm_ok: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict = {}
+
+    async def fake_complete_text(**kwargs):
+        captured.update(kwargs)
+        return "recap"
+
+    monkeypatch.setattr(N, "complete_text", fake_complete_text)
+    msgs = _msgs(100)
+    out = await N.thread_recap(_state(messages=msgs))
+    payload = json.loads(captured["user"])
+    prefix_len = len(msgs) - N.RECAP_RAW_TAIL  # 92
+    assert payload["new_messages"] == msgs[prefix_len - N.RECAP_MAX_FOLD : prefix_len]
+    assert out["summary_upto"] == prefix_len
+
+
+def test_thread_recap_edges() -> None:
+    from internal.session.graph import build_session_graph
+
+    edges = {(e.source, e.target) for e in build_session_graph().get_graph().edges}
+    assert ("fast_rule_checker", "thread_recap") in edges
+    assert ("thread_recap", "route_intent") in edges
+    assert ("fast_rule_checker", "route_intent") not in edges
+
+
+def test_graph_values_carries_recap_pair() -> None:
+    from internal.session.service import _graph_values
+
+    session = SimpleNamespace(
+        id=uuid.uuid4(),
+        company_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        mode=MODE_CHAT,
+        state={"thread_summary": "recap text", "summary_upto": 8},
+    )
+    vals = _graph_values(session, [])
+    assert vals["thread_summary"] == "recap text"
+    assert vals["summary_upto"] == 8
+
+    session.state = {}
+    vals = _graph_values(session, [])
+    assert vals["thread_summary"] == ""
+    assert vals["summary_upto"] == 0

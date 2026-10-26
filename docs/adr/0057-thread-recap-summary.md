@@ -5,7 +5,7 @@
 
 ## Context
 
-LLM context per turn is windowed: `route_intent`, `query_generator`, and the fallback query hint read `_recent_thread` (last 6 messages, 400 chars each); the `chat` node reads `messages[-8:]`. Everything older is invisible to those nodes, even though the full transcript is loaded into graph state every turn.
+LLM context per turn was windowed: `route_intent`, `query_generator`, and the fallback query hint read `_recent_thread` (last 6 messages, 400 chars each); the `chat` node read `messages[-8:]`. Everything older was invisible to those nodes, even though the full transcript is loaded into graph state every turn.
 
 The durable working set — brief, draft, image_plan, ranked signals, persona, products — already lives in structured `session.state`, and that stickiness across turns is intentional. What the windows cannot carry is *conversational* memory: a user who keeps one session for many turns and references a topic from 5+ exchanges ago ("頭先嗰個 topic", "繼續講嗰個") gets a query rewrite or intent classification that cannot see the referent. Users also state preferences or reject options early that never land in structured state.
 
@@ -15,11 +15,11 @@ A free-text rolling summary is the standard fix, but it introduces two risks wor
 
 1. **`thread_recap` is a plain graph node** between `fast_rule_checker` and `route_intent`, not a service-layer side effect — it gets node-step tracing, LLM-call recording, and mock coverage like every other LLM node.
 
-2. **Deterministic trigger, incremental fold.** The node keeps the last **16** messages raw (`RECAP_RAW_TAIL`) and folds the older prefix into `thread_summary`. It calls the LLM only when at least **8** new messages (`RECAP_MIN_NEW`) have aged past the window since `summary_upto` — the count of leading messages already folded. Input is `{prior_summary, new_messages}`: the prior summary plus only the newly-aged slice, never the whole transcript. Short sessions never pay for the call.
+2. **Deterministic trigger, incremental fold.** The node keeps the last **8** messages raw (`RECAP_RAW_TAIL`) and folds the older prefix into `thread_summary`. It calls the LLM only when at least **8** new messages (`RECAP_MIN_NEW`) have aged past the window since `summary_upto` — the count of leading messages already folded. Input is `{prior_summary, new_messages}`: the prior summary plus only the newly-aged slice, never the whole transcript. Each fold slice is capped at **40** messages (`RECAP_MAX_FOLD`); on the first fold of an already-long session (`summary_upto=0`), messages older than the cap are dropped, not summarized, while `summary_upto` still advances to the fold point. Short sessions never pay for the call.
 
 3. **`thread_summary` + `summary_upto` live in session state** like any other sticky field: persisted via `_graph_values` / `_persist_after_invoke`, checkpointed with graph values. Discard/Stop restores `pre_state`, so the pair rolls back together — the summary can never describe a future that was discarded, only a slightly older past.
 
-4. **Summary is stale-labeled background, not ground truth.** Consumers get it as a separate `thread_summary` payload field, never merged into `recent_thread`/`history`. The consumer prompts (`ROUTE_INTENT`, `QUERY_GENERATOR`, `CHAT`) state it may be stale and must not override the current message or live structured state.
+4. **Summary is stale-labeled background, not ground truth — and summary + live window = the whole transcript.** Consumers get it as a separate `thread_summary` payload field, never merged into `recent_thread`/`history`. Their raw window is the unsummarized tail `messages[summary_upto:]` (8–15 messages), so no message sits in a blind band invisible to both summary and window; this replaces the fixed last-6 / last-8 windows in `route_intent`, `query_generator`, and `chat`. The fallback query hint in `query_generator` keeps the last-6 window — it joins all prior user texts into one search hint and must stay short. The consumer prompts (`ROUTE_INTENT`, `QUERY_GENERATOR`, `CHAT`) state the summary may be stale and must not override the current message or live structured state.
 
 5. **First consumers: `route_intent`, `query_generator`, `chat`** — the nodes whose job is referent resolution and conversational coherence. `executor_post`, `edit_copy`, `reviewer`, and `brainstormer` do NOT receive it: their working set is the structured state, and an LLM-authored recap must not become a grounding/craft surface.
 
@@ -29,7 +29,10 @@ A free-text rolling summary is the standard fix, but it introduces two risks wor
 
 ## Consequences
 
-- Cost: zero for sessions under ~24 messages; afterwards one CHEAP-tier call per ~8 new aged messages (~4 exchanges). Node-step rows record the node's I/O for prompt tuning.
+- Cost: zero for sessions under ~16 messages; afterwards one CHEAP-tier call per ~8 new aged messages (~4 exchanges). Node-step rows record the node's I/O for prompt tuning.
+- Latency: on the trigger turn (~every 4 exchanges once active) the graph pays one serial CHEAP call before `route_intent`; other turns pass through a length check only.
+- The consumers' live window grew from a fixed last-6 / last-8 to the unsummarized tail (8–15 messages); everything older is covered by `thread_summary`, so there is no blind band.
+- `thread_recap` is an internal node — the web chat agent trail hides it (`INTERNAL_AGENT_NODES`), so no extra "Working…" row appears each turn.
 - Correctness bound: worst case after the change is the same as today (summary absent) plus a possibly-stale hint that consumers are told to distrust — never a regression in grounding, since grounded consumers never see it.
 - The summary is a heuristic memory; it is not surfaced to the user and must not be treated as a citation source.
 - Resume paths (`ainvoke(None)`) do not re-run `thread_recap`; the summary lags at most one parked turn.
