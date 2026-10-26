@@ -53,6 +53,15 @@ param llmImageModel string = 'placeholder'
 param imagePrefix string = 'ghcr.io/brandon-wsc'
 param imageTag string = 'onprem'
 
+@description('''Custom domain bound to web ingress (e.g. demo.unhinted.hk). Empty = ACA default FQDN only.
+Requires CNAME <sub> → <web FQDN> and TXT asuid.<sub> → customDomainVerificationId before provision;
+the env managed cert validates via CNAME lookup.''')
+param customDomainName string = ''
+
+@description('''Managed cert resource name on the env. Defaults to a deterministic cert-<domain> name.
+Set to an existing az-generated name (mc-…-5102 style) to adopt that cert in place instead of minting a second one.''')
+param customDomainCertName string = ''
+
 var apiImage = '${imagePrefix}/unhinted-api:${imageTag}'
 var webImage = '${imagePrefix}/unhinted-web:${imageTag}'
 var resourceToken = toLower(uniqueString(subscription().id, resourceGroup().id, location))
@@ -141,6 +150,24 @@ resource nginxStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = 
       shareName: nginxShare.name
       accessMode: 'ReadOnly'
     }
+  }
+}
+
+// Declarative SNI cert + hostname binding for the custom domain. Without this
+// every `azd provision` PUT re-asserts webApp.ingress with no customDomains and
+// silently wipes the binding (the cert on the env survives; the binding does not).
+var resolvedCustomDomainCertName = empty(customDomainCertName)
+  ? 'cert-${replace(customDomainName, '.', '-')}'
+  : customDomainCertName
+
+resource customDomainCert 'Microsoft.App/managedEnvironments/managedCertificates@2024-03-01' = if (!empty(customDomainName)) {
+  parent: managedEnv
+  name: resolvedCustomDomainCertName
+  location: location
+  tags: tags
+  properties: {
+    subjectName: customDomainName
+    domainControlValidation: 'CNAME'
   }
 }
 
@@ -240,6 +267,13 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 80
         transport: 'auto'
         allowInsecure: false
+        customDomains: empty(customDomainName) ? [] : [
+          {
+            name: customDomainName
+            certificateId: customDomainCert.id
+            bindingType: 'SniEnabled'
+          }
+        ]
       }
     }
     template: {

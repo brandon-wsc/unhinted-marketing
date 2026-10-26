@@ -43,11 +43,19 @@ First boot: open the web URL → `/setup` wizard creates SUPERADMIN + first org 
 
 ## Custom domain (demo.unhinted.hk)
 
-ACA issues a **free managed certificate**; you only pay for DNS.
+ACA issues a **free managed certificate**; you only pay for DNS. The binding is
+declarative in `infra/main.bicep` (`ingress.customDomains` + a managed cert on
+the env), so `azd up` / `azd provision` re-asserts it instead of wiping it —
+a manually-bound hostname gets silently dropped by every provision PUT.
 
 1. `CNAME demo → <WEB_FQDN>` (printed at the end of `azd up`)
 2. `TXT asuid.demo → <customDomainVerificationId>` (also printed)
-3. `az containerapp hostname add` → `az containerapp env certificate create --validation-method CNAME` → `az containerapp hostname bind` — the hook prints all three commands ready to paste.
+3. `azd env set CUSTOM_DOMAIN_NAME demo.unhinted.hk && azd up` — provision creates
+   the managed cert (`cert-demo-unhinted-hk`) and binds it `SniEnabled`.
+   To adopt an existing az-generated cert instead of minting a second one:
+   `azd env set CUSTOM_DOMAIN_CERT_NAME mc-…`.
+
+DNS must be live **before** provisioning — cert issuance does a CNAME lookup.
 
 ## Operations
 

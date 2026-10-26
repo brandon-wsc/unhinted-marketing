@@ -14,6 +14,8 @@
     "tavilyApiKey": { "value": "${TAVILY_API_KEY=}" },
     "llmImageModel": { "value": "${LLM_IMAGE_MODEL=placeholder}" },
     "imagePrefix": { "value": "${IMAGE_PREFIX=ghcr.io/brandon-wsc}" },
-    "imageTag": { "value": "${IMAGE_TAG=onprem}" }
+    "imageTag": { "value": "${IMAGE_TAG=onprem}" },
+    "customDomainName": { "value": "${CUSTOM_DOMAIN_NAME=}" },
+    "customDomainCertName": { "value": "${CUSTOM_DOMAIN_CERT_NAME=}" }
   }
 }
