@@ -4,12 +4,14 @@
 # fastembed 0.9.0 (pulled by semantic-router[fastembed]) requires pillow<13.
 # Remove these entries once a fastembed release allows pillow>=13 and the
 # lock regenerates onto it.
+# PYSEC-2026-4327 is the same pillow 12.3.0 → 13.0.0 / fastembed pin.
 #
 # filelock 3.32.7 — fixed in 4.2.1, currently uninstallable: litellm
 # 1.106.2 (the newest) requires filelock<4.0, so the lock cannot bump.
 # All three advisories are Windows-only (SoftFileLock oplock timeout;
 # ReadWriteLock SQLite side-file handling); runtime and CI run Linux.
 # Remove once a litellm release allows filelock>=4.2.1.
+PYSEC-2026-4327
 CVE-2026-112907
 CVE-2026-112913
 CVE-2026-112940
