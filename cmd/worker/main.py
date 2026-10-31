@@ -15,7 +15,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.auth.roles import parse_platform_level
@@ -106,13 +106,25 @@ _JOB_HANDLERS: dict[str, Callable[[AsyncSession, Job], Awaitable[None]]] = {
 }
 
 
-async def _run_one_job(worker_id: str) -> bool:
-    """One service tick: claim → dispatch → finish. True when a job ran."""
+async def _claim_and_run(worker_id: str) -> tuple[bool, float | None]:
+    """One drain tick: claim → dispatch → finish (ADR 0039 semantics).
+
+    Returns ``(ran, seconds_until_next_due)``. The due-time hint is computed
+    on the DB clock reusing the claim's session, so arming the timer costs
+    no extra query. It covers deferred jobs that carry no wake hint
+    (``finish_job`` retries are UPDATEs — ADR 0058 §8).
+    """
     async with open_session() as db:
         job = await claim_next_job(db, worker_id=worker_id)
-        await db.commit()
         if job is None:
-            return False
+            due = await db.scalar(
+                select(func.min(Job.run_after - func.now())).where(
+                    Job.status == "pending"
+                )
+            )
+            await db.commit()
+            return False, (due.total_seconds() if due is not None else None)
+        await db.commit()
         logger.info(
             "claimed job %s kind=%s attempt %d/%d",
             job.id,
@@ -147,27 +159,141 @@ async def _run_one_job(worker_id: str) -> bool:
             await finish_job(db, job, ok=True)
             await db.commit()
             logger.info("job %s (%s) succeeded", job.id, job.kind)
-        return True
+        return True, None
+
+
+async def _reclaim_sweep() -> None:
+    try:
+        async with open_session() as db:
+            reclaimed = await reclaim_stale_jobs(db)
+            await db.commit()
+        if reclaimed:
+            logger.info("reclaimed %d stale job(s)", reclaimed)
+    except Exception:
+        logger.exception("reclaim sweep failed")
+
+
+def _lane_delay(due_in: float | None, sweep_seconds: int) -> float:
+    """Due-time timer capped at the sweep interval (ADR 0058 §7)."""
+    if due_in is None:
+        return float(sweep_seconds)
+    return min(max(due_in, 1.0), float(sweep_seconds))
+
+
+async def _drain_loop(
+    worker_id: str,
+    stop: asyncio.Event,
+    wake_ev: asyncio.Event,
+    *,
+    lane_active: Callable[[], bool],
+    maintain_lane: Callable[[], Awaitable[None]] | None = None,
+    claim: Callable[[str], Awaitable[tuple[bool, float | None]]] | None = None,
+    hint_gap_seconds: float = 1.0,
+) -> None:
+    """Wake-driven drain (ADR 0058): wake = NOTIFY | kick | due timer | sweep.
+
+    With no lane wired this is exactly the old cadence — ``worker_poll_seconds``
+    backoff to 30s with a 60s reclaim.
+    """
+    from internal.memory import wake as wake_lib
+
+    claim = claim or _claim_and_run
+    sweep_seconds = settings.worker_sweep_seconds
+    last_reclaim = 0.0
+    idle_streak = 0
+    last_claim_at = 0.0
+    while not stop.is_set():
+        # Fallback mode keeps the old 60s reclaim cadence — including during
+        # busy drains (loop-top check, same as before).
+        if not lane_active() and (
+            time.monotonic() - last_reclaim >= _RECLAIM_INTERVAL_SECONDS
+        ):
+            last_reclaim = time.monotonic()
+            await _reclaim_sweep()
+
+        # Lost-wakeup rule: clear BEFORE each claim attempt — a hint that
+        # lands mid-claim must trigger one more pass.
+        wake_ev.clear()
+        try:
+            ran, due_in = await claim(worker_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("worker tick failed")
+            ran, due_in = False, None
+        if ran:
+            idle_streak = 0
+            continue
+
+        if lane_active():
+            delay = _lane_delay(due_in, sweep_seconds)
+        else:
+            idle_streak += 1
+            # Idle backoff: poll interval doubles on each empty tick, capped.
+            delay = min(
+                settings.worker_poll_seconds * 2 ** min(idle_streak - 1, 3),
+                _IDLE_BACKOFF_MAX_SECONDS,
+            )
+
+        reason = await wake_lib.wait_for_trigger(stop, wake_ev, delay)
+        if reason == "stop":
+            break
+        if reason == "sweep":
+            if maintain_lane is not None:
+                await maintain_lane()
+            if lane_active() or (
+                time.monotonic() - last_reclaim >= _RECLAIM_INTERVAL_SECONDS
+            ):
+                last_reclaim = time.monotonic()
+                await _reclaim_sweep()
+        elif lane_active():
+            # Coalesced via wake_ev already; rate-limit hint-triggered
+            # claims to at least one second apart (ADR 0058 §6).
+            gap = hint_gap_seconds - (time.monotonic() - last_claim_at)
+            if gap > 0:
+                await asyncio.sleep(gap)
+        last_claim_at = time.monotonic()
 
 
 async def _cmd_serve() -> int:
-    """Long-running queue consumer (ADR 0039).
+    """Long-running queue consumer (ADR 0039 claim semantics + ADR 0058 hints).
 
     SIGTERM/SIGINT stop claiming new work; the in-flight job finishes first,
     then the loop exits 0. A hard kill leaves a ``running`` lease that the
     reclaim sweep returns to ``pending`` after 15 minutes.
     """
+    from internal.memory import wake as wake_lib
+
     stop = asyncio.Event()
+    wake_ev = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
+
+    lane = None
+    if settings.worker_listen_enabled:
+        lane = wake_lib.ListenLane(
+            wake_lib.database_url_to_dsn(settings.database_url), wake_ev
+        )
+        await lane.start()
+
+    kick_server = None
+    kick_task = None
+    if settings.kick_port:
+        kick_server, kick_task = await wake_lib.serve_kick(
+            settings.kick_port, wake_ev.set
+        )
+
     logger.info(
-        "Worker %s started (poll %ss, reclaim every %ss)",
+        "Worker %s started (poll %ss, reclaim every %ss; listen=%s kick=%s sweep=%ss)",
         worker_id,
         settings.worker_poll_seconds,
         _RECLAIM_INTERVAL_SECONDS,
+        lane.alive if lane else "disabled",
+        settings.kick_port or "disabled",
+        settings.worker_sweep_seconds,
     )
     # Warm the FastEmbed singleton up front — otherwise the first
     # attachment_ingest sees a cold model and lands ready_lexical, waiting
@@ -176,39 +302,34 @@ async def _cmd_serve() -> int:
 
     start_product_embedder_warmup()
 
-    last_reclaim = 0.0
-    idle_streak = 0
-    while not stop.is_set():
-        if time.monotonic() - last_reclaim >= _RECLAIM_INTERVAL_SECONDS:
-            last_reclaim = time.monotonic()
-            try:
-                async with open_session() as db:
-                    reclaimed = await reclaim_stale_jobs(db)
-                    await db.commit()
-                if reclaimed:
-                    logger.info("reclaimed %d stale job(s)", reclaimed)
-            except Exception:
-                logger.exception("reclaim sweep failed")
+    def lane_active() -> bool:
+        return kick_server is not None or (lane is not None and lane.alive)
 
-        try:
-            ran = await _run_one_job(worker_id)
-        except asyncio.CancelledError:
-            break
-        except Exception:
-            logger.exception("worker tick failed")
-            ran = False
+    last_maintain = 0.0
 
-        if ran:
-            idle_streak = 0
-            continue
-        idle_streak += 1
-        # Idle backoff: poll interval doubles on each empty tick, capped.
-        delay = min(
-            settings.worker_poll_seconds * 2 ** min(idle_streak - 1, 3),
-            _IDLE_BACKOFF_MAX_SECONDS,
+    async def maintain_lane() -> None:
+        nonlocal last_maintain
+        if lane is None:
+            return
+        if lane.alive or time.monotonic() - last_maintain >= _RECLAIM_INTERVAL_SECONDS:
+            last_maintain = time.monotonic()
+            await lane.maintain()
+
+    try:
+        await _drain_loop(
+            worker_id,
+            stop,
+            wake_ev,
+            lane_active=lane_active,
+            maintain_lane=maintain_lane,
         )
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stop.wait(), timeout=delay)
+    finally:
+        if lane is not None:
+            await lane.stop()
+        if kick_server is not None:
+            kick_server.should_exit = True
+            with contextlib.suppress(Exception):
+                await kick_task
 
     await drain_llm_records()
     logger.info("Worker %s stopped", worker_id)

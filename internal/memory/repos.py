@@ -2144,6 +2144,11 @@ async def upsert_instance_settings(db: AsyncSession, **fields) -> InstanceSettin
     for key, value in fields.items():
         setattr(row, key, value)
     await db.flush()
+    # ADR 0058 — settings write → kick the scheduler after commit so quiet
+    # mode preserves the ~1-minute apply of ADR 0050 without a 60s poll.
+    from internal.memory import wake
+
+    wake.mark_settings_changed(db)
     return row
 
 
@@ -2213,7 +2218,14 @@ async def enqueue_job(
         .on_conflict_do_nothing(index_elements=["dedupe_key"])
         .returning(Job)
     )
-    return await db.scalar(stmt)
+    job = await db.scalar(stmt)
+    if job is not None:
+        # ADR 0058 — INSERT landed → mark the session so commit emits a
+        # wake hint (pg_notify + worker kick). Dedupe no-ops stay silent.
+        from internal.memory import wake
+
+        wake.mark_job_enqueued(db)
+    return job
 
 
 async def claim_next_job(db: AsyncSession, *, worker_id: str) -> Job | None:

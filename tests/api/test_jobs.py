@@ -145,7 +145,7 @@ async def test_worker_tick_runs_hot_search_job_to_success(
     session_factory, worker_db, monkeypatch
 ) -> None:
     """Enqueue -> one worker tick -> succeeded (handlers stubbed)."""
-    from cmd.worker.main import _run_one_job
+    from cmd.worker.main import _claim_and_run
 
     async def fake_hot_search(db):
         return {"google_trends_hk": 3, "errors": 0}
@@ -161,7 +161,8 @@ async def test_worker_tick_runs_hot_search_job_to_success(
         job_id = job.id
         await db.commit()
 
-    assert await _run_one_job("test-worker") is True
+    ran, _due_in = await _claim_and_run("test-worker")
+    assert ran is True
 
     async with session_factory() as db:
         done = await db.get(Job, job_id)
@@ -175,17 +176,160 @@ async def test_worker_tick_runs_hot_search_job_to_success(
 async def test_worker_tick_marks_unknown_kind_failed(
     session_factory, worker_db
 ) -> None:
-    from cmd.worker.main import _run_one_job
+    from cmd.worker.main import _claim_and_run
 
     async with session_factory() as db:
         job = await repos.enqueue_job(db, kind="nope", dedupe_key="tick:unknown", max_attempts=1)
         job_id = job.id
         await db.commit()
 
-    assert await _run_one_job("test-worker") is True
+    ran, _due_in = await _claim_and_run("test-worker")
+    assert ran is True
 
     async with session_factory() as db:
         done = await db.get(Job, job_id)
         assert done is not None
         assert done.status == "failed"
         assert "unknown job kind" in (done.error or "")
+
+
+# --- ADR 0058 — commit-bound wake hints (pg_notify + HTTP kick) -----------
+
+
+async def _listen_jobs(dsn: str):
+    """Raw asyncpg LISTEN — the same shape the worker's ListenLane uses."""
+    import asyncpg
+
+    from internal.memory import wake
+
+    conn = await asyncpg.connect(wake.database_url_to_dsn(dsn))
+    notes = []
+    await conn.add_listener("jobs", lambda *args: notes.append(args))
+    return conn, notes
+
+
+async def _wait_notes(notes: list, n: int, timeout: float = 3.0) -> int:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while len(notes) < n and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.05)
+    return len(notes)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_emits_one_notify_per_commit(
+    db_session, test_database_url
+) -> None:
+    """Two enqueues in one txn → exactly one pg_notify at commit."""
+    conn, notes = await _listen_jobs(test_database_url)
+    try:
+        await repos.enqueue_job(db_session, kind="hot_search", dedupe_key="n:1")
+        await repos.enqueue_job(db_session, kind="promote_signals", dedupe_key="n:2")
+        assert notes == []  # nothing fires before commit
+        await db_session.commit()
+        assert await _wait_notes(notes, 1) == 1
+
+        # Dedupe no-op lands nothing → silent.
+        await repos.enqueue_job(db_session, kind="hot_search", dedupe_key="n:1")
+        await db_session.commit()
+        await asyncio.sleep(0.3)
+        assert len(notes) == 1
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_rollback_emits_no_notify(db_session, test_database_url) -> None:
+    conn, notes = await _listen_jobs(test_database_url)
+    try:
+        await repos.enqueue_job(db_session, kind="hot_search", dedupe_key="rb:1")
+        await db_session.rollback()
+        await asyncio.sleep(0.3)
+        assert notes == []
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_savepoint_rollback_emits_no_notify(
+    db_session, test_database_url
+) -> None:
+    """Marks are txn-scoped by clearing: a savepoint rollback clears all —
+    the outer job's hint is dropped rather than leaked (sweep covers it)."""
+    conn, notes = await _listen_jobs(test_database_url)
+    try:
+        job = await repos.enqueue_job(db_session, kind="hot_search", dedupe_key="sp:outer")
+        sp = await db_session.begin_nested()
+        await repos.enqueue_job(db_session, kind="hot_search", dedupe_key="sp:inner")
+        await sp.rollback()
+        await db_session.commit()
+        await asyncio.sleep(0.5)
+        assert notes == []
+        await db_session.refresh(job)
+        assert job.status == "pending"  # outer row still landed
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_kick_fires_only_after_commit(db_session, monkeypatch) -> None:
+    """after_commit kicks fire-and-forget; rollback kicks never fire."""
+    from internal.config import settings
+    from internal.memory import wake
+
+    kicks: list[str] = []
+
+    async def fake_post(_client, url: str) -> None:
+        kicks.append(url)
+
+    monkeypatch.setattr(wake, "_post_kick", fake_post)
+    monkeypatch.setattr(settings, "worker_kick_url", "http://worker.internal")
+    monkeypatch.setattr(settings, "scheduler_kick_url", "http://sched.internal")
+
+    await repos.enqueue_job(db_session, kind="hot_search", dedupe_key="k:1")
+    assert kicks == []
+    await db_session.commit()
+    for _ in range(40):
+        if kicks:
+            break
+        await asyncio.sleep(0.05)
+    assert kicks == ["http://worker.internal/kick"]
+
+    await repos.enqueue_job(db_session, kind="hot_search", dedupe_key="k:2")
+    await db_session.rollback()
+    await asyncio.sleep(0.1)
+    assert len(kicks) == 1
+
+    # Instance-settings write kicks the scheduler (ADR 0050 apply preserved).
+    await repos.upsert_instance_settings(db_session, email_backend="smtp")
+    await db_session.commit()
+    for _ in range(40):
+        if len(kicks) > 1:
+            break
+        await asyncio.sleep(0.05)
+    assert kicks[-1] == "http://sched.internal/kick"
+
+
+@pytest.mark.asyncio
+async def test_claim_and_run_reports_due_in_on_db_clock(
+    session_factory, worker_db
+) -> None:
+    """Empty claim returns the deferred job's due delay for the due-timer."""
+    from cmd.worker.main import _claim_and_run
+
+    async with session_factory() as db:
+        await repos.enqueue_job(
+            db,
+            kind="hot_search",
+            dedupe_key="due:1",
+            run_after=datetime.now(UTC) + timedelta(seconds=600),
+        )
+        await db.commit()
+
+    ran, due_in = await _claim_and_run("test-worker")
+    assert ran is False
+    assert due_in is not None
+    assert 550 < due_in <= 600
+
+    async with session_factory() as db:
+        rows = (await db.scalars(select(Job).where(Job.status == "pending"))).all()
+        assert len(rows) == 1  # nothing claimed, nothing queued twice

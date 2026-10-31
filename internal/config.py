@@ -109,8 +109,21 @@ class Settings(BaseSettings):
     scheduler_hot_search_enabled: bool = True
     scheduler_questions_interval_hours: int = 12
     # Worker service (ADR 0039) — idle poll between claim attempts on the
-    # jobs table; backs off while the queue stays empty.
+    # jobs table; backs off while the queue stays empty. ADR 0058 demotes
+    # this to the no-lane fallback cadence when a wake lane is wired.
     worker_poll_seconds: int = 5
+    # ADR 0058 — wake hints. Producers kick the worker after an enqueue
+    # commit; settings writes kick the scheduler. Unset URL = lane skipped.
+    worker_kick_url: str | None = None
+    scheduler_kick_url: str | None = None
+    # Worker + scheduler serve `POST /kick` on this port when set.
+    kick_port: int | None = None
+    # LISTEN lane: policy flag — set false on scale-to-zero DBs where a
+    # held/reconnecting listener would itself reset the suspend timer.
+    worker_listen_enabled: bool = True
+    # Backstop sweep when a lane is healthy (>=3600 on scale-to-zero DBs —
+    # every DB touch costs at least one suspend-timeout of compute).
+    worker_sweep_seconds: int = 300
 
     # Tavily web search ingest (ADR 0009) — session research upserts into raw_news_events
     tavily_api_key: str | None = None
