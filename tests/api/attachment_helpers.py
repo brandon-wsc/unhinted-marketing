@@ -264,7 +264,7 @@ async def seed_pending_attachment(
 async def run_next_job(
     db: AsyncSession, *, worker_id: str = "attachment-test-worker"
 ) -> Job | None:
-    """Claim one pending job and dispatch it the way ``cmd.worker._run_one_job`` does."""
+    """Claim one pending job and dispatch it the way ``cmd.worker._claim_and_run`` does."""
     from cmd.worker.main import _JOB_HANDLERS
 
     job = await repos.claim_next_job(db, worker_id=worker_id)

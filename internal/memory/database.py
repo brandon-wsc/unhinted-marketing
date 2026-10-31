@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.orm import Session as OrmSession
 
 from internal.config import settings
+from internal.memory import wake
 
 # pool_pre_ping: drop dead connections before checkout (idle Postgres kill /
 # Docker restart). pool_recycle: force refresh before long-lived sockets go stale.
@@ -35,6 +37,15 @@ def attach_pgvector(eng: AsyncEngine) -> None:
 
 
 attach_pgvector(engine)
+
+# ADR 0058 — session-level wake-hint hooks. Class-level listeners cover
+# every Session (including AsyncSession inner sessions and test factories):
+# producers mark db.info in enqueue_job / upsert_instance_settings and the
+# hooks emit pg_notify + HTTP kicks bound to commit only.
+event.listen(OrmSession, "before_commit", wake.before_commit)
+event.listen(OrmSession, "after_commit", wake.after_commit)
+event.listen(OrmSession, "after_rollback", wake.after_rollback)
+event.listen(OrmSession, "after_soft_rollback", wake.after_rollback)
 
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
