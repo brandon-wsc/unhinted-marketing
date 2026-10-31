@@ -4,17 +4,40 @@
 # fastembed 0.9.0 (pulled by semantic-router[fastembed]) requires pillow<13.
 # Remove these entries once a fastembed release allows pillow>=13 and the
 # lock regenerates onto it.
-# PYSEC-2026-4327 is the same pillow 12.3.0 → 13.0.0 / fastembed pin.
+# PYSEC-2026-4327 and PYSEC-2026-4332 are the same pillow 12.3.0 → 13.0.0 /
+# fastembed pin.
 #
 # filelock 3.32.7 — fixed in 4.2.1, currently uninstallable: litellm
 # 1.106.2 (the newest) requires filelock<4.0, so the lock cannot bump.
-# All three advisories are Windows-only (SoftFileLock oplock timeout;
-# ReadWriteLock SQLite side-file handling); runtime and CI run Linux.
+# The first three advisories (112907/112913/112940) are Windows-only; the
+# 2026-10-31 batch (112908–112939) are POSIX local multi-user races — an
+# attacker needs an untrusted account racing on the lock path, which the
+# single-user container and CI filesystem never expose.
 # Remove once a litellm release allows filelock>=4.2.1.
+#
+# pyasn1 0.6.4 — four quadratic-complexity DoS advisories fixed in 0.6.5,
+# but 0.6.5 was released 2026-10-27 and fails the 7-day release-age gate in
+# scripts/regen_deps.sh. Remove these entries and regen the locks once
+# 0.6.5 ages past the gate (~2026-11-03).
 PYSEC-2026-4327
+PYSEC-2026-4332
 CVE-2026-112907
 CVE-2026-112913
 CVE-2026-112940
+CVE-2026-112908
+CVE-2026-112909
+CVE-2026-112910
+CVE-2026-112911
+CVE-2026-112912
+CVE-2026-112915
+CVE-2026-112935
+CVE-2026-112936
+CVE-2026-112938
+CVE-2026-112939
+CVE-2026-119194
+CVE-2026-119195
+CVE-2026-119196
+CVE-2026-119197
 CVE-2026-112390
 CVE-2026-112391
 CVE-2026-112392
