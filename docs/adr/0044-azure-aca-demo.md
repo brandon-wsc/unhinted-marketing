@@ -30,8 +30,8 @@ environment containing the same four roles as the compose package:
 |-------------------------|--------------------|-------|
 | `web` app — external ingress :80 | `web` | Stock GHCR nginx image; minReplicas=0 |
 | `api` app — internal ingress :8000 | `api` | Not reachable from the internet; minReplicas=0 |
-| `scheduler` app — no ingress | `scheduler` | maxReplicas=1; minReplicas=0 (scale to zero) |
-| `worker` app — no ingress | `worker` | maxReplicas=1; minReplicas=0 (scale to zero) |
+| `scheduler` **Job** (Schedule trigger) | `scheduler` | Cron `*/15 * * * *` → `cmd.scheduler --once`; bucket dedupe keys make each tick idempotent |
+| `worker` app — no ingress | `worker` | maxReplicas=1; KEDA `postgresql` scaler on the `jobs` table (see §6) |
 | `migrate` **Job** (Manual trigger) | `migrate` one-shot | `alembic upgrade head`, started by the post-provision hook |
 
 Postgres is **external** — `DATABASE_URL` points at Neon (or any managed
@@ -71,12 +71,43 @@ Customer installs stay on the compose packages + release compose assets
 `IMAGE_TAG` pins a release (`v*`) while the floating `onprem` tag tracks the
 latest release.
 
+### 6. No-ingress apps cannot scale to zero — worker is kick-activated
+
+A bare `minReplicas: 0` only works for apps with ingress — ACA has no
+metric to evaluate for background apps, so the replica stays up. (The
+first billing month proved this: worker + scheduler ran 24/7 at
+~USD 3.3/day.) Two fixes, one per role:
+
+- `worker` gains **internal ingress on the kick listener** (`KICK_PORT`
+  9100, `allowInsecure`), implementing ADR 0058 §9's kick-activated
+  worker: an enqueue commit's fire-and-forget `POST /kick` scales it
+  0→1; an idle replica returns to 0 on the HTTP-scaler cooldown.
+  `WORKER_KICK_URL` is wired on `api` and the scheduler job (to the
+  worker's internal FQDN) and on the worker itself via loopback so jobs
+  enqueued mid-drain re-arm the drain timer. `WORKER_LISTEN_ENABLED=false`
+  + `WORKER_SWEEP_SECONDS=3600` per 0058's Neon-keep-awake policy —
+  this is also why the KEDA `postgresql` scaler is *not* used: its ~30s
+  query cadence would hold the scale-to-zero database awake.
+  `terminationGracePeriodSeconds: 600` lets an in-flight job finish on
+  scale-down; anything longer leaves a stale `running` lease for the
+  next replica's reclaim sweep. Deferred jobs becoming due while the
+  worker sleeps stall to the next enqueue kick — the hourly hot tick or
+  a user action (ADR 0058 §9 accepts this bound for the demo).
+- `scheduler` becomes a scheduled ACA Job (`triggerType: 'Schedule'`,
+  cron `*/15 * * * *`) running `cmd.scheduler --once` — the documented
+  exit from ADR 0058 §9, taken here: it only enqueues deduped rows, so
+  cron granularity just bounds how late a rolled interval bucket lands.
+  Costs ~USD 0. Side effect: `SCHEDULER_KICK_URL` has no listener, so
+  instance-settings scheduler edits apply on the next cron tick (≤15 min)
+  instead of ADR 0050's ~1 minute — accepted for a demo.
+
 ## Consequences
 
 - `azd up` is the whole bring-up; `azd down` tears it down. Cost is driven by
-  replica-hours — web/api/scheduler/worker all use minReplicas=0 (scale to
-  zero when idle) to cut demo cost; maxReplicas stays 1. Expect cold starts
-  on first request after idle.
+  replica-hours — web/api scale to zero on ingress idle; the worker scales to
+  zero on the jobs-queue scaler and the scheduler only exists as cron
+  executions (§6). Expect cold starts on first request/job after idle —
+  first queued job pays ~1–2 min of Python + FastEmbed warmup.
 - First boot seeds `instance_settings` from `WEB_BASE_URL` (ADR 0026) — set
   it to the final public URL before the first boot or fix it later in
   Platform → Instance.

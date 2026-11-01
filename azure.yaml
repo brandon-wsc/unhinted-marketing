@@ -1,7 +1,9 @@
 # azd project — Azure Container Apps demo deploy (ADR 0044).
-# All four services use the published GHCR release images as-is
+# All services use the published GHCR release images as-is
 # (imagePassthrough — no build, no ACR copy). `azd up` provisions
 # infra/ then re-asserts the image refs; `azd provision` alone is enough.
+# The scheduler is NOT an azd service: it is a scheduled ACA Job
+# (cron trigger → `cmd.scheduler --once`), created by infra/main.bicep.
 name: unhinted-marketing
 infra:
   provider: bicep
@@ -19,11 +21,6 @@ services:
     docker:
       imagePassthrough: true
   worker:
-    host: containerapp
-    image: ghcr.io/brandon-wsc/unhinted-api:onprem
-    docker:
-      imagePassthrough: true
-  scheduler:
     host: containerapp
     image: ghcr.io/brandon-wsc/unhinted-api:onprem
     docker:

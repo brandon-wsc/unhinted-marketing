@@ -173,7 +173,9 @@ deployment:
      deferred: convert it to an **ACA scheduled job** running the existing
      `cmd.scheduler` once-mode (`run_scheduler(once=True)` already exists)
      on cron — zero resident cost, but ADR 0050's ~1-minute settings
-     apply degrades to next-cron.
+     apply degrades to next-cron. **(Taken 2026-11-01 — the live ACA
+     scheduler is now a `Schedule`-trigger Job on `*/15 * * * *`; see ADR
+     0044 §6.)**
    - Wiring: api + scheduler get `WORKER_KICK_URL`; api gets
      `SCHEDULER_KICK_URL`; worker + scheduler get `KICK_PORT`;
      `WORKER_SWEEP_SECONDS=3600` on the demo env.
