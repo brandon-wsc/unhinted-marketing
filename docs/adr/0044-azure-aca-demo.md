@@ -37,7 +37,7 @@ environment containing the same four roles as the compose package:
 Postgres is **external** — `DATABASE_URL` points at Neon (or any managed
 Postgres with `vector`). There is no bundled `db` resource. The direct
 endpoint is required, not a transaction-mode pooler: the worker claims jobs
-with `FOR UPDATE SKIP LOCKED` and asyncpg caches prepared statements.
+with `FOR UPDATE SKIP LOCKED` and the drivers cache prepared statements.
 
 ### 2. Secrets are ACA secrets, not AUTO_SECRETS
 

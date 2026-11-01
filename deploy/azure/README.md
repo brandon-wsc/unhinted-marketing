@@ -22,17 +22,22 @@ Estimated cost: ~USD 10–20/mo (East Asia) — web/api scale to zero on ingress
 
 - `az` + `azd` (`brew install azure-cli azd`), logged in: `azd auth login`
 - **Neon project** (free tier fine). Any managed Postgres with the `vector` extension works — migrations run `CREATE EXTENSION IF NOT EXISTS vector`.
-  - Use the **direct endpoint**, not the `-pooler` host (PgBouncer transaction mode breaks asyncpg prepared statements and row-level locking).
-  - The SQLAlchemy URL needs the **asyncpg** form:
-    `postgresql+asyncpg://USER:PASS@ep-xxxx.ap-southeast-1.aws.neon.tech/unhinted?ssl=require`
-    — Neon prints `?sslmode=require&channel_binding=require`; asyncpg does not accept `sslmode`, swap it for `ssl=require`.
+  - Use the **direct endpoint**, not the `-pooler` host (PgBouncer transaction mode breaks prepared statements and row-level locking).
+  - Keep the URL in the **psycopg** form — exactly what Neon prints:
+    `postgresql://USER:PASS@ep-xxxx.ap-southeast-1.aws.neon.tech/unhinted?sslmode=require&channel_binding=require`
+    Do NOT rewrite it to `postgresql+asyncpg://…?ssl=require`: SQLAlchemy then
+    speaks asyncpg (fine), but the LangGraph checkpointer strips the scheme
+    to `postgresql://` and psycopg rejects the `ssl` option — sessions and
+    `alembic` break with `invalid connection option "ssl"`. The bare
+    `postgresql://` + `sslmode=require` form works for every driver in the
+    app (psycopg, asyncpg ≥0.29, psycopg_pool).
 - GHCR packages public (one-time repo-owner step, see `deploy/README.md`), or add registry credentials to the apps in `infra/main.bicep`.
 
 ## Deploy
 
 ```bash
 azd env new unhinted-demo          # pick subscription + location (e.g. eastasia)
-azd env set DATABASE_URL    'postgresql+asyncpg://...@ep-....neon.tech/unhinted?ssl=require'
+azd env set DATABASE_URL    'postgresql://...@ep-....neon.tech/unhinted?sslmode=require'
 azd env set JWT_SECRET      "$(openssl rand -base64 48)"
 azd env set BYOK_ENCRYPTION_KEY "$(python3 -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')"
 azd env set WEB_BASE_URL    'https://demo.unhinted.hk'   # planned public URL
