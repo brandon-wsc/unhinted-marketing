@@ -18,7 +18,7 @@ param environmentName string
 param location string = resourceGroup().location
 
 @secure()
-@description('postgresql+asyncpg:// URL of the external Postgres (Neon). Use the direct endpoint, not the -pooler host.')
+@description('postgresql:// URL of the external Postgres (Neon) — psycopg form with ?sslmode=require. Use the direct endpoint, not the -pooler host; do not rewrite to postgresql+asyncpg:// (the psycopg checkpointer would reject ssl=require).')
 param databaseUrl string
 
 @secure()
