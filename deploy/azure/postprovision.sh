@@ -8,8 +8,11 @@
 #   1. Upload the nginx upstream template to the nginx-conf Files share and
 #      restart the web revision (the share mounts at /etc/nginx/templates —
 #      the first revision may have started before the file existed).
-#   2. Run the migrate job (alembic upgrade head) and wait for it.
-#   3. Print the URLs and the custom-domain next step.
+#   2. Remove the legacy always-on scheduler Container App if present —
+#      incremental provision does not delete resources dropped from the
+#      template; the scheduler now runs as a scheduled Job (same name).
+#   3. Run the migrate job (alembic upgrade head) and wait for it.
+#   4. Print the URLs and the custom-domain next step.
 set -e
 
 RG="${RESOURCE_GROUP_NAME:?bicep output RESOURCE_GROUP_NAME missing}"
@@ -30,6 +33,12 @@ echo "==> Restarting latest web revision to pick up the template"
 REV="$(az containerapp revision list -g "$RG" -n "$WEB" \
   --query 'sort_by(@, &properties.createdTime)[-1].name' -o tsv)"
 az containerapp revision restart -g "$RG" -n "$WEB" --revision "$REV" -o none
+
+ENV_NAME="${MANAGED_ENV_NAME#cae-}"
+if az containerapp show -g "$RG" -n "${ENV_NAME}-scheduler" -o none 2>/dev/null; then
+  echo "==> Removing legacy scheduler Container App '${ENV_NAME}-scheduler' (now a scheduled Job)"
+  az containerapp delete -g "$RG" -n "${ENV_NAME}-scheduler" --yes -o none
+fi
 
 echo "==> Running migrate job '$JOB' (alembic upgrade head)"
 az containerapp job start -g "$RG" -n "$JOB" -o none

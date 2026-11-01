@@ -7,12 +7,16 @@ demo.unhinted.hk ──HTTPS──▶ web (nginx :80, external ingress)
                                 │ /api → http://<api>.internal.<env> (port 80 → 8000)
                                 ▼
                             api (internal ingress :8000)
-   scheduler + worker (no ingress, replicas=1)   migrate (Manual job → alembic)
+   worker (internal ingress /kick only; scales 0→1 on enqueue kicks — ADR 0058)
+   scheduler (scheduled Job, cron */15m → cmd.scheduler --once)
+   migrate (Manual job → alembic)
                                 │
    Neon Postgres (DATABASE_URL) · Azure Files appdata → /app/data (media)
 ```
 
-Estimated cost: ~USD 35–65/mo (East Asia) — ACA consumption mostly idle + Neon free tier + ~2 GB Files. Egress under 100 GB/mo is free.
+Estimated cost: ~USD 10–20/mo (East Asia) — web/api scale to zero on ingress, the worker scales to zero via kick-activated ingress (ADR 0058), the scheduler runs only on its cron tick. Neon free tier + ~2 GB Files + Log Analytics ingestion are the rest. Egress under 100 GB/mo is free.
+
+> **Why not bare `minReplicas: 0`?** ACA only honors scale-to-zero on apps it can scale — ingress traffic or an explicit KEDA rule. A no-ingress app with `minReplicas: 0` and no rules just stays up. The Oct 2026 bill (~$3.3/day ≈ $99/mo run rate) was almost entirely the worker + scheduler running 24/7. The worker now has internal ingress on `/kick` so enqueue commits wake it (ADR 0058 §9); the scheduler became a scheduled Job. A KEDA `postgresql` scaler was deliberately *not* used — its ~30s query cadence would keep the scale-to-zero Neon compute awake (ADR 0058 §4/Alternatives).
 
 ## Prerequisites
 
@@ -67,6 +71,10 @@ az containerapp logs show -g rg-unhinted-demo -n unhinted-demo-worker --follow
 # Re-run migrations after pulling a newer image tag
 az containerapp job start -g rg-unhinted-demo -n unhinted-demo-migrate
 
+# Force a scheduler tick now instead of waiting for the cron
+az containerapp job start -g rg-unhinted-demo -n unhinted-demo-scheduler
+az containerapp job execution list -g rg-unhinted-demo -n unhinted-demo-scheduler -o table
+
 # Update to a newer release tag
 azd env set IMAGE_TAG v1.2.3 && azd up
 
@@ -80,7 +88,10 @@ azd down    # tear everything in the resource group down
 ## Notes
 
 - **`DEPLOYMENT_MODE=onprem` stays** — this is a self-hosted install that happens to run on Azure (first-run `/setup`, local media on the shared Files volume). Cloud mode would require S3 (ADR 0023/0024); Azure Blob is not S3-compatible.
-- **scheduler / worker are pinned to 1 replica** — the job queue is Postgres `FOR UPDATE SKIP LOCKED` (ADR 0039), safe to scale later but pointless for a demo.
+- **worker wake + drain semantics** — an enqueue commit posts a fire-and-forget `POST /kick` to the worker's internal ingress; cold start + FastEmbed warmup means the first claim after idle lands ~1–3 min late. An idle replica scales to 0 on the HTTP-scaler cooldown; a mid-drain scale-down sends SIGTERM and `terminationGracePeriodSeconds: 600` lets the in-flight job finish — anything longer stays `running` until the next replica's 15-min reclaim sweep returns it to `pending`. Deferred jobs (retry backoff, questions jitter) due while the worker sleeps stall to the next enqueue kick (hourly hot tick or user action).
+- **settings edits** — `SCHEDULER_KICK_URL` has no listener now, so Platform scheduler interval edits apply on the next cron tick (≤15 min), not ADR 0050's ~1 min.
+- **worker is a singleton** — `maxReplicas: 1`; the queue is Postgres `FOR UPDATE SKIP LOCKED` (ADR 0039), safe to raise later but pointless for a demo.
+- **kick activator spike (ADR 0058 §9)** — unverified whether ACA still boots a replica when the kicking client abandons on its 10 s timeout (cold start can exceed it). Watch for a stalled queue on the first demo run; if kicks don't activate, fall back is `worker minReplicas: 1` or raising the kick timeout in `internal/memory/wake.py`.
 - **Secrets** are ACA secrets (`secretRef`), not `AUTO_SECRETS` — there is no shared `appdata/.secrets.env` trick across apps.
 - **nginx upstream**: the stock web image hardcodes `proxy_pass http://api:8000`. ACA internal ingress listens on port 80, so `deploy/azure/nginx/default.conf.template` is uploaded to the `nginx-conf` share and mounted at `/etc/nginx/templates` — the stock nginx entrypoint envsubsts it at container start. No rebuild.
 - **Two ACA routing gotchas** (both handled in the template + bicep): internal ingress routes by **Host header** — send `Host $proxy_host`, not the public `$host` or it 404s "app does not exist"; and `allowInsecure:false` 301s HTTP→HTTPS, which `proxy_pass` won't follow — api's ingress sets `allowInsecure: true` (internal hop is plain HTTP; TLS terminates at web's external ingress).

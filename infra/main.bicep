@@ -232,7 +232,11 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'api'
           image: apiImage
-          env: backendEnv
+          env: concat(
+            backendEnv,
+            // ADR 0058 — enqueue commits kick the worker's ingress awake.
+            [{ name: 'WORKER_KICK_URL', value: workerKickUrl }]
+          )
           resources: { cpu: json('1.0'), memory: '2Gi' }
           volumeMounts: [appdataMount]
           probes: [
@@ -305,31 +309,57 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-// ── scheduler + worker (no ingress; singleton replicas — ADR 0039) ─────────
-
-resource schedulerApp 'Microsoft.App/containerApps@2024-03-01' = {
+// ── scheduler (scheduled Job) + worker (queue-scaled) — ADR 0039 ──────────
+//
+// The scheduler only enqueues deduped job rows, so an always-on replica is
+// pure burn: a scheduled ACA Job runs `cmd.scheduler --once` every 15 min —
+// the per-bucket dedupe_key makes each tick idempotent, so the cron cadence
+// just bounds how late a rolled interval bucket lands (≤15 min on top of the
+// configured intervals). Costs ~$0; nothing to scale.
+resource schedulerJob 'Microsoft.App/jobs@2024-03-01' = {
   name: '${environmentName}-scheduler'
   location: location
-  tags: union(tags, { 'azd-service-name': 'scheduler' })
-  dependsOn: [appdataStorage]
+  tags: tags
   properties: {
-    managedEnvironmentId: managedEnv.id
-    configuration: { secrets: backendSecrets }
+    environmentId: managedEnv.id
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 300
+      replicaRetryLimit: 1
+      scheduleTriggerConfig: {
+        cronExpression: '*/15 * * * *'
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+      secrets: backendSecrets
+    }
     template: {
       containers: [
         {
           name: 'scheduler'
           image: apiImage
-          command: ['python', '-m', 'cmd.scheduler']
-          env: backendEnv
+          command: ['python', '-m', 'cmd.scheduler', '--once']
+          // Its enqueued rows kick the worker awake — without this, periodic
+          // jobs would wait for the next unrelated kick to be claimed.
+          env: concat(backendEnv, [{ name: 'WORKER_KICK_URL', value: workerKickUrl }])
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
         }
       ]
-      scale: { minReplicas: 0, maxReplicas: 1 }
     }
   }
 }
 
+// Worker: kick-activated (ADR 0058 §9). Internal ingress exposes only the
+// /kick listener — a bare minReplicas:0 could never scale down without
+// ingress; now an enqueue commit's fire-and-forget POST wakes 0→1 and an
+// idle replica returns to 0 after the HTTP-scaler cooldown. A mid-drain
+// scale-down SIGTERMs the serve loop, which finishes the in-flight job
+// inside terminationGracePeriodSeconds; anything longer leaves a stale
+// `running` lease the next replica's reclaim sweep returns to pending.
+// Deferred jobs becoming due while the worker sleeps stall until the next
+// kick — bounded by the scheduler cron tick (ADR 0058 §9, accepted).
+// WORKER_KICK_URL targets itself via loopback: jobs enqueued mid-drain
+// (embed reschedule) re-arm the drain timer without leaving the box.
 resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${environmentName}-worker'
   location: location
@@ -337,14 +367,32 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
   dependsOn: [appdataStorage]
   properties: {
     managedEnvironmentId: managedEnv.id
-    configuration: { secrets: backendSecrets }
+    configuration: {
+      secrets: backendSecrets
+      ingress: {
+        external: false
+        targetPort: 9100
+        transport: 'auto'
+        // Plain HTTP inside the env — same rationale as the api app.
+        allowInsecure: true
+      }
+    }
     template: {
+      terminationGracePeriodSeconds: 600
       containers: [
         {
           name: 'worker'
           image: apiImage
           command: ['python', '-m', 'cmd.worker', 'serve']
-          env: backendEnv
+          env: concat(
+            backendEnv,
+            [
+              { name: 'KICK_PORT', value: '9100' }
+              { name: 'WORKER_LISTEN_ENABLED', value: 'false' }
+              { name: 'WORKER_SWEEP_SECONDS', value: '3600' }
+              { name: 'WORKER_KICK_URL', value: 'http://localhost:9100' }
+            ]
+          )
           resources: { cpu: json('1.0'), memory: '2Gi' }
           volumeMounts: [appdataMount]
         }
@@ -354,6 +402,8 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
     }
   }
 }
+
+var workerKickUrl = 'http://${workerApp.properties.configuration.ingress.fqdn}'
 
 // ── migrate (Manual job; started by deploy/azure/postprovision.sh) ─────────
 
