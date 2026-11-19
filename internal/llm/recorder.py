@@ -99,7 +99,7 @@ class LlmCallRecordBuilder:
             self.ttft_ms = int((time.monotonic() - self._started_mono) * 1000)
 
     def set_usage(self, usage: Any) -> None:
-        """Accept LiteLLM or Pydantic AI usage (object or dict)."""
+        """Accept LiteLLM / LangChain / provider usage (object or dict)."""
         if usage is None:
             return
         prompt = _usage_int(usage, "prompt_tokens")
@@ -118,7 +118,7 @@ class LlmCallRecordBuilder:
         # Prompt-cache hits — provider shapes differ; first non-None wins.
         # LiteLLM/DeepSeek: prompt_cache_hit_tokens; OpenAI:
         # prompt_tokens_details.cached_tokens; Anthropic:
-        # cache_read_input_tokens; pydantic-ai: cache_read_tokens.
+        # cache_read_input_tokens; legacy pydantic-ai: cache_read_tokens.
         cached = _usage_int(usage, "prompt_cache_hit_tokens")
         if cached is None:
             details = (

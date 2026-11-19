@@ -6,10 +6,8 @@ import json
 import logging
 from typing import Any
 
+from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent
-from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
-from pydantic_ai.models import Model
 
 from internal.llm.recorder import track
 from internal.llm.router import LlmProviderError, ModelTier
@@ -17,7 +15,7 @@ from internal.session import harness as H
 
 logger = logging.getLogger(__name__)
 
-_model_override: Model | None = None
+_model_override: BaseChatModel | None = None
 
 # Short extract of docs/VOICE.md — keep this file, not internal/session/prompts.py.
 VOICE_JUDGE_SYSTEM = """You score one Hong Kong zh-HK Instagram caption for Unhinted.
@@ -70,8 +68,8 @@ class VoiceJudgeOut(BaseModel):
         }
 
 
-def set_voice_judge_model_override(model: Model | None) -> None:
-    """Test hook: inject TestModel. Pass None to restore live."""
+def set_voice_judge_model_override(model: BaseChatModel | None) -> None:
+    """Test hook: inject a scripted chat model. Pass None to restore live."""
     global _model_override
     _model_override = model
 
@@ -139,13 +137,10 @@ async def judge_draft(
     brief: str = "",
 ) -> VoiceJudgeOut | None:
     """Score a draft caption. None = parse miss (caller must fail the case)."""
-    model = _model_override or H.live_harness_model(ModelTier.CHEAP)
-    agent: Agent[None, VoiceJudgeOut] = Agent(
-        model,
-        output_type=VoiceJudgeOut,
-        system_prompt=VOICE_JUDGE_SYSTEM,
-        name="eval_voice_judge",
-    )
+    if _model_override is not None:
+        chat, label = _model_override, H.model_label(_model_override)
+    else:
+        chat, label = H.live_lc_model(ModelTier.CHEAP)
     user = json.dumps(
         {
             "caption": caption,
@@ -159,26 +154,25 @@ async def judge_draft(
         with track(
             kind="chat_json",
             tier=ModelTier.CHEAP,
-            model=H._model_label(model),
+            model=label,
             system=VOICE_JUDGE_SYSTEM,
             user=user,
         ) as rec:
-            result = await agent.run(user)
-            usage = getattr(result, "usage", None)
-            rec.set_usage(usage() if callable(usage) else usage)
-            output = result.output
-            if isinstance(output, VoiceJudgeOut):
-                parsed = output
-            elif isinstance(output, dict):
-                parsed = VoiceJudgeOut.model_validate(output)
-            else:
+            parsed = await H.run_lc_tool_loop(
+                chat=chat,
+                system=VOICE_JUDGE_SYSTEM,
+                user_prompt=user,
+                deps=None,
+                tools=[],
+                out_type=VoiceJudgeOut,
+                rec=rec,
+            )
+            if parsed is None:
                 return None
             rec.response_text = parsed.model_dump_json()
             return parsed
     except LlmProviderError:
         raise
-    except (ModelHTTPError, ModelAPIError) as exc:
-        raise H._wrap_provider_error(exc) from exc
     except Exception:
         logger.exception("voice judge failed")
         return None

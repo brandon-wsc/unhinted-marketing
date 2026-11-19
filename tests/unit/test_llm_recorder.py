@@ -210,7 +210,7 @@ def test_set_usage_cached_tokens_provider_shapes() -> None:
     rec.set_usage({"cache_read_input_tokens": 55})
     assert rec.cached_tokens == 55
 
-    # pydantic-ai RequestUsage/RunUsage.
+    # Objects exposing cache_read_tokens still map (pydantic-ai-era shape).
     rec = recorder.LlmCallRecordBuilder(kind="chat_json")
     rec.set_usage(SimpleNamespace(cache_read_tokens=9))
     assert rec.cached_tokens == 9

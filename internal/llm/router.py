@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
+import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from enum import Enum
 from typing import Any
 
@@ -27,7 +29,7 @@ import httpx
 
 from internal.config import settings
 from internal.llm.image_api import post_dedicated_image, resolve_compat_image_api
-from internal.llm.recorder import track
+from internal.llm.recorder import LlmCallRecordBuilder, track
 from internal.llm.resolve import (
     bundle_has_credentials,
     effective_api_base,
@@ -215,7 +217,7 @@ async def _vertex_astream_text(
             raise _wrap_google_genai_error(exc, model=model) from exc
         raise
     finally:
-        await _aclose_stream(stream)
+        await aclose_stream(stream)
 
 
 async def _vertex_complete_text(
@@ -459,7 +461,7 @@ def _is_provider_failure(exc: BaseException) -> bool:
     )
 
 
-async def _aclose_stream(stream: Any) -> None:
+async def aclose_stream(stream: Any) -> None:
     """Best-effort close of a LiteLLM/httpx streaming response (Stop / cancel)."""
     if stream is None:
         return
@@ -518,7 +520,380 @@ async def _astream_completion(
             raise _wrap_provider_error(exc, model=model) from exc
         raise
     finally:
-        await _aclose_stream(response)
+        await aclose_stream(response)
+
+
+def _lc_model_id(resolved: Any) -> str:
+    """API model id for the LangChain path (mirrors ``live_harness_model``)."""
+    api_base = effective_api_base(resolved.provider_type, resolved.api_base)
+    if resolved.provider_type == "openai_compatible" or api_base:
+        return openai_compat_model_id(resolved.model_id)
+    return resolved.model_id.split("/")[-1]
+
+
+def _lc_chat_model(
+    resolved: Any, *, temperature: float | None, json_mode: bool = False
+) -> tuple[Any, str] | None:
+    """``(ChatModel, model_label)`` for the LangChain path, else ``None``.
+
+    Deliberately narrow (ADR 0060 §5): only ``openai``/``openai_compatible``
+    (any api_base) run on LangChain here. ``anthropic`` + AI-Studio ``gemini``
+    stay on litellm and ``vertex_ai`` keeps the hand-rolled api_key-only path
+    (ADR 0021 §4) — the full provider map lives in ``lc_harness_model`` for
+    the session harnesses.
+    """
+    if resolved.provider_type not in ("openai", "openai_compatible"):
+        return None
+    try:
+        from langchain_openai import ChatOpenAI
+    except ImportError:
+        return None
+    api_base = effective_api_base(resolved.provider_type, resolved.api_base)
+    model = _lc_model_id(resolved)
+    chat = ChatOpenAI(
+        model=model,
+        api_key=resolved.api_key or "not-set",
+        base_url=api_base,
+        temperature=temperature,
+        timeout=settings.llm_timeout_seconds,
+        stream_usage=True,
+        max_retries=0,
+        model_kwargs=({"response_format": {"type": "json_object"}} if json_mode else {}),
+    )
+    return chat, model
+
+
+def lc_harness_model(resolved: Any) -> tuple[Any, str]:
+    """``(ChatModel, model_label)`` for the session harnesses — full provider coverage.
+
+    Mirrors the retired ``live_harness_model`` branch order: gemini/vertex
+    first, compat/api_base second, claude-by-name third, plain openai last.
+    ``vertex_ai`` rides the genai SDK's Express mode (``vertexai=True`` +
+    api_key — ADR 0021 §4). Raises ``LlmProviderError`` when the matching
+    langchain package is absent.
+    """
+    lowered = resolved.model_id.lower()
+    if resolved.provider_type in ("gemini", "vertex_ai"):
+        model = gemini_catalog_id(resolved.model_id)
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+        except ImportError as exc:
+            raise LlmProviderError(
+                "Gemini / Vertex Express session harness needs "
+                "langchain-google-genai (pip install langchain-google-genai).",
+                model=model,
+                kind="unsupported",
+            ) from exc
+        chat = ChatGoogleGenerativeAI(
+            model=model,
+            google_api_key=resolved.api_key or "not-set",
+            vertexai=resolved.provider_type == "vertex_ai",
+            timeout=settings.llm_timeout_seconds,
+            max_retries=0,
+        )
+        return chat, model
+    api_base = effective_api_base(resolved.provider_type, resolved.api_base)
+    if resolved.provider_type == "openai_compatible" or api_base:
+        lc = _lc_chat_model(resolved, temperature=None)
+        if lc is None:
+            raise LlmProviderError(
+                "OpenAI-compatible session harness needs langchain-openai.",
+                model=resolved.model_id,
+                kind="unsupported",
+            )
+        return lc
+    if (
+        resolved.provider_type == "anthropic"
+        or "claude" in lowered
+        or lowered.startswith("anthropic")
+    ):
+        model = resolved.model_id.split("/")[-1]
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError as exc:
+            raise LlmProviderError(
+                "Anthropic session harness needs langchain-anthropic "
+                "(pip install langchain-anthropic).",
+                model=model,
+                kind="unsupported",
+            ) from exc
+        chat = ChatAnthropic(
+            model=model,
+            api_key=resolved.api_key,
+            timeout=settings.llm_timeout_seconds,
+            max_retries=0,
+        )
+        return chat, model
+    if not resolved.api_key:
+        raise LlmProviderError(
+            "No OpenAI-compatible key for the session harness.",
+            model=resolved.model_id,
+            kind="auth",
+        )
+    lc = _lc_chat_model(resolved, temperature=None)
+    if lc is None:
+        raise LlmProviderError(
+            "OpenAI session harness needs langchain-openai.",
+            model=resolved.model_id,
+            kind="unsupported",
+        )
+    return lc
+
+
+def wrap_lc_error(exc: BaseException, *, model: str) -> LlmProviderError:
+    """Map provider-SDK / LangChain exceptions onto ``LlmProviderError`` kinds."""
+    try:
+        import anthropic
+    except ImportError:  # pragma: no cover — optional provider extra
+        anthropic = None  # type: ignore[assignment]
+    if anthropic is not None:
+        if isinstance(exc, anthropic.APITimeoutError):
+            return LlmProviderError(
+                f"LLM timed out talking to {model}. Check network and that the model is reachable.",
+                model=model,
+                kind="timeout",
+            )
+        if isinstance(exc, anthropic.APIConnectionError):
+            return LlmProviderError(
+                f"Could not connect to LLM endpoint for {model}. Check LLM_API_BASE / network.",
+                model=model,
+                kind="connection",
+            )
+        if isinstance(exc, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+            return LlmProviderError(
+                f"LLM authentication failed for {model}. Check the provider API key.",
+                model=model,
+                kind="auth",
+            )
+        if isinstance(exc, anthropic.RateLimitError):
+            return LlmProviderError(
+                f"LLM rate limit hit for {model}. Try again shortly.",
+                model=model,
+                kind="rate_limit",
+            )
+        if isinstance(exc, anthropic.NotFoundError):
+            return LlmProviderError(
+                f"Model {model} was not found. Check the model id.",
+                model=model,
+                kind="unsupported",
+            )
+        if isinstance(exc, anthropic.BadRequestError):
+            return LlmProviderError(
+                f"LLM rejected the request for {model} (bad model id or unsupported params). Check LLM_*_MODEL.",
+                model=model,
+                kind="bad_request",
+            )
+    try:
+        from google.genai.errors import APIError as GoogleAPIError
+    except ImportError:  # pragma: no cover — optional provider extra
+        GoogleAPIError = None  # type: ignore[assignment, misc]
+    if GoogleAPIError is not None and isinstance(exc, GoogleAPIError):
+        return _wrap_google_genai_error(exc, model=model)
+    try:
+        import openai
+    except ImportError:  # pragma: no cover — openai ships with litellm
+        return _wrap_provider_error(exc, model=model)
+    if isinstance(exc, openai.APITimeoutError):
+        return LlmProviderError(
+            f"LLM timed out talking to {model}. Check network, LLM_API_BASE, and that the model is reachable.",
+            model=model,
+            kind="timeout",
+        )
+    if isinstance(exc, openai.APIConnectionError):
+        return LlmProviderError(
+            f"Could not connect to LLM endpoint for {model}. Check LLM_API_BASE / network.",
+            model=model,
+            kind="connection",
+        )
+    if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
+        return LlmProviderError(
+            f"LLM authentication failed for {model}. Check OPENAI_API_KEY (or provider key).",
+            model=model,
+            kind="auth",
+        )
+    if isinstance(exc, openai.RateLimitError):
+        return LlmProviderError(
+            f"LLM rate limit hit for {model}. Try again shortly.",
+            model=model,
+            kind="rate_limit",
+        )
+    if isinstance(exc, openai.NotFoundError):
+        return LlmProviderError(
+            f"Model {model} was not found. Check the model id.",
+            model=model,
+            kind="unsupported",
+        )
+    if isinstance(exc, openai.BadRequestError):
+        return LlmProviderError(
+            f"LLM rejected the request for {model} (bad model id or unsupported params). Check LLM_*_MODEL.",
+            model=model,
+            kind="bad_request",
+        )
+    return _wrap_provider_error(exc, model=model)
+
+
+def map_lc_error(exc: BaseException, *, model: str) -> BaseException:
+    """Map a LangChain-seam exception — ADR 0060 §3 error contract.
+
+    Framework cancellation (``concurrent.futures.CancelledError`` from a
+    wrapped ``run_in_executor`` call) maps to ``CancelledError``; everything
+    else wraps to ``LlmProviderError``.
+    """
+    if isinstance(exc, concurrent.futures.CancelledError):
+        return asyncio.CancelledError()
+    return wrap_lc_error(exc, model=model)
+
+
+def _lc_token_count(
+    chat: Any,
+    messages: Sequence[Any] = (),
+    text: str = "",
+) -> int | None:
+    """Token count via the model's counters, then a per-content fallback.
+
+    ``get_num_tokens_from_messages`` hard-raises on model ids it does not
+    know (any OpenAI-compatible slug like ``deepseek/...``), while plain
+    ``get_num_tokens`` maps them to a generic encoding — so a failed message
+    count falls back to counting each message's content (and tool-call args).
+    """
+    try:
+        if messages:
+            return int(chat.get_num_tokens_from_messages(list(messages)))
+        if text:
+            return int(chat.get_num_tokens(text))
+        return 0
+    except Exception:
+        logger.debug("lc message token count failed; per-content fallback", exc_info=True)
+    try:
+        total = 0
+        for message in messages:
+            content = getattr(message, "content", "")
+            if isinstance(content, str) and content:
+                total += int(chat.get_num_tokens(content))
+            for call in getattr(message, "tool_calls", None) or []:
+                args = call.get("args") if isinstance(call, dict) else getattr(call, "args", None)
+                if args:
+                    total += int(chat.get_num_tokens(json.dumps(args, ensure_ascii=False)))
+        if text:
+            total += int(chat.get_num_tokens(text))
+        return total
+    except Exception:  # noqa: BLE001 — best-effort estimate
+        return None
+
+
+def estimate_lc_usage(
+    chat: Any,
+    prompt_messages: Sequence[Any],
+    *,
+    completion_messages: Sequence[Any] = (),
+    completion_text: str = "",
+) -> dict[str, int] | None:
+    """Client-side usage estimate when a provider returns no usage.
+
+    LiteLLM used to fill usage client-side when a stream carried no usage
+    chunk; LangChain only reports what the provider sends, so providers that
+    ignore ``include_usage`` record NULL token counts — under-counting
+    llm_call_records and under-enforcing the ADR 0041 member cap. Returns
+    ``None`` when the model cannot count tokens locally.
+    """
+    prompt = _lc_token_count(chat, prompt_messages)
+    if prompt is None:
+        return None
+    if completion_messages:
+        output = _lc_token_count(chat, completion_messages)
+    else:
+        output = _lc_token_count(chat, text=completion_text)
+    output = output or 0
+    return {
+        "input_tokens": prompt,
+        "output_tokens": output,
+        "total_tokens": prompt + output,
+    }
+
+
+async def _lc_astream_text(
+    *,
+    chat: Any,
+    model: str,
+    system: str,
+    user: str,
+    usage_sink: Any = None,
+    on_first_token: Any = None,
+) -> AsyncIterator[str]:
+    """Yield text deltas from a LangChain chat model; aclose on cancel.
+
+    ``_astream_completion`` equivalent on ``BaseChatModel.astream``: usage
+    rides trailing chunks (``usage_metadata`` as input_/output_/total_tokens),
+    the first non-empty delta marks first token, and closing the generator
+    aborts the HTTP stream (``astream`` holds it inside ``async with``).
+    """
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    messages = [SystemMessage(content=system), HumanMessage(content=user)]
+    agen: Any = None
+    first = True
+    saw_chunk = False
+    saw_usage = False
+    parts: list[str] = []
+    try:
+        agen = chat.astream(messages)
+        async for chunk in agen:
+            saw_chunk = True
+            usage = getattr(chunk, "usage_metadata", None)
+            if usage_sink is not None and usage:
+                saw_usage = True
+                usage_sink(usage)
+            piece = chunk.content if isinstance(chunk.content, str) else ""
+            if piece:
+                parts.append(piece)
+                if first:
+                    first = False
+                    if on_first_token is not None:
+                        on_first_token()
+                yield piece
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        raise map_lc_error(exc, model=model) from exc
+    finally:
+        await aclose_stream(agen)
+        if usage_sink is not None and saw_chunk and not saw_usage:
+            estimate = estimate_lc_usage(
+                chat, messages, completion_text="".join(parts)
+            )
+            if estimate is not None:
+                usage_sink(estimate)
+
+
+async def _drain_text_stream(
+    stream: AsyncIterator[str],
+    rec: LlmCallRecordBuilder,
+    *,
+    strip: bool = False,
+) -> str:
+    """Drain a text stream into ``rec``; stash partial text before re-raise.
+
+    ADR 0060 §3 — a cancelled/erroring stream still records what it managed
+    to return; an empty completion is an ``empty_response`` failure.
+    """
+    parts: list[str] = []
+    try:
+        async for piece in stream:
+            parts.append(piece)
+    except BaseException:
+        rec.response_text = "".join(parts).strip() or None
+        raise
+    content = "".join(parts)
+    if strip:
+        content = content.strip()
+    if not content:
+        rec.fail(
+            "empty_response",
+            {"kind": "empty_response", "message": "LLM returned empty content"},
+        )
+        raise RuntimeError("LLM returned empty content")
+    rec.response_text = content
+    return content
 
 
 async def complete_json(
@@ -530,14 +905,33 @@ async def complete_json(
 ) -> str:
     """JSON completion via streaming so Stop can aclose mid-response."""
     resolved = resolve_llm_model(tier)
+    lc = (
+        None
+        if resolved.provider_type == "vertex_ai"
+        else _lc_chat_model(resolved, temperature=temperature, json_mode=True)
+    )
+    kwargs: dict = {}
     if resolved.provider_type == "vertex_ai":
         model = gemini_catalog_id(resolved.model_id)
-        with track(
-            kind="chat_json", tier=tier, model=model, temperature=temperature,
-            system=system, user=user,
-        ) as rec:
-            parts: list[str] = []
-            async for piece in _vertex_astream_text(
+    elif lc is not None:
+        model = lc[1]
+    else:
+        kwargs = _base_kwargs(tier, temperature)
+        model = str(kwargs["model"])
+        kwargs["messages"] = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        kwargs["response_format"] = {"type": "json_object"}
+        kwargs["stream"] = True
+        # Ask for a final usage chunk (dropped for providers that don't support it).
+        kwargs["stream_options"] = {"include_usage": True}
+    with track(
+        kind="chat_json", tier=tier, model=model, temperature=temperature,
+        system=system, user=user,
+    ) as rec:
+        if resolved.provider_type == "vertex_ai":
+            stream = _vertex_astream_text(
                 resolved=resolved,
                 system=system,
                 user=user,
@@ -545,45 +939,24 @@ async def complete_json(
                 json_mode=True,
                 usage_sink=rec.set_usage,
                 on_first_token=rec.mark_first_token,
-            ):
-                parts.append(piece)
-            content = "".join(parts)
-            if not content:
-                rec.fail(
-                    "empty_response",
-                    {"kind": "empty_response", "message": "LLM returned empty content"},
-                )
-                raise RuntimeError("LLM returned empty content")
-            rec.response_text = content
-            return content
-    kwargs = _base_kwargs(tier, temperature)
-    model = str(kwargs["model"])
-    kwargs["messages"] = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
-    kwargs["response_format"] = {"type": "json_object"}
-    kwargs["stream"] = True
-    # Ask for a final usage chunk (dropped for providers that don't support it).
-    kwargs["stream_options"] = {"include_usage": True}
-    with track(
-        kind="chat_json", tier=tier, model=model, temperature=temperature,
-        system=system, user=user,
-    ) as rec:
-        parts: list[str] = []
-        async for piece in _astream_completion(
-            model=model,
-            kwargs=kwargs,
-            usage_sink=rec.set_usage,
-            on_first_token=rec.mark_first_token,
-        ):
-            parts.append(piece)
-        content = "".join(parts)
-        if not content:
-            rec.fail("empty_response", {"kind": "empty_response", "message": "LLM returned empty content"})
-            raise RuntimeError("LLM returned empty content")
-        rec.response_text = content
-        return content
+            )
+        elif lc is not None:
+            stream = _lc_astream_text(
+                chat=lc[0],
+                model=model,
+                system=system,
+                user=user,
+                usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
+            )
+        else:
+            stream = _astream_completion(
+                model=model,
+                kwargs=kwargs,
+                usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
+            )
+        return await _drain_text_stream(stream, rec)
 
 
 async def complete_text(
@@ -615,6 +988,25 @@ async def complete_text(
                 raise RuntimeError("LLM returned empty content")
             rec.response_text = content
             return rec.response_text
+    lc = _lc_chat_model(resolved, temperature=temperature)
+    if lc is not None:
+        chat, model = lc
+        with track(
+            kind="chat_text", tier=tier, model=model, temperature=temperature,
+            system=system, user=user,
+        ) as rec:
+            return await _drain_text_stream(
+                _lc_astream_text(
+                    chat=chat,
+                    model=model,
+                    system=system,
+                    user=user,
+                    usage_sink=rec.set_usage,
+                    on_first_token=rec.mark_first_token,
+                ),
+                rec,
+                strip=True,
+            )
     kwargs = _base_kwargs(tier, temperature)
     model = str(kwargs["model"])
     kwargs["messages"] = [
@@ -649,46 +1041,62 @@ async def astream_text(
 ) -> AsyncIterator[str]:
     """Yield assistant text pieces as the model streams them; aclose on cancel."""
     resolved = resolve_llm_model(tier)
+    lc = (
+        None
+        if resolved.provider_type == "vertex_ai"
+        else _lc_chat_model(resolved, temperature=temperature)
+    )
+    kwargs: dict = {}
     if resolved.provider_type == "vertex_ai":
         model = gemini_catalog_id(resolved.model_id)
-        with track(
-            kind="chat_text", tier=tier, model=model, temperature=temperature,
-            system=system, user=user,
-        ) as rec:
-            parts: list[str] = []
-            async for piece in _vertex_astream_text(
+    elif lc is not None:
+        model = lc[1]
+    else:
+        kwargs = _base_kwargs(tier, temperature)
+        model = str(kwargs["model"])
+        kwargs["messages"] = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        kwargs["stream"] = True
+        kwargs["stream_options"] = {"include_usage": True}
+    with track(
+        kind="chat_text", tier=tier, model=model, temperature=temperature,
+        system=system, user=user,
+    ) as rec:
+        if resolved.provider_type == "vertex_ai":
+            stream = _vertex_astream_text(
                 resolved=resolved,
                 system=system,
                 user=user,
                 temperature=temperature,
                 usage_sink=rec.set_usage,
                 on_first_token=rec.mark_first_token,
-            ):
+            )
+        elif lc is not None:
+            stream = _lc_astream_text(
+                chat=lc[0],
+                model=model,
+                system=system,
+                user=user,
+                usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
+            )
+        else:
+            stream = _astream_completion(
+                model=model,
+                kwargs=kwargs,
+                usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
+            )
+        parts: list[str] = []
+        try:
+            async for piece in stream:
                 parts.append(piece)
                 yield piece
-            rec.response_text = "".join(parts)
-        return
-    kwargs = _base_kwargs(tier, temperature)
-    model = str(kwargs["model"])
-    kwargs["messages"] = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
-    kwargs["stream"] = True
-    kwargs["stream_options"] = {"include_usage": True}
-    with track(
-        kind="chat_text", tier=tier, model=model, temperature=temperature,
-        system=system, user=user,
-    ) as rec:
-        parts: list[str] = []
-        async for piece in _astream_completion(
-            model=model,
-            kwargs=kwargs,
-            usage_sink=rec.set_usage,
-            on_first_token=rec.mark_first_token,
-        ):
-            parts.append(piece)
-            yield piece
+        except BaseException:
+            rec.response_text = "".join(parts).strip() or None
+            raise
         rec.response_text = "".join(parts)
 
 

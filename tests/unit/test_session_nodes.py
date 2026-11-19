@@ -6,7 +6,6 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
-from pydantic_ai.models.test import TestModel
 
 from internal.session import execute_harness as EH
 from internal.session import nodes as N
@@ -25,6 +24,7 @@ from internal.session.io import (
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW
 from internal.session.trace import get_node_trace, node_trace_recording
 from schemas.contracts import DraftCopy, SessionBriefData
+from tests.unit.lc_fakes import _ScriptedChat, out_call
 from tests.unit.session_fakes import fake_signal
 
 
@@ -149,13 +149,19 @@ async def test_query_generator_colloquial_uses_llm(
 ) -> None:
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     RH.set_research_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "search_queries": ["usagi", "Usagi favorite food", "rabbit feed"],
-                "topic": "general",
-                "time_range": "month",
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "QueryGenOut",
+                        {
+                            "search_queries": ["usagi", "Usagi favorite food", "rabbit feed"],
+                            "topic": "general",
+                            "time_range": "month",
+                        },
+                    )
+                ]
+            )
         )
     )
     out = await N.query_generator(
@@ -181,12 +187,18 @@ async def test_query_generator_accepts_null_optional_json(
     """Optional fields omitted must keep LLM search_queries, not gloss fallback."""
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     RH.set_research_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "search_queries": ["Usagi food preferences", "Usagi rabbit diet"],
-                "topic": "general",
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "QueryGenOut",
+                        {
+                            "search_queries": ["Usagi food preferences", "Usagi rabbit diet"],
+                            "topic": "general",
+                        },
+                    )
+                ]
+            )
         )
     )
     out = await N.query_generator(
@@ -218,12 +230,18 @@ async def test_query_generator_follow_up_skips_cheap_hk_path(
 
     monkeypatch.setattr(RH, "run_query_generator_agent", wrapped)
     RH.set_research_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "search_queries": ["Chiikawa Usagi", "Chiikawa Usagi favorite food"],
-                "topic": "general",
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "QueryGenOut",
+                        {
+                            "search_queries": ["Chiikawa Usagi", "Chiikawa Usagi favorite food"],
+                            "topic": "general",
+                        },
+                    )
+                ]
+            )
         )
     )
     out = await N.query_generator(
@@ -713,14 +731,20 @@ async def test_executor_post_filters_citations(
 ) -> None:
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     EH.set_execute_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "caption": "Hello HK",
-                "hashtags": ["#HK"],
-                "cta": "了解更多",
-                "source_signal_ids": ["sig_a", "sig_evil"],
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "DraftOut",
+                        {
+                            "caption": "Hello HK",
+                            "hashtags": ["#HK"],
+                            "cta": "了解更多",
+                            "source_signal_ids": ["sig_a", "sig_evil"],
+                        },
+                    )
+                ]
+            )
         )
     )
     out = await N.executor_post(
@@ -743,14 +767,20 @@ async def test_executor_post_empty_citations_stay_empty(
     """A draft that relied on no signal must not be stuffed with ranked ids."""
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     EH.set_execute_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "caption": "純創作 caption",
-                "hashtags": ["#HK"],
-                "cta": "了解更多",
-                "source_signal_ids": [],
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "DraftOut",
+                        {
+                            "caption": "純創作 caption",
+                            "hashtags": ["#HK"],
+                            "cta": "了解更多",
+                            "source_signal_ids": [],
+                        },
+                    )
+                ]
+            )
         )
     )
     out = await N.executor_post(
@@ -992,15 +1022,21 @@ async def test_edit_copy_filters_citations_and_need_image(
 ) -> None:
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     EH.set_edit_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "caption": "短啲 caption",
-                "hashtags": ["#a"],
-                "cta": "go",
-                "need_image": True,
-                "source_signal_ids": ["sig_a", "sig_evil"],
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "EditOut",
+                        {
+                            "caption": "短啲 caption",
+                            "hashtags": ["#a"],
+                            "cta": "go",
+                            "need_image": True,
+                            "source_signal_ids": ["sig_a", "sig_evil"],
+                        },
+                    )
+                ]
+            )
         )
     )
     out = await N.edit_copy(
@@ -1030,15 +1066,21 @@ async def test_edit_copy_review_retry_keeps_pending_image(
     """
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     EH.set_edit_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "caption": "改短啲嘅 caption",
-                "hashtags": ["#a"],
-                "cta": "go",
-                "need_image": False,
-                "source_signal_ids": [],
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "EditOut",
+                        {
+                            "caption": "改短啲嘅 caption",
+                            "hashtags": ["#a"],
+                            "cta": "go",
+                            "need_image": False,
+                            "source_signal_ids": [],
+                        },
+                    )
+                ]
+            )
         )
     )
     out = await N.edit_copy(
@@ -1077,15 +1119,21 @@ async def test_edit_copy_hold_park_caption_edit_stays_caption_only(
     """
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     EH.set_edit_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "caption": "改短啲嘅 caption",
-                "hashtags": ["#a"],
-                "cta": "go",
-                "need_image": False,
-                "source_signal_ids": [],
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "EditOut",
+                        {
+                            "caption": "改短啲嘅 caption",
+                            "hashtags": ["#a"],
+                            "cta": "go",
+                            "need_image": False,
+                            "source_signal_ids": [],
+                        },
+                    )
+                ]
+            )
         )
     )
     out = await N.edit_copy(

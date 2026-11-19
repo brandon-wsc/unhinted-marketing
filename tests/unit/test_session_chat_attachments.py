@@ -10,13 +10,14 @@ Pins the two ``_chat_stream`` changes the read_attachment step needs:
   ``state["user_id"]`` so the tool can re-check owner scope (§14).
 
 The chat node runs the REAL harness — ``has_llm_credentials`` is patched
-where ``nodes`` imports it and a ``FunctionModel`` (with a
-``stream_function`` for ``run_stream``) probes the prompt / issues real
-``read_attachment`` tool calls through ``set_chat_model_override``.
+where ``nodes`` imports it and a scripted ``GenericFakeChatModel`` probes
+the prompt / issues real ``read_attachment`` tool calls through
+``set_chat_model_override``.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from unittest.mock import AsyncMock
 
@@ -96,7 +97,7 @@ def _chat_state(**extra) -> dict:
 
 @pytest.mark.asyncio
 async def test_chat_payload_carries_attachment_digests() -> None:
-    """The FunctionModel emits the crafted offering ONLY when the prompt
+    """The scripted model emits the crafted offering ONLY when the prompt
     carries the digest (attachments key + filename + title) and no
     full-text sentinel — red until ``_chat_stream`` wires it."""
     seen: dict = {}
@@ -125,7 +126,7 @@ async def test_chat_payload_carries_attachment_digests() -> None:
 async def test_read_attachment_tool_gets_company_and_user_from_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A FunctionModel-issued ``read_attachment`` call must reach the seam
+    """A scripted-model-issued ``read_attachment`` call must reach the seam
     with ``company_id`` + ``user_id`` hydrated from session state."""
     seam_calls: list[dict] = []
 
@@ -189,13 +190,9 @@ async def test_read_attachment_untrusted_id_returns_error_not_exception(
         out = await N.chat(_chat_state())
 
     assert returns_seen, "tool call never returned — run died inside the agent"
-    blob = returns_seen[0]
-    assert '"slices": []' in blob or "slices': []" in blob or "slices=[]" in blob, (
-        f"refused read must carry empty slices: {blob!r}"
-    )
-    assert '"error"' in blob or "'error'" in blob or "error=" in blob, (
-        f"refused read must carry an error string: {blob!r}"
-    )
+    data = json.loads(returns_seen[0])
+    assert data["slices"] == [], f"refused read must carry empty slices: {data!r}"
+    assert data["error"], f"refused read must carry an error string: {data!r}"
     assert out["messages"][-1]["content"] == FINAL_TEXT
 
 

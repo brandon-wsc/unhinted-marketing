@@ -850,7 +850,7 @@ def _chat_attachment_digests(state: SessionState) -> list[dict[str, Any]]:
 
 
 async def _chat_stream(state: SessionState, user: str) -> str | None:
-    """Stream the chat reply via the Pydantic AI harness (ADR 0019)."""
+    """Stream the chat reply via the LangChain inner harness (ADR 0060)."""
     history = _live_messages(state)
     research = state.get("research") or {}
     pack = _voice_pack(state)

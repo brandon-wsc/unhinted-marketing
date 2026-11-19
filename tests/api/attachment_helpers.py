@@ -589,7 +589,7 @@ async def read_object_bytes(key: str) -> bytes | None:
 #   unparsable ``attachment_id``, and a missing session-db context.
 
 READ_ATTACHMENT_TOOL = "read_attachment"
-"""Pydantic AI tool name — ``CHAT_TOOL_NAMES`` member, never a publish tool."""
+"""LangChain tool name — ``CHAT_TOOL_NAMES`` member, never a publish tool."""
 
 MAX_ATTACHMENT_READS = 3
 """Chosen per-turn budget (ADR 0047 §6 "≤2–3 calls"); the impl pins the same
@@ -606,15 +606,57 @@ document/chunk text (§5)."""
 
 
 def model_prompt_text(messages) -> str:
-    """Flatten every string ``part.content`` of a pydantic-ai ModelMessage
-    list — the FunctionModel probe for what the agent actually saw."""
+    """Flatten every string ``message.content`` of a LangChain message list —
+    the fake-model probe for what the agent actually saw."""
     texts: list[str] = []
     for message in messages or []:
-        for part in getattr(message, "parts", []) or []:
-            content = getattr(part, "content", None)
-            if isinstance(content, str):
-                texts.append(content)
+        content = getattr(message, "content", message)
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            for block in content:
+                if isinstance(block, str):
+                    texts.append(block)
+                elif isinstance(block, dict) and isinstance(block.get("text"), str):
+                    texts.append(block["text"])
     return "\n".join(texts)
+
+
+def _fn_chat_model(decide):
+    """``GenericFakeChatModel`` whose reply comes from ``decide(messages)``.
+
+    ``bind_tools`` returns self (the fake ignores bound tools) and ``_stream``
+    yields one ``AIMessageChunk`` carrying content + ``tool_calls`` +
+    ``usage_metadata`` — the scripted shapes the harness loop consumes.
+    """
+    from typing import Any
+
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessageChunk
+    from langchain_core.outputs import ChatGenerationChunk
+
+    class _FnChat(GenericFakeChatModel):
+        decide: Any = None
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            from langchain_core.outputs import ChatGeneration, ChatResult
+
+            return ChatResult(generations=[ChatGeneration(message=self.decide(messages))])
+
+        def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+            msg = self.decide(messages)
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(
+                    content=msg.content if isinstance(msg.content, str) else "",
+                    tool_calls=msg.tool_calls,
+                    usage_metadata=msg.usage_metadata,
+                )
+            )
+
+    return _FnChat(messages=iter(()), decide=decide)
 
 
 def make_digest_probe_model(
@@ -625,7 +667,7 @@ def make_digest_probe_model(
     seen: dict,
     sentinel: str = FULL_TEXT_SENTINEL,
 ):
-    """FunctionModel + stream_function pair for ``set_chat_model_override``.
+    """Scripted chat model for ``set_chat_model_override``.
 
     The model emits ``reply`` ONLY when the prompt it was served carries the
     attachment digest (``"attachments"`` key + ``filename`` + ``title``) and
@@ -633,10 +675,9 @@ def make_digest_probe_model(
     so assertions stay red until ``_chat_stream`` wires digests in (§5).
     ``seen`` records what the model observed for Then-step assertions.
     """
-    from pydantic_ai.messages import ModelResponse, TextPart
-    from pydantic_ai.models.function import FunctionModel
+    from langchain_core.messages import AIMessage
 
-    def _decide(messages) -> str:
+    def _decide(messages) -> AIMessage:
         blob = model_prompt_text(messages)
         seen["prompt_text"] = blob
         seen["saw_attachments_key"] = f'"{PAYLOAD_ATTACHMENTS_KEY}"' in blob
@@ -649,16 +690,10 @@ def make_digest_probe_model(
             and seen["saw_title"]
             and not seen["saw_full_text"]
         ):
-            return reply
-        return "MISSING-DIGEST-SENTINEL"
+            return AIMessage(content=reply)
+        return AIMessage(content="MISSING-DIGEST-SENTINEL")
 
-    def fn(messages, agent_info):
-        return ModelResponse(parts=[TextPart(content=_decide(messages))])
-
-    async def stream_fn(messages, agent_info):
-        yield _decide(messages)
-
-    return FunctionModel(fn, stream_function=stream_fn)
+    return _fn_chat_model(_decide)
 
 
 def make_read_attachment_driver(
@@ -667,60 +702,36 @@ def make_read_attachment_driver(
     returns_seen: list,
     final_text: str,
 ):
-    """FunctionModel that issues ``read_attachment`` ToolCallParts — one per
-    model invocation until ``calls`` is exhausted — recording every
-    ToolReturnPart content into ``returns_seen`` before emitting
-    ``final_text``. Deterministic, sequential calls so per-turn budgets are
-    observable."""
-    import json as _json
-
-    from pydantic_ai.messages import (
-        ModelResponse,
-        TextPart,
-        ToolCallPart,
-        ToolReturnPart,
-    )
-    from pydantic_ai.models.function import DeltaToolCall, FunctionModel
+    """Scripted chat model that issues ``read_attachment`` tool calls — one
+    per model invocation until ``calls`` is exhausted — recording every
+    ToolMessage content into ``returns_seen`` before emitting ``final_text``.
+    Deterministic, sequential calls so per-turn budgets are observable."""
+    from langchain_core.messages import AIMessage, ToolMessage
 
     seen_ids: set[str] = set()
+    issued: list[int] = [0]
 
-    def _decide(messages) -> tuple[str, dict | None]:
+    def _decide(messages) -> AIMessage:
         for message in messages or []:
-            for part in getattr(message, "parts", []) or []:
-                if isinstance(part, ToolReturnPart) and part.tool_call_id not in seen_ids:
-                    seen_ids.add(part.tool_call_id)
-                    returns_seen.append(str(part.content))
-        idx = len(returns_seen)
+            if isinstance(message, ToolMessage) and message.tool_call_id not in seen_ids:
+                seen_ids.add(message.tool_call_id)
+                returns_seen.append(str(message.content))
+        idx = issued[0]
         if idx < len(calls):
-            return ("tool", calls[idx])
-        return ("text", None)
-
-    def fn(messages, agent_info):
-        kind, call = _decide(messages)
-        if kind == "tool":
-            return ModelResponse(
-                parts=[
-                    ToolCallPart(
-                        tool_name=READ_ATTACHMENT_TOOL,
-                        args=dict(call),
-                    )
-                ]
+            issued[0] += 1
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": READ_ATTACHMENT_TOOL,
+                        "args": dict(calls[idx]),
+                        "id": f"read-{idx}",
+                    }
+                ],
             )
-        return ModelResponse(parts=[TextPart(content=final_text)])
+        return AIMessage(content=final_text)
 
-    async def stream_fn(messages, agent_info):
-        kind, call = _decide(messages)
-        if kind == "tool":
-            yield {
-                0: DeltaToolCall(
-                    name=READ_ATTACHMENT_TOOL,
-                    json_args=_json.dumps(call),
-                )
-            }
-        else:
-            yield final_text
-
-    return FunctionModel(fn, stream_function=stream_fn)
+    return _fn_chat_model(_decide)
 
 
 def patch_read_document_seam(monkeypatch: pytest.MonkeyPatch, stub) -> None:

@@ -1,18 +1,21 @@
 """read_attachment chat tool (ADR 0047 §6/§14) — pinned contract, no DB.
 
-The tool is a read-only Pydantic AI function tool: ``≤5`` slices
+The tool is a read-only LangChain ``@tool``: ``≤5`` slices
 ``{chunk_id, ref, text}`` + ``partial``, ``≤3`` calls per turn, owner scope
 re-checked on every call — the ids the LLM emits are untrusted (§14). Every
 refusal returns ``slices=[]`` + a non-empty ``error``; the tool never
-raises and never returns full document text (§5).
+raises and never returns full document text (§5). ``ChatDeps`` rides in as
+an ``InjectedToolArg`` — tests invoke with ``deps`` inside the args dict,
+same as the harness loop.
 
 Invented names this step must satisfy (documented in
 tests/api/attachment_helpers.py as well):
 
-- ``internal.session.harness.read_attachment`` —
-  ``async (ctx: RunContext[ChatDeps], attachment_id: str,
-  query: str | None = None, section: str | None = None)
-  -> ReadAttachmentResponse``; registered on the chat agent.
+- ``internal.session.harness.read_attachment`` — a LangChain tool named
+  ``"read_attachment"`` whose args are ``attachment_id: str``,
+  ``query: str | None``, ``section: str | None`` (``deps`` is injected and
+  never appears in the model-facing schema); output is the
+  ``ReadAttachmentResponse`` JSON string.
 - ``schemas.tools.ReadAttachmentSlice {chunk_id, ref, text}`` and
   ``schemas.tools.ReadAttachmentResponse {slices, partial, error}``.
 - ``ChatDeps`` gains ``user_id: uuid.UUID | None`` and per-turn counter
@@ -33,12 +36,11 @@ refusal, never an exception.
 
 from __future__ import annotations
 
+import json
 import uuid
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from pydantic_ai.models.test import TestModel
 
 from internal.session import harness as H
 from internal.session.context import session_db
@@ -70,13 +72,8 @@ def _clear_chat_model_override() -> None:
 
 
 def _tool():
-    """Get the tool fn — AttributeError names the missing seam (right red)."""
+    """Get the tool object — AttributeError names the missing seam (right red)."""
     return getattr(H, READ_ATTACHMENT_TOOL)
-
-
-def _ctx(deps: H.ChatDeps) -> SimpleNamespace:
-    """Fake RunContext — only ``ctx.deps`` may be touched by the tool."""
-    return SimpleNamespace(deps=deps)
 
 
 def _deps() -> H.ChatDeps:
@@ -84,11 +81,14 @@ def _deps() -> H.ChatDeps:
 
 
 async def _call_tool(deps: H.ChatDeps, **kwargs):
-    return await _tool()(_ctx(deps), **kwargs)
+    """Invoke like the harness loop does: ``deps`` injected inside args."""
+    return await _tool().ainvoke({"deps": deps, **kwargs})
 
 
 def _result_dump(result) -> dict:
-    """Result may be a pydantic model or plain dict — both dump to a dict."""
+    """Tool output is the ReadAttachmentResponse JSON string."""
+    if isinstance(result, str):
+        return json.loads(result)
     if hasattr(result, "model_dump"):
         return result.model_dump()
     return dict(result)
@@ -103,11 +103,20 @@ def test_read_attachment_in_chat_tool_names() -> None:
     assert H.CHAT_TOOL_NAMES.isdisjoint(H.PUBLISH_TOOL_NAMES)
 
 
-def test_read_attachment_registered_on_chat_agent() -> None:
-    agent = H.build_chat_agent(model=TestModel(call_tools=[], custom_output_text="x"))
-    names = H.registered_function_tool_names(agent)
+def test_read_attachment_registered_on_chat_loop() -> None:
+    names = {t.name for t in H.chat_tools()}
     assert READ_ATTACHMENT_TOOL in names
     assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
+
+
+def test_read_attachment_deps_not_in_model_schema() -> None:
+    """``deps`` is an InjectedToolArg — the LLM must never see it."""
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+
+    schema = convert_to_openai_tool(_tool())
+    params = schema["function"]["parameters"]["properties"]
+    assert "deps" not in params
+    assert set(params) == {"attachment_id", "query", "section"}
 
 
 # --- happy path / seam pass-through --------------------------------------------
@@ -149,7 +158,6 @@ async def test_read_attachment_passes_slices_and_scope_through(
     assert dump["partial"] is True
     assert len(dump["slices"]) == len(SLICES)
     for got, want in zip(dump["slices"], SLICES, strict=True):
-        got = _result_dump(got)
         assert got["chunk_id"] == want["chunk_id"]
         assert got["ref"] == want["ref"]
         assert got["text"] == want["text"]
@@ -248,6 +256,26 @@ async def test_read_attachment_refuses_without_db_context(
     assert calls == []
 
 
+@pytest.mark.asyncio
+async def test_read_attachment_refuses_without_scope_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§14 — missing company_id/user_id → ``missing_scope`` refusal."""
+    calls: list[dict] = []
+
+    async def stub(db, **kwargs):
+        calls.append(kwargs)
+        return {"slices": SLICES, "partial": False}
+
+    patch_read_document_seam(monkeypatch, stub)
+    with session_db(AsyncMock()):
+        result = await _call_tool(H.ChatDeps(), attachment_id=str(ATTACHMENT_ID), query="優惠期")
+    dump = _result_dump(result)
+    assert dump["slices"] == []
+    assert dump["error"]
+    assert calls == []
+
+
 # --- per-turn budget (§6: ≤2–3 calls/turn) --------------------------------------
 
 
@@ -324,4 +352,4 @@ async def test_read_attachment_result_shape_never_leaks_full_text(
         f"result exposes unexpected fields: {sorted(dump)}"
     )
     for s in dump["slices"]:
-        assert set(_result_dump(s)) <= {"chunk_id", "ref", "text"}
+        assert set(s) <= {"chunk_id", "ref", "text"}

@@ -1,7 +1,7 @@
 """Per-turn LLM credential resolution (ADR 0020).
 
 A company bundle is preloaded in ``company_llm_scope`` (async, one DB read +
-decrypt of referenced keys). Sync callers (``_base_kwargs``, ``live_harness_model``)
+decrypt of referenced keys). Sync callers (``_base_kwargs``, ``lc_harness_model``)
 read the contextvar — they never query the DB.
 
 Unbound (no scope / ``company_id is None``) or a NULL routing slot falls back

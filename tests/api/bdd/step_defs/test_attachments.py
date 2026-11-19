@@ -608,10 +608,10 @@ def attachment_rows_and_object_removed(api, bdd_ctx) -> None:
 # The zero-instruction scenario runs the REAL compiled session graph — the
 # Given's StubSessionGraph is swapped out in the When step — with a canned
 # ``route_intent`` classifier (``complete_json`` → intent="chat") and a
-# FunctionModel that only produces the offering reply when the prompt it
+# scripted chat model that only produces the offering reply when the prompt it
 # was served carries the attachment digest. Everything between POST
 # /messages and the chat node — _invoke_graph, digest hydration,
-# _chat_stream, the Pydantic AI harness — runs for real.
+# _chat_stream, the chat harness — runs for real.
 
 
 def _last_assistant_message(bdd_ctx) -> dict:
@@ -623,7 +623,7 @@ def _last_assistant_message(bdd_ctx) -> dict:
 @when("they send a message with only the attachment")
 def send_message_with_only_attachment(api, bdd_ctx, monkeypatch) -> None:
     """POST /messages with ``attachment_ids`` and a minimal content through
-    the real graph; the FunctionModel crafts the §8 offering reply only
+    the real graph; the scripted model crafts the §8 offering reply only
     when the prompt carries the digest — red until ``_chat_stream`` wires
     ``state["attachments"]`` into the payload."""
     import json as _json
@@ -667,7 +667,7 @@ def send_message_with_only_attachment(api, bdd_ctx, monkeypatch) -> None:
 @then("the assistant reply carries the document digest")
 def assistant_reply_carries_document_digest(bdd_ctx) -> None:
     """§8/§5: the reply quotes digest facts (filename + title) — which the
-    FunctionModel only writes when the prompt actually carried the digest."""
+    scripted model only writes when the prompt actually carried the digest."""
     seen = bdd_ctx.get("model_seen") or {}
     assert seen.get("saw_full_text") is not True, (
         "chat prompt leaked a non-digest field — §5 digest-only violation"
