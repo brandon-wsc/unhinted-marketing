@@ -60,11 +60,11 @@ async def _run_ingest_web_search(
     key = q.lower()
     if any(existing.lower() == key for existing in deps.queries_run):
         return []
-    deps.queries_run.append(q)
     try:
         db = get_db()
     except RuntimeError:
-        return []
+        return [{"error": "no_session_db"}]
+    deps.queries_run.append(q)
     items = await ingest_mod.fetch_and_upsert_tavily(
         db,
         [q],
@@ -86,7 +86,8 @@ async def ingest_web_search(
     """Search the web via Tavily and persist hits to PostgreSQL.
 
     At most 3 queries this turn, 5 hits each. Returns signal slices
-    (id, title, excerpt, metrics.query) — never full pages.
+    (id, title, excerpt, metrics.query) — never full pages. Returns
+    ``[{"error": ...}]`` instead when the search could not run.
     """
     slices = await _run_ingest_web_search(deps, query, topic, time_range)
     return json.dumps(slices, ensure_ascii=False, default=str)

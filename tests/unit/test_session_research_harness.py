@@ -260,6 +260,22 @@ async def test_ingest_web_search_caps_at_three_queries() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ingest_web_search_reports_no_session_db(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No ``session_db`` contextvar → error payload, never a fake empty list."""
+    async def fake_fetch(*_args: object, **_kwargs: object) -> list[dict]:
+        raise AssertionError("fetch must not run without a session db")
+
+    monkeypatch.setattr(ingest_mod, "fetch_and_upsert_tavily", fake_fetch)
+    deps = RH.ResearchDeps()
+    out = await RH.ingest_web_search.ainvoke({"deps": deps, "query": "hk"})
+    assert json.loads(out) == [{"error": "no_session_db"}]
+    assert deps.queries_run == []
+    assert deps.ingested == []
+
+
+@pytest.mark.asyncio
 async def test_ingest_web_search_deps_not_in_model_schema() -> None:
     """``deps`` is an InjectedToolArg — the LLM must never see it."""
     from langchain_core.utils.function_calling import convert_to_openai_tool
