@@ -1,7 +1,11 @@
-"""Pydantic AI inner loop for session nodes (ADR 0019).
+"""Session chat inner loop — LangChain primary, Pydantic AI fallback (ADR 0060).
 
-Agents are built per call and discarded — never stored on graph state or FastAPI.
-Chat tools are read-only; publish-class names are never registered.
+``openai`` / ``openai_compatible`` providers run a hand-rolled
+``bind_tools`` + ``astream`` loop (no ``create_agent`` / ToolNode per the
+ADR). ``anthropic`` / ``gemini`` / ``vertex_ai`` keep the Pydantic AI agent
+path until their langchain packages land — provider coverage is unchanged.
+Tools are built per call and discarded — never stored on graph state or
+FastAPI. Chat tools are read-only; publish-class names are never registered.
 """
 
 from __future__ import annotations
@@ -11,16 +15,26 @@ import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic_ai import Agent, RunContext
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages.utils import message_chunk_to_message
+from langchain_core.tools import BaseTool, InjectedToolArg, tool
+from pydantic_ai import Agent, RunContext, Tool
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, RunCancelled
 from pydantic_ai.models import Model
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.llm.recorder import LlmCallRecordBuilder, track
 from internal.llm.resolve import gemini_catalog_id, openai_compat_model_id, resolve_llm_model
-from internal.llm.router import LlmProviderError, ModelTier
+from internal.llm.router import (
+    LlmProviderError,
+    ModelTier,
+    _aclose_stream,
+    _lc_chat_model,
+    _wrap_lc_error,
+)
 from internal.memory import document_retrieve
 from internal.memory.repos import list_top_signals
 from internal.session import prompts
@@ -42,10 +56,14 @@ CHAT_TOOL_NAMES = frozenset({"query_market_trends", "read_attachment"})
 # ADR 0047 §6 — per-turn read_attachment budget (chosen cap in the 2–3 range).
 MAX_ATTACHMENT_READS_PER_TURN = 3
 
+# Safety bound on the hand-rolled tool loop — far past any legit turn (the
+# 3-read attachment budget ends read loops on its own).
+_MAX_TOOL_ROUNDS = 32
+
 # Match nodes._DELTA_FLUSH_CHARS — long replies must not overflow SSE queues.
 _DELTA_FLUSH_CHARS = 24
 
-_model_override: Model | None = None
+_model_override: Model | BaseChatModel | None = None
 
 
 @dataclass
@@ -58,8 +76,8 @@ class ChatDeps:
     attachment_reads: int = 0
 
 
-def set_chat_model_override(model: Model | None) -> None:
-    """Test hook: inject TestModel / FunctionModel. Pass None to restore live."""
+def set_chat_model_override(model: Model | BaseChatModel | None) -> None:
+    """Test hook: inject a fake chat model (LangChain or Pydantic AI). Pass None to restore live."""
     global _model_override
     _model_override = model
 
@@ -133,8 +151,22 @@ def live_harness_model(tier: ModelTier) -> Model:
 
 
 def live_chat_model() -> Model:
-    """Chat-tier BYOK model."""
+    """Chat-tier BYOK model (Pydantic AI fallback path)."""
     return live_harness_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
+
+
+def _live_lc_chat_model() -> tuple[Any, str] | None:
+    """``(ChatModel, label)`` when the chat provider has a LangChain path, else ``None``.
+
+    Mirrors ``live_harness_model``'s claude-by-name heuristic so a bare
+    ``provider_type="openai"`` slot with a claude id keeps routing to the
+    Anthropic (Pydantic AI) path.
+    """
+    resolved = resolve_llm_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
+    lowered = resolved.model_id.lower()
+    if "claude" in lowered or lowered.startswith("anthropic"):
+        return None
+    return _lc_chat_model(resolved, temperature=None)
 
 
 async def lookup_market_trends(
@@ -167,16 +199,6 @@ async def lookup_market_trends(
     )
 
 
-async def query_market_trends(
-    ctx: RunContext[ChatDeps],
-    region: str = "HK",
-    limit: int = 20,
-) -> QueryMarketTrendsResponse:
-    """Read-only lookup of recent Hong Kong market signals from PostgreSQL."""
-    del ctx  # company_id reserved; corpus is still HK-wide (same as trend_searcher)
-    return await lookup_market_trends(region, limit)
-
-
 async def read_document(
     db: AsyncSession,
     *,
@@ -202,8 +224,17 @@ async def read_document(
     )
 
 
-async def read_attachment(
-    ctx: RunContext[ChatDeps],
+async def _run_query_market_trends(
+    deps: ChatDeps,
+    region: str = "HK",
+    limit: int = 20,
+) -> QueryMarketTrendsResponse:
+    del deps  # company_id reserved; corpus is still HK-wide (same as trend_searcher)
+    return await lookup_market_trends(region, limit)
+
+
+async def _run_read_attachment(
+    deps: ChatDeps,
     attachment_id: str,
     query: str | None = None,
     section: str | None = None,
@@ -216,7 +247,6 @@ async def read_attachment(
     ``attachment_reads`` is the per-turn budget — only calls that pass local
     validation count against it.
     """
-    deps = ctx.deps
     q = (query or "").strip()
     s = (section or "").strip()
     if not q and not s:
@@ -264,11 +294,56 @@ async def read_attachment(
     return ReadAttachmentResponse(slices=slices, partial=bool(result.get("partial")))
 
 
-async def slow_probe(ctx: RunContext[ChatDeps]) -> str:
+@tool
+async def query_market_trends(
+    deps: Annotated[ChatDeps, InjectedToolArg],
+    region: str = "HK",
+    limit: int = 20,
+) -> str:
+    """Read-only lookup of recent Hong Kong market signals from PostgreSQL."""
+    response = await _run_query_market_trends(deps, region, limit)
+    return response.model_dump_json()
+
+
+@tool
+async def read_attachment(
+    deps: Annotated[ChatDeps, InjectedToolArg],
+    attachment_id: str,
+    query: str | None = None,
+    section: str | None = None,
+) -> str:
+    """Read-only slices from one session attachment (never full document text).
+
+    Pass ``attachment_id`` plus a ``query`` or ``section``; refusals return
+    ``slices=[]`` with a non-empty ``error`` (ADR 0047 §5/§6/§14).
+    """
+    response = await _run_read_attachment(deps, attachment_id, query, section)
+    return response.model_dump_json()
+
+
+@tool
+async def slow_probe(deps: Annotated[ChatDeps, InjectedToolArg]) -> str:
     """Test-only: sleep so Stop/cancel can be observed mid-tool. Never register in prod."""
-    del ctx
+    del deps
     await asyncio.sleep(10)
     return "slept"
+
+
+async def _pa_query_market_trends(
+    ctx: RunContext[ChatDeps],
+    region: str = "HK",
+    limit: int = 20,
+) -> QueryMarketTrendsResponse:
+    return await _run_query_market_trends(ctx.deps, region, limit)
+
+
+async def _pa_read_attachment(
+    ctx: RunContext[ChatDeps],
+    attachment_id: str,
+    query: str | None = None,
+    section: str | None = None,
+) -> ReadAttachmentResponse:
+    return await _run_read_attachment(ctx.deps, attachment_id, query, section)
 
 
 def build_chat_agent(
@@ -276,7 +351,12 @@ def build_chat_agent(
     model: Model,
     extra_tools: Sequence[Any] = (),
 ) -> Agent[ChatDeps, str]:
-    tools: list[Any] = [query_market_trends, read_attachment, *extra_tools]
+    """Pydantic AI fallback agent — anthropic/gemini/vertex path (same tool names)."""
+    tools: list[Any] = [
+        Tool(_pa_query_market_trends, name="query_market_trends"),
+        Tool(_pa_read_attachment, name="read_attachment"),
+        *extra_tools,
+    ]
     return Agent(
         model,
         deps_type=ChatDeps,
@@ -295,6 +375,14 @@ def registered_function_tool_names(agent: Agent[Any, Any]) -> set[str]:
         if isinstance(tools, dict):
             names.update(str(name) for name in tools)
     return names
+
+
+def chat_tools(extra_tools: Sequence[Any] = ()) -> list[Any]:
+    """LangChain tools on the chat loop — publish-class names never registered."""
+    tools: list[Any] = [query_market_trends, read_attachment]
+    for extra in extra_tools:
+        tools.append(extra if isinstance(extra, BaseTool) else tool(extra))
+    return tools
 
 
 async def _publish_deltas(
@@ -319,24 +407,175 @@ def _wrap_provider_error(exc: BaseException) -> LlmProviderError:
     return LlmProviderError(str(exc) or exc.__class__.__name__, kind=kind)
 
 
-def _model_label(model: Model) -> str:
-    name = getattr(model, "model_name", None)
-    return str(name) if name else "pydantic-ai"
+def _model_label(model: Any) -> str:
+    name = getattr(model, "model_name", None) or getattr(model, "model", None)
+    return str(name) if name else type(model).__name__
 
 
 def _stash_partial(rec: LlmCallRecordBuilder, parts: list[str]) -> None:
     rec.response_text = "".join(parts).strip() or None
 
 
-async def stream_chat_reply(
+def _merge_lc_usage(totals: dict[str, int], usage: Any) -> None:
+    """Accumulate ``usage_metadata`` across tool-loop rounds into ``totals``."""
+    for key in ("input_tokens", "output_tokens", "total_tokens"):
+        value = usage.get(key) if isinstance(usage, dict) else getattr(usage, key, None)
+        if isinstance(value, int):
+            totals[key] = totals.get(key, 0) + value
+    details = (
+        usage.get("input_token_details")
+        if isinstance(usage, dict)
+        else getattr(usage, "input_token_details", None)
+    )
+    cached = (
+        details.get("cache_read")
+        if isinstance(details, dict)
+        else getattr(details, "cache_read", None)
+    )
+    if isinstance(cached, int):
+        totals["cache_read_input_tokens"] = totals.get("cache_read_input_tokens", 0) + cached
+
+
+async def _run_lc_tool_call(call: dict, tools: dict[str, Any], deps: ChatDeps) -> ToolMessage:
+    """Dispatch one model tool_call; ``deps`` rides in as the injected arg."""
+    name = str(call.get("name") or "")
+    call_id = str(call.get("id") or name or "tool_call")
+    tool_obj = tools.get(name)
+    if tool_obj is None:
+        return ToolMessage(
+            content=f'{{"error": "unknown_tool:{name}"}}',
+            tool_call_id=call_id,
+        )
+    args = dict(call.get("args") or {})
+    args["deps"] = deps
+    result = await tool_obj.ainvoke({**call, "args": args, "id": call_id})
+    if isinstance(result, ToolMessage):
+        return result
+    return ToolMessage(content=str(result), tool_call_id=call_id)
+
+
+async def _stream_round(
+    bound: Any,
+    messages: list[Any],
     *,
+    rec: LlmCallRecordBuilder,
+    usage: dict[str, int],
+    parts: list[str],
+    pending: list[str],
+    session_id: uuid.UUID | None,
+) -> Any:
+    """Stream one model round; return the merged reply or ``None`` on zero chunks."""
+    agen = bound.astream(messages)
+    acc = None
+    try:
+        async for chunk in agen:
+            acc = chunk if acc is None else acc + chunk
+            chunk_usage = getattr(chunk, "usage_metadata", None)
+            if chunk_usage:
+                _merge_lc_usage(usage, chunk_usage)
+                rec.set_usage(usage)
+            piece = chunk.content if isinstance(chunk.content, str) else ""
+            if piece:
+                rec.mark_first_token()
+                parts.append(piece)
+                pending.append(piece)
+                if session_id:
+                    await _publish_deltas(session_id, pending)
+    except ValueError as exc:
+        # BaseChatModel.astream raises when a round yields zero
+        # chunks — treat as an empty reply, not a provider error.
+        if "generation chunks" not in str(exc):
+            raise
+    finally:
+        await _aclose_stream(agen)
+    return acc
+
+
+async def _stream_chat_reply_lc(
+    *,
+    chat: BaseChatModel,
+    model_label: str,
     user_prompt: str,
     session_id: uuid.UUID | None,
     deps: ChatDeps,
-    extra_tools: Sequence[Any] = (),
+    extra_tools: Sequence[Any],
 ) -> str | None:
-    """Run the chat agent, fan out message.delta, return the final text."""
-    model = _model_override or live_chat_model()
+    """Hand-rolled ``bind_tools`` + ``astream`` loop (ADR 0060 — no ToolNode)."""
+    tools = chat_tools(extra_tools)
+    by_name = {t.name: t for t in tools}
+    bound = chat.bind_tools(tools)
+    messages: list[Any] = [
+        SystemMessage(content=prompts.CHAT),
+        HumanMessage(content=user_prompt),
+    ]
+    parts: list[str] = []
+    pending: list[str] = []
+    usage: dict[str, int] = {}
+    output: str | None = None
+    with track(
+        kind="chat_text",
+        tier=NODE_MODEL_TIERS["chat"],
+        model=model_label,
+        system=prompts.CHAT,
+        user=user_prompt,
+    ) as rec:
+        try:
+            for _ in range(_MAX_TOOL_ROUNDS):
+                acc = await _stream_round(
+                    bound,
+                    messages,
+                    rec=rec,
+                    usage=usage,
+                    parts=parts,
+                    pending=pending,
+                    session_id=session_id,
+                )
+                if acc is None:
+                    break
+                reply = message_chunk_to_message(acc)
+                tool_calls = list(reply.tool_calls or [])
+                invalid = list(getattr(reply, "invalid_tool_calls", None) or [])
+                if not tool_calls and not invalid:
+                    output = reply.content if isinstance(reply.content, str) else ""
+                    break
+                messages.append(reply)
+                for call in tool_calls:
+                    messages.append(await _run_lc_tool_call(call, by_name, deps))
+                for call in invalid:
+                    call_id = str(call.get("id") or call.get("name") or "tool_call")
+                    messages.append(
+                        ToolMessage(
+                            content='{"error": "invalid_tool_call"}',
+                            tool_call_id=call_id,
+                        )
+                    )
+            else:
+                logger.warning("chat tool loop hit %s rounds; returning partial", _MAX_TOOL_ROUNDS)
+            if session_id:
+                await _publish_deltas(session_id, pending, force=True)
+        except asyncio.CancelledError:
+            _stash_partial(rec, parts)
+            raise
+        except LlmProviderError:
+            _stash_partial(rec, parts)
+            raise
+        except Exception as exc:
+            _stash_partial(rec, parts)
+            raise _wrap_lc_error(exc, model=model_label) from exc
+        text = (output if output is not None else "".join(parts)).strip()
+        rec.response_text = text or None
+    return text or None
+
+
+async def _stream_chat_reply_pa(
+    *,
+    model: Model,
+    user_prompt: str,
+    session_id: uuid.UUID | None,
+    deps: ChatDeps,
+    extra_tools: Sequence[Any],
+) -> str | None:
+    """Pydantic AI path — anthropic/gemini/vertex until langchain packages land."""
     agent = build_chat_agent(model=model, extra_tools=extra_tools)
     parts: list[str] = []
     pending: list[str] = []
@@ -359,7 +598,7 @@ async def stream_chat_reply(
                 if session_id:
                     await _publish_deltas(session_id, pending, force=True)
                 output = await result.get_output()
-                rec.set_usage(result.usage)
+                rec.set_usage(result.usage())
         except asyncio.CancelledError:
             _stash_partial(rec, parts)
             raise
@@ -378,3 +617,43 @@ async def stream_chat_reply(
         text = (output if isinstance(output, str) else "".join(parts)).strip()
         rec.response_text = text or None
     return text or None
+
+
+async def stream_chat_reply(
+    *,
+    user_prompt: str,
+    session_id: uuid.UUID | None,
+    deps: ChatDeps,
+    extra_tools: Sequence[Any] = (),
+) -> str | None:
+    """Run the chat agent, fan out message.delta, return the final text."""
+    model = _model_override
+    if isinstance(model, BaseChatModel):
+        return await _stream_chat_reply_lc(
+            chat=model,
+            model_label=_model_label(model),
+            user_prompt=user_prompt,
+            session_id=session_id,
+            deps=deps,
+            extra_tools=extra_tools,
+        )
+    if model is None:
+        lc = _live_lc_chat_model()
+        if lc is not None:
+            chat, label = lc
+            return await _stream_chat_reply_lc(
+                chat=chat,
+                model_label=label,
+                user_prompt=user_prompt,
+                session_id=session_id,
+                deps=deps,
+                extra_tools=extra_tools,
+            )
+        model = live_chat_model()
+    return await _stream_chat_reply_pa(
+        model=model,
+        user_prompt=user_prompt,
+        session_id=session_id,
+        deps=deps,
+        extra_tools=extra_tools,
+    )

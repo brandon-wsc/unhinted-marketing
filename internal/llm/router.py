@@ -530,7 +530,7 @@ def _lc_model_id(resolved: Any) -> str:
 
 
 def _lc_chat_model(
-    resolved: Any, *, temperature: float, json_mode: bool = False
+    resolved: Any, *, temperature: float | None, json_mode: bool = False
 ) -> tuple[Any, str] | None:
     """``(ChatModel, model_label)`` for the LangChain path, else ``None``.
 
@@ -555,7 +555,7 @@ def _lc_chat_model(
         timeout=settings.llm_timeout_seconds,
         stream_usage=True,
         max_retries=0,
-        model_kwargs=({"response_format": {"type": "json_object"}} if json_mode else None),
+        model_kwargs=({"response_format": {"type": "json_object"}} if json_mode else {}),
     )
     return chat, model
 
