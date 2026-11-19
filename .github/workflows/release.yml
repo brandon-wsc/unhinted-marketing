@@ -164,7 +164,7 @@ jobs:
     name: Deploy demo.unhinted.hk (ACA)
     needs: release
     runs-on: ubuntu-latest
-    environment: demo
+    environment: unhinted-deploy
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:

@@ -112,12 +112,12 @@ az role assignment create --assignee "$appId" --role Contributor \
 az ad app federated-credential create --id "$appId" --parameters '{
   "name": "github-demo-env",
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:brandon-wsc/unhinted-marketing:environment:demo",
+  "subject": "repo:brandon-wsc/unhinted-marketing:environment:unhinted-deploy",
   "audiences": ["api://AzureADTokenExchange"]
 }'
 ```
 
-Then GitHub → repo **Settings → Environments → New environment `demo`**
+Then GitHub → repo **Settings → Environments → New environment `unhinted-deploy`**
 → add variables `AZURE_CLIENT_ID` (the `appId` above), `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`. The `environment` name is what the federated
 credential's `subject` binds to — rename both together if changed.

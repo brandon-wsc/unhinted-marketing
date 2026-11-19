@@ -56,7 +56,8 @@ five ACA resources to the pinned tag and starts the migrate job. The job
 pins `vX.Y.Z` rather than `onprem` because an unchanged image string
 produces no new ACA revision (so `onprem` would not re-pull); a later
 manual `azd up` returns the apps to `onprem` — the same image — so the
-drift is cosmetic. Azure auth is GitHub OIDC on a `demo` environment (no
+drift is cosmetic. Azure auth is GitHub OIDC on the `unhinted-deploy`
+environment (no
 stored client secret); one-time setup is in `deploy/azure/README.md`.
 
 ### 4. CI covers release branches
