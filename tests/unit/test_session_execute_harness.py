@@ -1,9 +1,8 @@
 """Execute harness (ADR 0060) — scripted chat models, allowlist, DraftOut/EditOut, recorder.
 
-Primary path is LangChain (``bind_tools`` + output-as-tool loop); the
-Pydantic AI agents stay as the anthropic/gemini/vertex fallback. The model
-finishes by "calling" ``DraftOut`` / ``EditOut`` — the same mechanism
-Pydantic AI used for ``output_type``.
+``bind_tools`` + output-as-tool loop: the model finishes by "calling"
+``DraftOut`` / ``EditOut``, so scripted replies emit a tool_call naming
+the schema.
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ import uuid
 
 import pytest
 from langchain_core.messages import AIMessage
-from pydantic_ai.models.test import TestModel
 
 from internal.session import execute_harness as EH
 from internal.session import harness as H
@@ -30,19 +28,6 @@ def _clear_execute_model_override() -> None:
 
 def test_execute_lc_tool_allowlist_excludes_publish() -> None:
     names = {t.name for t in EH.execute_tools()}
-    assert names == EH.EXECUTE_TOOL_NAMES
-    assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
-    assert "publish_social_post" not in names
-
-
-def test_execute_pa_fallback_agent_keeps_same_allowlist() -> None:
-    agent = EH.build_execute_agent(
-        model=TestModel(
-            call_tools=[],
-            custom_output_args={"caption": "Hello HK"},
-        )
-    )
-    names = H.registered_function_tool_names(agent)
     assert names == EH.EXECUTE_TOOL_NAMES
     assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
     assert "publish_social_post" not in names
@@ -138,19 +123,6 @@ async def test_run_executor_post_records_chat_json(monkeypatch: pytest.MonkeyPat
     assert rec.response_text
     assert rec.prompt_tokens is not None
     assert rec.completion_tokens is not None
-
-
-def test_edit_pa_fallback_agent_keeps_same_allowlist() -> None:
-    agent = EH.build_edit_agent(
-        model=TestModel(
-            call_tools=[],
-            custom_output_args={"caption": "短啲 caption"},
-        )
-    )
-    names = H.registered_function_tool_names(agent)
-    assert names == EH.EXECUTE_TOOL_NAMES
-    assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
-    assert "publish_social_post" not in names
 
 
 @pytest.mark.asyncio

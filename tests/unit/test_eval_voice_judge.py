@@ -1,9 +1,8 @@
-"""VOICE judge math + TestModel — no live API."""
+"""VOICE judge math + scripted chat model — no live API."""
 
 from __future__ import annotations
 
 import pytest
-from pydantic_ai.models.test import TestModel
 
 from internal.config import settings
 from tests.eval.voice_judge import (
@@ -11,6 +10,7 @@ from tests.eval.voice_judge import (
     judge_draft,
     set_voice_judge_model_override,
 )
+from tests.unit.lc_fakes import _ScriptedChat, out_call
 
 
 @pytest.fixture(autouse=True)
@@ -47,18 +47,24 @@ def test_safety_gates() -> None:
 
 
 @pytest.mark.asyncio
-async def test_judge_draft_parses_testmodel() -> None:
+async def test_judge_draft_parses_scripted_output() -> None:
     set_voice_judge_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "scene": 4,
-                "layers": 4,
-                "bridge": 3,
-                "locale": 5,
-                "safety": 5,
-                "reason": "HK OT hook, soft sell",
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "VoiceJudgeOut",
+                        {
+                            "scene": 4,
+                            "layers": 4,
+                            "bridge": 3,
+                            "locale": 5,
+                            "safety": 5,
+                            "reason": "HK OT hook, soft sell",
+                        },
+                    )
+                ]
+            )
         )
     )
     judged = await judge_draft(caption="星期五 OT 完飲罐嘢先走。")

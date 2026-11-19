@@ -560,8 +560,132 @@ def _lc_chat_model(
     return chat, model
 
 
+def _lc_harness_model(resolved: Any) -> tuple[Any, str]:
+    """``(ChatModel, model_label)`` for the session harnesses — full provider coverage.
+
+    Mirrors the retired ``live_harness_model`` branch order: gemini/vertex
+    first, compat/api_base second, claude-by-name third, plain openai last.
+    ``vertex_ai`` rides the genai SDK's Express mode (``vertexai=True`` +
+    api_key — ADR 0021 §4). Raises ``LlmProviderError`` when the matching
+    langchain package is absent.
+    """
+    lowered = resolved.model_id.lower()
+    if resolved.provider_type in ("gemini", "vertex_ai"):
+        model = gemini_catalog_id(resolved.model_id)
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+        except ImportError as exc:
+            raise LlmProviderError(
+                "Gemini / Vertex Express session harness needs "
+                "langchain-google-genai (pip install langchain-google-genai).",
+                model=model,
+                kind="unsupported",
+            ) from exc
+        chat = ChatGoogleGenerativeAI(
+            model=model,
+            google_api_key=resolved.api_key or "not-set",
+            vertexai=resolved.provider_type == "vertex_ai",
+            timeout=settings.llm_timeout_seconds,
+            max_retries=0,
+        )
+        return chat, model
+    api_base = effective_api_base(resolved.provider_type, resolved.api_base)
+    if resolved.provider_type == "openai_compatible" or api_base:
+        lc = _lc_chat_model(resolved, temperature=None)
+        if lc is None:
+            raise LlmProviderError(
+                "OpenAI-compatible session harness needs langchain-openai.",
+                model=resolved.model_id,
+                kind="unsupported",
+            )
+        return lc
+    if (
+        resolved.provider_type == "anthropic"
+        or "claude" in lowered
+        or lowered.startswith("anthropic")
+    ):
+        model = resolved.model_id.split("/")[-1]
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError as exc:
+            raise LlmProviderError(
+                "Anthropic session harness needs langchain-anthropic "
+                "(pip install langchain-anthropic).",
+                model=model,
+                kind="unsupported",
+            ) from exc
+        chat = ChatAnthropic(
+            model=model,
+            api_key=resolved.api_key,
+            timeout=settings.llm_timeout_seconds,
+            max_retries=0,
+        )
+        return chat, model
+    if not resolved.api_key:
+        raise LlmProviderError(
+            "No OpenAI-compatible key for the session harness.",
+            model=resolved.model_id,
+            kind="auth",
+        )
+    lc = _lc_chat_model(resolved, temperature=None)
+    if lc is None:
+        raise LlmProviderError(
+            "OpenAI session harness needs langchain-openai.",
+            model=resolved.model_id,
+            kind="unsupported",
+        )
+    return lc
+
+
 def _wrap_lc_error(exc: BaseException, *, model: str) -> LlmProviderError:
-    """Map openai-client / LangChain exceptions onto ``LlmProviderError`` kinds."""
+    """Map provider-SDK / LangChain exceptions onto ``LlmProviderError`` kinds."""
+    try:
+        import anthropic
+    except ImportError:  # pragma: no cover — optional provider extra
+        anthropic = None  # type: ignore[assignment]
+    if anthropic is not None:
+        if isinstance(exc, anthropic.APITimeoutError):
+            return LlmProviderError(
+                f"LLM timed out talking to {model}. Check network and that the model is reachable.",
+                model=model,
+                kind="timeout",
+            )
+        if isinstance(exc, anthropic.APIConnectionError):
+            return LlmProviderError(
+                f"Could not connect to LLM endpoint for {model}. Check LLM_API_BASE / network.",
+                model=model,
+                kind="connection",
+            )
+        if isinstance(exc, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+            return LlmProviderError(
+                f"LLM authentication failed for {model}. Check the provider API key.",
+                model=model,
+                kind="auth",
+            )
+        if isinstance(exc, anthropic.RateLimitError):
+            return LlmProviderError(
+                f"LLM rate limit hit for {model}. Try again shortly.",
+                model=model,
+                kind="rate_limit",
+            )
+        if isinstance(exc, anthropic.NotFoundError):
+            return LlmProviderError(
+                f"Model {model} was not found. Check the model id.",
+                model=model,
+                kind="unsupported",
+            )
+        if isinstance(exc, anthropic.BadRequestError):
+            return LlmProviderError(
+                f"LLM rejected the request for {model} (bad model id or unsupported params). Check LLM_*_MODEL.",
+                model=model,
+                kind="bad_request",
+            )
+    try:
+        from google.genai.errors import APIError as GoogleAPIError
+    except ImportError:  # pragma: no cover — optional provider extra
+        GoogleAPIError = None  # type: ignore[assignment, misc]
+    if GoogleAPIError is not None and isinstance(exc, GoogleAPIError):
+        return _wrap_google_genai_error(exc, model=model)
     try:
         import openai
     except ImportError:  # pragma: no cover — openai ships with litellm

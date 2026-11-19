@@ -1,16 +1,13 @@
-"""Execute inner loop for executor_post and edit_copy — LangChain primary, Pydantic AI fallback (ADR 0060).
+"""Execute inner loop for executor_post and edit_copy — LangChain chat models (ADR 0060).
 
 Narrow agents: typed DraftOut / EditOut. Publish-class tools are never registered.
-Graph vertices stay unchanged; Confirm remains HTTP. ``openai`` /
-``openai_compatible`` run the ``bind_tools`` + output-as-tool loop;
-``anthropic`` / ``gemini`` / ``vertex_ai`` keep the Pydantic AI agent until
-their langchain packages land — provider coverage is unchanged.
+Graph vertices stay unchanged; Confirm remains HTTP. DraftOut/EditOut ride
+the tool loop as bound schemas — the model finishes by "calling" one
+(ADR 0060 §output-as-tool).
 """
 
 from __future__ import annotations
 
-import asyncio
-import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -18,24 +15,18 @@ from typing import Annotated, Any
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
-from pydantic_ai import Agent, RunContext, Tool
-from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, RunCancelled
-from pydantic_ai.models import Model
 
-from internal.llm.recorder import mark_last_call, track
-from internal.llm.router import LlmProviderError, ModelTier
+from internal.llm.router import ModelTier
 from internal.session import harness as H
 from internal.session import prompts
-from internal.session.io import DraftOut, EditOut, omit_nulls
+from internal.session.io import DraftOut, EditOut
 from internal.session.tiers import NODE_MODEL_TIERS
 from schemas.tools import QueryMarketTrendsResponse
 
-logger = logging.getLogger(__name__)
-
 EXECUTE_TOOL_NAMES = frozenset({"query_market_trends"})
 
-_model_override: Model | BaseChatModel | None = None
-_edit_model_override: Model | BaseChatModel | None = None
+_model_override: BaseChatModel | None = None
+_edit_model_override: BaseChatModel | None = None
 
 
 @dataclass
@@ -43,13 +34,13 @@ class ExecuteDeps:
     company_id: uuid.UUID | None = None
 
 
-def set_execute_model_override(model: Model | BaseChatModel | None) -> None:
-    """Test hook: inject a fake chat model (LangChain or Pydantic AI). Pass None to restore live."""
+def set_execute_model_override(model: BaseChatModel | None) -> None:
+    """Test hook: inject a scripted chat model. Pass None to restore live."""
     global _model_override
     _model_override = model
 
 
-def set_edit_model_override(model: Model | BaseChatModel | None) -> None:
+def set_edit_model_override(model: BaseChatModel | None) -> None:
     """Test hook for edit_copy. Pass None to restore live."""
     global _edit_model_override
     _edit_model_override = model
@@ -83,75 +74,22 @@ def execute_tools(extra_tools: Sequence[Any] = ()) -> list[Any]:
     return tools
 
 
-async def _pa_query_market_trends(
-    ctx: RunContext[ExecuteDeps],
-    region: str = "HK",
-    limit: int = 20,
-) -> QueryMarketTrendsResponse:
-    return await _run_query_market_trends(ctx.deps, region, limit)
-
-
-def build_execute_agent(
-    *,
-    model: Model,
-    extra_tools: Sequence[Any] = (),
-) -> Agent[ExecuteDeps, DraftOut]:
-    """Pydantic AI fallback agent — anthropic/gemini/vertex path (same tool names)."""
-    tools: list[Any] = [
-        Tool(_pa_query_market_trends, name="query_market_trends"),
-        *extra_tools,
-    ]
-    return Agent(
-        model,
-        deps_type=ExecuteDeps,
-        output_type=DraftOut,
-        system_prompt=prompts.EXECUTOR_POST,
-        tools=tools,
-        name="session_execute",
-        end_strategy="exhaustive",
-    )
-
-
-def build_edit_agent(
-    *,
-    model: Model,
-    extra_tools: Sequence[Any] = (),
-) -> Agent[ExecuteDeps, EditOut]:
-    """Pydantic AI fallback agent — anthropic/gemini/vertex path (same tool names)."""
-    tools: list[Any] = [
-        Tool(_pa_query_market_trends, name="query_market_trends"),
-        *extra_tools,
-    ]
-    return Agent(
-        model,
-        deps_type=ExecuteDeps,
-        output_type=EditOut,
-        system_prompt=prompts.EDIT_COPY,
-        tools=tools,
-        name="session_edit",
-        end_strategy="exhaustive",
-    )
-
-
-def _usage_of(result: Any) -> Any:
-    usage = getattr(result, "usage", None)
-    return usage() if callable(usage) else usage
-
-
 def _caption_ok(parsed: Any) -> bool:
     return bool((parsed.caption or "").strip())
 
 
-async def _run_executor_post_lc(
-    *,
-    chat: BaseChatModel,
-    model_label: str,
+async def run_executor_post_agent(
     user_prompt: str,
     deps: ExecuteDeps,
 ) -> DraftOut | None:
+    """Run the execute agent; return DraftOut or None on parse miss."""
+    if _model_override is not None:
+        chat, label = _model_override, H._model_label(_model_override)
+    else:
+        chat, label = H._live_lc_model(NODE_MODEL_TIERS["executor_post"] or ModelTier.MEDIUM)
     return await H.run_typed_lc_agent(
         chat=chat,
-        model_label=model_label,
+        model_label=label,
         tier=NODE_MODEL_TIERS["executor_post"],
         system=prompts.EXECUTOR_POST,
         user_prompt=user_prompt,
@@ -163,93 +101,18 @@ async def _run_executor_post_lc(
     )
 
 
-async def _run_executor_post_pa(
-    *,
-    model: Model,
-    user_prompt: str,
-    deps: ExecuteDeps,
-) -> DraftOut | None:
-    """Pydantic AI path — anthropic/gemini/vertex until langchain packages land."""
-    agent = build_execute_agent(model=model)
-    parsed: DraftOut | None = None
-    with track(
-        kind="chat_json",
-        tier=NODE_MODEL_TIERS["executor_post"],
-        model=H._model_label(model),
-        system=prompts.EXECUTOR_POST,
-        user=user_prompt,
-    ) as rec:
-        try:
-            result = await agent.run(user_prompt, deps=deps)
-            rec.set_usage(_usage_of(result))
-            output = result.output
-            if isinstance(output, DraftOut):
-                parsed = DraftOut.model_validate(omit_nulls(output.model_dump()))
-            elif isinstance(output, dict):
-                parsed = DraftOut.model_validate(omit_nulls(output))
-            else:
-                parsed = DraftOut.model_validate(omit_nulls({"caption": str(output)}))
-            rec.response_text = parsed.model_dump_json()
-        except asyncio.CancelledError:
-            raise
-        except RunCancelled as exc:
-            raise asyncio.CancelledError from exc
-        except (ModelHTTPError, ModelAPIError) as exc:
-            raise H._wrap_provider_error(exc) from exc
-        except LlmProviderError:
-            raise
-        except Exception:
-            mark_last_call(parse_ok=False, fallback_used=True)
-            logger.exception("executor_post agent failed")
-            return None
-        if not (parsed.caption or "").strip():
-            mark_last_call(parse_ok=False, fallback_used=True)
-            return None
-        mark_last_call(parse_ok=True)
-        return parsed
-
-
-async def run_executor_post_agent(
-    user_prompt: str,
-    deps: ExecuteDeps,
-) -> DraftOut | None:
-    """Run the execute agent; return DraftOut or None on parse miss."""
-    model = _model_override
-    if isinstance(model, BaseChatModel):
-        return await _run_executor_post_lc(
-            chat=model,
-            model_label=H._model_label(model),
-            user_prompt=user_prompt,
-            deps=deps,
-        )
-    if model is None:
-        lc = H._live_lc_model(NODE_MODEL_TIERS["executor_post"] or ModelTier.MEDIUM)
-        if lc is not None:
-            chat, label = lc
-            return await _run_executor_post_lc(
-                chat=chat,
-                model_label=label,
-                user_prompt=user_prompt,
-                deps=deps,
-            )
-        model = H.live_harness_model(NODE_MODEL_TIERS["executor_post"] or ModelTier.MEDIUM)
-    return await _run_executor_post_pa(
-        model=model,
-        user_prompt=user_prompt,
-        deps=deps,
-    )
-
-
-async def _run_edit_copy_lc(
-    *,
-    chat: BaseChatModel,
-    model_label: str,
+async def run_edit_copy_agent(
     user_prompt: str,
     deps: ExecuteDeps,
 ) -> EditOut | None:
+    """Run the edit agent; return EditOut or None on parse miss."""
+    if _edit_model_override is not None:
+        chat, label = _edit_model_override, H._model_label(_edit_model_override)
+    else:
+        chat, label = H._live_lc_model(NODE_MODEL_TIERS["edit_copy"] or ModelTier.MEDIUM)
     return await H.run_typed_lc_agent(
         chat=chat,
-        model_label=model_label,
+        model_label=label,
         tier=NODE_MODEL_TIERS["edit_copy"],
         system=prompts.EDIT_COPY,
         user_prompt=user_prompt,
@@ -258,81 +121,4 @@ async def _run_edit_copy_lc(
         out_type=EditOut,
         is_valid=_caption_ok,
         log_tag="edit_copy",
-    )
-
-
-async def _run_edit_copy_pa(
-    *,
-    model: Model,
-    user_prompt: str,
-    deps: ExecuteDeps,
-) -> EditOut | None:
-    """Pydantic AI path — anthropic/gemini/vertex until langchain packages land."""
-    agent = build_edit_agent(model=model)
-    parsed: EditOut | None = None
-    with track(
-        kind="chat_json",
-        tier=NODE_MODEL_TIERS["edit_copy"],
-        model=H._model_label(model),
-        system=prompts.EDIT_COPY,
-        user=user_prompt,
-    ) as rec:
-        try:
-            result = await agent.run(user_prompt, deps=deps)
-            rec.set_usage(_usage_of(result))
-            output = result.output
-            if isinstance(output, EditOut):
-                parsed = EditOut.model_validate(omit_nulls(output.model_dump()))
-            elif isinstance(output, dict):
-                parsed = EditOut.model_validate(omit_nulls(output))
-            else:
-                parsed = EditOut.model_validate(omit_nulls({"caption": str(output)}))
-            rec.response_text = parsed.model_dump_json()
-        except asyncio.CancelledError:
-            raise
-        except RunCancelled as exc:
-            raise asyncio.CancelledError from exc
-        except (ModelHTTPError, ModelAPIError) as exc:
-            raise H._wrap_provider_error(exc) from exc
-        except LlmProviderError:
-            raise
-        except Exception:
-            mark_last_call(parse_ok=False, fallback_used=True)
-            logger.exception("edit_copy agent failed")
-            return None
-        if not (parsed.caption or "").strip():
-            mark_last_call(parse_ok=False, fallback_used=True)
-            return None
-        mark_last_call(parse_ok=True)
-        return parsed
-
-
-async def run_edit_copy_agent(
-    user_prompt: str,
-    deps: ExecuteDeps,
-) -> EditOut | None:
-    """Run the edit agent; return EditOut or None on parse miss."""
-    model = _edit_model_override
-    if isinstance(model, BaseChatModel):
-        return await _run_edit_copy_lc(
-            chat=model,
-            model_label=H._model_label(model),
-            user_prompt=user_prompt,
-            deps=deps,
-        )
-    if model is None:
-        lc = H._live_lc_model(NODE_MODEL_TIERS["edit_copy"] or ModelTier.MEDIUM)
-        if lc is not None:
-            chat, label = lc
-            return await _run_edit_copy_lc(
-                chat=chat,
-                model_label=label,
-                user_prompt=user_prompt,
-                deps=deps,
-            )
-        model = H.live_harness_model(NODE_MODEL_TIERS["edit_copy"] or ModelTier.MEDIUM)
-    return await _run_edit_copy_pa(
-        model=model,
-        user_prompt=user_prompt,
-        deps=deps,
     )

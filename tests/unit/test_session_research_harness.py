@@ -1,10 +1,7 @@
 """Research harness (ADR 0060) — scripted chat models, allowlist, ingest tool, recorder.
 
-Primary path is LangChain (``bind_tools`` + output-as-tool loop); the
-Pydantic AI agent stays as the anthropic/gemini/vertex fallback. The model
-finishes by "calling" ``QueryGenOut`` — the same mechanism Pydantic AI used
-for ``output_type`` — so scripted replies emit a tool_call naming the
-schema.
+``bind_tools`` + output-as-tool loop: the model finishes by "calling"
+``QueryGenOut``, so scripted replies emit a tool_call naming the schema.
 """
 
 from __future__ import annotations
@@ -15,7 +12,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 from langchain_core.messages import AIMessage
-from pydantic_ai.models.test import TestModel
 
 from internal.session import harness as H
 from internal.session import ingest as ingest_mod
@@ -48,19 +44,6 @@ def _tavily_items(query: str) -> list[dict]:
 
 def test_research_lc_tool_allowlist_excludes_publish() -> None:
     names = {t.name for t in RH.research_tools()}
-    assert names == RH.RESEARCH_TOOL_NAMES
-    assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
-    assert "publish_social_post" not in names
-
-
-def test_research_pa_fallback_agent_keeps_same_allowlist() -> None:
-    agent = RH.build_research_agent(
-        model=TestModel(
-            call_tools=[],
-            custom_output_args={"search_queries": ["Hong Kong overtime"]},
-        )
-    )
-    names = H.registered_function_tool_names(agent)
     assert names == RH.RESEARCH_TOOL_NAMES
     assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
     assert "publish_social_post" not in names

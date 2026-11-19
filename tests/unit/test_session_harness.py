@@ -1,10 +1,10 @@
 """Chat harness (ADR 0060) — scripted chat models, allowlist, cancel, SSE deltas.
 
-The primary path is LangChain (``bind_tools`` + hand-rolled ``astream`` loop);
-``anthropic`` / ``gemini`` / ``vertex_ai`` keep the Pydantic AI fallback, so
-``live_harness_model`` and ``build_chat_agent`` stay pydantic-flavoured.
-``_ScriptedChat`` is the ``GenericFakeChatModel`` + ``bind_tools`` shim the
-LangChain tests script through ``set_chat_model_override``.
+``bind_tools`` + hand-rolled ``astream`` loop; provider mapping lives in
+``router._lc_harness_model`` (openai/compat → ChatOpenAI, claude-by-name →
+ChatAnthropic, gemini/vertex_ai → ChatGoogleGenerativeAI). ``_ScriptedChat``
+is the ``GenericFakeChatModel`` + ``bind_tools`` shim the tests script
+through ``set_chat_model_override``.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from typing import Annotated
 import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.tools import InjectedToolArg, tool
-from pydantic_ai.models.test import TestModel
 
 from internal.session import harness as H
 from internal.session import nodes as N
@@ -37,13 +36,6 @@ def test_chat_agent_allowlist_excludes_publish() -> None:
     assert names == H.CHAT_TOOL_NAMES
     assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
     assert "publish_social_post" not in names
-
-
-def test_pa_fallback_agent_keeps_same_allowlist() -> None:
-    agent = H.build_chat_agent(model=TestModel(call_tools=[], custom_output_text="x"))
-    names = H.registered_function_tool_names(agent)
-    assert names == H.CHAT_TOOL_NAMES
-    assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
 
 
 def test_slow_probe_is_opt_in() -> None:
@@ -264,15 +256,6 @@ async def test_stream_chat_reply_records_call_context(monkeypatch: pytest.Monkey
 # --- live model resolution ---------------------------------------------------
 
 
-def test_live_chat_model_uses_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    from internal import config
-
-    monkeypatch.setattr(config.settings, "llm_api_base", "http://127.0.0.1:4000/v1")
-    monkeypatch.setattr(config.settings, "openai_api_key", "sk-test")
-    model = H.live_chat_model()
-    assert getattr(model, "model_name", None)
-
-
 def test_live_lc_chat_model_openai_compatible(monkeypatch: pytest.MonkeyPatch) -> None:
     """openai_compatible resolves to a LangChain ChatOpenAI."""
     from langchain_openai import ChatOpenAI
@@ -282,16 +265,16 @@ def test_live_lc_chat_model_openai_compatible(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
     monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
     monkeypatch.setattr(config.settings, "llm_cheap_model", "deepseek/deepseek-v4-flash-0731")
-    lc = H._live_lc_chat_model()
-    assert lc is not None
-    chat, label = lc
+    chat, label = H._live_lc_chat_model()
     assert isinstance(chat, ChatOpenAI)
     assert label == "deepseek/deepseek-v4-flash-0731"
 
 
-def test_live_lc_chat_model_none_for_claude_named_openai_slot() -> None:
+def test_live_lc_chat_model_anthropic_for_claude_named_openai_slot() -> None:
     """A bare provider_type='openai' slot with a claude id keeps the
-    ``live_harness_model`` anthropic heuristic — no LangChain model."""
+    claude-by-name heuristic — routes to ChatAnthropic."""
+    from langchain_anthropic import ChatAnthropic
+
     from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
 
     claude = ResolvedModel(
@@ -303,10 +286,14 @@ def test_live_lc_chat_model_none_for_claude_named_openai_slot() -> None:
         key_last4="test",
     )
     with llm_bundle_scope(CompanyLlmBundle(cheap=claude)):
-        assert H._live_lc_chat_model() is None
+        chat, label = H._live_lc_chat_model()
+    assert isinstance(chat, ChatAnthropic)
+    assert label == "claude-sonnet-4-5"
 
 
-def test_live_lc_chat_model_none_for_gemini() -> None:
+def test_live_lc_chat_model_google_genai_for_gemini() -> None:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
     from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
 
     gemini = ResolvedModel(
@@ -318,60 +305,17 @@ def test_live_lc_chat_model_none_for_gemini() -> None:
         key_last4="test",
     )
     with llm_bundle_scope(CompanyLlmBundle(cheap=gemini)):
-        assert H._live_lc_chat_model() is None
+        chat, label = H._live_lc_chat_model()
+    assert isinstance(chat, ChatGoogleGenerativeAI)
+    assert label == "gemini-2.5-flash"
+    assert getattr(chat, "vertexai", None) is False
 
 
-def test_live_harness_keeps_openrouter_slug(monkeypatch: pytest.MonkeyPatch) -> None:
-    from internal import config
-    from internal.llm.router import ModelTier
-
-    monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
-    monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
-    monkeypatch.setattr(config.settings, "llm_cheap_model", "deepseek/deepseek-v4-flash-0731")
-    model = H.live_harness_model(ModelTier.CHEAP)
-    assert getattr(model, "model_name", None) == "deepseek/deepseek-v4-flash-0731"
-
-
-def test_live_harness_strips_openrouter_provider_prefix(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from internal import config
-    from internal.llm.router import ModelTier
-
-    monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
-    monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
-    monkeypatch.setattr(
-        config.settings, "llm_cheap_model", "openrouter/bytedance-seed/seedream-4.5"
-    )
-    model = H.live_harness_model(ModelTier.CHEAP)
-    assert getattr(model, "model_name", None) == "bytedance-seed/seedream-4.5"
-
-
-def test_live_harness_uses_google_model_for_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pydantic_ai.models.google import GoogleModel
+def test_live_lc_chat_model_vertexai_flag_for_vertex_slot() -> None:
+    """vertex_ai rides the genai SDK's Express mode — api_key + vertexai=True."""
+    from langchain_google_genai import ChatGoogleGenerativeAI
 
     from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
-    from internal.llm.router import ModelTier
-
-    gemini = ResolvedModel(
-        model_id="gemini-2.5-flash",
-        api_key="AIza-test",
-        api_base=None,
-        provider_type="gemini",
-        source="org",
-        key_last4="test",
-    )
-    with llm_bundle_scope(CompanyLlmBundle(cheap=gemini)):
-        model = H.live_harness_model(ModelTier.CHEAP)
-    assert isinstance(model, GoogleModel)
-    assert getattr(model, "model_name", None) == "gemini-2.5-flash"
-
-
-def test_live_harness_uses_google_cloud_provider_for_vertex_ai() -> None:
-    from pydantic_ai.models.google import GoogleModel
-
-    from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
-    from internal.llm.router import ModelTier
 
     vertex = ResolvedModel(
         model_id="gemini-2.5-flash",
@@ -382,8 +326,59 @@ def test_live_harness_uses_google_cloud_provider_for_vertex_ai() -> None:
         key_last4="test",
     )
     with llm_bundle_scope(CompanyLlmBundle(cheap=vertex)):
-        model = H.live_harness_model(ModelTier.CHEAP)
-    assert isinstance(model, GoogleModel)
-    assert getattr(model, "model_name", None) == "gemini-2.5-flash"
-    assert model.system == "google-cloud"
-    assert getattr(model.client, "vertexai", None) is True
+        chat, label = H._live_lc_chat_model()
+    assert isinstance(chat, ChatGoogleGenerativeAI)
+    assert label == "gemini-2.5-flash"
+    assert getattr(chat, "vertexai", None) is True
+
+
+def test_live_lc_chat_model_keeps_openrouter_slug(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_openai import ChatOpenAI
+
+    from internal import config
+
+    monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
+    monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
+    monkeypatch.setattr(config.settings, "llm_cheap_model", "deepseek/deepseek-v4-flash-0731")
+    chat, label = H._live_lc_chat_model()
+    assert isinstance(chat, ChatOpenAI)
+    assert label == "deepseek/deepseek-v4-flash-0731"
+    assert getattr(chat, "model_name", None) == "deepseek/deepseek-v4-flash-0731"
+
+
+def test_live_lc_chat_model_strips_openrouter_provider_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from langchain_openai import ChatOpenAI
+
+    from internal import config
+
+    monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
+    monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
+    monkeypatch.setattr(
+        config.settings, "llm_cheap_model", "openrouter/bytedance-seed/seedream-4.5"
+    )
+    chat, label = H._live_lc_chat_model()
+    assert isinstance(chat, ChatOpenAI)
+    assert label == "bytedance-seed/seedream-4.5"
+
+
+def test_live_lc_model_no_openai_key_is_auth_error() -> None:
+    """A plain openai slot with no key fails the same way the PA path did."""
+    from internal.llm.resolve import CompanyLlmBundle, ResolvedModel, llm_bundle_scope
+    from internal.llm.router import LlmProviderError, ModelTier
+
+    bare = ResolvedModel(
+        model_id="gpt-4o-mini",
+        api_key=None,
+        api_base=None,
+        provider_type="openai",
+        source="org",
+        key_last4=None,
+    )
+    with (
+        llm_bundle_scope(CompanyLlmBundle(cheap=bare)),
+        pytest.raises(LlmProviderError) as exc_info,
+    ):
+        H._live_lc_model(ModelTier.CHEAP)
+    assert exc_info.value.kind == "auth"

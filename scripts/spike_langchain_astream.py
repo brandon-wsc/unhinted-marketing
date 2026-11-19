@@ -16,6 +16,7 @@ Run: .venv/bin/python scripts/spike_langchain_astream.py
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from typing import Any
@@ -167,10 +168,8 @@ class SseStub:
         # Watcher must start after the request is fully read: a StreamReader
         # rejects a second concurrent read.
         watcher = asyncio.create_task(self._watch_eof(reader))
-        try:
+        with contextlib.suppress(json.JSONDecodeError):
             self.request_body = json.loads(body)
-        except json.JSONDecodeError:
-            pass
         writer.write(
             b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n"
             b"cache-control: no-cache\r\nconnection: close\r\n\r\n"
@@ -225,8 +224,8 @@ async def _consume_n_then_cancel(model: ChatOpenAI, n: int) -> tuple[list[str], 
     # Explicitly aclose the outer generator — mirrors what our seam will do.
     try:
         await agen.aclose()
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 — best-effort close in the spike
+        print(f"aclose after cancel: {exc!r}")
     return parts, cancelled, usage
 
 
