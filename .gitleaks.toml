@@ -1,0 +1,23 @@
+title = "unhinted gitleaks config"
+
+[extend]
+useDefault = true
+
+# Test fixtures and CI-only placeholder secrets — scoped to the exact files
+# and exact values so a real secret leaked anywhere else (including other
+# test files) is still caught. If a fixture value is rotated, update the
+# matching regex here.
+[allowlist]
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''^tests/api/test_setup\.py$''',
+  '''^tests/unit/test_meta_oauth\.py$''',
+  '''^\.github/workflows/ci\.yml$''',
+]
+regexes = [
+  '''relay-secret-\d+''',
+  '''IGQW-[\w-]+''',
+  '''ci-test-jwt-secret-[\w-]+''',
+  '''7TYpIqhIjNnl1cVDXFLcMFEVJI8YgzgEvB3mWS8dZc4=''',
+]
