@@ -224,6 +224,8 @@ jobs:
           pip install --no-deps --no-build-isolation -e .
       - name: Fail if contract mirrors are out of date
         run: python -m scripts.check_contracts_fresh
+      - name: AGENTS.md documented commands exist
+        run: python -m scripts.check_agents_commands
       - name: Fail if generated TS types are out of date
         working-directory: scripts/typescript_gen
         run: |
