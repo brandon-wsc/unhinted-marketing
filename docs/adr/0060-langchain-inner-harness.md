@@ -75,6 +75,8 @@ The migration is invisible to the graph and to most tests because the seams do n
 
 Working checklist lives in [`docs/LANGCHAIN_MIGRATION.md`](../LANGCHAIN_MIGRATION.md) (temporary; deleted when the migration lands). Order: this ADR → deps (`langchain-core` + provider packages, versions ≥7 days old) → `complete_json`/`complete_text` on LangChain → three harnesses (chat, research, execute) → re-point `scripts/eval_agent.py` → rewrite the five Pydantic-AI-coupled test files at the same abstraction level → `pydantic-ai-slim` removed last.
 
+**Coverage never shrinks mid-migration.** Until a provider's langchain package lands, its current path stays live behind the same seam: `anthropic`/`gemini`/`vertex_ai` chat turns keep the Pydantic AI agent loop (including the `claude`-by-name heuristic), and the router seams keep their litellm/vertex fallbacks. Removing those fallbacks happens only when the replacement package is installed and verified.
+
 Regression anchor: `scripts/eval_agent --suite regression --out reports/eval/baseline.json` on main before the swap, `scripts/eval_diff` after — set-coverage metrics must not regress (`--strict-models` if the resolved model set changes).
 
 Rejected, restated: a nested LangGraph/`create_agent` inner loop (state ownership ambiguity — the original 0019 objection); OpenAI/Claude Agent SDK and other second control planes (unchanged from 0019); exposing `schemas/` through a TypeScript-first framework (unchanged).
