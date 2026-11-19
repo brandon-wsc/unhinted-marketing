@@ -12,11 +12,12 @@ Requires Docker with Compose v2.20+ (`docker compose version`).
 
 ## Two update tracks
 
-Same compose shape, different source of truth ([ADR 0037](../docs/adr/0037-demo-local-cd.md)).
+Same compose shape, different source of truth ([ADR 0037](../docs/adr/0037-demo-local-cd.md) · [ADR 0059](../docs/adr/0059-release-branches-demo-track-split.md)).
 
 | Track | Who | What runs | How it updates |
 |-------|-----|-----------|----------------|
-| **Demo / local CD** | Personal machine or private demo host | Current `main` HEAD, built on that machine | `./demo-sync.sh` (git fast-forward + `docker compose up -d --build`) |
+| **Hosted demo** | `demo.unhinted.hk` (Azure Container Apps) | Latest published release — floating GHCR `onprem` tag | `azd up` after a release (see `azure/README.md`) |
+| **Demo / local CD** | NAS test host, personal machine | Current `main` HEAD, built on that machine | `./demo-sync.sh` (git fast-forward + `docker compose up -d --build`) |
 | **Customer pull CD** | Versioned self-hosted install | A published GitHub Release (GHCR version tag; floating `onprem` moves only when a release is published) | Release compose assets, or `docker compose pull` |
 
 `demo-sync.sh` does not download Release assets and does not pull the floating

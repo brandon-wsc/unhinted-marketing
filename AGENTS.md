@@ -119,6 +119,8 @@ Prefer domain names over roadmap phases for `scope`: `auth`, `signals`, `session
 
 Follow the [Conventional Branch](https://conventionalbranch.org/) purpose prefixes: `feat/…` (or `feature/…`), `fix/…` (or `bugfix/…`), `hotfix/…`, `release/…` (dots OK for versions, e.g. `release/v1.2.0`), `chore/…`. Slug is lowercase, hyphen-separated — e.g. `fix/executor-post-voice`. There is no `ci/`, `docs/`, `test/`, `refactor/`, or `perf/` branch — branch type is work intent, not commit type: CI-config, docs, refactor, and test-only work all branch under `chore/…` (their commits still use the commit-type table above). CI rejects PRs whose head branch does not match.
 
+**Long-lived branches** ([ADR 0059](docs/adr/0059-release-branches-demo-track-split.md)): `main` is the only standing integration branch — no `develop`. `release/vX.Y` is cut from `main` on demand only (release hardening, or patching a shipped `vX.Y.*` line). Patch flow: `hotfix/<slug>` off the release branch → PR into `release/vX.Y` → tag `vX.Y.Z` from it → merge or cherry-pick the fix back to `main`. Every `v*` tag also auto-deploys the hosted demo (`release.yml` `demo` job → ACA).
+
 ## Pull requests
 
 - **Title** — same format as commit subjects (`type(scope): summary`, ≤72 chars, ASCII-only); use the dominant change's type/scope. CI's `conventions` job rejects non-conforming titles. Release notes (`generate_release_notes`) read PR titles, so keep them accurate.
@@ -127,7 +129,7 @@ Follow the [Conventional Branch](https://conventionalbranch.org/) purpose prefix
 
 ## Feature work
 
-- **New feature / fix → fresh branch off latest `main`.** Never commit on `main`; never reuse a merged or unrelated branch — one branch + PR per change.
+- **New feature / fix → fresh branch off latest `main`.** Never commit on `main`; never reuse a merged or unrelated branch — one branch + PR per change. (Exception: a fix for a shipped `vX.Y.*` line branches off that `release/vX.Y` branch and PRs into it — ADR 0059.)
 - **New feature → ADR.** A feature that adds or changes a product contract, routing/behavior rule, or architectural decision gets `docs/adr/NNNN-<slug>.md` (next number) before or with the code — supersede the old ADR rather than rewriting it. Pure bug fixes, docs-only, and chore/tooling changes do not need one.
 
 ## Alembic migrations

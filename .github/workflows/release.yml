@@ -2,10 +2,12 @@ name: Release
 
 # Tag a v* release → build + push GHCR images → attach standalone
 # (pull-only, build: stripped, IMAGE_TAG pinned) compose assets to the
-# GitHub Release. Re-run an existing tag via workflow_dispatch.
+# GitHub Release → deploy demo.unhinted.hk on ACA. Re-run an existing
+# tag via workflow_dispatch.
 #
-# Customer pull CD only. Demo / local hosts that track main HEAD use
-# deploy/demo-sync.sh (ADR 0037) — do not build main or poll Releases here.
+# Customer pull CD + hosted demo CD (ADR 0059). NAS / local hosts that
+# track main HEAD use deploy/demo-sync.sh (ADR 0037) — do not build
+# main or poll Releases here.
 #
 # One-time manual step after the first publish: the GHCR packages start
 # private — flip each to public under github.com/users/<owner>/packages →
@@ -157,3 +159,34 @@ jobs:
           # Tag suffix marks the channel: v1.0.0-beta / -rc → pre-release,
           # plain v1.0.0 → full release.
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
+
+  demo:
+    name: Deploy demo.unhinted.hk (ACA)
+    needs: release
+    runs-on: ubuntu-latest
+    environment: unhinted-deploy
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      # Pin the released v tag, not the floating `onprem`: an unchanged
+      # image string produces no new ACA revision, so `onprem` would not
+      # re-pull. A later manual `azd up` returns apps to `onprem` — the
+      # same image — so the drift is cosmetic.
+      - name: Point apps + jobs at the release images
+        run: |
+          set -euo pipefail
+          rg=rg-unhinted-demo
+          api="ghcr.io/${{ github.repository_owner }}/unhinted-api:${RELEASE_TAG}"
+          web="ghcr.io/${{ github.repository_owner }}/unhinted-web:${RELEASE_TAG}"
+          az containerapp update     -g "$rg" -n unhinted-demo-api       --image "$api"
+          az containerapp update     -g "$rg" -n unhinted-demo-web       --image "$web"
+          az containerapp update     -g "$rg" -n unhinted-demo-worker    --image "$api"
+          az containerapp job update -g "$rg" -n unhinted-demo-scheduler --image "$api"
+          az containerapp job update -g "$rg" -n unhinted-demo-migrate   --image "$api"
+      - name: Run DB migrations on the new image
+        run: az containerapp job start -g rg-unhinted-demo -n unhinted-demo-migrate

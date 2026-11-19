@@ -61,6 +61,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0056](./0056-mcp-personal-access-tokens.md) | Personal access tokens for headless MCP clients | Accepted |
 | [0057](./0057-thread-recap-summary.md) | Rolling thread recap for long sessions | Accepted |
 | [0058](./0058-service-wake-hints.md) | Service wake hints: LISTEN/NOTIFY + HTTP kick; polls → backstop sweeps | Proposed |
+| [0059](./0059-release-branches-demo-track-split.md) | Release branches off `main` on demand; hosted demo on releases, NAS/local on `main` | Accepted |
 
 ## Format
 
