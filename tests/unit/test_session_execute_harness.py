@@ -1,14 +1,22 @@
-"""Pydantic AI execute harness (ADR 0019) — TestModel, allowlist, DraftOut, recorder."""
+"""Execute harness (ADR 0060) — scripted chat models, allowlist, DraftOut/EditOut, recorder.
+
+Primary path is LangChain (``bind_tools`` + output-as-tool loop); the
+Pydantic AI agents stay as the anthropic/gemini/vertex fallback. The model
+finishes by "calling" ``DraftOut`` / ``EditOut`` — the same mechanism
+Pydantic AI used for ``output_type``.
+"""
 
 from __future__ import annotations
 
 import uuid
 
 import pytest
+from langchain_core.messages import AIMessage
 from pydantic_ai.models.test import TestModel
 
 from internal.session import execute_harness as EH
 from internal.session import harness as H
+from tests.unit.lc_fakes import _ScriptedChat, out_call
 
 
 @pytest.fixture(autouse=True)
@@ -20,7 +28,14 @@ def _clear_execute_model_override() -> None:
     EH.set_edit_model_override(None)
 
 
-def test_execute_agent_allowlist_excludes_publish() -> None:
+def test_execute_lc_tool_allowlist_excludes_publish() -> None:
+    names = {t.name for t in EH.execute_tools()}
+    assert names == EH.EXECUTE_TOOL_NAMES
+    assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
+    assert "publish_social_post" not in names
+
+
+def test_execute_pa_fallback_agent_keeps_same_allowlist() -> None:
     agent = EH.build_execute_agent(
         model=TestModel(
             call_tools=[],
@@ -36,14 +51,20 @@ def test_execute_agent_allowlist_excludes_publish() -> None:
 @pytest.mark.asyncio
 async def test_executor_post_agent_parses_draftout() -> None:
     EH.set_execute_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "caption": "Hello HK",
-                "hashtags": ["#HK"],
-                "cta": "了解更多",
-                "source_signal_ids": ["sig_a"],
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "DraftOut",
+                        {
+                            "caption": "Hello HK",
+                            "hashtags": ["#HK"],
+                            "cta": "了解更多",
+                            "source_signal_ids": ["sig_a"],
+                        },
+                    )
+                ]
+            )
         )
     )
     parsed = await EH.run_executor_post_agent("draft me", EH.ExecuteDeps())
@@ -55,9 +76,22 @@ async def test_executor_post_agent_parses_draftout() -> None:
 @pytest.mark.asyncio
 async def test_execute_agent_can_call_query_market_trends() -> None:
     EH.set_execute_model_override(
-        TestModel(
-            call_tools=["query_market_trends"],
-            custom_output_args={"caption": "Hello HK"},
+        _ScriptedChat(
+            messages=iter(
+                [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "query_market_trends",
+                                "args": {"region": "HK"},
+                                "id": "t1",
+                            }
+                        ],
+                    ),
+                    out_call("DraftOut", {"caption": "Hello HK"}),
+                ]
+            )
         )
     )
     parsed = await EH.run_executor_post_agent("draft me", EH.ExecuteDeps())
@@ -72,9 +106,16 @@ async def test_run_executor_post_records_chat_json(monkeypatch: pytest.MonkeyPat
     sent: list = []
     monkeypatch.setattr(recorder, "submit", sent.append)
     EH.set_execute_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={"caption": "Hello HK", "hashtags": ["#HK"]},
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "DraftOut",
+                        {"caption": "Hello HK", "hashtags": ["#HK"]},
+                        usage={"input_tokens": 9, "output_tokens": 8, "total_tokens": 17},
+                    )
+                ]
+            )
         )
     )
     sid = uuid.uuid4()
@@ -99,7 +140,7 @@ async def test_run_executor_post_records_chat_json(monkeypatch: pytest.MonkeyPat
     assert rec.completion_tokens is not None
 
 
-def test_edit_agent_allowlist_excludes_publish() -> None:
+def test_edit_pa_fallback_agent_keeps_same_allowlist() -> None:
     agent = EH.build_edit_agent(
         model=TestModel(
             call_tools=[],
@@ -115,15 +156,21 @@ def test_edit_agent_allowlist_excludes_publish() -> None:
 @pytest.mark.asyncio
 async def test_edit_copy_agent_parses_editout() -> None:
     EH.set_edit_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={
-                "caption": "短啲 caption",
-                "hashtags": ["#a"],
-                "cta": "go",
-                "need_image": True,
-                "source_signal_ids": ["sig_a"],
-            },
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "EditOut",
+                        {
+                            "caption": "短啲 caption",
+                            "hashtags": ["#a"],
+                            "cta": "go",
+                            "need_image": True,
+                            "source_signal_ids": ["sig_a"],
+                        },
+                    )
+                ]
+            )
         )
     )
     parsed = await EH.run_edit_copy_agent("shorten", EH.ExecuteDeps())
@@ -134,15 +181,34 @@ async def test_edit_copy_agent_parses_editout() -> None:
 
 
 @pytest.mark.asyncio
+async def test_edit_copy_empty_caption_is_parse_miss() -> None:
+    """Empty caption trips the validity check — same contract as the PA path."""
+    EH.set_edit_model_override(
+        _ScriptedChat(
+            messages=iter([out_call("EditOut", {"caption": "   ", "hashtags": []})])
+        )
+    )
+    parsed = await EH.run_edit_copy_agent("shorten", EH.ExecuteDeps())
+    assert parsed is None
+
+
+@pytest.mark.asyncio
 async def test_run_edit_copy_records_chat_json(monkeypatch: pytest.MonkeyPatch) -> None:
     from internal.llm import recorder
 
     sent: list = []
     monkeypatch.setattr(recorder, "submit", sent.append)
     EH.set_edit_model_override(
-        TestModel(
-            call_tools=[],
-            custom_output_args={"caption": "短啲 caption", "need_image": False},
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "EditOut",
+                        {"caption": "短啲 caption", "need_image": False},
+                        usage={"input_tokens": 7, "output_tokens": 6, "total_tokens": 13},
+                    )
+                ]
+            )
         )
     )
     sid = uuid.uuid4()

@@ -11,40 +11,18 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Annotated, Any
+from typing import Annotated
 
 import pytest
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, AIMessageChunk
-from langchain_core.outputs import ChatGenerationChunk
+from langchain_core.messages import AIMessage
 from langchain_core.tools import InjectedToolArg, tool
 from pydantic_ai.models.test import TestModel
 
 from internal.session import harness as H
 from internal.session import nodes as N
 from internal.session.trace import node_trace_recording
+from tests.unit.lc_fakes import _ScriptedChat
 from tests.unit.test_session_nodes import _base_state
-
-
-class _ScriptedChat(GenericFakeChatModel):
-    """GenericFakeChatModel that supports ``bind_tools`` and streams
-    ``tool_calls`` / ``usage_metadata`` through ``astream`` chunks."""
-
-    def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
-        return self
-
-    def _stream(
-        self, messages: Any, stop: Any = None, run_manager: Any = None, **kwargs: Any
-    ) -> Any:
-        msg = next(self.messages)
-        msg = AIMessage(content=msg) if isinstance(msg, str) else msg
-        yield ChatGenerationChunk(
-            message=AIMessageChunk(
-                content=msg.content if isinstance(msg.content, str) else "",
-                tool_calls=msg.tool_calls,
-                usage_metadata=msg.usage_metadata,
-            )
-        )
 
 
 @pytest.fixture(autouse=True)

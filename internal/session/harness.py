@@ -11,22 +11,24 @@ FastAPI. Chat tools are read-only; publish-class names are never registered.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeVar
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.messages.utils import message_chunk_to_message
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
+from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext, Tool
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, RunCancelled
 from pydantic_ai.models import Model
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from internal.llm.recorder import LlmCallRecordBuilder, track
+from internal.llm.recorder import LlmCallRecordBuilder, mark_last_call, track
 from internal.llm.resolve import gemini_catalog_id, openai_compat_model_id, resolve_llm_model
 from internal.llm.router import (
     LlmProviderError,
@@ -40,6 +42,7 @@ from internal.memory.repos import list_top_signals
 from internal.session import prompts
 from internal.session.context import get_db
 from internal.session.events import session_event_bus
+from internal.session.io import omit_nulls
 from internal.session.tiers import NODE_MODEL_TIERS
 from schemas.tools import (
     QueryMarketTrendsResponse,
@@ -155,18 +158,22 @@ def live_chat_model() -> Model:
     return live_harness_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
 
 
-def _live_lc_chat_model() -> tuple[Any, str] | None:
-    """``(ChatModel, label)`` when the chat provider has a LangChain path, else ``None``.
+def _live_lc_model(tier: ModelTier) -> tuple[Any, str] | None:
+    """``(ChatModel, label)`` when the tier's provider has a LangChain path, else ``None``.
 
     Mirrors ``live_harness_model``'s claude-by-name heuristic so a bare
     ``provider_type="openai"`` slot with a claude id keeps routing to the
     Anthropic (Pydantic AI) path.
     """
-    resolved = resolve_llm_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
+    resolved = resolve_llm_model(tier)
     lowered = resolved.model_id.lower()
     if "claude" in lowered or lowered.startswith("anthropic"):
         return None
     return _lc_chat_model(resolved, temperature=None)
+
+
+def _live_lc_chat_model() -> tuple[Any, str] | None:
+    return _live_lc_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
 
 
 async def lookup_market_trends(
@@ -565,6 +572,134 @@ async def _stream_chat_reply_lc(
         text = (output if output is not None else "".join(parts)).strip()
         rec.response_text = text or None
     return text or None
+
+
+OutT = TypeVar("OutT", bound=BaseModel)
+
+
+def _structured_from_text(out_type: type[OutT], content: Any) -> OutT | None:
+    """Plain-text JSON fallback when a model answers instead of calling ``out_type``."""
+    if isinstance(content, str):
+        text = content
+    else:
+        text = "".join(
+            str(block.get("text") or "") for block in content if isinstance(block, dict)
+        )
+    try:
+        return out_type.model_validate(omit_nulls(json.loads(text)))
+    except (ValueError, TypeError):
+        return None
+
+
+async def run_lc_tool_loop(
+    *,
+    chat: BaseChatModel,
+    system: str,
+    user_prompt: str,
+    deps: Any,
+    tools: Sequence[Any],
+    out_type: type[OutT],
+    rec: LlmCallRecordBuilder,
+) -> OutT | None:
+    """``bind_tools`` loop for typed-output harnesses (ADR 0060 — no ToolNode).
+
+    ``out_type`` is bound alongside the real tools — the same mechanism
+    Pydantic AI uses for ``output_type`` — so the model can interleave real
+    tool calls and finish by "calling" the output schema. A no-tool-call
+    reply falls back to parsing its text as JSON. Provider errors raise
+    ``LlmProviderError``; everything else (tool bugs, validation misses)
+    propagates for the caller's parse-fail path.
+    """
+    by_name = {t.name: t for t in tools}
+    out_name = out_type.__name__
+    bound = chat.bind_tools([*tools, out_type])
+    messages: list[Any] = [
+        SystemMessage(content=system),
+        HumanMessage(content=user_prompt),
+    ]
+    usage: dict[str, int] = {}
+    for _ in range(_MAX_TOOL_ROUNDS):
+        try:
+            reply = await bound.ainvoke(messages)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            raise _wrap_lc_error(exc, model=_model_label(chat)) from exc
+        _merge_lc_usage(usage, getattr(reply, "usage_metadata", None))
+        if usage:
+            rec.set_usage(usage)
+        calls = list(getattr(reply, "tool_calls", None) or [])
+        invalid = list(getattr(reply, "invalid_tool_calls", None) or [])
+        out_calls = [c for c in calls if str(c.get("name") or "") == out_name]
+        real_calls = [c for c in calls if str(c.get("name") or "") != out_name]
+        if real_calls or invalid:
+            messages.append(reply)
+            for call in real_calls:
+                messages.append(await _run_lc_tool_call(call, by_name, deps))
+            for call in invalid:
+                call_id = str(call.get("id") or call.get("name") or "tool_call")
+                messages.append(
+                    ToolMessage(content='{"error": "invalid_tool_call"}', tool_call_id=call_id)
+                )
+        if out_calls:
+            return out_type.model_validate(omit_nulls(dict(out_calls[-1].get("args") or {})))
+        if not calls and not invalid:
+            return _structured_from_text(out_type, getattr(reply, "content", ""))
+    logger.warning("lc tool loop hit %s rounds; parse miss", _MAX_TOOL_ROUNDS)
+    return None
+
+
+async def run_typed_lc_agent(
+    *,
+    chat: BaseChatModel,
+    model_label: str,
+    tier: ModelTier | None,
+    system: str,
+    user_prompt: str,
+    deps: Any,
+    tools: Sequence[Any],
+    out_type: type[OutT],
+    is_valid: Callable[[OutT], bool],
+    log_tag: str,
+) -> OutT | None:
+    """Recorder + error contract shared by the research/execute LC paths.
+
+    Same contract as the Pydantic AI runners: provider errors raise
+    ``LlmProviderError``, cancels propagate, every other failure is a
+    parse miss → ``None``.
+    """
+    with track(
+        kind="chat_json",
+        tier=tier,
+        model=model_label,
+        system=system,
+        user=user_prompt,
+    ) as rec:
+        try:
+            parsed = await run_lc_tool_loop(
+                chat=chat,
+                system=system,
+                user_prompt=user_prompt,
+                deps=deps,
+                tools=tools,
+                out_type=out_type,
+                rec=rec,
+            )
+            if parsed is not None:
+                rec.response_text = parsed.model_dump_json()
+        except asyncio.CancelledError:
+            raise
+        except LlmProviderError:
+            raise
+        except Exception:
+            mark_last_call(parse_ok=False, fallback_used=True)
+            logger.exception("%s agent failed", log_tag)
+            return None
+        if parsed is None or not is_valid(parsed):
+            mark_last_call(parse_ok=False, fallback_used=True)
+            return None
+        mark_last_call(parse_ok=True)
+        return parsed
 
 
 async def _stream_chat_reply_pa(
