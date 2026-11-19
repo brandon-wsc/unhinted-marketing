@@ -71,11 +71,13 @@ The migration is invisible to the graph and to most tests because the seams do n
 
 [ADR 0021](./0021-org-byok-native-gemini.md) locks Vertex Express to **api_key-only — no ADC**. `langchain-google-vertexai` assumes ADC; `langchain-google-genai` (AI Studio key) may fit Express keys. Spike order: `langchain-google-genai` → keep the existing hand-rolled `_vertex_*` path behind the same `complete_json` seam if neither package honours key-only auth. The seam makes either outcome transparent; record the result in this ADR's follow-up note or STATUS.
 
+**Resolved (landed):** `ChatGoogleGenerativeAI(vertexai=True, google_api_key=…)` constructs the genai SDK client in Vertex Express mode (`client.vertexai === true`, verified offline) — the harness path uses it, no `langchain-google-vertexai` needed. The `complete_json`/`complete_text`/`astream_text` seams keep the existing hand-rolled `express_client` path for `vertex_ai` unchanged.
+
 ### 5. Migration order
 
 Working checklist lives in [`docs/LANGCHAIN_MIGRATION.md`](../LANGCHAIN_MIGRATION.md) (temporary; deleted when the migration lands). Order: this ADR → deps (`langchain-core` + provider packages, versions ≥7 days old) → `complete_json`/`complete_text` on LangChain → three harnesses (chat, research, execute) → re-point `scripts/eval_agent.py` → rewrite the five Pydantic-AI-coupled test files at the same abstraction level → `pydantic-ai-slim` removed last.
 
-**Coverage never shrinks mid-migration.** Until a provider's langchain package lands, its current path stays live behind the same seam: `anthropic`/`gemini`/`vertex_ai` chat turns keep the Pydantic AI agent loop (including the `claude`-by-name heuristic), and the router seams keep their litellm/vertex fallbacks. Removing those fallbacks happens only when the replacement package is installed and verified.
+**Coverage never shrank mid-migration.** During the port each provider kept its current path behind the same seam until a verified LangChain replacement landed. Final state: `router._lc_harness_model` is the single provider map — `anthropic` + the `claude`-by-name heuristic → `ChatAnthropic` (`langchain-anthropic`), `gemini`/`vertex_ai` → `ChatGoogleGenerativeAI` (`langchain-google-genai`, `vertexai=True` for Express), openai/openai_compatible → `ChatOpenAI`; a missing package raises `LlmProviderError(kind=unsupported)` exactly like the old extras check. `pydantic-ai-slim` is removed; `google-genai` is now an explicit dep because `vertex_express.py` uses the SDK directly. The `complete_json`/`complete_text`/`astream_text` fallbacks for anthropic/gemini stay on litellm and the vertex express path — unchanged and independent of pydantic.
 
 Regression anchor: `scripts/eval_agent --suite regression --out reports/eval/baseline.json` on main before the swap, `scripts/eval_diff` after — set-coverage metrics must not regress (`--strict-models` if the resolved model set changes).
 
@@ -83,7 +85,7 @@ Rejected, restated: a nested LangGraph/`create_agent` inner loop (state ownershi
 
 ## Consequences
 
-- `pydantic-ai-slim` is removed once the three harnesses port; `litellm` stays for the pricing cost map (and possibly the Vertex path) until a follow-up decides otherwise.
+- `pydantic-ai-slim` is removed (done — all three harnesses, the eval voice judge, and all tests run on `BaseChatModel`); `litellm` stays for the pricing cost map, the `complete_*` anthropic/gemini fallback, and the image path.
 - One agent stack: model resolution, streaming, cancel, and recording converge on `BaseChatModel`; new providers are a `provider_type` mapping entry, not a new adapter surface.
 - The five harness-own test files (`test_session_harness.py`, `test_session_research_harness.py`, `test_session_execute_harness.py`, `test_read_attachment_tool.py`, `test_session_chat_attachments.py`) are rewritten against `langchain_core.language_models.fake_chat_models`; every other unit/API/eval test must pass **unmodified** — a patch-site failure means the seam moved, which is a bug in the migration, not the test.
 - Explicitly out of scope, unchanged from 0019: checkpointer changes; an MCP-server control plane; publish-class tools; a document RAG store; in-loop tool approval (future need → park → HTTP → resume per 0019 §3).
