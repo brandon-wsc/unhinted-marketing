@@ -21,7 +21,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0016](./0016-queue-send-while-turn-in-flight.md) | Queue send while a turn is in flight | Accepted (§6 superseded by 0031) |
 | [0017](./0017-session-fork.md) | Session fork (branch a chat at an assistant message) | Accepted (shared media keys: 0024 GC) |
 | [0018](./0018-recommended-questions-worker-graph.md) | Recommended questions worker graph + fill contract | Accepted |
-| [0019](./0019-pydantic-ai-inner-harness.md) | Pydantic AI inner harness; session graph narrows to mode/lifecycle | Accepted |
+| [0019](./0019-pydantic-ai-inner-harness.md) | Pydantic AI inner harness; session graph narrows to mode/lifecycle | Superseded by 0060 |
 | [0020](./0020-org-byok-keys-models-routing.md) | Org BYOK: provider keys, model registry, per-tier routing | Accepted (enum + Completions-only surface amended by 0021; compat image path 2026-09-12) |
 | [0021](./0021-org-byok-native-gemini.md) | Org BYOK: native Gemini + Vertex Express | Accepted |
 | [0022](./0022-real-publish-instagram.md) | Real publish: Instagram adapter, org social accounts, receipt status | Accepted (Confirm image URL amended by 0024; external URL 2026-09-18; OAuth callback from `web_base_url` 2026-09-19; public-URL precondition gate 0043 §1) |
@@ -62,6 +62,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0057](./0057-thread-recap-summary.md) | Rolling thread recap for long sessions | Accepted |
 | [0058](./0058-service-wake-hints.md) | Service wake hints: LISTEN/NOTIFY + HTTP kick; polls → backstop sweeps | Proposed |
 | [0059](./0059-release-branches-demo-track-split.md) | Release branches off `main` on demand; hosted demo on releases, NAS/local on `main` | Accepted |
+| [0060](./0060-langchain-inner-harness.md) | LangChain inner harness; supersedes the Pydantic AI loop | Accepted |
 
 ## Format
 

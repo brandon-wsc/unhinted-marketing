@@ -1,6 +1,6 @@
 # ADR 0019 — Pydantic AI inner harness; session graph narrows to mode/lifecycle layer
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0060](./0060-langchain-inner-harness.md) (inner loop moves to LangChain chat models; layer boundaries unchanged)
 - **Date:** 2026-08-29
 - **Supersedes:** —
 - **Related:** [ADR 0002](./0002-rest-source-of-truth-sse-enhancement.md) (REST SSOT + SSE dedupe unchanged); [ADR 0003](./0003-confirm-without-llm.md) (Confirm stays HTTP, never a tool); [ADR 0004](./0004-stop-discard-and-image-resume.md) (Stop → harness abort; park/resume shape); [ADR 0009](./0009-research-gate-and-tavily-ingest.md) (document ingest uses the existing PG plane); [ADR 0011](./0011-knowledge-commit-without-llm.md) (catalog upsert stays HTTP, never a tool); [ADR 0016](./0016-queue-send-while-turn-in-flight.md) (in-flight queue unchanged)
