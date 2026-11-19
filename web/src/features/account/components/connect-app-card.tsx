@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { CopyField } from "@/components/copy-field";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { API_BASE } from "@/lib/api-base";
+import { fetchInstanceMeta } from "@/features/account/api";
 
 /**
  * ADR 0051 — the MCP URL is the whole install story: the client discovers
@@ -16,9 +16,8 @@ export function ConnectAppCard() {
   const [base, setBase] = useState(window.location.origin);
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API_BASE}/meta`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((meta: { web_base_url?: string } | null) => {
+    fetchInstanceMeta()
+      .then((meta) => {
         if (!cancelled && meta?.web_base_url) setBase(meta.web_base_url.replace(/\/+$/, ""));
       })
       .catch(() => {});

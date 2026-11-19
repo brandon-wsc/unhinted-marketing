@@ -1,0 +1,51 @@
+name: Audit gate
+
+# Advisory LLM audit (docs/audit-rules.md): an LLM scores except-handler
+# candidates in the diff against ERR-01/02/03 and reports findings as
+# check-run annotations. Always concludes success or neutral — never blocks
+# merge. Fork PRs get no secrets and a read-only GITHUB_TOKEN: the script
+# reports "skipped" and exits 0 either way. Same posture as cardex's gate.
+
+on:
+  pull_request:
+
+concurrency:
+  group: audit-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: except-handler audit (advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      # litellm (the judge client) comes with the project dev deps.
+      - run: |
+          pip install --require-hashes -r requirements-dev.txt
+          pip install --no-deps --no-build-isolation -e .
+      - name: Except-handler audit
+        env:
+          # The repo secret named OPENAI_API_KEY holds an OpenRouter key —
+          # expose it under the env name litellm's openrouter provider reads,
+          # and route the judge model through openrouter/.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY || secrets.OPENAI_API_KEY }}
+          AUDIT_MODEL: openrouter/deepseek/deepseek-v4.1-flash-1017
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUDIT_EXEMPT: ${{ contains(github.event.pull_request.labels.*.name, 'audit-exempt') && '1' || '' }}
+        run: |
+          python -m scripts.except_audit \
+            ${{ github.event.pull_request.base.sha }} \
+            ${{ github.event.pull_request.head.sha }}

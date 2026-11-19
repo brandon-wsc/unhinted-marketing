@@ -194,6 +194,9 @@ async def _persist_steps_safely(
             for idx, step in enumerate(steps)
         ]
         async with SessionLocal() as db:
+            # zone-boundary-allow: node_steps is fire-and-forget turn
+            # telemetry, not a commit artifact; it bypasses repos on
+            # purpose so a tracing failure can never break a turn.
             db.add_all(rows)
             await db.commit()
     except Exception:

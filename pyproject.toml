@@ -65,6 +65,9 @@ select = [
     "BLE",   # blind-except
     "RUF",   # ruff-specific
     "S110",  # try-except-pass
+    "C901",      # mccabe complexity (≤12, see [tool.ruff.lint.mccabe])
+    "PLR0912",   # too-many-branches
+    "PLR0915",   # too-many-statements
 ]
 ignore = [
     "E501",   # line length — discretionary
@@ -73,13 +76,31 @@ ignore = [
     "RUF003",
 ]
 
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
 [tool.ruff.lint.per-file-ignores]
 "migrations/**" = ["UP035", "UP007", "I001"]
-"tests/**" = ["S101", "BLE001"]
+"tests/**" = ["S101", "BLE001", "C901", "PLR0912", "PLR0915"]
+# Complexity debt baseline — the gate is armed for all other files; shrink
+# this list as the named functions get refactored (45 findings at adoption;
+# internal/session/service.py carries the same three keys on its own line
+# below, alongside its older ignores).
+"internal/perception/question_graph/nodes.py" = ["C901", "PLR0912", "PLR0915"]
+"internal/llm/router.py" = ["C901", "PLR0912", "PLR0915"]
+"cmd/api/routes/admin.py" = ["C901", "PLR0912", "PLR0915"]
+"internal/memory/document_ingest.py" = ["C901", "PLR0912", "PLR0915"]
+"internal/mcp/server.py" = ["C901", "PLR0912", "PLR0915"]
+"internal/llm/recorder.py" = ["C901", "PLR0912", "PLR0915"]
+"internal/auth/meta_oauth.py" = ["C901", "PLR0912", "PLR0915"]
+"cmd/worker/main.py" = ["C901", "PLR0912", "PLR0915"]
+"cmd/api/routes/setup.py" = ["C901", "PLR0912", "PLR0915"]
+"internal/media/migrate.py" = ["C901", "PLR0912", "PLR0915"]
+"scripts/eval_cost_from_records.py" = ["C901", "PLR0912", "PLR0915"]
 # LLM / graph glue: broad catch is intentional around optional checkpoint sync
 "internal/llm/**" = ["UP042", "I001"]  # I001: pydantic.root_model must import before litellm
 "internal/perception/**" = ["BLE001"]
-"internal/session/service.py" = ["BLE001", "RUF005"]
+"internal/session/service.py" = ["BLE001", "RUF005", "C901", "PLR0912", "PLR0915"]
 "internal/session/semantic_gate.py" = ["BLE001"]
 "internal/memory/database.py" = ["BLE001", "S110"]
 "internal/memory/embeddings.py" = ["BLE001"]

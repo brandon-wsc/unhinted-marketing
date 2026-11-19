@@ -55,6 +55,24 @@ jobs:
           if [ "$bad" -eq 0 ]; then echo "commit subjects ok"; fi
           exit "$bad"
 
+  contract:
+    name: Contract drift gate (surface ↔ docs)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: contract-exempt label skips the gate
+        if: contains(github.event.pull_request.labels.*.name, 'contract-exempt')
+        run: echo "skipped via contract-exempt label"
+      - name: Contract surface diffs carry docs
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'contract-exempt') }}
+        run: python -m scripts.check_contract_drift ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
+
   deps:
     name: Dependency locks + audit
     runs-on: ubuntu-latest
@@ -75,6 +93,21 @@ jobs:
           pip-audit
           $(grep -vE '^\s*(#|$)' pip-audit-ignores.txt | sed 's/^/--ignore-vuln /' | tr '\n' ' ')
 
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # gitleaks-action comments findings on the PR
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history — a secret committed three commits back still leaks
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
@@ -85,6 +118,12 @@ jobs:
           python-version: "3.12"
       - run: pip install --require-hashes -r requirements-ci.txt
       - run: ruff check .
+      # Mechanizes the AGENTS.md hard boundaries: nothing in the LangGraph /
+      # LLM zone may reach publish, confirm, or org-catalog commit paths.
+      - name: LLM-zone commit boundary
+        run: python -m scripts.check_zone_boundary
+      - name: Semgrep web api-transport boundary
+        run: semgrep scan --config .semgrep/ --error web/src
 
   backend-unit:
     name: Backend unit
@@ -220,6 +259,8 @@ jobs:
           pip install --no-deps --no-build-isolation -e .
       - name: Fail if contract mirrors are out of date
         run: python -m scripts.check_contracts_fresh
+      - name: AGENTS.md documented commands exist
+        run: python -m scripts.check_agents_commands
       - name: Fail if generated TS types are out of date
         working-directory: scripts/typescript_gen
         run: |
