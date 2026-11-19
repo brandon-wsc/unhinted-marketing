@@ -589,7 +589,7 @@ async def read_object_bytes(key: str) -> bytes | None:
 #   unparsable ``attachment_id``, and a missing session-db context.
 
 READ_ATTACHMENT_TOOL = "read_attachment"
-"""Pydantic AI tool name — ``CHAT_TOOL_NAMES`` member, never a publish tool."""
+"""LangChain tool name — ``CHAT_TOOL_NAMES`` member, never a publish tool."""
 
 MAX_ATTACHMENT_READS = 3
 """Chosen per-turn budget (ADR 0047 §6 "≤2–3 calls"); the impl pins the same

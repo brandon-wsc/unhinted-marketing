@@ -14,7 +14,7 @@ What did not pay:
 - **Two agent stacks in one process.** LangGraph owns the outer loop; Pydantic AI owns the inner. Every cross-layer concern — BYOK model resolution, streaming deltas, cancellation, `recorder.track` correlation, provider-error wrapping — is implemented and tested twice, on two different API surfaces.
 - **The lock-in surface grew past `tool signature + output_type`.** `TestModel`, `RunContext[Deps]`, `set_*_model_override` hooks, and `live_harness_model`'s provider mapping are all Pydantic-AI-shaped. Any framework change costs the harness *and* its test idiom.
 - **The hand-rolled streaming path duplicates what a chat-model layer gives for free.** `internal/llm/router.py` re-implements streaming JSON, usage capture, first-token timing, and provider kwargs per provider type — the exact surface LangChain's `BaseChatModel.astream` standardises.
-- **LangChain's 0019-era objection no longer applies to the layer we now want.** 0019 rejected `create_agent` because a nested graph inside our graph makes state ownership ambiguous. That rejection stands for graph semantics — and we are not adopting it. What we adopt is `langchain-core`'s chat-model + tool-calling layer (`bind_tools`, `astream`, `with_structured_output`): no nested graph, no second state machine, `SessionState` ownership unchanged.
+- **LangChain's 0019-era objection no longer applies to the layer we now want.** 0019 rejected `create_agent` because a nested graph inside our graph makes state ownership ambiguous. That rejection stands for graph semantics — and we are not adopting it. What we adopt is `langchain-core`'s chat-model + tool-calling layer (`bind_tools`, `astream`, structured output via a bound out-schema): no nested graph, no second state machine, `SessionState` ownership unchanged.
 
 Constraints that must not move are restated verbatim from 0019 because this migration changes the *vendor of the inner loop*, not the boundaries around it:
 
@@ -39,7 +39,7 @@ flowchart TB
   subgraph nodes [Node internals — LangChain chat models]
     CHAT["chat chain (tools: query_market_trends, read_attachment)"]
     RESEARCH["research chain (ingest_web_search, query_market_trends)"]
-    EXEC["execute / edit_copy (with_structured_output: DraftOut/EditOut)"]
+    EXEC["execute / edit_copy (bound out-schema: DraftOut/EditOut)"]
     SINGLE["grounding_check / reviewer (single-shot, no tools)"]
   end
   HTTP --> MODE --> nodes
@@ -48,7 +48,7 @@ flowchart TB
 
 - **FastAPI: unchanged.** All HTTP boundaries stay.
 - **LangGraph: unchanged.** `graph.py`, `service.py`, `turn_registry`, checkpointer, `interrupt_before` — none of this moves.
-- **LangChain `langchain-core` chat models: the inner loop.** Per-stage narrow chains register only that stage's tools (allowlist stays "the tool does not exist"). `with_structured_output` maps onto the `schemas/` Pydantic models, preserving the structured-I/O contract. A tool loop, where a node needs one, is a small in-node `bind_tools` + tool-execution cycle — **not** `create_agent`, `ToolNode`, or a nested `StateGraph`. Graph semantics stay single-level.
+- **LangChain `langchain-core` chat models: the inner loop.** Per-stage narrow chains register only that stage's tools (allowlist stays "the tool does not exist"). Typed outputs ride the tool loop as a **bound out-schema** — `bind_tools([*tools, OutT])`, the same mechanism `with_structured_output` uses internally — over the `internal/session/io.py` Pydantic models (`DraftOut`/`EditOut`/`QueryGenOut`), preserving the structured-I/O contract. A tool loop, where a node needs one, is a small in-node `bind_tools` + tool-execution cycle — **not** `create_agent`, `ToolNode`, or a nested `StateGraph`. Graph semantics stay single-level.
 - **`grounding_check` / `reviewer` stay single-shot** — an agent loop there only adds variance and cost (unchanged from 0019).
 
 ### 2. The seams keep their signatures
@@ -64,7 +64,7 @@ The migration is invisible to the graph and to most tests because the seams do n
 - **Streaming:** `astream` deltas fan out to `message.delta` with the same 24-char flush; final text lands on the same state keys.
 - **Cancel:** task cancellation propagates through `astream` and closes the provider connection (best-effort upstream abort, same as ADR 0004 semantics); partial text is stashed on the record before re-raise — no `RunCancelled`-style wrapper needed if cancel surfaces as `CancelledError`; if a provider raises a framework cancellation type it is mapped to `CancelledError` at the seam.
 - **Recording:** `recorder.track` still wraps each call at the same points — `kind`, `tier`, `mark_first_token`, `set_usage`, `response_text` shapes unchanged so `llm_call_records`, Session Trace, and `eval_cost_from_records` keep working.
-- **Tools:** `query_market_trends`, `read_attachment`, `ingest_web_search` port to `@tool` with identical names/schemas and identical refusal contracts (`schemas/tools.py`). `read_attachment` keeps the 3-read/turn budget and per-call owner re-scope ([ADR 0047](./0047-session-file-attachments.md) §6/§14); the per-turn counter travels via invocation config or an inner-fn seam, not via a framework deps object.
+- **Tools:** `query_market_trends`, `read_attachment`, `ingest_web_search` port to `@tool` with identical names/schemas and identical refusal contracts (`schemas/tools.py`). `read_attachment` keeps the 3-read/turn budget and per-call owner re-scope ([ADR 0047](./0047-session-file-attachments.md) §6/§14); the per-turn counter travels via an `InjectedToolArg` parameter the tool loop fills from a per-turn deps dataclass — an inner-fn seam, not a framework-owned deps object (no `RunContext[Deps]` analogue).
 - **BYOK:** `resolve_llm_model(tier)` stays the resolution choke point; provider mapping per `provider_type` — `ChatOpenAI` with `base_url` for `openai_compatible`/OpenRouter (slug stripping preserved), `ChatAnthropic` for Anthropic, Google per §4.
 
 ### 4. Vertex Express is the known unknown
@@ -75,9 +75,9 @@ The migration is invisible to the graph and to most tests because the seams do n
 
 ### 5. Migration order
 
-Working checklist lives in [`docs/LANGCHAIN_MIGRATION.md`](../LANGCHAIN_MIGRATION.md) (temporary; deleted when the migration lands). Order: this ADR → deps (`langchain-core` + provider packages, versions ≥7 days old) → `complete_json`/`complete_text` on LangChain → three harnesses (chat, research, execute) → re-point `scripts/eval_agent.py` → rewrite the five Pydantic-AI-coupled test files at the same abstraction level → `pydantic-ai-slim` removed last.
+Working checklist lived in `docs/LANGCHAIN_MIGRATION.md` (temporary; deleted when the migration landed). Order: this ADR → deps (`langchain-core` + provider packages, versions ≥7 days old) → `complete_json`/`complete_text` on LangChain → three harnesses (chat, research, execute) → re-point `scripts/eval_agent.py` → rewrite the five Pydantic-AI-coupled test files at the same abstraction level → `pydantic-ai-slim` removed last.
 
-**Coverage never shrank mid-migration.** During the port each provider kept its current path behind the same seam until a verified LangChain replacement landed. Final state: `router._lc_harness_model` is the single provider map — `anthropic` + the `claude`-by-name heuristic → `ChatAnthropic` (`langchain-anthropic`), `gemini`/`vertex_ai` → `ChatGoogleGenerativeAI` (`langchain-google-genai`, `vertexai=True` for Express), openai/openai_compatible → `ChatOpenAI`; a missing package raises `LlmProviderError(kind=unsupported)` exactly like the old extras check. `pydantic-ai-slim` is removed; `google-genai` is now an explicit dep because `vertex_express.py` uses the SDK directly. The `complete_json`/`complete_text`/`astream_text` fallbacks for anthropic/gemini stay on litellm and the vertex express path — unchanged and independent of pydantic.
+**Coverage never shrank mid-migration.** During the port each provider kept its current path behind the same seam until a verified LangChain replacement landed. Final state: `router.lc_harness_model` is the single provider map — `anthropic` + the `claude`-by-name heuristic → `ChatAnthropic` (`langchain-anthropic`), `gemini`/`vertex_ai` → `ChatGoogleGenerativeAI` (`langchain-google-genai`, `vertexai=True` for Express), openai/openai_compatible → `ChatOpenAI`; a missing package raises `LlmProviderError(kind=unsupported)` exactly like the old extras check. `pydantic-ai-slim` is removed; `google-genai` is now an explicit dep because `vertex_express.py` uses the SDK directly. The `complete_json`/`complete_text`/`astream_text` fallbacks for anthropic/gemini stay on litellm and the vertex express path — unchanged and independent of pydantic.
 
 Regression anchor: `scripts/eval_agent --suite regression --out reports/eval/baseline.json` on main before the swap, `scripts/eval_diff` after — set-coverage metrics must not regress (`--strict-models` if the resolved model set changes).
 
