@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
+from langchain_core.messages import AIMessageChunk
 from litellm.exceptions import BadRequestError, NotFoundError
 
 from internal.llm import recorder
@@ -244,40 +245,66 @@ async def test_astream_text_aclose_on_cancel(monkeypatch: pytest.MonkeyPatch) ->
     assert stream.aclose_calls >= 1
 
 
+class _FakeLcChat:
+    """ChatOpenAI stand-in for the LangChain path (ADR 0060).
+
+    ``astream`` yields ``AIMessageChunk`` pieces; ``closed`` counts generator
+    teardown (the ``aclose`` the seam issues on complete/cancel).
+    """
+
+    def __init__(
+        self,
+        pieces: list[str],
+        *,
+        usage: dict | None = None,
+        fail_after: int | None = None,
+    ) -> None:
+        self.pieces = list(pieces)
+        self.usage = usage
+        self.fail_after = fail_after
+        self.closed = 0
+
+    def astream(self, _messages: list, **_kwargs: object):
+        return self._gen()
+
+    async def _gen(self):
+        try:
+            if self.fail_after is not None and self.fail_after <= 0:
+                raise asyncio.CancelledError()
+            for i, piece in enumerate(self.pieces):
+                yield AIMessageChunk(content=piece)
+                if self.fail_after is not None and i + 1 >= self.fail_after:
+                    raise asyncio.CancelledError()
+            if self.usage is not None:
+                yield AIMessageChunk(content="", usage_metadata=self.usage)
+        finally:
+            self.closed += 1
+
+
+def _stub_lc_provider(monkeypatch: pytest.MonkeyPatch, chat: _FakeLcChat) -> None:
+    """Route complete_json onto the LangChain path with a fake chat model."""
+    monkeypatch.setattr(R, "resolve_llm_model", lambda _tier: _openai_image("gpt-test"))
+    monkeypatch.setattr(R, "_lc_chat_model", lambda *_a, **_k: (chat, "gpt-test"))
+
+
 @pytest.mark.asyncio
 async def test_complete_json_streams_and_aclose(monkeypatch: pytest.MonkeyPatch) -> None:
-    stream = _FakeStream(['{"ok":', " true}"])
-
-    async def fake_acompletion(**kwargs):
-        assert kwargs.get("stream") is True
-        assert kwargs.get("response_format") == {"type": "json_object"}
-        return stream
-
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
-    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+    chat = _FakeLcChat(['{"ok":', " true}"])
+    _stub_lc_provider(monkeypatch, chat)
 
     raw = await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
     assert raw == '{"ok": true}'
-    assert stream.aclose_calls == 1
+    assert chat.closed == 1
 
 
 @pytest.mark.asyncio
 async def test_complete_json_aclose_on_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
-    stream = _FakeStream(['{"a":', "1}"], fail_after=1)
-
-    async def fake_acompletion(**_kwargs):
-        return stream
-
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
-    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+    chat = _FakeLcChat(['{"a":', "1}"], fail_after=1)
+    _stub_lc_provider(monkeypatch, chat)
 
     with pytest.raises(asyncio.CancelledError):
         await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
-    assert stream.aclose_calls == 1
+    assert chat.closed == 1
 
 
 # --- ADR 0005: call recording -----------------------------------------------
@@ -304,9 +331,8 @@ def _stub_chat_provider(monkeypatch: pytest.MonkeyPatch, stream_or_response) -> 
 async def test_complete_json_records_ok_with_usage(
     monkeypatch: pytest.MonkeyPatch, recorded: list
 ) -> None:
-    usage = SimpleNamespace(prompt_tokens=3, completion_tokens=5, total_tokens=8)
-    stream = _FakeStream(['{"ok": true}'], usage=usage)
-    _stub_chat_provider(monkeypatch, stream)
+    usage = {"input_tokens": 3, "output_tokens": 5, "total_tokens": 8}
+    _stub_lc_provider(monkeypatch, _FakeLcChat(['{"ok": true}'], usage=usage))
 
     raw = await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
 
@@ -322,30 +348,73 @@ async def test_complete_json_records_ok_with_usage(
     assert rec.ttft_ms is not None
 
 
+def test_lc_chat_model_requests_usage_and_json_mode() -> None:
+    lc = R._lc_chat_model(_openai_image("gpt-test"), temperature=0.4, json_mode=True)
+    assert lc is not None
+    chat, model = lc
+    assert model == "gpt-test"
+    assert chat.stream_usage is True
+    assert chat.model_kwargs == {"response_format": {"type": "json_object"}}
+    assert chat.max_retries == 0
+
+
+def test_lc_chat_model_compat_strips_slug_and_sets_base() -> None:
+    lc = R._lc_chat_model(
+        _openai_image(
+            "openrouter/deepseek/deepseek-chat",
+            api_base="https://openrouter.ai/api/v1",
+            provider_type="openai_compatible",
+        ),
+        temperature=0.4,
+        json_mode=True,
+    )
+    assert lc is not None
+    chat, model = lc
+    assert model == "deepseek/deepseek-chat"
+    assert str(chat.openai_api_base) == "https://openrouter.ai/api/v1"
+
+
+def test_lc_chat_model_skips_anthropic_and_gemini() -> None:
+    for ptype in ("anthropic", "gemini"):
+        assert (
+            R._lc_chat_model(
+                _openai_image("x", provider_type=ptype),
+                temperature=0.4,
+                json_mode=True,
+            )
+            is None
+        )
+
+
 @pytest.mark.asyncio
-async def test_complete_json_requests_usage_chunk(
-    monkeypatch: pytest.MonkeyPatch, recorded: list
+async def test_complete_json_falls_back_to_litellm_for_anthropic(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict = {}
+    stream = _FakeStream(['{"ok": true}'])
 
-    async def fake_acompletion(**kwargs):
-        captured.update(kwargs)
-        return _FakeStream(['{"ok": true}'])
+    async def fake_acompletion(**_kwargs):
+        return stream
 
+    monkeypatch.setattr(
+        R,
+        "resolve_llm_model",
+        lambda _tier: _openai_image("claude-test", provider_type="anthropic"),
+    )
     monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
+    monkeypatch.setattr(R, "resolve_model", lambda _tier: "claude-test")
     monkeypatch.setattr(R.settings, "llm_api_base", None)
     monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
 
-    await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
-    assert captured.get("stream_options") == {"include_usage": True}
+    raw = await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
+    assert raw == '{"ok": true}'
+    assert stream.aclose_calls == 1
 
 
 @pytest.mark.asyncio
 async def test_complete_json_records_cancel(
     monkeypatch: pytest.MonkeyPatch, recorded: list
 ) -> None:
-    _stub_chat_provider(monkeypatch, _FakeStream(['{"a":'], fail_after=1))
+    _stub_lc_provider(monkeypatch, _FakeLcChat(['{"a":'], fail_after=1))
     with pytest.raises(asyncio.CancelledError):
         await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
     assert recorded[0].status == "cancelled"
@@ -355,7 +424,7 @@ async def test_complete_json_records_cancel(
 async def test_complete_json_ttft_none_when_cancel_before_first_token(
     monkeypatch: pytest.MonkeyPatch, recorded: list
 ) -> None:
-    _stub_chat_provider(monkeypatch, _FakeStream(["x"], fail_after=0))
+    _stub_lc_provider(monkeypatch, _FakeLcChat(["x"], fail_after=0))
     with pytest.raises(asyncio.CancelledError):
         await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
     assert recorded[0].status == "cancelled"
@@ -410,7 +479,7 @@ async def test_record_picks_up_call_context(
     monkeypatch: pytest.MonkeyPatch, recorded: list
 ) -> None:
     sid = uuid.uuid4()
-    _stub_chat_provider(monkeypatch, _FakeStream(['{"ok": true}']))
+    _stub_lc_provider(monkeypatch, _FakeLcChat(['{"ok": true}']))
 
     with recorder.call_context(
         caller="node:route_intent", node="route_intent", session_id=str(sid)

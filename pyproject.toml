@@ -21,6 +21,7 @@ dependencies = [
     "feedparser>=6.0.11",
     "litellm>=1.55.0",
     "pydantic-ai-slim[google]>=2.0",
+    "langchain-openai>=1.7.4,<1.8",
     "langgraph>=0.2.0",
     "langgraph-checkpoint-postgres>=2.0.0",
     "boto3>=1.35.0",

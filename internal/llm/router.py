@@ -521,6 +521,131 @@ async def _astream_completion(
         await _aclose_stream(response)
 
 
+def _lc_model_id(resolved: Any) -> str:
+    """API model id for the LangChain path (mirrors ``live_harness_model``)."""
+    api_base = effective_api_base(resolved.provider_type, resolved.api_base)
+    if resolved.provider_type == "openai_compatible" or api_base:
+        return openai_compat_model_id(resolved.model_id)
+    return resolved.model_id.split("/")[-1]
+
+
+def _lc_chat_model(
+    resolved: Any, *, temperature: float, json_mode: bool = False
+) -> tuple[Any, str] | None:
+    """``(ChatModel, model_label)`` for the LangChain path, else ``None``.
+
+    ADR 0060 coverage is incremental: ``openai``/``openai_compatible`` (any
+    api_base) move first; ``anthropic`` + AI-Studio ``gemini`` stay on litellm
+    until langchain-anthropic / -google-genai land; ``vertex_ai`` keeps the
+    hand-rolled api_key-only path (ADR 0021 §4).
+    """
+    if resolved.provider_type not in ("openai", "openai_compatible"):
+        return None
+    try:
+        from langchain_openai import ChatOpenAI
+    except ImportError:
+        return None
+    api_base = effective_api_base(resolved.provider_type, resolved.api_base)
+    model = _lc_model_id(resolved)
+    chat = ChatOpenAI(
+        model=model,
+        api_key=resolved.api_key or "not-set",
+        base_url=api_base,
+        temperature=temperature,
+        timeout=settings.llm_timeout_seconds,
+        stream_usage=True,
+        max_retries=0,
+        model_kwargs=({"response_format": {"type": "json_object"}} if json_mode else None),
+    )
+    return chat, model
+
+
+def _wrap_lc_error(exc: BaseException, *, model: str) -> LlmProviderError:
+    """Map openai-client / LangChain exceptions onto ``LlmProviderError`` kinds."""
+    try:
+        import openai
+    except ImportError:  # pragma: no cover — openai ships with litellm
+        return _wrap_provider_error(exc, model=model)
+    if isinstance(exc, openai.APITimeoutError):
+        return LlmProviderError(
+            f"LLM timed out talking to {model}. Check network, LLM_API_BASE, and that the model is reachable.",
+            model=model,
+            kind="timeout",
+        )
+    if isinstance(exc, openai.APIConnectionError):
+        return LlmProviderError(
+            f"Could not connect to LLM endpoint for {model}. Check LLM_API_BASE / network.",
+            model=model,
+            kind="connection",
+        )
+    if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
+        return LlmProviderError(
+            f"LLM authentication failed for {model}. Check OPENAI_API_KEY (or provider key).",
+            model=model,
+            kind="auth",
+        )
+    if isinstance(exc, openai.RateLimitError):
+        return LlmProviderError(
+            f"LLM rate limit hit for {model}. Try again shortly.",
+            model=model,
+            kind="rate_limit",
+        )
+    if isinstance(exc, openai.NotFoundError):
+        return LlmProviderError(
+            f"Model {model} was not found. Check the model id.",
+            model=model,
+            kind="unsupported",
+        )
+    if isinstance(exc, openai.BadRequestError):
+        return LlmProviderError(
+            f"LLM rejected the request for {model} (bad model id or unsupported params). Check LLM_*_MODEL.",
+            model=model,
+            kind="bad_request",
+        )
+    return _wrap_provider_error(exc, model=model)
+
+
+async def _lc_astream_text(
+    *,
+    chat: Any,
+    model: str,
+    system: str,
+    user: str,
+    usage_sink: Any = None,
+    on_first_token: Any = None,
+) -> AsyncIterator[str]:
+    """Yield text deltas from a LangChain chat model; aclose on cancel.
+
+    ``_astream_completion`` equivalent on ``BaseChatModel.astream``: usage
+    rides trailing chunks (``usage_metadata`` as input_/output_/total_tokens),
+    the first non-empty delta marks first token, and closing the generator
+    aborts the HTTP stream (``astream`` holds it inside ``async with``).
+    """
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    agen: Any = None
+    first = True
+    try:
+        agen = chat.astream([SystemMessage(content=system), HumanMessage(content=user)])
+        async for chunk in agen:
+            usage = getattr(chunk, "usage_metadata", None)
+            if usage_sink is not None and usage:
+                usage_sink(usage)
+            piece = chunk.content if isinstance(chunk.content, str) else ""
+            if piece:
+                if first:
+                    first = False
+                    if on_first_token is not None:
+                        on_first_token()
+                yield piece
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        raise _wrap_lc_error(exc, model=model) from exc
+    finally:
+        await _aclose_stream(agen)
+
+
 async def complete_json(
     *,
     tier: ModelTier,
@@ -556,6 +681,32 @@ async def complete_json(
                 raise RuntimeError("LLM returned empty content")
             rec.response_text = content
             return content
+    lc = _lc_chat_model(resolved, temperature=temperature, json_mode=True)
+    if lc is not None:
+        chat, model = lc
+        with track(
+            kind="chat_json", tier=tier, model=model, temperature=temperature,
+            system=system, user=user,
+        ) as rec:
+            parts = []
+            async for piece in _lc_astream_text(
+                chat=chat,
+                model=model,
+                system=system,
+                user=user,
+                usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
+            ):
+                parts.append(piece)
+            content = "".join(parts)
+            if not content:
+                rec.fail(
+                    "empty_response",
+                    {"kind": "empty_response", "message": "LLM returned empty content"},
+                )
+                raise RuntimeError("LLM returned empty content")
+            rec.response_text = content
+            return content
     kwargs = _base_kwargs(tier, temperature)
     model = str(kwargs["model"])
     kwargs["messages"] = [
@@ -570,7 +721,7 @@ async def complete_json(
         kind="chat_json", tier=tier, model=model, temperature=temperature,
         system=system, user=user,
     ) as rec:
-        parts: list[str] = []
+        parts = []
         async for piece in _astream_completion(
             model=model,
             kwargs=kwargs,
