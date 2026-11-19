@@ -33,7 +33,11 @@ from internal.perception.question_graph import prompts
 from internal.perception.question_graph.context import get_db
 from internal.perception.question_graph.state import QuestionGraphState
 from internal.perception.rss_news import ingest_rss_news
-from internal.perception.tavily import has_tavily_credentials, search_tavily
+from internal.perception.tavily import (
+    TavilySearchError,
+    has_tavily_credentials,
+    search_tavily,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -407,18 +411,23 @@ async def shallow_research(state: QuestionGraphState) -> dict[str, Any]:
     researched: list[dict[str, Any]] = []
     any_snippet = False
 
-    async def fetch(cand: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    async def fetch(
+        cand: dict[str, Any],
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], bool]:
+        failed = False
         try:
             items = await asyncio.wait_for(
                 search_tavily(cand["title"], max_results=3), timeout=20
             )
-        except Exception:
+        except (TavilySearchError, TimeoutError):
             logger.exception("shallow_research tavily failed for %s", cand.get("signal_id"))
-            items = []
-        return cand, items
+            items, failed = [], True
+        return cand, items, failed
 
     pairs = await asyncio.gather(*[fetch(c) for c in candidates])
-    for cand, items in pairs:
+    any_failed = False
+    for cand, items, failed in pairs:
+        any_failed = any_failed or failed
         snippets: list[str] = []
         for item in items:
             await upsert_signal(
@@ -438,6 +447,8 @@ async def shallow_research(state: QuestionGraphState) -> dict[str, Any]:
     await db.commit()
 
     flags = [] if any_snippet else ["research_empty"]
+    if any_failed:
+        flags.append("research_fetch_failed")
     return {"researched": researched, "quality_flags": _flags(state, *flags)}
 
 

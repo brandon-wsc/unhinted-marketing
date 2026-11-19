@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 from langchain_core.messages import AIMessage
 
+from internal.perception.tavily import TavilySearchError
 from internal.session import harness as H
 from internal.session import ingest as ingest_mod
 from internal.session import nodes as N
@@ -272,6 +273,23 @@ async def test_ingest_web_search_reports_no_session_db(
     out = await RH.ingest_web_search.ainvoke({"deps": deps, "query": "hk"})
     assert json.loads(out) == [{"error": "no_session_db"}]
     assert deps.queries_run == []
+    assert deps.ingested == []
+
+
+@pytest.mark.asyncio
+async def test_ingest_web_search_reports_tavily_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tavily outage → error payload — never a fake empty result list."""
+    async def boom(*_args: object, **_kwargs: object) -> list[dict]:
+        raise TavilySearchError("down")
+
+    monkeypatch.setattr(ingest_mod, "search_tavily", boom)
+    deps = RH.ResearchDeps()
+    with session_db(AsyncMock()):
+        out = await RH.ingest_web_search.ainvoke({"deps": deps, "query": "hk"})
+    assert json.loads(out) == [{"error": "tavily_failed"}]
+    assert deps.queries_run == ["hk"]
     assert deps.ingested == []
 
 
