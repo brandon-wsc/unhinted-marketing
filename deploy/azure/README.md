@@ -80,7 +80,10 @@ az containerapp job start -g rg-unhinted-demo -n unhinted-demo-migrate
 az containerapp job start -g rg-unhinted-demo -n unhinted-demo-scheduler
 az containerapp job execution list -g rg-unhinted-demo -n unhinted-demo-scheduler -o table
 
-# Update to a newer release tag
+# Upgrade to the latest published release (default IMAGE_TAG=onprem floats — ADR 0059)
+azd up
+
+# …or pin to a specific release tag for a frozen demo
 azd env set IMAGE_TAG v1.2.3 && azd up
 
 # One-off admin CLI inside the api container
