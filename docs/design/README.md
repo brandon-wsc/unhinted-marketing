@@ -1,7 +1,7 @@
 # Design (in-repo)
 
 > **Format:** docs + tokens inventory + Penpot Core file. **Runtime applied** — [`web/src/index.css`](../../web/src/index.css) carries the harness desk tokens.  
-> **Primitives:** [`AGENTS.md`](../../AGENTS.md) (Web UI system)
+> **Primitives:** [`.agents/skills/web-ui-system`](../../.agents/skills/web-ui-system/SKILL.md)
 
 | Doc / file | Job |
 |------------|-----|
