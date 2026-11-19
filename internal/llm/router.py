@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncIterator, Sequence
 from enum import Enum
@@ -729,6 +730,43 @@ def _wrap_lc_error(exc: BaseException, *, model: str) -> LlmProviderError:
     return _wrap_provider_error(exc, model=model)
 
 
+def _lc_token_count(
+    chat: Any,
+    messages: Sequence[Any] = (),
+    text: str = "",
+) -> int | None:
+    """Token count via the model's counters, then a per-content fallback.
+
+    ``get_num_tokens_from_messages`` hard-raises on model ids it does not
+    know (any OpenAI-compatible slug like ``deepseek/...``), while plain
+    ``get_num_tokens`` maps them to a generic encoding — so a failed message
+    count falls back to counting each message's content (and tool-call args).
+    """
+    try:
+        if messages:
+            return int(chat.get_num_tokens_from_messages(list(messages)))
+        if text:
+            return int(chat.get_num_tokens(text))
+        return 0
+    except Exception:
+        logger.debug("lc message token count failed; per-content fallback", exc_info=True)
+    try:
+        total = 0
+        for message in messages:
+            content = getattr(message, "content", "")
+            if isinstance(content, str) and content:
+                total += int(chat.get_num_tokens(content))
+            for call in getattr(message, "tool_calls", None) or []:
+                args = call.get("args") if isinstance(call, dict) else getattr(call, "args", None)
+                if args:
+                    total += int(chat.get_num_tokens(json.dumps(args, ensure_ascii=False)))
+        if text:
+            total += int(chat.get_num_tokens(text))
+        return total
+    except Exception:  # noqa: BLE001 — best-effort estimate
+        return None
+
+
 def _estimate_lc_usage(
     chat: Any,
     prompt_messages: Sequence[Any],
@@ -744,18 +782,14 @@ def _estimate_lc_usage(
     llm_call_records and under-enforcing the ADR 0041 member cap. Returns
     ``None`` when the model cannot count tokens locally.
     """
-    try:
-        prompt = int(chat.get_num_tokens_from_messages(list(prompt_messages)))
-    except Exception:  # noqa: BLE001 — token counting must never break the LLM path
+    prompt = _lc_token_count(chat, prompt_messages)
+    if prompt is None:
         return None
-    output = 0
-    try:
-        if completion_messages:
-            output = int(chat.get_num_tokens_from_messages(list(completion_messages)))
-        elif completion_text:
-            output = int(chat.get_num_tokens(completion_text))
-    except Exception:  # noqa: BLE001 — best-effort estimate; prompt count still useful
-        output = 0
+    if completion_messages:
+        output = _lc_token_count(chat, completion_messages)
+    else:
+        output = _lc_token_count(chat, text=completion_text)
+    output = output or 0
     return {
         "input_tokens": prompt,
         "output_tokens": output,

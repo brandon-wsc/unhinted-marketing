@@ -29,18 +29,24 @@ class _ScriptedChat(GenericFakeChatModel):
     """
 
     token_estimates: tuple[int, int] | None = None
+    # Real ChatOpenAI hard-raises message counting on non-OpenAI model ids;
+    # these fields script that failure mode plus the per-text fallback.
+    messages_count_fails: bool = False
+    per_text_tokens: int | None = None
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
         return self
 
     def get_num_tokens_from_messages(self, messages: Any) -> int:
-        if self.token_estimates is None:
+        if self.messages_count_fails or self.token_estimates is None:
             raise NotImplementedError("no tokenizer")
         # Prompt calls pass the full conversation; the estimate fallback's
         # completion call passes the single reply message.
         return self.token_estimates[0] if len(list(messages)) > 1 else self.token_estimates[1]
 
     def get_num_tokens(self, text: str) -> int:
+        if self.per_text_tokens is not None:
+            return self.per_text_tokens
         if self.token_estimates is None:
             raise NotImplementedError("no tokenizer")
         return self.token_estimates[1]

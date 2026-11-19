@@ -280,6 +280,33 @@ async def test_stream_chat_reply_estimates_usage_when_stream_silent(
 
 
 @pytest.mark.asyncio
+async def test_stream_chat_reply_estimates_via_text_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Message-level counting fails on custom model ids (e.g. deepseek);
+    the estimate then sums per-content text counts."""
+    from internal.llm import recorder
+
+    sent: list = []
+    monkeypatch.setattr(recorder, "submit", sent.append)
+    H.set_chat_model_override(
+        _ScriptedChat(
+            messages=iter([AIMessage(content="hello from test")]),
+            messages_count_fails=True,
+            per_text_tokens=7,
+        )
+    )
+    await H.stream_chat_reply(
+        user_prompt="hi",
+        session_id=None,
+        deps=H.ChatDeps(),
+    )
+    rec = sent[0]
+    # fallback: (System + Human) x7 prompt, reply content x7 completion
+    assert (rec.prompt_tokens, rec.completion_tokens, rec.total_tokens) == (14, 7, 21)
+
+
+@pytest.mark.asyncio
 async def test_stream_chat_reply_null_usage_without_tokenizer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

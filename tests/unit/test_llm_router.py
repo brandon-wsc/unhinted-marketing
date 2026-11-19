@@ -245,19 +245,26 @@ class _FakeLcChat:
         usage: dict | None = None,
         fail_after: int | None = None,
         token_estimates: tuple[int, int] | None = None,
+        messages_count_fails: bool = False,
+        per_text: int | None = None,
     ) -> None:
         self.pieces = list(pieces)
         self.usage = usage
         self.fail_after = fail_after
         self.token_estimates = token_estimates
+        self.messages_count_fails = messages_count_fails
+        self.per_text = per_text
         self.closed = 0
 
     def get_num_tokens_from_messages(self, _messages: list) -> int:
-        if self.token_estimates is None:
+        # Real ChatOpenAI hard-raises this for non-OpenAI model ids.
+        if self.messages_count_fails or self.token_estimates is None:
             raise NotImplementedError("no tokenizer")
         return self.token_estimates[0]
 
     def get_num_tokens(self, _text: str) -> int:
+        if self.per_text is not None:
+            return self.per_text
         if self.token_estimates is None:
             raise NotImplementedError("no tokenizer")
         return self.token_estimates[1]
@@ -351,6 +358,22 @@ async def test_complete_json_estimates_usage_when_stream_silent(
     rec = recorded[0]
     assert rec.status == "ok"
     assert (rec.prompt_tokens, rec.completion_tokens, rec.total_tokens) == (10, 4, 14)
+
+
+@pytest.mark.asyncio
+async def test_complete_json_estimates_usage_via_text_fallback(
+    monkeypatch: pytest.MonkeyPatch, recorded: list
+) -> None:
+    """``get_num_tokens_from_messages`` hard-raises on non-OpenAI model ids
+    (e.g. deepseek slugs); the estimate falls back to per-content counts."""
+    chat = _FakeLcChat(['{"ok": true}'], messages_count_fails=True, per_text=4)
+    _stub_lc_provider(monkeypatch, chat)
+
+    await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
+
+    rec = recorded[0]
+    # fallback: 2 prompt messages x4 + completion text x4
+    assert (rec.prompt_tokens, rec.completion_tokens, rec.total_tokens) == (8, 4, 12)
 
 
 def test_lc_chat_model_requests_usage_and_json_mode() -> None:
