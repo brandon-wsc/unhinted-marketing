@@ -203,15 +203,8 @@ class _FakeStream:
 
 @pytest.mark.asyncio
 async def test_astream_text_aclose_on_complete(monkeypatch: pytest.MonkeyPatch) -> None:
-    stream = _FakeStream(["Hel", "lo"])
-
-    async def fake_acompletion(**_kwargs):
-        return stream
-
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
-    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+    chat = _FakeLcChat(["Hel", "lo"])
+    _stub_lc_provider(monkeypatch, chat)
 
     parts = [
         p
@@ -220,20 +213,13 @@ async def test_astream_text_aclose_on_complete(monkeypatch: pytest.MonkeyPatch) 
         )
     ]
     assert "".join(parts) == "Hello"
-    assert stream.aclose_calls == 1
+    assert chat.closed == 1
 
 
 @pytest.mark.asyncio
 async def test_astream_text_aclose_on_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
-    stream = _FakeStream(["a", "b", "c"], fail_after=1)
-
-    async def fake_acompletion(**_kwargs):
-        return stream
-
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
-    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+    chat = _FakeLcChat(["a", "b", "c"], fail_after=1)
+    _stub_lc_provider(monkeypatch, chat)
 
     gen = R.astream_text(tier=R.ModelTier.CHEAP, system="s", user="u")
     first = await gen.__anext__()
@@ -242,7 +228,7 @@ async def test_astream_text_aclose_on_cancel(monkeypatch: pytest.MonkeyPatch) ->
         await gen.__anext__()
     # Generator cleanup (aclose finally) runs when the generator is closed.
     await gen.aclose()
-    assert stream.aclose_calls >= 1
+    assert chat.closed >= 1
 
 
 class _FakeLcChat:
@@ -315,16 +301,6 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> list:
     sent: list = []
     monkeypatch.setattr(recorder, "submit", sent.append)
     return sent
-
-
-def _stub_chat_provider(monkeypatch: pytest.MonkeyPatch, stream_or_response) -> None:
-    async def fake_acompletion(**_kwargs):
-        return stream_or_response
-
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
-    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
 
 
 @pytest.mark.asyncio
@@ -435,18 +411,8 @@ async def test_complete_json_ttft_none_when_cancel_before_first_token(
 async def test_complete_text_records_ok_with_usage(
     monkeypatch: pytest.MonkeyPatch, recorded: list
 ) -> None:
-    response = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="  hi  "))],
-        usage=SimpleNamespace(prompt_tokens=1, completion_tokens=2, total_tokens=3),
-    )
-
-    async def fake_acompletion(**_kwargs):
-        return response
-
-    monkeypatch.setattr(R, "configure_litellm", lambda: None)
-    monkeypatch.setattr(R, "resolve_model", lambda _tier: "gpt-test")
-    monkeypatch.setattr(R.settings, "llm_api_base", None)
-    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+    usage = {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3}
+    _stub_lc_provider(monkeypatch, _FakeLcChat(["  hi  "], usage=usage))
 
     text = await R.complete_text(tier=R.ModelTier.CHEAP, system="s", user="u")
 
@@ -462,7 +428,7 @@ async def test_complete_text_records_ok_with_usage(
 async def test_astream_text_records_cancel(
     monkeypatch: pytest.MonkeyPatch, recorded: list
 ) -> None:
-    _stub_chat_provider(monkeypatch, _FakeStream(["a", "b"], fail_after=1))
+    _stub_lc_provider(monkeypatch, _FakeLcChat(["a", "b"], fail_after=1))
 
     gen = R.astream_text(tier=R.ModelTier.CHEAP, system="s", user="u")
     assert await gen.__anext__() == "a"

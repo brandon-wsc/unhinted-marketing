@@ -766,6 +766,32 @@ async def complete_text(
                 raise RuntimeError("LLM returned empty content")
             rec.response_text = content
             return rec.response_text
+    lc = _lc_chat_model(resolved, temperature=temperature)
+    if lc is not None:
+        chat, model = lc
+        with track(
+            kind="chat_text", tier=tier, model=model, temperature=temperature,
+            system=system, user=user,
+        ) as rec:
+            parts = []
+            async for piece in _lc_astream_text(
+                chat=chat,
+                model=model,
+                system=system,
+                user=user,
+                usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
+            ):
+                parts.append(piece)
+            content = "".join(parts).strip()
+            if not content:
+                rec.fail(
+                    "empty_response",
+                    {"kind": "empty_response", "message": "LLM returned empty content"},
+                )
+                raise RuntimeError("LLM returned empty content")
+            rec.response_text = content
+            return content
     kwargs = _base_kwargs(tier, temperature)
     model = str(kwargs["model"])
     kwargs["messages"] = [
@@ -812,6 +838,26 @@ async def astream_text(
                 system=system,
                 user=user,
                 temperature=temperature,
+                usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
+            ):
+                parts.append(piece)
+                yield piece
+            rec.response_text = "".join(parts)
+        return
+    lc = _lc_chat_model(resolved, temperature=temperature)
+    if lc is not None:
+        chat, model = lc
+        with track(
+            kind="chat_text", tier=tier, model=model, temperature=temperature,
+            system=system, user=user,
+        ) as rec:
+            parts = []
+            async for piece in _lc_astream_text(
+                chat=chat,
+                model=model,
+                system=system,
+                user=user,
                 usage_sink=rec.set_usage,
                 on_first_token=rec.mark_first_token,
             ):
