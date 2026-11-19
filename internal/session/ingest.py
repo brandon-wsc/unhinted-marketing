@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from internal.memory.repos import upsert_signal
-from internal.perception.tavily import search_tavily
+from internal.perception.tavily import TavilySearchError, search_tavily
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +58,16 @@ async def fetch_and_upsert_tavily(
     max_results: int = MAX_HITS_PER_QUERY,
     search: SearchFn | None = None,
     upsert: UpsertFn | None = None,
+    errors: list[str],
 ) -> list[dict[str, Any]]:
-    """Run each atomic query via Tavily and upsert into ``raw_news_events``."""
+    """Run each atomic query via Tavily and upsert into ``raw_news_events``.
+
+    A failed query is skipped, not faked: ``errors`` collects the query
+    strings whose search raised ``TavilySearchError``, so callers can tell
+    "no hits" apart from "search failed". An item that fails to upsert is
+    still returned — the fetched content stays usable — with
+    ``metrics.upsert_failed`` set so it is never mistaken for a stored row.
+    """
     search_fn = search or search_tavily
     upsert_fn = upsert or upsert_signal
     topic_s = normalize_tavily_topic(topic)
@@ -73,12 +81,17 @@ async def fetch_and_upsert_tavily(
     tavily_items: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     for query in capped:
-        batch = await search_fn(
-            query,
-            max_results=max_results,
-            topic=topic_s,
-            time_range=range_s,
-        )
+        try:
+            batch = await search_fn(
+                query,
+                max_results=max_results,
+                topic=topic_s,
+                time_range=range_s,
+            )
+        except TavilySearchError:
+            logger.exception("Tavily search failed for query=%r", query[:80])
+            errors.append(query)
+            continue
         for item in batch:
             sid = item.get("signal_id")
             if not sid or sid in seen_ids:
@@ -101,6 +114,7 @@ async def fetch_and_upsert_tavily(
             )
         except Exception:
             logger.exception("failed to upsert Tavily signal %s", item.get("signal_id"))
+            item["metrics"]["upsert_failed"] = True
     if tavily_items:
         await db.flush()
     return tavily_items

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from internal.perception.tavily import TavilySearchError
 from internal.session import execute_harness as EH
 from internal.session import nodes as N
 from internal.session import research_harness as RH
@@ -391,6 +392,37 @@ async def test_research_ingest_untrusted_when_no_tavily(
                 },
             )
         )
+    assert out["research"]["signals_trusted"] is False
+    assert any(s["signal_id"] == "google_trends_hk:1" for s in out["research_signals"])
+
+
+@pytest.mark.asyncio
+async def test_research_ingest_flags_tavily_failure(
+    monkeypatch: pytest.MonkeyPatch, mock_db
+) -> None:
+    """A Tavily outage marks the failed queries — the turn still completes."""
+    monkeypatch.setattr(
+        N,
+        "search_tavily",
+        AsyncMock(side_effect=TavilySearchError("down")),
+    )
+    monkeypatch.setattr(N, "upsert_signal", AsyncMock())
+    monkeypatch.setattr(
+        N,
+        "list_top_signals",
+        AsyncMock(return_value=[fake_signal(signal_id="google_trends_hk:1", title="PG")]),
+    )
+    with session_db(mock_db):
+        out = await N.research_ingest(
+            _base_state(
+                search_query="Hong Kong overtime",
+                research={
+                    "search_queries": ["Hong Kong overtime"],
+                    "query_source": "llm",
+                },
+            )
+        )
+    assert out["research"]["tavily_failed_queries"] == ["Hong Kong overtime"]
     assert out["research"]["signals_trusted"] is False
     assert any(s["signal_id"] == "google_trends_hk:1" for s in out["research_signals"])
 

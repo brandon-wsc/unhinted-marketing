@@ -195,6 +195,8 @@ class SseStub:
             await writer.drain()
             self.served_fully = True
         except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError):
+            # audit-allow(ERR-03): client abort is the outcome under test —
+            # served_fully stays False and client_eof_at records the drop.
             pass
         writer.close()
         await watcher

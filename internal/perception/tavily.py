@@ -17,6 +17,10 @@ SOURCE_TAVILY = "tavily"
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
 
+class TavilySearchError(Exception):
+    """Tavily /search failed — callers must not mistake this for zero hits."""
+
+
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return slug[:80] or "signal"
@@ -39,7 +43,12 @@ async def search_tavily(
     topic: str = "news",
     time_range: str | None = "week",
 ) -> list[dict[str, Any]]:
-    """Call Tavily /search; return upsert-ready signal dicts. Empty if no key / error."""
+    """Call Tavily /search; return upsert-ready signal dicts.
+
+    Empty when the query is blank or TAVILY_API_KEY is unset. Request or
+    response failures raise ``TavilySearchError`` — an outage is not an
+    empty result set.
+    """
     q = (query or "").strip()
     if not q:
         return []
@@ -70,9 +79,10 @@ async def search_tavily(
             )
             res.raise_for_status()
             data = res.json()
-    except Exception:
-        logger.exception("Tavily search failed for query=%r", q[:80])
-        return []
+    except Exception as exc:
+        raise TavilySearchError(
+            f"Tavily search failed for query={q[:80]!r}"
+        ) from exc
 
     results = data.get("results") if isinstance(data, dict) else None
     if not isinstance(results, list):

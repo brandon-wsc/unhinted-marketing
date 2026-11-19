@@ -693,6 +693,7 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
     topic_s = ingest_mod.normalize_tavily_topic(str(research.get("tavily_topic") or "news"))
     time_range = ingest_mod.normalize_tavily_time_range(research.get("tavily_time_range"))
 
+    tavily_errors: list[str] = []
     if research.get("ingest_via_agent"):
         tavily_items = [
             item
@@ -708,6 +709,7 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
             max_results=ingest_mod.MAX_HITS_PER_QUERY,
             search=search_tavily,
             upsert=upsert_signal,
+            errors=tavily_errors,
         )
 
     pg_signals = await list_top_signals(db, limit=20, region="HK")
@@ -717,6 +719,8 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
     query_source = str(research.get("query_source") or "")
     signals_trusted = query_source != QUERY_SOURCE_FALLBACK and bool(tavily_items)
     research_out = {k: v for k, v in research.items() if k != "tavily_items"}
+    if tavily_errors:
+        research_out["tavily_failed_queries"] = tavily_errors
     return {
         "research_signals": merged[:20],
         "search_query": queries[0] if queries else primary,
