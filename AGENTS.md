@@ -73,6 +73,8 @@ python -m scripts.eval_agent --suite regression   # bigger pack; --out reports/e
 python -m scripts.eval_diff          # baseline vs latest — exits 1; model change downgrades metrics to warnings (--strict-models fails hard)
 python -m scripts.eval_cost_from_records  # prod llm_call_records p50/p95 + ttft + cache hit rate + rough $
 python -m scripts.check_zone_boundary   # LLM-zone commit boundary — hard boundaries 1/4/5 as a gate
+python -m scripts.check_agents_commands # documented commands in AGENTS.md must resolve (CI gate)
+python -m scripts.check_contract_drift <base> <head>  # contract-surface diffs need docs/adr|STATUS (CI gate)
 cd scripts/typescript_gen && npm install && npm run generate  # session TS mirrors
 cd web && pnpm run lint && pnpm test && pnpm run build
 cd relay && npm ci && npm run types && npm test   # Cloudflare OAuth relay worker
