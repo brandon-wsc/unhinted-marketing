@@ -55,6 +55,21 @@ jobs:
           if [ "$bad" -eq 0 ]; then echo "commit subjects ok"; fi
           exit "$bad"
 
+  contract:
+    name: Contract drift gate (surface ↔ docs)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: contract-exempt label skips the gate
+        if: contains(github.event.pull_request.labels.*.name, 'contract-exempt')
+        run: echo "skipped via contract-exempt label"
+      - name: Contract surface diffs carry docs
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'contract-exempt') }}
+        run: python -m scripts.check_contract_drift ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
+
   deps:
     name: Dependency locks + audit
     runs-on: ubuntu-latest
