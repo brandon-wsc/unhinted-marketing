@@ -267,7 +267,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 - **Primitives** — `web/src/components/ui/*` is the only control stack (shadcn); compose in `components/` / `features/`; no parallel Button/Input/Dialog
 - **Tokens** — Prefer semantic utilities (`bg-card`, `text-muted-foreground`, …) from `web/src/index.css` `@theme`; avoid `var(--color-*)` in JSX classNames
 - **Session shell layout** — `split` vs `paged` from **container width vs content min-widths** (`session-layout.ts`: history + chat [+ preview]), not viewport `lg` / device names; measured via `useContainerWidth` on the chat shell. Split + preview: leftover after history is resizable (default chat 40% / preview 60%, both mins 360px bind; ratio persisted in `localStorage`). Paged remains the overflow valve. **Held:** chat/preview order swap.
-- **Agent rule** — [`AGENTS.md`](../AGENTS.md) (Web UI system)
+- **Agent rule** — [`.agents/skills/web-ui-system`](../.agents/skills/web-ui-system/SKILL.md)
 - **Composed helpers** — `FormField`, `IconButton` in `web/src/components/`; menus/confirm via `DropdownMenu` / `AlertDialog`
 
 **Decision (2026-08-09) — Design-in-repo docs first (harness desk proposed, CSS unchanged):**
@@ -277,7 +277,7 @@ This document summarizes **what exists today** vs the [ROADMAP](./ROADMAP.md). F
 
 **Decision (2026-08-16) — Portable agent instructions (no harness lock-in):**
 
-- Execution rules (commits, Alembic, web UI) live in [`AGENTS.md`](../AGENTS.md). Nested [`web/AGENTS.md`](../web/AGENTS.md) / [`migrations/AGENTS.md`](../migrations/AGENTS.md) only point back; they are not a second copy.
+- Execution rules (commits, Alembic, web UI, commands) live in [`.agents/skills/`](../.agents/skills/) — portable `SKILL.md` files loaded on demand (moved out of `AGENTS.md` 2026-11-19); [`AGENTS.md`](../AGENTS.md) maps them. Nested [`web/AGENTS.md`](../web/AGENTS.md) / [`migrations/AGENTS.md`](../migrations/AGENTS.md) only point; they are not a second copy.
 - Do not keep a parallel copy in harness-specific files (`.cursor/rules/*.mdc`, `CLAUDE.md`, …). Personal tool prefs stay in the operator's home directory, not this repo.
 
 **Decision (2026-08-10) — Harness desk applied to runtime + chrome refresh:**
@@ -492,7 +492,7 @@ Set `OPENAI_API_KEY` (and optional `LLM_API_BASE`) in `.env` for LLM paths; with
 | `/invite/:token` | Invite accept (public page; POST accept requires auth) |
 | `/system` | Platform ops (level ≥ 6) — LLM calls / node steps / session trace / Instance settings (edit ≥ 9); `/admin` redirects here |
 
-**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; harness-desk values from [`docs/design/`](./design/) **applied**; layers in [`AGENTS.md`](../AGENTS.md). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`, `UserMenu`). Session shell uses content-width `split`/`paged` (`session-layout.ts`); split chat|preview is resizable. Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
+**UI system:** shadcn under `components/ui/` + semantic tokens in `index.css`; harness-desk values from [`docs/design/`](./design/) **applied**; layers in [`.agents/skills/web-ui-system`](../.agents/skills/web-ui-system/SKILL.md). Auth composes `ui/*` + `FormField` / `PasswordBox`; app chrome in `components/` (`AppShell`, `AuthLayout`, `IconButton`, `UserMenu`). Session shell uses content-width `split`/`paged` (`session-layout.ts`); split chat|preview is resizable. Lint/format: Biome (`web/biome.json`; `pnpm run lint`).
 
 **UX features:**
 
@@ -535,6 +535,7 @@ unhinted-marketing/
 ├── migrations/           # Alembic (auth → signals → sessions)
 ├── tests/                # pytest: unit (no DB) + api (TEST_DATABASE_URL)
 ├── web/                  # React frontend (Phase 3 chat / agent / preview / history UI)
+├── .agents/skills/       # execution conventions — portable SKILL.md packs
 ├── AGENTS.md             # Portable coding-agent SSOT (not editor-specific rules)
 └── docs/
     ├── ROADMAP.md
