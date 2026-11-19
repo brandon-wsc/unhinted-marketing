@@ -11,8 +11,9 @@ must be a real package.json script"), extended for this repo's surfaces:
     3. `npm <script>` / `npm run <script>`   → same, for npm builtins
     4. `tests/<path>` tokens          → file or directory exists
 
-Scans every AGENTS.md in the tree (root + nested packs) so new agent docs
-are covered automatically. Run:
+Scans every AGENTS.md in the tree (root + nested packs) plus project
+skills under `.agents/skills/`, so new agent docs are covered
+automatically. Run:
 
     python -m scripts.check_agents_commands
 """
@@ -81,10 +82,18 @@ def check_file(path: Path, scripts: set[str]) -> list[str]:
     return check_text(path.read_text(encoding="utf-8"), rel, scripts)
 
 
-def main() -> int:
-    docs = sorted(
-        p for p in ROOT.rglob("AGENTS.md") if "node_modules" not in p.parts and ".venv" not in p.parts
+def doc_paths() -> list[Path]:
+    agents = (
+        p
+        for p in ROOT.rglob("AGENTS.md")
+        if "node_modules" not in p.parts and ".venv" not in p.parts
     )
+    skills = ROOT.glob(".agents/skills/*/SKILL.md")
+    return sorted([*agents, *skills])
+
+
+def main() -> int:
+    docs = doc_paths()
     scripts = _script_names()
     failures: list[str] = []
     for doc in docs:
@@ -95,7 +104,7 @@ def main() -> int:
             print(f"::error::{f}")
         print(f"\nagents-commands: {len(failures)} drifted command(s) — fix the doc or add the target")
         return 1
-    print(f"agents-commands ok — {len(docs)} AGENTS.md file(s) checked")
+    print(f"agents-commands ok — {len(docs)} agent doc(s) checked")
     return 0
 
 

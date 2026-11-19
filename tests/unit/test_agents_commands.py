@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scripts.check_agents_commands import check_file, check_text
+from scripts.check_agents_commands import check_file, check_text, doc_paths
 from scripts.check_zone_boundary import ROOT
 
 SCRIPTS = {"lint", "test", "build", "generate", "types"}
@@ -42,9 +42,7 @@ def test_test_paths_must_exist():
 
 def test_real_agents_files_have_no_drift():
     failures = []
-    for doc in ROOT.rglob("AGENTS.md"):
-        if "node_modules" in doc.parts or ".venv" in doc.parts:
-            continue
+    for doc in doc_paths():
         failures.extend(check_file(doc, _scripts()))
     assert failures == []
 
