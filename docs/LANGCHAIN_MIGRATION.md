@@ -70,10 +70,22 @@ Same for harness runners: keep `RH.run_query_generator_agent`, `EH.run_executor_
 - [ ] `pytest tests/unit` + API suite + eval baseline diff
 - [ ] Remove `pydantic-ai-slim` last
 
+## Spike findings (2026-11-19, `scripts/spike_langchain_astream.py` — keyless, 9/9)
+
+Verified against `langchain-core` 1.8.3 + `langchain-openai` 1.8.3 with `GenericFakeChatModel` and a local OpenAI-compatible SSE stub:
+
+- **Cancel propagates.** Cancelling the consumer task mid-stream raises `CancelledError` in the consumer AND runs `finally` blocks inside `_astream` — cleanup propagates through the outer `astream` wrapper. `BaseChatOpenAI._astream` holds the HTTP stream inside `async with context_manager`, so early close `aclose()`s the response.
+- **HTTP abort is real.** Server-side: after 3 consumed chunks + cancel, the stub never served the remaining ~47 chunks and the client connection closed (EOF at ~0.34s of a ~7.5s stream). Best-effort upstream abort holds. Port note: the seam should still `aclose()` the outer generator on cancel.
+- **First-token is per-chunk.** `mark_first_token` maps to "first `astream` chunk received" (fake ttft ~2ms). Equivalent semantics.
+- **usage_metadata works.** With `stream_usage=True` the request carries `stream_options.include_usage`; a final `AIMessageChunk` carries `usage_metadata={input_tokens, output_tokens, total_tokens}` — map onto `rec.set_usage` (field names differ from litellm's `prompt_tokens`/`completion_tokens`: langchain normalises to `input_*`/`output_*`).
+- **`response_format` routes to the beta `.stream()` path.** With `response_format` in the payload, `BaseChatOpenAI._astream` uses `root_async_client.beta.chat.completions.stream()` instead of `async_client.create()`. Consequences: (a) after the deltas it yields a **final-completion chunk with `content=''`** — naive `"".join(chunk.content)` is still safe; (b) the final-completion parser needs `role` in the first delta (a stub without `delta.role` crashed `_convert_dict_to_message` — real OpenAI/compat servers send it, but a compat provider that doesn't would hard-fail JSON mode).
+- **Request body parity confirmed:** `stream=True`, `response_format={"type":"json_object"}` forwarded as-is via `model_kwargs`.
+
 ## Open questions
 
 - [ ] **Vertex Express** — current path is api_key-only, no ADC (ADR 0021 §4). `langchain-google-vertexai` assumes ADC. Options: `langchain-google-genai` (AI Studio key) mapping, or keep vertex hand-rolled behind the seam.
 - [ ] **OpenRouter slug** — `live_harness_model` strips `openrouter/` provider prefix + `openai_compat_model_id`; where does this live in the langchain provider mapping?
 - [ ] **Attachment budget** — `deps.attachment_reads` is per-turn mutable state inside `RunContext`; langchain equivalent = `InjectedState`/config-scoped counter or keep the check inside the tool's inner fn with a turn-scoped object passed via `RunnableConfig`.
 - [ ] **litellm** — `router.py` hand-rolls streaming on litellm/`acompletion`; `pricing.py` uses litellm cost map lazily. Migration likely keeps litellm for pricing even after the completion path moves — confirm before dropping the dep.
-- [ ] **Structured output fidelity** — `complete_json` callers `json.loads`/`model_validate` the raw string; `with_structured_output` returns parsed objects. Keeping the `str` seam means serializing back — decide whether the seam returns `str` (zero test churn) or a new name is introduced (then re-point ~115 sites — avoid).
+- [x] ~~**Structured output fidelity**~~ — **resolved by spike:** keep the `str` seam. `model_kwargs={"response_format":{"type":"json_object"}}` + join `astream` delta `.content` reproduces `complete_json` exactly; the trailing final-completion chunk is `content=''` so join stays clean. `with_structured_output` stays an option for nodes wanting schema validation, but is not needed for the seam.
+- [ ] **response_format → beta path caveat** — JSON mode now depends on the openai client's beta streaming parser; a compat provider sending first-delta without `role` hard-fails (pydantic ValidationError, not LlmProviderError). Port should wrap that path so it surfaces as `LlmProviderError` like today.
