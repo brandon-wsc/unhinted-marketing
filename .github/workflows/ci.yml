@@ -76,7 +76,7 @@ jobs:
           $(grep -vE '^\s*(#|$)' pip-audit-ignores.txt | sed 's/^/--ignore-vuln /' | tr '\n' ' ')
 
   lint:
-    name: Lint (ruff)
+    name: Lint (ruff + zone boundary)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,6 +85,10 @@ jobs:
           python-version: "3.12"
       - run: pip install --require-hashes -r requirements-ci.txt
       - run: ruff check .
+      # Mechanizes the AGENTS.md hard boundaries: nothing in the LangGraph /
+      # LLM zone may reach publish, confirm, or org-catalog commit paths.
+      - name: LLM-zone commit boundary
+        run: python -m scripts.check_zone_boundary
 
   backend-unit:
     name: Backend unit

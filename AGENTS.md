@@ -72,6 +72,7 @@ python -m scripts.eval_retrieve      # keyless product-retrieve eval — seeds c
 python -m scripts.eval_agent --suite regression   # bigger pack; --out reports/eval/baseline.json refreshes anchor
 python -m scripts.eval_diff          # baseline vs latest — exits 1; model change downgrades metrics to warnings (--strict-models fails hard)
 python -m scripts.eval_cost_from_records  # prod llm_call_records p50/p95 + ttft + cache hit rate + rough $
+python -m scripts.check_zone_boundary   # LLM-zone commit boundary — hard boundaries 1/4/5 as a gate
 cd scripts/typescript_gen && npm install && npm run generate  # session TS mirrors
 cd web && pnpm run lint && pnpm test && pnpm run build
 cd relay && npm ci && npm run types && npm test   # Cloudflare OAuth relay worker
@@ -187,7 +188,7 @@ Adding UI: check `components/ui` first; if missing, `pnpm dlx shadcn@latest add 
 
 ## When reviewing changes
 
-- Flag chat/LLM paths that publish, confirm, or upsert org catalog products; those are HTTP-only (ADR 0003, ADR 0011).
+- Flag chat/LLM paths that publish, confirm, or upsert org catalog products; those are HTTP-only (ADR 0003, ADR 0011). `python -m scripts.check_zone_boundary` gates the import-level version of this; `# zone-boundary-allow: <reason>` is the suppression convention.
 - Flag blocking sync calls (CPU-bound work like ONNX embeds, sync I/O) inside `async def` routes/deps — wrap with `asyncio.to_thread` / `run_in_threadpool`.
 - Flag a second knowledge store or a second streaming-markdown stack.
 - Flag hand-rolled Alembic revision IDs and parallel `Button`/`Input`/`Dialog` outside `web/src/components/ui`.

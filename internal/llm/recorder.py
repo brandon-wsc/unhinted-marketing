@@ -329,6 +329,9 @@ def submit(rec: LlmCallRecordBuilder) -> None:
 async def _persist_safely(rec: LlmCallRecordBuilder) -> None:
     try:
         async with SessionLocal() as db:
+            # zone-boundary-allow: llm_call_records is fire-and-forget turn
+            # telemetry, not a commit artifact; it bypasses repos on purpose
+            # so a recording failure can never break a turn.
             db.add(rec.to_model())
             await db.commit()
     except Exception:
