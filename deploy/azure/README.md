@@ -80,10 +80,9 @@ az containerapp job start -g rg-unhinted-demo -n unhinted-demo-migrate
 az containerapp job start -g rg-unhinted-demo -n unhinted-demo-scheduler
 az containerapp job execution list -g rg-unhinted-demo -n unhinted-demo-scheduler -o table
 
-# Upgrade to the latest published release (default IMAGE_TAG=onprem floats — ADR 0059)
-azd up
-
-# …or pin to a specific release tag for a frozen demo
+# Releases deploy automatically — release.yml's `demo` job pins the new
+# v* tag on every app/job and starts the migrate job (ADR 0059).
+# Manual override, e.g. pin an older tag for a frozen demo:
 azd env set IMAGE_TAG v1.2.3 && azd up
 
 # One-off admin CLI inside the api container
@@ -92,6 +91,36 @@ az containerapp exec -g rg-unhinted-demo -n unhinted-demo-api \
 
 azd down    # tear everything in the resource group down
 ```
+
+## Release CD — auto-deploy on every `v*` tag
+
+`release.yml`'s `demo` job runs after the GitHub Release publishes: it
+pins the new `v*` tag on `unhinted-demo-{api,web,worker}` and the
+`unhinted-demo-{scheduler,migrate}` jobs, then starts the migrate job.
+The job pins the released tag rather than floating `onprem` — an
+unchanged image string creates no new ACA revision, so `onprem` would
+not re-pull. A later `azd up` returns apps to `onprem` (same image).
+
+One-time setup — a GitHub OIDC-federated Entra app, no client secret:
+
+```bash
+subId=$(az account show --query id -o tsv)
+appId=$(az ad app create --display-name unhinted-demo-cd --query appId -o tsv)
+az ad sp create --id "$appId"
+az role assignment create --assignee "$appId" --role Contributor \
+  --scope "/subscriptions/$subId/resourceGroups/rg-unhinted-demo"
+az ad app federated-credential create --id "$appId" --parameters '{
+  "name": "github-demo-env",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:brandon-wsc/unhinted-marketing:environment:demo",
+  "audiences": ["api://AzureADTokenExchange"]
+}'
+```
+
+Then GitHub → repo **Settings → Environments → New environment `demo`**
+→ add variables `AZURE_CLIENT_ID` (the `appId` above), `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`. The `environment` name is what the federated
+credential's `subject` binds to — rename both together if changed.
 
 ## Notes
 

@@ -119,7 +119,7 @@ Prefer domain names over roadmap phases for `scope`: `auth`, `signals`, `session
 
 Follow the [Conventional Branch](https://conventionalbranch.org/) purpose prefixes: `feat/…` (or `feature/…`), `fix/…` (or `bugfix/…`), `hotfix/…`, `release/…` (dots OK for versions, e.g. `release/v1.2.0`), `chore/…`. Slug is lowercase, hyphen-separated — e.g. `fix/executor-post-voice`. There is no `ci/`, `docs/`, `test/`, `refactor/`, or `perf/` branch — branch type is work intent, not commit type: CI-config, docs, refactor, and test-only work all branch under `chore/…` (their commits still use the commit-type table above). CI rejects PRs whose head branch does not match.
 
-**Long-lived branches** ([ADR 0059](docs/adr/0059-release-branches-demo-track-split.md)): `main` is the only standing integration branch — no `develop`. `release/vX.Y` is cut from `main` on demand only (release hardening, or patching a shipped `vX.Y.*` line). Patch flow: `hotfix/<slug>` off the release branch → PR into `release/vX.Y` → tag `vX.Y.Z` from it → merge or cherry-pick the fix back to `main`.
+**Long-lived branches** ([ADR 0059](docs/adr/0059-release-branches-demo-track-split.md)): `main` is the only standing integration branch — no `develop`. `release/vX.Y` is cut from `main` on demand only (release hardening, or patching a shipped `vX.Y.*` line). Patch flow: `hotfix/<slug>` off the release branch → PR into `release/vX.Y` → tag `vX.Y.Z` from it → merge or cherry-pick the fix back to `main`. Every `v*` tag also auto-deploys the hosted demo (`release.yml` `demo` job → ACA).
 
 ## Pull requests
 

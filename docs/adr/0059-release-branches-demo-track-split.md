@@ -44,13 +44,20 @@ while the NAS test host and local checkouts want `main` HEAD.
 
 | Track | Host / audience | Source of truth | Update |
 |-------|-----------------|-----------------|--------|
-| Hosted demo | `demo.unhinted.hk` (Azure ACA, ADR 0044) | Latest published release — GHCR floating `onprem` tag | `azd up` after a release (or `IMAGE_TAG` pin) |
+| Hosted demo | `demo.unhinted.hk` (Azure ACA, ADR 0044) | Latest published release | `release.yml` `demo` job — pins the `v*` tag on all ACA apps/jobs and re-runs migrate; `azd up` stays as the manual path |
 | Demo / local CD | NAS test host, personal machines | `origin/main` HEAD | `deploy/demo-sync.sh` (ADR 0037) |
 | Customer pull CD | Versioned self-hosted installs | A published GitHub Release | Release assets / `docker compose pull` |
 
 ADR 0037's "demo tracks `main`" now applies to the NAS/local track only.
 The hosted demo was already on release images (`IMAGE_TAG` defaults to the
-floating `onprem` tag); this ADR makes that the explicit stable track.
+floating `onprem` tag); this ADR makes that the explicit stable track and
+`release.yml`'s `demo` job automates the upgrade — a `v*` tag updates all
+five ACA resources to the pinned tag and starts the migrate job. The job
+pins `vX.Y.Z` rather than `onprem` because an unchanged image string
+produces no new ACA revision (so `onprem` would not re-pull); a later
+manual `azd up` returns the apps to `onprem` — the same image — so the
+drift is cosmetic. Azure auth is GitHub OIDC on a `demo` environment (no
+stored client secret); one-time setup is in `deploy/azure/README.md`.
 
 ### 4. CI covers release branches
 
@@ -65,5 +72,8 @@ already accepts `release/` and `hotfix/` head branches.
   settings — a manual step, like `main`'s).
 - `AGENTS.md` branch conventions and `deploy/README.md` document the
   lifecycle and the three tracks.
+- Every `v*` tag now deploys the hosted demo automatically — including
+  `workflow_dispatch` re-publishes of an old tag, which roll the demo
+  back to that version.
 - Cherry-picking a fix back to `main` is a human step; forgetting it ships
   the fix to customers but regresses it on the next minor line.
