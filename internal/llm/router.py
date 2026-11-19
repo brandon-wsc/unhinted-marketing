@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from enum import Enum
 from typing import Any
 
@@ -729,6 +729,40 @@ def _wrap_lc_error(exc: BaseException, *, model: str) -> LlmProviderError:
     return _wrap_provider_error(exc, model=model)
 
 
+def _estimate_lc_usage(
+    chat: Any,
+    prompt_messages: Sequence[Any],
+    *,
+    completion_messages: Sequence[Any] = (),
+    completion_text: str = "",
+) -> dict[str, int] | None:
+    """Client-side usage estimate when a provider returns no usage.
+
+    LiteLLM used to fill usage client-side when a stream carried no usage
+    chunk; LangChain only reports what the provider sends, so providers that
+    ignore ``include_usage`` record NULL token counts — under-counting
+    llm_call_records and under-enforcing the ADR 0041 member cap. Returns
+    ``None`` when the model cannot count tokens locally.
+    """
+    try:
+        prompt = int(chat.get_num_tokens_from_messages(list(prompt_messages)))
+    except Exception:  # noqa: BLE001 — token counting must never break the LLM path
+        return None
+    output = 0
+    try:
+        if completion_messages:
+            output = int(chat.get_num_tokens_from_messages(list(completion_messages)))
+        elif completion_text:
+            output = int(chat.get_num_tokens(completion_text))
+    except Exception:  # noqa: BLE001 — best-effort estimate; prompt count still useful
+        output = 0
+    return {
+        "input_tokens": prompt,
+        "output_tokens": output,
+        "total_tokens": prompt + output,
+    }
+
+
 async def _lc_astream_text(
     *,
     chat: Any,
@@ -747,16 +781,23 @@ async def _lc_astream_text(
     """
     from langchain_core.messages import HumanMessage, SystemMessage
 
+    messages = [SystemMessage(content=system), HumanMessage(content=user)]
     agen: Any = None
     first = True
+    saw_chunk = False
+    saw_usage = False
+    parts: list[str] = []
     try:
-        agen = chat.astream([SystemMessage(content=system), HumanMessage(content=user)])
+        agen = chat.astream(messages)
         async for chunk in agen:
+            saw_chunk = True
             usage = getattr(chunk, "usage_metadata", None)
             if usage_sink is not None and usage:
+                saw_usage = True
                 usage_sink(usage)
             piece = chunk.content if isinstance(chunk.content, str) else ""
             if piece:
+                parts.append(piece)
                 if first:
                     first = False
                     if on_first_token is not None:
@@ -768,6 +809,12 @@ async def _lc_astream_text(
         raise _wrap_lc_error(exc, model=model) from exc
     finally:
         await _aclose_stream(agen)
+        if usage_sink is not None and saw_chunk and not saw_usage:
+            estimate = _estimate_lc_usage(
+                chat, messages, completion_text="".join(parts)
+            )
+            if estimate is not None:
+                usage_sink(estimate)
 
 
 async def complete_json(

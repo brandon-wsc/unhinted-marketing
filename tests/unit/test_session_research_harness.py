@@ -188,6 +188,37 @@ async def test_run_query_generator_records_chat_json(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
+async def test_run_query_generator_estimates_usage_when_reply_silent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An ainvoke reply with no usage_metadata still records an estimate."""
+    from internal.llm import recorder
+
+    sent: list = []
+    monkeypatch.setattr(recorder, "submit", sent.append)
+    RH.set_research_model_override(
+        _ScriptedChat(
+            messages=iter(
+                [
+                    out_call(
+                        "QueryGenOut",
+                        {
+                            "search_queries": ["Hong Kong overtime"],
+                            "topic": "news",
+                        },
+                    )
+                ]
+            ),
+            token_estimates=(9, 3),
+        )
+    )
+    parsed = await RH.run_query_generator_agent("Hong Kong overtime", RH.ResearchDeps())
+    assert parsed is not None
+    rec = sent[0]
+    assert (rec.prompt_tokens, rec.completion_tokens, rec.total_tokens) == (9, 3, 12)
+
+
+@pytest.mark.asyncio
 async def test_run_query_generator_json_text_fallback() -> None:
     """A model that answers with plain JSON text (no schema call) still parses."""
     RH.set_research_model_override(

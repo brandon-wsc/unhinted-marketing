@@ -253,6 +253,55 @@ async def test_stream_chat_reply_records_call_context(monkeypatch: pytest.Monkey
     assert rec.ttft_ms is not None
 
 
+@pytest.mark.asyncio
+async def test_stream_chat_reply_estimates_usage_when_stream_silent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stream that never carries usage_metadata still records an estimate —
+    the fallback LiteLLM used to provide (ADR 0041 accounting)."""
+    from internal.llm import recorder
+
+    sent: list = []
+    monkeypatch.setattr(recorder, "submit", sent.append)
+    H.set_chat_model_override(
+        _ScriptedChat(
+            messages=iter([AIMessage(content="hello from test")]),
+            token_estimates=(20, 6),
+        )
+    )
+    text = await H.stream_chat_reply(
+        user_prompt="hi",
+        session_id=None,
+        deps=H.ChatDeps(),
+    )
+    assert text == "hello from test"
+    rec = sent[0]
+    assert (rec.prompt_tokens, rec.completion_tokens, rec.total_tokens) == (20, 6, 26)
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_reply_null_usage_without_tokenizer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No provider usage and no local tokenizer → usage stays NULL."""
+    from internal.llm import recorder
+
+    sent: list = []
+    monkeypatch.setattr(recorder, "submit", sent.append)
+    H.set_chat_model_override(
+        _ScriptedChat(messages=iter([AIMessage(content="hello")]))
+    )
+    await H.stream_chat_reply(
+        user_prompt="hi",
+        session_id=None,
+        deps=H.ChatDeps(),
+    )
+    rec = sent[0]
+    assert rec.status == "ok"
+    assert rec.prompt_tokens is None
+    assert rec.total_tokens is None
+
+
 # --- live model resolution ---------------------------------------------------
 
 

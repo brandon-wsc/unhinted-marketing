@@ -32,6 +32,7 @@ from internal.llm.router import (
     LlmProviderError,
     ModelTier,
     _aclose_stream,
+    _estimate_lc_usage,
     _lc_harness_model,
     _wrap_lc_error,
 )
@@ -324,6 +325,7 @@ async def _run_lc_tool_call(call: dict, tools: dict[str, Any], deps: ChatDeps) -
 
 async def _stream_round(
     bound: Any,
+    chat: Any,
     messages: list[Any],
     *,
     rec: LlmCallRecordBuilder,
@@ -335,11 +337,14 @@ async def _stream_round(
     """Stream one model round; return the merged reply or ``None`` on zero chunks."""
     agen = bound.astream(messages)
     acc = None
+    saw_usage = False
+    round_text: list[str] = []
     try:
         async for chunk in agen:
             acc = chunk if acc is None else acc + chunk
             chunk_usage = getattr(chunk, "usage_metadata", None)
             if chunk_usage:
+                saw_usage = True
                 _merge_lc_usage(usage, chunk_usage)
                 rec.set_usage(usage)
             piece = chunk.content if isinstance(chunk.content, str) else ""
@@ -347,6 +352,7 @@ async def _stream_round(
                 rec.mark_first_token()
                 parts.append(piece)
                 pending.append(piece)
+                round_text.append(piece)
                 if session_id:
                     await _publish_deltas(session_id, pending)
     except ValueError as exc:
@@ -356,6 +362,16 @@ async def _stream_round(
             raise
     finally:
         await _aclose_stream(agen)
+        if acc is not None and not saw_usage:
+            estimate = _estimate_lc_usage(
+                chat,
+                messages,
+                completion_messages=[message_chunk_to_message(acc)],
+                completion_text="".join(round_text),
+            )
+            if estimate is not None:
+                _merge_lc_usage(usage, estimate)
+                rec.set_usage(usage)
     return acc
 
 
@@ -391,6 +407,7 @@ async def _stream_chat_reply_lc(
             for _ in range(_MAX_TOOL_ROUNDS):
                 acc = await _stream_round(
                     bound,
+                    chat,
                     messages,
                     rec=rec,
                     usage=usage,
@@ -486,7 +503,12 @@ async def run_lc_tool_loop(
             raise
         except Exception as exc:
             raise _wrap_lc_error(exc, model=_model_label(chat)) from exc
-        _merge_lc_usage(usage, getattr(reply, "usage_metadata", None))
+        if getattr(reply, "usage_metadata", None):
+            _merge_lc_usage(usage, reply.usage_metadata)
+        else:
+            estimate = _estimate_lc_usage(chat, messages, completion_messages=[reply])
+            if estimate is not None:
+                _merge_lc_usage(usage, estimate)
         if usage:
             rec.set_usage(usage)
         calls = list(getattr(reply, "tool_calls", None) or [])

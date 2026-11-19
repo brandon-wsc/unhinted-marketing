@@ -244,11 +244,23 @@ class _FakeLcChat:
         *,
         usage: dict | None = None,
         fail_after: int | None = None,
+        token_estimates: tuple[int, int] | None = None,
     ) -> None:
         self.pieces = list(pieces)
         self.usage = usage
         self.fail_after = fail_after
+        self.token_estimates = token_estimates
         self.closed = 0
+
+    def get_num_tokens_from_messages(self, _messages: list) -> int:
+        if self.token_estimates is None:
+            raise NotImplementedError("no tokenizer")
+        return self.token_estimates[0]
+
+    def get_num_tokens(self, _text: str) -> int:
+        if self.token_estimates is None:
+            raise NotImplementedError("no tokenizer")
+        return self.token_estimates[1]
 
     def astream(self, _messages: list, **_kwargs: object):
         return self._gen()
@@ -322,6 +334,23 @@ async def test_complete_json_records_ok_with_usage(
     assert (rec.prompt_tokens, rec.completion_tokens, rec.total_tokens) == (3, 5, 8)
     assert rec.latency_ms is not None
     assert rec.ttft_ms is not None
+
+
+@pytest.mark.asyncio
+async def test_complete_json_estimates_usage_when_stream_silent(
+    monkeypatch: pytest.MonkeyPatch, recorded: list
+) -> None:
+    """Providers that skip ``include_usage`` chunks still record usage — the
+    client-side estimate fallback LiteLLM used to provide (ADR 0041)."""
+    chat = _FakeLcChat(['{"ok": true}'], token_estimates=(10, 4))
+    _stub_lc_provider(monkeypatch, chat)
+
+    raw = await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
+
+    assert raw == '{"ok": true}'
+    rec = recorded[0]
+    assert rec.status == "ok"
+    assert (rec.prompt_tokens, rec.completion_tokens, rec.total_tokens) == (10, 4, 14)
 
 
 def test_lc_chat_model_requests_usage_and_json_mode() -> None:

@@ -21,10 +21,29 @@ from langchain_core.outputs import ChatGenerationChunk
 
 class _ScriptedChat(GenericFakeChatModel):
     """GenericFakeChatModel that supports ``bind_tools`` and streams
-    ``tool_calls`` / ``usage_metadata`` through ``astream`` chunks."""
+    ``tool_calls`` / ``usage_metadata`` through ``astream`` chunks.
+
+    ``token_estimates`` scripts the ``get_num_tokens*`` counters used by the
+    usage-estimate fallback; unset raises ``NotImplementedError`` like a model
+    with no local tokenizer.
+    """
+
+    token_estimates: tuple[int, int] | None = None
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
         return self
+
+    def get_num_tokens_from_messages(self, messages: Any) -> int:
+        if self.token_estimates is None:
+            raise NotImplementedError("no tokenizer")
+        # Prompt calls pass the full conversation; the estimate fallback's
+        # completion call passes the single reply message.
+        return self.token_estimates[0] if len(list(messages)) > 1 else self.token_estimates[1]
+
+    def get_num_tokens(self, text: str) -> int:
+        if self.token_estimates is None:
+            raise NotImplementedError("no tokenizer")
+        return self.token_estimates[1]
 
     def _stream(
         self, messages: Any, stop: Any = None, run_manager: Any = None, **kwargs: Any
