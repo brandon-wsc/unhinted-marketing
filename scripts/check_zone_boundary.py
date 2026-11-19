@@ -172,178 +172,192 @@ def _resolve_module(node: ast.ImportFrom, file_pkg: str) -> str:
     return ".".join(base)
 
 
-def check_source(source: str, filename: str) -> list[Finding]:
-    """Run the boundary rules over one zone file's source."""
-    rel = filename
-    findings: list[Finding] = []
-    lines = source.splitlines()
-    tree = ast.parse(source, filename=filename)
-    # Package the file lives in — for `a/b/nodes.py` it is `a.b`; for
-    # `a/b/__init__.py` it is already `a.b`.
-    file_pkg = rel.removesuffix("/__init__.py").removesuffix(".py").replace("/", ".")
-    if not rel.endswith("/__init__.py") and "." in file_pkg:
-        file_pkg = file_pkg.rsplit(".", 1)[0]
+class _Checker:
+    """Per-file check state: source lines for marker lookup, module-alias
+    bindings, and the findings list."""
 
-    def _marked(line_no: int) -> bool:
-        if not 0 < line_no <= len(lines):
+    def __init__(self, source: str, rel: str) -> None:
+        self.rel = rel
+        self.lines = source.splitlines()
+        self.findings: list[Finding] = []
+        # Local names bound to watched modules (``from internal.memory import
+        # repos`` → "repos"; ``import internal.memory.repos as r`` → "r"),
+        # plus the fully-qualified dotted form.
+        self.module_bindings: dict[str, str] = {}
+
+    def _marked(self, line_no: int) -> bool:
+        if not 0 < line_no <= len(self.lines):
             return False
-        text = lines[line_no - 1]
+        text = self.lines[line_no - 1]
         if ALLOW_MARKER not in text:
             return False
         tail = text.split(ALLOW_MARKER, 1)[1].strip()
         return tail.startswith(":") and bool(tail[1:].strip())
 
-    def allowed(*linenos: int) -> bool:
+    def allowed(self, *linenos: int) -> bool:
         # Marker suppresses on the offending line, or in a comment block
         # directly above it (scan up while lines are comments or blank).
         for n in linenos:
-            if _marked(n):
+            if self._marked(n):
                 return True
             line_no = n - 1
-            while 0 < line_no <= len(lines):
-                text = lines[line_no - 1].strip()
+            while 0 < line_no <= len(self.lines):
+                text = self.lines[line_no - 1].strip()
                 if not text:
                     break
-                if _marked(line_no):
+                if self._marked(line_no):
                     return True
                 if not text.startswith("#"):
                     break
                 line_no -= 1
         return False
 
-    # Local names bound to watched modules (``from internal.memory import
-    # repos`` → "repos"; ``import internal.memory.repos as r`` → "r"), plus
-    # the fully-qualified dotted form for ``import internal.memory.repos``.
-    module_bindings: dict[str, str] = {}
+    def add(self, line: int, rule: str, message: str) -> None:
+        self.findings.append(Finding(self.rel, line, rule, message))
 
+    # --- R1/R2/R4: imports --------------------------------------------------
+
+    def check_import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            banned = _is_banned_module(alias.name)
+            if banned and not self.allowed(node.lineno):
+                self.add(node.lineno, "R1", f"import {alias.name} — {BANNED_MODULES[banned]}")
+            if alias.name == REPOS:
+                self.module_bindings[alias.asname or REPOS] = REPOS
+            elif alias.name == SCHEMAS_TOOLS:
+                self.module_bindings[alias.asname or SCHEMAS_TOOLS] = SCHEMAS_TOOLS
+
+    def check_import_from(self, node: ast.ImportFrom, file_pkg: str) -> None:
+        module = _resolve_module(node, file_pkg)
+        for alias in node.names:
+            if alias.name == "*":
+                if module in (REPOS, SCHEMAS_TOOLS) and not self.allowed(node.lineno):
+                    self.add(
+                        node.lineno,
+                        "R2",
+                        f"star import from {module} hides symbol names — name the imports",
+                    )
+                continue
+            self._check_imported_name(node, module, alias)
+        # Module-alias binding — `from internal.memory import repos` and
+        # `from schemas import tools` bind the module under a local name;
+        # call sites are checked in check_call.
+        for alias in node.names:
+            if module == "internal.memory" and alias.name == "repos":
+                self.module_bindings[alias.asname or "repos"] = REPOS
+            elif module == "schemas" and alias.name == "tools":
+                self.module_bindings[alias.asname or "tools"] = SCHEMAS_TOOLS
+
+    def _check_imported_name(self, node: ast.ImportFrom, module: str, alias: ast.alias) -> None:
+        full = f"{module}.{alias.name}" if module else alias.name
+        banned = _is_banned_module(module) or _is_banned_module(full)
+        if banned:
+            if not self.allowed(node.lineno, alias.lineno):
+                self.add(
+                    alias.lineno,
+                    "R1",
+                    f"from {module or '<pkg>'} import {alias.name} — {BANNED_MODULES[banned]}",
+                )
+            return
+        if module == REPOS:
+            self._check_repos_name(node, alias, "repos")
+        elif module == SCHEMAS_TOOLS:
+            self._check_schema_name(node, alias, "schemas.tools")
+
+    def _check_repos_name(self, node: ast.ImportFrom, alias: ast.alias, via: str) -> None:
+        if (
+            _is_write_name(alias.name)
+            and alias.name not in ZONE_WRITE_ALLOW
+            and not self.allowed(node.lineno, alias.lineno)
+        ):
+            self.add(
+                alias.lineno,
+                "R2",
+                f"{via}.{alias.name} is write-shaped but not in ZONE_WRITE_ALLOW — "
+                "triage: turn-state/ingest write (allowlist it) or commit-class (keep it HTTP-side)",
+            )
+
+    def _check_schema_name(self, node: ast.ImportFrom, alias: ast.alias, via: str) -> None:
+        if BANNED_SCHEMA_RE.match(alias.name) and not self.allowed(node.lineno, alias.lineno):
+            self.add(
+                alias.lineno,
+                "R4",
+                f"{via}.{alias.name} is confirm-side — zone emits previews/drafts only (ADR 0003)",
+            )
+
+    # --- R2/R4 at call sites, R3 raw writes ---------------------------------
+
+    def check_call(self, node: ast.Call) -> None:
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            return
+        receiver = _dotted(func.value)
+        if receiver and receiver in self.module_bindings:
+            self._check_module_call(node, self.module_bindings[receiver], receiver, func.attr)
+            return
+        self._check_db_call(node, receiver, func)
+
+    def _check_module_call(self, node: ast.Call, bound: str, receiver: str, attr: str) -> None:
+        if bound == REPOS:
+            if (
+                _is_write_name(attr)
+                and attr not in ZONE_WRITE_ALLOW
+                and not self.allowed(node.lineno)
+            ):
+                self.add(
+                    node.lineno,
+                    "R2",
+                    f"{receiver}.{attr}(...) is write-shaped but not in ZONE_WRITE_ALLOW — "
+                    "triage: turn-state/ingest write (allowlist it) or commit-class (keep it HTTP-side)",
+                )
+        elif bound == SCHEMAS_TOOLS and BANNED_SCHEMA_RE.match(attr) and not self.allowed(
+            node.lineno
+        ):
+            self.add(
+                node.lineno,
+                "R4",
+                f"{receiver}.{attr}(...) is confirm-side — zone emits previews/drafts only (ADR 0003)",
+            )
+
+    def _check_db_call(self, node: ast.Call, receiver: str | None, func: ast.Attribute) -> None:
+        # Raw ORM writes on a db-ish receiver — direct, attribute-tailed
+        # (self.db.execute), or via a factory call (get_db().execute(...)).
+        recv_name = receiver.rsplit(".", 1)[-1] if receiver else None
+        if recv_name is None and isinstance(func.value, ast.Call) and isinstance(
+            func.value.func, ast.Name
+        ):
+            recv_name = func.value.func.id
+        if (
+            recv_name in DB_RECEIVERS | DB_FACTORIES
+            and func.attr in DB_WRITE_METHODS
+            and not self.allowed(node.lineno)
+        ):
+            self.add(
+                node.lineno,
+                "R3",
+                f"{recv_name}.{func.attr}(...) is a raw ORM write — reads/writes go through "
+                "internal.memory.repos so commit-class names stay visible to the gate",
+            )
+
+
+def check_source(source: str, filename: str) -> list[Finding]:
+    """Run the boundary rules over one zone file's source."""
+    tree = ast.parse(source, filename=filename)
+    # Package the file lives in — for `a/b/nodes.py` it is `a.b`; for
+    # `a/b/__init__.py` it is already `a.b`.
+    file_pkg = filename.removesuffix("/__init__.py").removesuffix(".py").replace("/", ".")
+    if not filename.endswith("/__init__.py") and "." in file_pkg:
+        file_pkg = file_pkg.rsplit(".", 1)[0]
+
+    checker = _Checker(source, filename)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            for alias in node.names:
-                banned = _is_banned_module(alias.name)
-                if banned and not allowed(node.lineno):
-                    findings.append(
-                        Finding(rel, node.lineno, "R1", f"import {alias.name} — {BANNED_MODULES[banned]}")
-                    )
-                if alias.name == REPOS:
-                    module_bindings[alias.asname or REPOS] = REPOS
-                elif alias.name == SCHEMAS_TOOLS:
-                    module_bindings[alias.asname or SCHEMAS_TOOLS] = SCHEMAS_TOOLS
-
+            checker.check_import(node)
         elif isinstance(node, ast.ImportFrom):
-            module = _resolve_module(node, file_pkg)
-            for alias in node.names:
-                if alias.name == "*":
-                    if module in (REPOS, SCHEMAS_TOOLS) and not allowed(node.lineno):
-                        findings.append(
-                            Finding(
-                                rel,
-                                node.lineno,
-                                "R2",
-                                f"star import from {module} hides symbol names — name the imports",
-                            )
-                        )
-                    continue
-                full = f"{module}.{alias.name}" if module else alias.name
-                banned = _is_banned_module(module) or _is_banned_module(full)
-                if banned and not allowed(node.lineno, alias.lineno):
-                    findings.append(
-                        Finding(
-                            rel,
-                            alias.lineno,
-                            "R1",
-                            f"from {module or '<pkg>'} import {alias.name} — {BANNED_MODULES[banned]}",
-                        )
-                    )
-                    continue
-                if module == REPOS and _is_write_name(alias.name) and alias.name not in ZONE_WRITE_ALLOW:
-                    if not allowed(node.lineno, alias.lineno):
-                        findings.append(
-                            Finding(
-                                rel,
-                                alias.lineno,
-                                "R2",
-                                f"repos.{alias.name} is write-shaped but not in ZONE_WRITE_ALLOW — "
-                                "triage: turn-state/ingest write (allowlist it) or commit-class (keep it HTTP-side)",
-                            )
-                        )
-                elif (
-                    module == SCHEMAS_TOOLS
-                    and BANNED_SCHEMA_RE.match(alias.name)
-                    and not allowed(node.lineno, alias.lineno)
-                ):
-                    findings.append(
-                        Finding(
-                            rel,
-                            alias.lineno,
-                            "R4",
-                            f"schemas.tools.{alias.name} is confirm-side — zone emits previews/drafts only (ADR 0003)",
-                        )
-                    )
-            # Module-alias binding — `from internal.memory import repos`
-            # and `from schemas import tools` bind the module under a local
-            # name; call sites are checked below (R2/R4 on `repos.<name>(…)`).
-            for alias in node.names:
-                if module == "internal.memory" and alias.name == "repos":
-                    module_bindings[alias.asname or "repos"] = REPOS
-                elif module == "schemas" and alias.name == "tools":
-                    module_bindings[alias.asname or "tools"] = SCHEMAS_TOOLS
-
+            checker.check_import_from(node, file_pkg)
         elif isinstance(node, ast.Call):
-            func = node.func
-            if not isinstance(func, ast.Attribute):
-                continue
-            receiver = _dotted(func.value)
-            # Module-alias call: repos.<write>(...) / tools.PublishSocialPost*(...)
-            if receiver and receiver in module_bindings:
-                bound = module_bindings[receiver]
-                if bound == REPOS and _is_write_name(func.attr) and func.attr not in ZONE_WRITE_ALLOW:
-                    if not allowed(node.lineno):
-                        findings.append(
-                            Finding(
-                                rel,
-                                node.lineno,
-                                "R2",
-                                f"{receiver}.{func.attr}(...) is write-shaped but not in ZONE_WRITE_ALLOW — "
-                                "triage: turn-state/ingest write (allowlist it) or commit-class (keep it HTTP-side)",
-                            )
-                        )
-                elif (
-                    bound == SCHEMAS_TOOLS
-                    and BANNED_SCHEMA_RE.match(func.attr)
-                    and not allowed(node.lineno)
-                ):
-                    findings.append(
-                        Finding(
-                            rel,
-                            node.lineno,
-                            "R4",
-                            f"{receiver}.{func.attr}(...) is confirm-side — zone emits previews/drafts only (ADR 0003)",
-                        )
-                    )
-                continue
-            # Raw ORM writes on a db-ish receiver — direct, attribute-tailed
-            # (self.db.execute), or via a factory call (get_db().execute(...)).
-            recv_name = receiver.rsplit(".", 1)[-1] if receiver else None
-            if recv_name is None and isinstance(func.value, ast.Call) and isinstance(
-                func.value.func, ast.Name
-            ):
-                recv_name = func.value.func.id
-            if (
-                recv_name in DB_RECEIVERS | DB_FACTORIES
-                and func.attr in DB_WRITE_METHODS
-                and not allowed(node.lineno)
-            ):
-                findings.append(
-                    Finding(
-                        rel,
-                        node.lineno,
-                        "R3",
-                        f"{recv_name}.{func.attr}(...) is a raw ORM write — reads/writes go through "
-                        "internal.memory.repos so commit-class names stay visible to the gate",
-                    )
-                )
-
-    return findings
+            checker.check_call(node)
+    return checker.findings
 
 
 def zone_files() -> list[Path]:

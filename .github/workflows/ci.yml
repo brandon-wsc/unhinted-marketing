@@ -103,7 +103,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   lint:
-    name: Lint (ruff + zone boundary)
+    name: Lint (ruff)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -116,6 +116,8 @@ jobs:
       # LLM zone may reach publish, confirm, or org-catalog commit paths.
       - name: LLM-zone commit boundary
         run: python -m scripts.check_zone_boundary
+      - name: Semgrep web api-transport boundary
+        run: semgrep scan --config .semgrep/ --error web/src
 
   backend-unit:
     name: Backend unit

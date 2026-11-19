@@ -1,0 +1,45 @@
+rules:
+  # Web api-transport boundary — all HTTP goes through lib/ helpers or a
+  # feature's api.ts so credentials, error mapping, and auth retry stay in
+  # one place. A component importing fetch() directly bypasses that.
+  - id: unhinted.web.no-raw-fetch-outside-api-modules
+    severity: ERROR
+    languages: [typescript]
+    message: >-
+      raw fetch() outside an api-client module — route HTTP through lib/
+      helpers or the feature's api.ts so credentials, error mapping, and
+      auth retry stay in one place.
+    pattern: fetch(...)
+    paths:
+      include:
+        - web/src/**/*.ts
+        - web/src/**/*.tsx
+      exclude:
+        - web/src/lib/**
+        - web/src/context/auth-context.tsx
+        - web/src/features/**/api.ts
+        - web/src/features/session/sse.ts
+        - web/src/**/generated/**
+        - web/src/**/*.test.ts
+        - web/src/**/*.test.tsx
+
+  # The /confirm endpoint lives in exactly one module — the UI confirm
+  # handler is the only path to publishing (ADR 0003). Keep the URL string
+  # out of components, hooks, and other feature modules.
+  - id: unhinted.web.confirm-endpoint-only-in-session-api
+    severity: ERROR
+    languages: [typescript]
+    message: >-
+      /confirm endpoint referenced outside features/session/api.ts —
+      publishing goes through the UI confirm handler only (ADR 0003); keep
+      the URL in one place.
+    pattern-regex: /confirm
+    paths:
+      include:
+        - web/src/**/*.ts
+        - web/src/**/*.tsx
+      exclude:
+        - web/src/features/session/api.ts
+        - web/src/**/generated/**
+        - web/src/**/*.test.ts
+        - web/src/**/*.test.tsx

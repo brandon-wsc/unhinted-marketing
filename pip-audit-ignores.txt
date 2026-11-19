@@ -70,3 +70,13 @@ CVE-2026-96643
 CVE-2026-96644
 CVE-2026-96778
 GHSA-78g4-xqwv-q3g8
+
+# mcp 1.29.0 — fixed in 1.30.0/2.2.0, currently uninstallable: every semgrep
+# release ≤1.186.0 pins mcp==1.29.0 exactly, so requirements-ci.txt cannot
+# bump it without falling back to semgrep 1.136.x. CI-only tooling (the
+# vulnerable surface is mcp client/server handling; we only run
+# `semgrep scan`). Remove once a semgrep release unpins mcp.
+CVE-2026-59951
+CVE-2026-116684
+CVE-2026-116685
+CVE-2026-116686
