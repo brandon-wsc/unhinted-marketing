@@ -18,7 +18,8 @@ Rules (question text is what the judge receives — update this file and
             fallback; execution continues as if nothing failed.
 
 Suppression: ``# audit-allow(ERR-NN): reason`` or ``# audit-allow(*): …``
-anywhere inside the enclosing function body.
+anywhere inside the enclosing function body. A bare marker with no reason
+does not suppress.
 
 Usage: python -m scripts.except_audit <base-sha> <head-sha>
 Env:   AUDIT_MODEL (litellm model string, default gpt-4.1-mini),
@@ -52,7 +53,7 @@ MODEL = os.environ.get("AUDIT_MODEL", "gpt-4.1-mini")
 
 GUARD_NAME = re.compile(r"^(is|has|can|allow|valid|verify|check|auth|require|enforce|guard)_?", re.I)
 GUARD_FILE = re.compile(r"auth|guard|valid|oauth|deps", re.I)
-ALLOW_RE = re.compile(r"audit-allow\((ERR-\d+|TEST-\d+|\*)\)")
+ALLOW_RE = re.compile(r"audit-allow\((ERR-\d+|TEST-\d+|\*)\)\s*:\s*\S")
 
 RULES = {
     "ERR-01": (
@@ -95,9 +96,10 @@ Reply with JSON only: {{"answers": {{"RULE-ID": {{"verdict": true, "confidence":
 class Candidate:
     file: str
     line: int
+    # Nearest line inside the PR diff — check-run annotations only render
+    # inline on diff lines, and the ``except`` line usually isn't one.
+    annot_line: int
     fn_name: str
-    fn_start: int
-    fn_end: int
     fn_source: str
     handler_source: str
     rules: list[str] = field(default_factory=list)
@@ -106,8 +108,7 @@ class Candidate:
 class _ExceptFinder(ast.NodeVisitor):
     """Collect ExceptHandler nodes with their enclosing function range."""
 
-    def __init__(self, source: str) -> None:
-        self.source = source
+    def __init__(self) -> None:
         self.stack: list[ast.AST] = []
         self.found: list[tuple[ast.ExceptHandler, ast.AST | None]] = []
 
@@ -124,25 +125,40 @@ class _ExceptFinder(ast.NodeVisitor):
             self.stack.pop()
 
 
-def find_candidates(source: str, rel: str, hunk_ranges: list[tuple[int, int]]) -> list[Candidate]:
-    """Except handlers whose enclosing function overlaps the diff hunks."""
+def find_candidates(
+    source: str, rel: str, hunk_ranges: list[tuple[int, int]] | None
+) -> list[Candidate]:
+    """Except handlers whose enclosing function overlaps the diff hunks.
+
+    ``hunk_ranges=None`` audits the whole file; an empty list means the diff
+    touched the file but added no lines (deletion-only / pure rename) — no
+    candidate can overlap, so nothing is audited.
+    """
     tree = ast.parse(source, filename=rel)
-    finder = _ExceptFinder(source)
+    finder = _ExceptFinder()
     finder.visit(tree)
     lines = source.splitlines(keepends=True)
     out: list[Candidate] = []
     for handler, fn in finder.found:
         scope_start = getattr(fn, "lineno", 1) if fn else 1
         scope_end = getattr(fn, "end_lineno", len(lines)) if fn else len(lines)
-        if hunk_ranges and not any(scope_start <= b and scope_end >= a for a, b in hunk_ranges):
-            continue
+        overlap = None
+        if hunk_ranges is not None:
+            overlap = [r for r in hunk_ranges if scope_start <= r[1] and scope_end >= r[0]]
+            if not overlap:
+                continue
+        annot = handler.lineno
+        if overlap:
+            annot = min(
+                (max(a, min(b, annot)) for a, b in overlap),
+                key=lambda x: abs(x - handler.lineno),
+            )
         fn_source = "".join(lines[scope_start - 1 : scope_end])
         cand = Candidate(
             file=rel,
             line=handler.lineno,
+            annot_line=annot,
             fn_name=getattr(fn, "name", "<module>") if fn else "<module>",
-            fn_start=scope_start,
-            fn_end=scope_end,
             fn_source=fn_source,
             handler_source="".join(
                 lines[handler.lineno - 1 : getattr(handler, "end_lineno", handler.lineno)]
@@ -170,7 +186,7 @@ def rules_for(cand: Candidate) -> list[str]:
 
 def _changed_files(base: str, head: str) -> list[str]:
     out = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=AMR", base, head],
+        ["git", "diff", "--name-only", "--diff-filter=AMR", f"{base}...{head}"],
         check=True,
         capture_output=True,
         text=True,
@@ -180,7 +196,7 @@ def _changed_files(base: str, head: str) -> list[str]:
 
 def _hunk_ranges(base: str, head: str, path: str) -> list[tuple[int, int]]:
     diff = subprocess.run(
-        ["git", "diff", "--unified=0", base, head, "--", path],
+        ["git", "diff", "--unified=0", f"{base}...{head}", "--", path],
         check=True,
         capture_output=True,
         text=True,
@@ -226,7 +242,7 @@ async def _judge(cand: Candidate) -> dict[str, dict]:
     raise RuntimeError(f"judge failed for {cand.file}:{cand.line}: {last_err}")
 
 
-async def _post_check_run(head: str, body: dict) -> None:
+async def _post_check_run(body: dict) -> None:
     token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     if not token or not repo:
@@ -255,7 +271,6 @@ async def _finish(head: str, *, conclusion: str, title: str, summary: str, annot
         with open(summary_path, "a", encoding="utf-8") as fh:
             fh.write(f"### {title}\n\n{summary}\n")
     await _post_check_run(
-        head,
         {
             "name": "except-audit",
             "head_sha": head,
@@ -305,8 +320,8 @@ async def run(base: str, head: str) -> None:
             if p >= NOTICE_AT:
                 findings.append({
                     "path": cand.file,
-                    "start_line": cand.line,
-                    "end_line": cand.line,
+                    "start_line": cand.annot_line,
+                    "end_line": cand.annot_line,
                     "annotation_level": "warning" if p >= WARN_AT else "notice",
                     "title": f"except-audit {rid}",
                     "message": f"{rid} (p={p:.2f}): {RULES[rid]}",

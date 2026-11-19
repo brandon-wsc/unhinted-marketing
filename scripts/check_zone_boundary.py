@@ -15,7 +15,7 @@ Rules (all file-scoped to zone files):
         record for "turn-state/ingest write" vs "commit write". The same
         rule applies at call sites that go through a module alias
         (``repos.<write>(...)``).
-    R3  Raw ORM writes — ``db.add/delete/merge/execute`` on a db-ish
+    R3  Raw ORM writes — ``db.add/add_all/delete/merge/execute`` on a db-ish
         receiver — are banned. Reads go through repos, so a raw call is
         either a commit bypass or a new kind of turn-state write to triage.
         ``flush``/``commit`` stay legal (turn-state bookkeeping in
@@ -124,7 +124,7 @@ DB_FACTORIES = {
     "SessionLocal",
     "async_session",
 }
-DB_WRITE_METHODS = {"add", "delete", "merge", "execute"}
+DB_WRITE_METHODS = {"add", "add_all", "delete", "merge", "execute"}
 
 ALLOW_MARKER = "zone-boundary-allow"
 

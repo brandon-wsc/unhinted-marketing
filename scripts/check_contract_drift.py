@@ -56,7 +56,7 @@ def check_changed(changed: list[str]) -> list[str]:
 
 def _changed_files(base: str, head: str) -> list[str]:
     out = subprocess.run(
-        ["git", "diff", "--name-only", base, head],
+        ["git", "diff", "--name-only", f"{base}...{head}"],
         check=True,
         capture_output=True,
         text=True,

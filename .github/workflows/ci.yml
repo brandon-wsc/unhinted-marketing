@@ -63,6 +63,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: contract-exempt label skips the gate
         if: contains(github.event.pull_request.labels.*.name, 'contract-exempt')
         run: echo "skipped via contract-exempt label"
@@ -93,6 +96,9 @@ jobs:
   secrets:
     name: gitleaks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # gitleaks-action comments findings on the PR
     steps:
       - uses: actions/checkout@v4
         with:

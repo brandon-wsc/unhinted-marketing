@@ -16,8 +16,10 @@ paths = [
   '''^\.github/workflows/ci\.yml$''',
 ]
 regexes = [
-  '''relay-secret-\d+''',
-  '''IGQW-[\w-]+''',
-  '''ci-test-jwt-secret-[\w-]+''',
-  '''7TYpIqhIjNnl1cVDXFLcMFEVJI8YgzgEvB3mWS8dZc4=''',
+  '''^relay-secret-1234$''',
+  '''^IGQW-long-lived-12345$''',
+  '''^IGQW-short$''',
+  '''^IGQW-relay-long$''',
+  '''^ci-test-jwt-secret-at-least-32-characters-long$''',
+  '''^7TYpIqhIjNnl1cVDXFLcMFEVJI8YgzgEvB3mWS8dZc4=$''',
 ]

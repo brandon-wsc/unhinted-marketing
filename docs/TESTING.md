@@ -71,11 +71,18 @@ Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — runs on 
 
 | Job | Checks |
 |-----|--------|
-| `lint` | `ruff check .` |
+| `conventions` | Branch name type/slug; PR title + commit subjects are Conventional Commits, ASCII-only (PRs only) |
+| `contract` | `python -m scripts.check_contract_drift <base> <head>` — contract-surface diffs must carry `docs/adr/` or `docs/STATUS.md` (PRs only; `contract-exempt` label skips) |
+| `deps` | Dependency locks cover pyproject + `pip-audit` |
+| `secrets` | `gitleaks` full-history scan (`.gitleaks.toml` allowlists the exact test-fixture values only) |
+| `lint` | `ruff check .` (incl. C901/PLR0912/PLR0915 with the pyproject debt baseline) + `python -m scripts.check_zone_boundary` + `semgrep` web api-transport boundary |
 | `backend-unit` | `pytest tests/unit` + utils cov ≥85%; session nodes mock-LLM cov ≥70% |
 | `backend-api` | `pgvector/pgvector:pg18` service + `pytest tests/api` + routes cov ≥70% |
 | `frontend` | `pnpm install --frozen-lockfile` → `pnpm run lint` (Biome) → `pnpm run test:coverage` → `pnpm run build` |
-| `contracts` | `python -m scripts.check_contracts_fresh`; regenerate TS via `scripts/typescript_gen` and `git diff --exit-code` on `web/src/features/session/generated/` |
+| `relay` | `npm ci` → `npm run types` → `npm test` (relay worker) |
+| `contracts` | `python -m scripts.check_contracts_fresh`; `python -m scripts.check_agents_commands`; regenerate TS via `scripts/typescript_gen` and `git diff --exit-code` on `web/src/features/session/generated/` |
+
+Separate workflow [`.github/workflows/audit-gate.yml`](../.github/workflows/audit-gate.yml): `except-handler audit` — **advisory**, never blocks; LLM scores except-handlers overlapping the PR diff against `docs/audit-rules.md` ERR-01/02/03 (`audit-exempt` label or `# audit-allow(ERR-NN): reason` suppresses).
 
 **Do not** require whole-repo 80%. Local equivalents:
 
@@ -171,7 +178,7 @@ Coverage omit list for broad reports: see `[tool.coverage.run]` in `pyproject.to
 2. ~~**Testable app lifespan** (`create_app`) + **Tier 2 API**~~ — `tests/api` + `TEST_DATABASE_URL`
 3. ~~**Frontend Vitest**~~ — Tier 1 `web/src/lib/**` + Tier 2 PasswordBox / UserMenuDropdown
 4. ~~**CI/CD**~~ — `.github/workflows/ci.yml` (ruff + pytest unit/API + Biome + Vitest + build)
-5. Hold: SSE E2E, Playwright chat→preview→confirm. **Live LLM eval CLI landed** — `python -m scripts.eval_agent` (on-demand; not a PR job). `@pytest.mark.live_llm` remains unused. **Branch rules:** enforced on `main` — all 7 CI jobs are required checks (`strict`), `enforce_admins` on, conversation resolution required; PR approvals not required (count 0).
+5. Hold: SSE E2E, Playwright chat→preview→confirm. **Live LLM eval CLI landed** — `python -m scripts.eval_agent` (on-demand; not a PR job). `@pytest.mark.live_llm` remains unused. **Branch rules:** enforced on `main` — all `ci.yml` jobs are required checks (`strict`), `enforce_admins` on, conversation resolution required; PR approvals not required (count 0).
 6. ~~**Contracts SSOT**~~ — `AGENTS.md`, ADRs, `schemas/contracts.py` / `tools.py`, `docs/contracts/` + OpenAPI export
 7. ~~**Graph mock-LLM node tests + CI**~~ — `tests/unit/test_session_nodes.py` + routing; opt-in `node_trace_recording()`; CI Tier 1b ≥70%
 

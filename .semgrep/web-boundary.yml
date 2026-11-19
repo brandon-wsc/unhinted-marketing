@@ -33,7 +33,7 @@ rules:
       /confirm endpoint referenced outside features/session/api.ts —
       publishing goes through the UI confirm handler only (ADR 0003); keep
       the URL in one place.
-    pattern-regex: /confirm
+    pattern-regex: /confirm(?![\w/-])
     paths:
       include:
         - web/src/**/*.ts

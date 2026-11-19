@@ -83,7 +83,9 @@ max-complexity = 12
 "migrations/**" = ["UP035", "UP007", "I001"]
 "tests/**" = ["S101", "BLE001", "C901", "PLR0912", "PLR0915"]
 # Complexity debt baseline — the gate is armed for all other files; shrink
-# this list as the named functions get refactored (45 findings at adoption).
+# this list as the named functions get refactored (45 findings at adoption;
+# internal/session/service.py carries the same three keys on its own line
+# below, alongside its older ignores).
 "internal/perception/question_graph/nodes.py" = ["C901", "PLR0912", "PLR0915"]
 "internal/llm/router.py" = ["C901", "PLR0912", "PLR0915"]
 "cmd/api/routes/admin.py" = ["C901", "PLR0912", "PLR0915"]

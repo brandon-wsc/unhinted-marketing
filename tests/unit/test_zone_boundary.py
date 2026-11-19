@@ -142,6 +142,7 @@ def test_r2_star_import_flagged():
     "call",
     [
         "db.add(row)",
+        "db.add_all(rows)",
         "db.delete(row)",
         "db.merge(row)",
         "db.execute(stmt)",

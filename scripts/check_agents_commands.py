@@ -37,9 +37,9 @@ PY_MODULE_RE = re.compile(r"\bpython3?\s+-m\s+scripts\.([a-z_][a-z0-9_]*)")
 PNPM_RE = re.compile(r"\bpnpm\s+(?:run\s+)?([a-z][a-z0-9:_-]*)")
 NPM_RE = re.compile(r"\bnpm\s+(?:run\s+)?([a-z][a-z0-9:_-]*)")
 TEST_PATH_RE = re.compile(r"(?<![\w./-])tests/[\w./_-]+")
-# `pnpm --dir web lint` / `npm -C web run types` — drop the option so the
-# real subcommand token is what gets checked.
-PKG_OPTION_RE = re.compile(r"\b(pnpm|npm)\s+(?:--dir|--filter|-C|-w|--workspace)\s+\S+")
+# `pnpm --dir web lint` / `pnpm --filter=web lint` / `npm -C web run types`
+# — drop the option so the real subcommand token is what gets checked.
+PKG_OPTION_RE = re.compile(r"\b(pnpm|npm)\s+(?:--dir|--filter|-C|-w|--workspace|-F)(?:\s+|=)\S+")
 
 
 def _script_names() -> set[str]:
