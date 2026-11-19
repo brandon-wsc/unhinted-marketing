@@ -58,13 +58,15 @@ async def fetch_and_upsert_tavily(
     max_results: int = MAX_HITS_PER_QUERY,
     search: SearchFn | None = None,
     upsert: UpsertFn | None = None,
-    errors: list[str] | None = None,
+    errors: list[str],
 ) -> list[dict[str, Any]]:
     """Run each atomic query via Tavily and upsert into ``raw_news_events``.
 
-    A failed query is skipped, not faked: when ``errors`` is passed it
-    collects the query strings whose search raised ``TavilySearchError``,
-    so callers can tell "no hits" apart from "search failed".
+    A failed query is skipped, not faked: ``errors`` collects the query
+    strings whose search raised ``TavilySearchError``, so callers can tell
+    "no hits" apart from "search failed". An item that fails to upsert is
+    still returned — the fetched content stays usable — with
+    ``metrics.upsert_failed`` set so it is never mistaken for a stored row.
     """
     search_fn = search or search_tavily
     upsert_fn = upsert or upsert_signal
@@ -88,8 +90,7 @@ async def fetch_and_upsert_tavily(
             )
         except TavilySearchError:
             logger.exception("Tavily search failed for query=%r", query[:80])
-            if errors is not None:
-                errors.append(query)
+            errors.append(query)
             continue
         for item in batch:
             sid = item.get("signal_id")
@@ -113,6 +114,7 @@ async def fetch_and_upsert_tavily(
             )
         except Exception:
             logger.exception("failed to upsert Tavily signal %s", item.get("signal_id"))
+            item["metrics"]["upsert_failed"] = True
     if tavily_items:
         await db.flush()
     return tavily_items
