@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 from collections.abc import AsyncIterator, Sequence
@@ -28,7 +29,7 @@ import httpx
 
 from internal.config import settings
 from internal.llm.image_api import post_dedicated_image, resolve_compat_image_api
-from internal.llm.recorder import track
+from internal.llm.recorder import LlmCallRecordBuilder, track
 from internal.llm.resolve import (
     bundle_has_credentials,
     effective_api_base,
@@ -216,7 +217,7 @@ async def _vertex_astream_text(
             raise _wrap_google_genai_error(exc, model=model) from exc
         raise
     finally:
-        await _aclose_stream(stream)
+        await aclose_stream(stream)
 
 
 async def _vertex_complete_text(
@@ -460,7 +461,7 @@ def _is_provider_failure(exc: BaseException) -> bool:
     )
 
 
-async def _aclose_stream(stream: Any) -> None:
+async def aclose_stream(stream: Any) -> None:
     """Best-effort close of a LiteLLM/httpx streaming response (Stop / cancel)."""
     if stream is None:
         return
@@ -519,7 +520,7 @@ async def _astream_completion(
             raise _wrap_provider_error(exc, model=model) from exc
         raise
     finally:
-        await _aclose_stream(response)
+        await aclose_stream(response)
 
 
 def _lc_model_id(resolved: Any) -> str:
@@ -535,10 +536,11 @@ def _lc_chat_model(
 ) -> tuple[Any, str] | None:
     """``(ChatModel, model_label)`` for the LangChain path, else ``None``.
 
-    ADR 0060 coverage is incremental: ``openai``/``openai_compatible`` (any
-    api_base) move first; ``anthropic`` + AI-Studio ``gemini`` stay on litellm
-    until langchain-anthropic / -google-genai land; ``vertex_ai`` keeps the
-    hand-rolled api_key-only path (ADR 0021 §4).
+    Deliberately narrow (ADR 0060 §5): only ``openai``/``openai_compatible``
+    (any api_base) run on LangChain here. ``anthropic`` + AI-Studio ``gemini``
+    stay on litellm and ``vertex_ai`` keeps the hand-rolled api_key-only path
+    (ADR 0021 §4) — the full provider map lives in ``lc_harness_model`` for
+    the session harnesses.
     """
     if resolved.provider_type not in ("openai", "openai_compatible"):
         return None
@@ -561,7 +563,7 @@ def _lc_chat_model(
     return chat, model
 
 
-def _lc_harness_model(resolved: Any) -> tuple[Any, str]:
+def lc_harness_model(resolved: Any) -> tuple[Any, str]:
     """``(ChatModel, model_label)`` for the session harnesses — full provider coverage.
 
     Mirrors the retired ``live_harness_model`` branch order: gemini/vertex
@@ -638,7 +640,7 @@ def _lc_harness_model(resolved: Any) -> tuple[Any, str]:
     return lc
 
 
-def _wrap_lc_error(exc: BaseException, *, model: str) -> LlmProviderError:
+def wrap_lc_error(exc: BaseException, *, model: str) -> LlmProviderError:
     """Map provider-SDK / LangChain exceptions onto ``LlmProviderError`` kinds."""
     try:
         import anthropic
@@ -730,6 +732,18 @@ def _wrap_lc_error(exc: BaseException, *, model: str) -> LlmProviderError:
     return _wrap_provider_error(exc, model=model)
 
 
+def map_lc_error(exc: BaseException, *, model: str) -> BaseException:
+    """Map a LangChain-seam exception — ADR 0060 §3 error contract.
+
+    Framework cancellation (``concurrent.futures.CancelledError`` from a
+    wrapped ``run_in_executor`` call) maps to ``CancelledError``; everything
+    else wraps to ``LlmProviderError``.
+    """
+    if isinstance(exc, concurrent.futures.CancelledError):
+        return asyncio.CancelledError()
+    return wrap_lc_error(exc, model=model)
+
+
 def _lc_token_count(
     chat: Any,
     messages: Sequence[Any] = (),
@@ -767,7 +781,7 @@ def _lc_token_count(
         return None
 
 
-def _estimate_lc_usage(
+def estimate_lc_usage(
     chat: Any,
     prompt_messages: Sequence[Any],
     *,
@@ -840,15 +854,46 @@ async def _lc_astream_text(
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        raise _wrap_lc_error(exc, model=model) from exc
+        raise map_lc_error(exc, model=model) from exc
     finally:
-        await _aclose_stream(agen)
+        await aclose_stream(agen)
         if usage_sink is not None and saw_chunk and not saw_usage:
-            estimate = _estimate_lc_usage(
+            estimate = estimate_lc_usage(
                 chat, messages, completion_text="".join(parts)
             )
             if estimate is not None:
                 usage_sink(estimate)
+
+
+async def _drain_text_stream(
+    stream: AsyncIterator[str],
+    rec: LlmCallRecordBuilder,
+    *,
+    strip: bool = False,
+) -> str:
+    """Drain a text stream into ``rec``; stash partial text before re-raise.
+
+    ADR 0060 §3 — a cancelled/erroring stream still records what it managed
+    to return; an empty completion is an ``empty_response`` failure.
+    """
+    parts: list[str] = []
+    try:
+        async for piece in stream:
+            parts.append(piece)
+    except BaseException:
+        rec.response_text = "".join(parts).strip() or None
+        raise
+    content = "".join(parts)
+    if strip:
+        content = content.strip()
+    if not content:
+        rec.fail(
+            "empty_response",
+            {"kind": "empty_response", "message": "LLM returned empty content"},
+        )
+        raise RuntimeError("LLM returned empty content")
+    rec.response_text = content
+    return content
 
 
 async def complete_json(
@@ -860,14 +905,33 @@ async def complete_json(
 ) -> str:
     """JSON completion via streaming so Stop can aclose mid-response."""
     resolved = resolve_llm_model(tier)
+    lc = (
+        None
+        if resolved.provider_type == "vertex_ai"
+        else _lc_chat_model(resolved, temperature=temperature, json_mode=True)
+    )
+    kwargs: dict = {}
     if resolved.provider_type == "vertex_ai":
         model = gemini_catalog_id(resolved.model_id)
-        with track(
-            kind="chat_json", tier=tier, model=model, temperature=temperature,
-            system=system, user=user,
-        ) as rec:
-            parts: list[str] = []
-            async for piece in _vertex_astream_text(
+    elif lc is not None:
+        model = lc[1]
+    else:
+        kwargs = _base_kwargs(tier, temperature)
+        model = str(kwargs["model"])
+        kwargs["messages"] = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        kwargs["response_format"] = {"type": "json_object"}
+        kwargs["stream"] = True
+        # Ask for a final usage chunk (dropped for providers that don't support it).
+        kwargs["stream_options"] = {"include_usage": True}
+    with track(
+        kind="chat_json", tier=tier, model=model, temperature=temperature,
+        system=system, user=user,
+    ) as rec:
+        if resolved.provider_type == "vertex_ai":
+            stream = _vertex_astream_text(
                 resolved=resolved,
                 system=system,
                 user=user,
@@ -875,71 +939,24 @@ async def complete_json(
                 json_mode=True,
                 usage_sink=rec.set_usage,
                 on_first_token=rec.mark_first_token,
-            ):
-                parts.append(piece)
-            content = "".join(parts)
-            if not content:
-                rec.fail(
-                    "empty_response",
-                    {"kind": "empty_response", "message": "LLM returned empty content"},
-                )
-                raise RuntimeError("LLM returned empty content")
-            rec.response_text = content
-            return content
-    lc = _lc_chat_model(resolved, temperature=temperature, json_mode=True)
-    if lc is not None:
-        chat, model = lc
-        with track(
-            kind="chat_json", tier=tier, model=model, temperature=temperature,
-            system=system, user=user,
-        ) as rec:
-            parts = []
-            async for piece in _lc_astream_text(
-                chat=chat,
+            )
+        elif lc is not None:
+            stream = _lc_astream_text(
+                chat=lc[0],
                 model=model,
                 system=system,
                 user=user,
                 usage_sink=rec.set_usage,
                 on_first_token=rec.mark_first_token,
-            ):
-                parts.append(piece)
-            content = "".join(parts)
-            if not content:
-                rec.fail(
-                    "empty_response",
-                    {"kind": "empty_response", "message": "LLM returned empty content"},
-                )
-                raise RuntimeError("LLM returned empty content")
-            rec.response_text = content
-            return content
-    kwargs = _base_kwargs(tier, temperature)
-    model = str(kwargs["model"])
-    kwargs["messages"] = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
-    kwargs["response_format"] = {"type": "json_object"}
-    kwargs["stream"] = True
-    # Ask for a final usage chunk (dropped for providers that don't support it).
-    kwargs["stream_options"] = {"include_usage": True}
-    with track(
-        kind="chat_json", tier=tier, model=model, temperature=temperature,
-        system=system, user=user,
-    ) as rec:
-        parts = []
-        async for piece in _astream_completion(
-            model=model,
-            kwargs=kwargs,
-            usage_sink=rec.set_usage,
-            on_first_token=rec.mark_first_token,
-        ):
-            parts.append(piece)
-        content = "".join(parts)
-        if not content:
-            rec.fail("empty_response", {"kind": "empty_response", "message": "LLM returned empty content"})
-            raise RuntimeError("LLM returned empty content")
-        rec.response_text = content
-        return content
+            )
+        else:
+            stream = _astream_completion(
+                model=model,
+                kwargs=kwargs,
+                usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
+            )
+        return await _drain_text_stream(stream, rec)
 
 
 async def complete_text(
@@ -978,25 +995,18 @@ async def complete_text(
             kind="chat_text", tier=tier, model=model, temperature=temperature,
             system=system, user=user,
         ) as rec:
-            parts = []
-            async for piece in _lc_astream_text(
-                chat=chat,
-                model=model,
-                system=system,
-                user=user,
-                usage_sink=rec.set_usage,
-                on_first_token=rec.mark_first_token,
-            ):
-                parts.append(piece)
-            content = "".join(parts).strip()
-            if not content:
-                rec.fail(
-                    "empty_response",
-                    {"kind": "empty_response", "message": "LLM returned empty content"},
-                )
-                raise RuntimeError("LLM returned empty content")
-            rec.response_text = content
-            return content
+            return await _drain_text_stream(
+                _lc_astream_text(
+                    chat=chat,
+                    model=model,
+                    system=system,
+                    user=user,
+                    usage_sink=rec.set_usage,
+                    on_first_token=rec.mark_first_token,
+                ),
+                rec,
+                strip=True,
+            )
     kwargs = _base_kwargs(tier, temperature)
     model = str(kwargs["model"])
     kwargs["messages"] = [
@@ -1031,66 +1041,62 @@ async def astream_text(
 ) -> AsyncIterator[str]:
     """Yield assistant text pieces as the model streams them; aclose on cancel."""
     resolved = resolve_llm_model(tier)
+    lc = (
+        None
+        if resolved.provider_type == "vertex_ai"
+        else _lc_chat_model(resolved, temperature=temperature)
+    )
+    kwargs: dict = {}
     if resolved.provider_type == "vertex_ai":
         model = gemini_catalog_id(resolved.model_id)
-        with track(
-            kind="chat_text", tier=tier, model=model, temperature=temperature,
-            system=system, user=user,
-        ) as rec:
-            parts: list[str] = []
-            async for piece in _vertex_astream_text(
+    elif lc is not None:
+        model = lc[1]
+    else:
+        kwargs = _base_kwargs(tier, temperature)
+        model = str(kwargs["model"])
+        kwargs["messages"] = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        kwargs["stream"] = True
+        kwargs["stream_options"] = {"include_usage": True}
+    with track(
+        kind="chat_text", tier=tier, model=model, temperature=temperature,
+        system=system, user=user,
+    ) as rec:
+        if resolved.provider_type == "vertex_ai":
+            stream = _vertex_astream_text(
                 resolved=resolved,
                 system=system,
                 user=user,
                 temperature=temperature,
                 usage_sink=rec.set_usage,
                 on_first_token=rec.mark_first_token,
-            ):
-                parts.append(piece)
-                yield piece
-            rec.response_text = "".join(parts)
-        return
-    lc = _lc_chat_model(resolved, temperature=temperature)
-    if lc is not None:
-        chat, model = lc
-        with track(
-            kind="chat_text", tier=tier, model=model, temperature=temperature,
-            system=system, user=user,
-        ) as rec:
-            parts = []
-            async for piece in _lc_astream_text(
-                chat=chat,
+            )
+        elif lc is not None:
+            stream = _lc_astream_text(
+                chat=lc[0],
                 model=model,
                 system=system,
                 user=user,
                 usage_sink=rec.set_usage,
                 on_first_token=rec.mark_first_token,
-            ):
+            )
+        else:
+            stream = _astream_completion(
+                model=model,
+                kwargs=kwargs,
+                usage_sink=rec.set_usage,
+                on_first_token=rec.mark_first_token,
+            )
+        parts: list[str] = []
+        try:
+            async for piece in stream:
                 parts.append(piece)
                 yield piece
-            rec.response_text = "".join(parts)
-        return
-    kwargs = _base_kwargs(tier, temperature)
-    model = str(kwargs["model"])
-    kwargs["messages"] = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
-    kwargs["stream"] = True
-    kwargs["stream_options"] = {"include_usage": True}
-    with track(
-        kind="chat_text", tier=tier, model=model, temperature=temperature,
-        system=system, user=user,
-    ) as rec:
-        parts: list[str] = []
-        async for piece in _astream_completion(
-            model=model,
-            kwargs=kwargs,
-            usage_sink=rec.set_usage,
-            on_first_token=rec.mark_first_token,
-        ):
-            parts.append(piece)
-            yield piece
+        except BaseException:
+            rec.response_text = "".join(parts).strip() or None
+            raise
         rec.response_text = "".join(parts)
 
 

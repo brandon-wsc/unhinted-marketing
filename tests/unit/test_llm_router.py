@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -446,6 +447,8 @@ async def test_complete_json_records_cancel(
     with pytest.raises(asyncio.CancelledError):
         await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
     assert recorded[0].status == "cancelled"
+    # ADR 0060 §3 — partial text is stashed on the record before re-raise.
+    assert recorded[0].response_text == '{"a":'
 
 
 @pytest.mark.asyncio
@@ -457,6 +460,51 @@ async def test_complete_json_ttft_none_when_cancel_before_first_token(
         await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
     assert recorded[0].status == "cancelled"
     assert recorded[0].ttft_ms is None
+
+
+@pytest.mark.asyncio
+async def test_complete_json_stashes_partial_on_litellm_cancel(
+    monkeypatch: pytest.MonkeyPatch, recorded: list
+) -> None:
+    stream = _FakeStream(['{"a":', '"b"'], fail_after=1)
+
+    async def fake_acompletion(**_kwargs):
+        return stream
+
+    monkeypatch.setattr(
+        R,
+        "resolve_llm_model",
+        lambda _tier: _openai_image("claude-test", provider_type="anthropic"),
+    )
+    monkeypatch.setattr(R, "configure_litellm", lambda: None)
+    monkeypatch.setattr(R, "resolve_model", lambda _tier: "claude-test")
+    monkeypatch.setattr(R.settings, "llm_api_base", None)
+    monkeypatch.setattr(R.litellm, "acompletion", fake_acompletion)
+
+    with pytest.raises(asyncio.CancelledError):
+        await R.complete_json(tier=R.ModelTier.CHEAP, system="s", user="u")
+
+    assert recorded[0].status == "cancelled"
+    assert recorded[0].response_text == '{"a":'
+
+
+@pytest.mark.asyncio
+async def test_complete_text_stashes_partial_on_cancel(
+    monkeypatch: pytest.MonkeyPatch, recorded: list
+) -> None:
+    _stub_lc_provider(monkeypatch, _FakeLcChat(["he", "y"], fail_after=1))
+    with pytest.raises(asyncio.CancelledError):
+        await R.complete_text(tier=R.ModelTier.CHEAP, system="s", user="u")
+    assert recorded[0].status == "cancelled"
+    assert recorded[0].response_text == "he"
+
+
+def test_map_lc_error_maps_framework_cancel() -> None:
+    """ADR 0060 §3 — a framework cancellation type maps to CancelledError."""
+    mapped = R.map_lc_error(
+        concurrent.futures.CancelledError("worker cancelled"), model="gpt-test"
+    )
+    assert isinstance(mapped, asyncio.CancelledError)
 
 
 @pytest.mark.asyncio
@@ -490,6 +538,7 @@ async def test_astream_text_records_cancel(
 
     assert len(recorded) == 1
     assert recorded[0].status == "cancelled"
+    assert recorded[0].response_text == "a"
 
 
 @pytest.mark.asyncio
