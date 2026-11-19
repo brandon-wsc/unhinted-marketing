@@ -138,9 +138,9 @@ async def judge_draft(
 ) -> VoiceJudgeOut | None:
     """Score a draft caption. None = parse miss (caller must fail the case)."""
     if _model_override is not None:
-        chat, label = _model_override, H._model_label(_model_override)
+        chat, label = _model_override, H.model_label(_model_override)
     else:
-        chat, label = H._live_lc_model(ModelTier.CHEAP)
+        chat, label = H.live_lc_model(ModelTier.CHEAP)
     user = json.dumps(
         {
             "caption": caption,

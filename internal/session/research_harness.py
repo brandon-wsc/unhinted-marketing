@@ -3,7 +3,7 @@
 Narrow agent: ingest via the existing Tavily∪PG adapter, then QueryGenOut.
 Publish-class tools are never registered. Graph vertices stay unchanged.
 ``QueryGenOut`` rides the tool loop as a bound schema — the model finishes
-by "calling" it (ADR 0060 §output-as-tool).
+by "calling" it (ADR 0060 §1).
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from internal.session import prompts
 from internal.session.context import get_db
 from internal.session.io import QueryGenOut
 from internal.session.tiers import NODE_MODEL_TIERS
-from schemas.tools import QueryMarketTrendsResponse
 
 RESEARCH_TOOL_NAMES = frozenset({"ingest_web_search", "query_market_trends"})
 
@@ -77,15 +76,6 @@ async def _run_ingest_web_search(
     return ingest_mod.signal_slices(items)
 
 
-async def _run_query_market_trends(
-    deps: ResearchDeps,
-    region: str = "HK",
-    limit: int = 20,
-) -> QueryMarketTrendsResponse:
-    del deps
-    return await H.lookup_market_trends(region, limit)
-
-
 @tool
 async def ingest_web_search(
     deps: Annotated[ResearchDeps, InjectedToolArg],
@@ -102,20 +92,9 @@ async def ingest_web_search(
     return json.dumps(slices, ensure_ascii=False, default=str)
 
 
-@tool
-async def query_market_trends(
-    deps: Annotated[ResearchDeps, InjectedToolArg],
-    region: str = "HK",
-    limit: int = 20,
-) -> str:
-    """Read-only lookup of recent Hong Kong market signals from PostgreSQL."""
-    response = await _run_query_market_trends(deps, region, limit)
-    return response.model_dump_json()
-
-
 def research_tools(extra_tools: Sequence[Any] = ()) -> list[Any]:
     """LangChain tools on the research loop — publish-class names never registered."""
-    tools: list[Any] = [ingest_web_search, query_market_trends]
+    tools: list[Any] = [ingest_web_search, H.query_market_trends]
     for extra in extra_tools:
         tools.append(extra if isinstance(extra, BaseTool) else tool(extra))
     return tools
@@ -127,9 +106,9 @@ async def run_query_generator_agent(
 ) -> QueryGenOut | None:
     """Run the research agent; return QueryGenOut or None on parse miss."""
     if _model_override is not None:
-        chat, label = _model_override, H._model_label(_model_override)
+        chat, label = _model_override, H.model_label(_model_override)
     else:
-        chat, label = H._live_lc_model(NODE_MODEL_TIERS["query_generator"] or ModelTier.CHEAP)
+        chat, label = H.live_lc_model(NODE_MODEL_TIERS["query_generator"] or ModelTier.CHEAP)
     return await H.run_typed_lc_agent(
         chat=chat,
         model_label=label,

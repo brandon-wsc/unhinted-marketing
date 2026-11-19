@@ -1,7 +1,7 @@
 """Chat harness (ADR 0060) — scripted chat models, allowlist, cancel, SSE deltas.
 
 ``bind_tools`` + hand-rolled ``astream`` loop; provider mapping lives in
-``router._lc_harness_model`` (openai/compat → ChatOpenAI, claude-by-name →
+``router.lc_harness_model`` (openai/compat → ChatOpenAI, claude-by-name →
 ChatAnthropic, gemini/vertex_ai → ChatGoogleGenerativeAI). ``_ScriptedChat``
 is the ``GenericFakeChatModel`` + ``bind_tools`` shim the tests script
 through ``set_chat_model_override``.
@@ -39,9 +39,15 @@ def test_chat_agent_allowlist_excludes_publish() -> None:
 
 
 def test_slow_probe_is_opt_in() -> None:
+    @tool
+    async def slow_probe(deps: Annotated[H.ChatDeps, InjectedToolArg]) -> str:
+        """Test-only sleep probe — never a prod-registered tool."""
+        del deps
+        return "slept"
+
     prod = {t.name for t in H.chat_tools()}
     assert "slow_probe" not in prod
-    spiked = {t.name for t in H.chat_tools(extra_tools=[H.slow_probe])}
+    spiked = {t.name for t in H.chat_tools(extra_tools=[slow_probe])}
     assert "slow_probe" in spiked
 
 
@@ -341,7 +347,7 @@ def test_live_lc_chat_model_openai_compatible(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
     monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
     monkeypatch.setattr(config.settings, "llm_cheap_model", "deepseek/deepseek-v4-flash-0731")
-    chat, label = H._live_lc_chat_model()
+    chat, label = H.live_lc_chat_model()
     assert isinstance(chat, ChatOpenAI)
     assert label == "deepseek/deepseek-v4-flash-0731"
 
@@ -362,7 +368,7 @@ def test_live_lc_chat_model_anthropic_for_claude_named_openai_slot() -> None:
         key_last4="test",
     )
     with llm_bundle_scope(CompanyLlmBundle(cheap=claude)):
-        chat, label = H._live_lc_chat_model()
+        chat, label = H.live_lc_chat_model()
     assert isinstance(chat, ChatAnthropic)
     assert label == "claude-sonnet-4-5"
 
@@ -381,7 +387,7 @@ def test_live_lc_chat_model_google_genai_for_gemini() -> None:
         key_last4="test",
     )
     with llm_bundle_scope(CompanyLlmBundle(cheap=gemini)):
-        chat, label = H._live_lc_chat_model()
+        chat, label = H.live_lc_chat_model()
     assert isinstance(chat, ChatGoogleGenerativeAI)
     assert label == "gemini-2.5-flash"
     assert getattr(chat, "vertexai", None) is False
@@ -402,7 +408,7 @@ def test_live_lc_chat_model_vertexai_flag_for_vertex_slot() -> None:
         key_last4="test",
     )
     with llm_bundle_scope(CompanyLlmBundle(cheap=vertex)):
-        chat, label = H._live_lc_chat_model()
+        chat, label = H.live_lc_chat_model()
     assert isinstance(chat, ChatGoogleGenerativeAI)
     assert label == "gemini-2.5-flash"
     assert getattr(chat, "vertexai", None) is True
@@ -416,7 +422,7 @@ def test_live_lc_chat_model_keeps_openrouter_slug(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(config.settings, "llm_api_base", "https://openrouter.ai/api/v1")
     monkeypatch.setattr(config.settings, "openai_api_key", "sk-or-test")
     monkeypatch.setattr(config.settings, "llm_cheap_model", "deepseek/deepseek-v4-flash-0731")
-    chat, label = H._live_lc_chat_model()
+    chat, label = H.live_lc_chat_model()
     assert isinstance(chat, ChatOpenAI)
     assert label == "deepseek/deepseek-v4-flash-0731"
     assert getattr(chat, "model_name", None) == "deepseek/deepseek-v4-flash-0731"
@@ -434,7 +440,7 @@ def test_live_lc_chat_model_strips_openrouter_provider_prefix(
     monkeypatch.setattr(
         config.settings, "llm_cheap_model", "openrouter/bytedance-seed/seedream-4.5"
     )
-    chat, label = H._live_lc_chat_model()
+    chat, label = H.live_lc_chat_model()
     assert isinstance(chat, ChatOpenAI)
     assert label == "bytedance-seed/seedream-4.5"
 
@@ -456,5 +462,5 @@ def test_live_lc_model_no_openai_key_is_auth_error() -> None:
         llm_bundle_scope(CompanyLlmBundle(cheap=bare)),
         pytest.raises(LlmProviderError) as exc_info,
     ):
-        H._live_lc_model(ModelTier.CHEAP)
+        H.live_lc_model(ModelTier.CHEAP)
     assert exc_info.value.kind == "auth"

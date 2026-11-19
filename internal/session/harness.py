@@ -1,7 +1,7 @@
 """Session chat inner loop — LangChain chat models (ADR 0060).
 
 A hand-rolled ``bind_tools`` + ``astream`` loop (no ``create_agent`` /
-ToolNode per the ADR). Provider mapping lives in ``router._lc_harness_model``
+ToolNode per the ADR). Provider mapping lives in ``router.lc_harness_model``
 and mirrors the retired ``live_harness_model``: openai/openai_compatible →
 ``ChatOpenAI``, anthropic + claude-by-name → ``ChatAnthropic``,
 gemini/vertex_ai → ``ChatGoogleGenerativeAI`` (Vertex Express api_key mode).
@@ -31,10 +31,10 @@ from internal.llm.resolve import resolve_llm_model
 from internal.llm.router import (
     LlmProviderError,
     ModelTier,
-    _aclose_stream,
-    _estimate_lc_usage,
-    _lc_harness_model,
-    _wrap_lc_error,
+    aclose_stream,
+    estimate_lc_usage,
+    lc_harness_model,
+    map_lc_error,
 )
 from internal.memory import document_retrieve
 from internal.memory.repos import list_top_signals
@@ -62,7 +62,7 @@ MAX_ATTACHMENT_READS_PER_TURN = 3
 # 3-read attachment budget ends read loops on its own).
 _MAX_TOOL_ROUNDS = 32
 
-# Match nodes._DELTA_FLUSH_CHARS — long replies must not overflow SSE queues.
+# message.delta publish threshold — long replies must not overflow SSE queues.
 _DELTA_FLUSH_CHARS = 24
 
 _model_override: BaseChatModel | None = None
@@ -84,15 +84,15 @@ def set_chat_model_override(model: BaseChatModel | None) -> None:
     _model_override = model
 
 
-def _live_lc_model(tier: ModelTier) -> tuple[Any, str]:
+def live_lc_model(tier: ModelTier) -> tuple[Any, str]:
     """``(ChatModel, label)`` for the tier — BYOK resolver mapping to a
     provider's LangChain chat model; raises ``LlmProviderError`` on
     unsupported/missing packages."""
-    return _lc_harness_model(resolve_llm_model(tier))
+    return lc_harness_model(resolve_llm_model(tier))
 
 
-def _live_lc_chat_model() -> tuple[Any, str]:
-    return _live_lc_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
+def live_lc_chat_model() -> tuple[Any, str]:
+    return live_lc_model(NODE_MODEL_TIERS["chat"] or ModelTier.CHEAP)
 
 
 async def lookup_market_trends(
@@ -148,15 +148,6 @@ async def read_document(
         query=query,
         section=section,
     )
-
-
-async def _run_query_market_trends(
-    deps: ChatDeps,
-    region: str = "HK",
-    limit: int = 20,
-) -> QueryMarketTrendsResponse:
-    del deps  # company_id reserved; corpus is still HK-wide (same as trend_searcher)
-    return await lookup_market_trends(region, limit)
 
 
 async def _run_read_attachment(
@@ -222,12 +213,13 @@ async def _run_read_attachment(
 
 @tool
 async def query_market_trends(
-    deps: Annotated[ChatDeps, InjectedToolArg],
+    deps: Annotated[Any, InjectedToolArg],
     region: str = "HK",
     limit: int = 20,
 ) -> str:
     """Read-only lookup of recent Hong Kong market signals from PostgreSQL."""
-    response = await _run_query_market_trends(deps, region, limit)
+    del deps  # company_id reserved; corpus is still HK-wide (same as trend_searcher)
+    response = await lookup_market_trends(region, limit)
     return response.model_dump_json()
 
 
@@ -245,14 +237,6 @@ async def read_attachment(
     """
     response = await _run_read_attachment(deps, attachment_id, query, section)
     return response.model_dump_json()
-
-
-@tool
-async def slow_probe(deps: Annotated[ChatDeps, InjectedToolArg]) -> str:
-    """Test-only: sleep so Stop/cancel can be observed mid-tool. Never register in prod."""
-    del deps
-    await asyncio.sleep(10)
-    return "slept"
 
 
 def chat_tools(extra_tools: Sequence[Any] = ()) -> list[Any]:
@@ -276,7 +260,7 @@ async def _publish_deltas(
         logger.exception("failed to publish message.delta")
 
 
-def _model_label(model: Any) -> str:
+def model_label(model: Any) -> str:
     name = getattr(model, "model_name", None) or getattr(model, "model", None)
     return str(name) if name else type(model).__name__
 
@@ -361,9 +345,9 @@ async def _stream_round(
         if "generation chunks" not in str(exc):
             raise
     finally:
-        await _aclose_stream(agen)
+        await aclose_stream(agen)
         if acc is not None and not saw_usage:
-            estimate = _estimate_lc_usage(
+            estimate = estimate_lc_usage(
                 chat,
                 messages,
                 completion_messages=[message_chunk_to_message(acc)],
@@ -446,7 +430,7 @@ async def _stream_chat_reply_lc(
             raise
         except Exception as exc:
             _stash_partial(rec, parts)
-            raise _wrap_lc_error(exc, model=model_label) from exc
+            raise map_lc_error(exc, model=model_label) from exc
         text = (output if output is not None else "".join(parts)).strip()
         rec.response_text = text or None
     return text or None
@@ -482,8 +466,8 @@ async def run_lc_tool_loop(
     """``bind_tools`` loop for typed-output harnesses (ADR 0060 — no ToolNode).
 
     ``out_type`` is bound alongside the real tools — the same mechanism
-    Pydantic AI uses for ``output_type`` — so the model can interleave real
-    tool calls and finish by "calling" the output schema. A no-tool-call
+    ``with_structured_output`` uses internally — so the model can interleave
+    real tool calls and finish by "calling" the output schema. A no-tool-call
     reply falls back to parsing its text as JSON. Provider errors raise
     ``LlmProviderError``; everything else (tool bugs, validation misses)
     propagates for the caller's parse-fail path.
@@ -502,11 +486,11 @@ async def run_lc_tool_loop(
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            raise _wrap_lc_error(exc, model=_model_label(chat)) from exc
+            raise map_lc_error(exc, model=model_label(chat)) from exc
         if getattr(reply, "usage_metadata", None):
             _merge_lc_usage(usage, reply.usage_metadata)
         else:
-            estimate = _estimate_lc_usage(chat, messages, completion_messages=[reply])
+            estimate = estimate_lc_usage(chat, messages, completion_messages=[reply])
             if estimate is not None:
                 _merge_lc_usage(usage, estimate)
         if usage:
@@ -547,7 +531,7 @@ async def run_typed_lc_agent(
 ) -> OutT | None:
     """Recorder + error contract shared by the research/execute LC paths.
 
-    Same contract as the Pydantic AI runners: provider errors raise
+    Same contract as the retired Pydantic AI runners: provider errors raise
     ``LlmProviderError``, cancels propagate, every other failure is a
     parse miss → ``None``.
     """
@@ -594,9 +578,9 @@ async def stream_chat_reply(
 ) -> str | None:
     """Run the chat agent, fan out message.delta, return the final text."""
     if _model_override is not None:
-        chat, label = _model_override, _model_label(_model_override)
+        chat, label = _model_override, model_label(_model_override)
     else:
-        chat, label = _live_lc_chat_model()
+        chat, label = live_lc_chat_model()
     return await _stream_chat_reply_lc(
         chat=chat,
         model_label=label,

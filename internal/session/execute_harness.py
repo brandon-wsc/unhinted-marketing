@@ -3,7 +3,7 @@
 Narrow agents: typed DraftOut / EditOut. Publish-class tools are never registered.
 Graph vertices stay unchanged; Confirm remains HTTP. DraftOut/EditOut ride
 the tool loop as bound schemas — the model finishes by "calling" one
-(ADR 0060 §output-as-tool).
+(ADR 0060 §1).
 """
 
 from __future__ import annotations
@@ -11,17 +11,16 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import BaseTool, InjectedToolArg, tool
+from langchain_core.tools import BaseTool, tool
 
 from internal.llm.router import ModelTier
 from internal.session import harness as H
 from internal.session import prompts
 from internal.session.io import DraftOut, EditOut
 from internal.session.tiers import NODE_MODEL_TIERS
-from schemas.tools import QueryMarketTrendsResponse
 
 EXECUTE_TOOL_NAMES = frozenset({"query_market_trends"})
 
@@ -46,29 +45,9 @@ def set_edit_model_override(model: BaseChatModel | None) -> None:
     _edit_model_override = model
 
 
-async def _run_query_market_trends(
-    deps: ExecuteDeps,
-    region: str = "HK",
-    limit: int = 20,
-) -> QueryMarketTrendsResponse:
-    del deps  # company_id reserved; corpus is still HK-wide
-    return await H.lookup_market_trends(region, limit)
-
-
-@tool
-async def query_market_trends(
-    deps: Annotated[ExecuteDeps, InjectedToolArg],
-    region: str = "HK",
-    limit: int = 20,
-) -> str:
-    """Read-only lookup of recent Hong Kong market signals from PostgreSQL."""
-    response = await _run_query_market_trends(deps, region, limit)
-    return response.model_dump_json()
-
-
 def execute_tools(extra_tools: Sequence[Any] = ()) -> list[Any]:
     """LangChain tools on the execute/edit loops — publish-class names never registered."""
-    tools: list[Any] = [query_market_trends]
+    tools: list[Any] = [H.query_market_trends]
     for extra in extra_tools:
         tools.append(extra if isinstance(extra, BaseTool) else tool(extra))
     return tools
@@ -84,9 +63,9 @@ async def run_executor_post_agent(
 ) -> DraftOut | None:
     """Run the execute agent; return DraftOut or None on parse miss."""
     if _model_override is not None:
-        chat, label = _model_override, H._model_label(_model_override)
+        chat, label = _model_override, H.model_label(_model_override)
     else:
-        chat, label = H._live_lc_model(NODE_MODEL_TIERS["executor_post"] or ModelTier.MEDIUM)
+        chat, label = H.live_lc_model(NODE_MODEL_TIERS["executor_post"] or ModelTier.MEDIUM)
     return await H.run_typed_lc_agent(
         chat=chat,
         model_label=label,
@@ -107,9 +86,9 @@ async def run_edit_copy_agent(
 ) -> EditOut | None:
     """Run the edit agent; return EditOut or None on parse miss."""
     if _edit_model_override is not None:
-        chat, label = _edit_model_override, H._model_label(_edit_model_override)
+        chat, label = _edit_model_override, H.model_label(_edit_model_override)
     else:
-        chat, label = H._live_lc_model(NODE_MODEL_TIERS["edit_copy"] or ModelTier.MEDIUM)
+        chat, label = H.live_lc_model(NODE_MODEL_TIERS["edit_copy"] or ModelTier.MEDIUM)
     return await H.run_typed_lc_agent(
         chat=chat,
         model_label=label,
