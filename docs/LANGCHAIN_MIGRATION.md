@@ -63,7 +63,7 @@ Same for harness runners: keep `RH.run_query_generator_agent`, `EH.run_executor_
 - [ ] **ADR 0060** — LangChain inner harness, supersedes ADR 0019 (required before/with code per AGENTS.md; this doc links out, ADR holds the decision)
 - [x] Add deps: `langchain-openai>=1.7.4,<1.8` pinned (1.8.x was <7 days old); `langchain-core` rides transitively. `langchain-anthropic` / `langchain-google-genai` deferred — those providers stay on litellm
 - [x] `complete_json`: langchain impl behind the same signature. `_lc_chat_model` (openai/openai_compatible → `ChatOpenAI`, `stream_usage=True`, `max_retries=0`, `response_format` via `model_kwargs`) + `_lc_astream_text` (joins delta `.content`, `usage_metadata` → `rec.set_usage`, aclose on cancel) + `_wrap_lc_error` (openai exceptions → `LlmProviderError` kinds). anthropic/gemini fall back to the litellm path; vertex untouched
-- [ ] `complete_text` / `astream_text`: same helpers — trivial follow-up, not yet ported
+- [x] `complete_text` / `astream_text`: same `_lc_chat_model` + `_lc_astream_text` helpers (no `json_mode`); both stream + join so cancel stays `aclose`-able. litellm fallback remains for anthropic/gemini
 - [ ] Port `harness.py` — tools → `@tool`, deps/`ChatDeps` → tool context (`InjectedToolArg`/config), keep `stream_chat_reply` + `set_chat_model_override` hook shape
 - [ ] Port `research_harness.py` + `execute_harness.py` — keep `run_*_agent` signatures + override hooks; typed outputs via `with_structured_output`
 - [ ] Re-point `scripts/eval_agent.py` runner seam
