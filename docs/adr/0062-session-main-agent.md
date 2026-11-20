@@ -1,6 +1,6 @@
 # ADR 0062 — Session main agent: collapse the cognition pipeline; supersedes nothing yet
 
-- **Status:** Draft (for discussion — do not implement against this text until Accepted)
+- **Status:** Accepted (draft open questions resolved 2026-11-21 — see §Resolved questions)
 - **Date:** 2026-11-21
 - **Related:** [ADR 0061](./0061-create-agent-inner-loop.md) (inner loop is `create_agent`); [ADR 0009](./0009-research-gate-and-tavily-ingest.md) (research gate); [ADR 0028](./0028-angle-pick-before-draft.md) (angle park); [ADR 0036](./0036-image-direction-new-script.md) (image park + direction change); [ADR 0016](./0016-queue-send-while-turn-in-flight.md) + [ADR 0035](./0035-queue-then-interrupt.md) (queue/interrupt semantics); [ADR 0003](./0003-confirm-without-llm.md) (Confirm stays HTTP); [ADR 0004](./0004-stop-discard-and-image-resume.md) (Stop → abort, no blind resume); [ADR 0047](./0047-session-file-attachments.md) (`read_attachment`); [ADR 0057](./0057-thread-recap-summary.md) (thread recap)
 
@@ -59,19 +59,21 @@ Disposition of current nodes:
 | `trend_searcher` | folded into the draft sub-agent's context (its prompt work) | it re-reads signals already fetched; the sub-agent owns "which trends matter" |
 | `product_matcher` | deterministic catalog query — either a tool or part of draft context assembly | no LLM today; stays non-LLM |
 | `brainstormer` | `propose_angles` tool → sub-agent returning typed angles + recommended pick | cognition, kept typed for the angle-park payload |
-| `angle_gate` | **park, still outer/HTTP-owned** — implemented via `interrupt()` inside the draft path or an explicit outer gate (see Open questions) | ADR 0028 semantics do not move |
+| `angle_gate` | **outer vertex, unchanged** — `interrupt()` inside a tool is unavailable: the leaf `create_agent` carries no checkpointer (ADR 0061 §1), so a dynamic interrupt cannot persist a resume point. All ADR 0028/0004/0016/0035 park semantics stay bound to `interrupt_before` | ADR 0028 semantics do not move |
 | `executor_post` | `draft_post` tool → sub-agent (`DraftOut`) — keeps `run_executor_post_agent` signature for eval | cognition |
 | `grounding_check` | deterministic post-check — runs on every draft via outer edge or middleware, never a tool the model may skip | product post-condition |
-| `reviewer` + `edit_copy` + `review_exhausted` | review gate: reviewer as sub-agent OR kept as outer LLM node; the attempt cap (`review_exhausted`) stays an outer counter | retry budget is product policy |
-| `edit_copy` (revise path) | `revise_draft` tool → sub-agent (`EditOut`) — keeps `run_edit_copy_agent` signature | cognition |
-| `executor_image_plan` / `executor_image_gen` / `hold_locked_plan` | `plan_image` / `generate_image` tools or a small image sub-agent; the park between plan and gen stays outer/HTTP-owned | ADR 0036 direction-change rules do not move |
+| `reviewer` + `review_exhausted` | **outer LLM node + outer cap, unchanged** — review pass/fail and `_reviewer_fail_bump` are product policy; the agent re-enters for the `edit_copy` leg only | retry budget is not cognition |
+| `edit_copy` (revise + fix paths) | `revise_draft` tool → sub-agent (`EditOut`) — keeps `run_edit_copy_agent` signature | cognition |
+| `executor_image_plan` | `plan_image` tool on the agent — script+plan is cognition, and "does this post want an image" becomes a model decision instead of a `route_after_reviewer` flag read | cognition |
+| `executor_image_gen` + image park | **outer node + park, unchanged** — gen is a deterministic media-adapter call behind a durable human gate (same checkpointer argument as `angle_gate`); `hold_locked_plan` stays an outer path | ADR 0036 direction-change rules do not move |
 | `persist_preview` | outer node (unchanged) | canonical-draft write is a post-condition |
 | `chat` | the main agent's default reply path (no tool) | — |
-| `ack_confirm` | outer/HTTP-adjacent — confirm-adjacent wording must not become a tool decision | ADR 0003 |
+| `ack_confirm` | intercepted in the `fast_rule_checker` layer (pre-agent, deterministic) — confirm-adjacent wording never reaches model discretion | ADR 0003 |
 
 ### 2. The agent never owns the state machine
 
 - `SessionState`, the Postgres checkpointer, `turn_registry`, and the park/resume verbs stay exactly where they are. The `session_agent` vertex is a bigger version of today's inner `create_agent` leaves — state is per-call scratch; parks are expressed as interrupts the outer graph observes, matching the ADR 0061 leaf-graph stance.
+- Parks can *only* be outer: a durable interrupt needs a checkpointer to hold its resume point, and the leaf `create_agent` carries none by design (ADR 0061 §1). `interrupt()` inside a tool is therefore not an available implementation for either park — both stay `interrupt_before` vertices.
 - Per-turn budgets keep their shape: `attachment_reads` cap, Tavily query cap, review-attempt cap — all enforced in code the model cannot route around.
 - Model tiers: the main agent uses the `chat`/`executor_post` tier; sub-agents keep their own `NODE_MODEL_TIERS` entries so cost routing survives the collapse.
 
@@ -84,13 +86,13 @@ Every `tests/eval` case today is node-keyed (`_run_case` calls `N.route_intent`,
 
 New gap admitted: no session-level eval exists today (message in → which tool fired → which park hit). A small set of tool-selection cases ships with the refactor — otherwise `eval_diff` can be all-green while routing walked off.
 
-## Open questions (the draft's real discussion surface)
+## Resolved questions (from the draft discussion)
 
-1. **Angle park mechanics.** `interrupt()` inside a sub-agent tool vs. keeping `angle_gate` as an outer vertex the agent's draft tool exits back through. The first keeps one vertex; the second keeps parks visibly outer-owned. ADR 0028 resume verbs (`POST /choose-angle`, typed `POST /messages`) must work identically either way.
-2. **Reviewer placement.** Sub-agent (context isolation, reviewer sees only the draft + rules) vs. outer node (the cap and `_reviewer_fail_bump` stay obviously deterministic). Leaning outer: the review loop is the clearest "product policy, not cognition" piece left in the pipeline.
-3. **Image path depth.** Full sub-agent (plan + gen tools) vs. keeping `executor_image_plan`/`executor_image_gen` as outer nodes triggered from the draft result. The park between plan and gen argues for staying outer.
-4. **`ack_confirm`.** Does confirm-adjacent chat ("搞掂未？") route through the agent at all, or stay a pre-agent fast rule? Must never become tool discretion (ADR 0003).
-5. **Queue/interrupt plumbing.** ADR 0016/0035 semantics are bound to superstep boundaries; collapsing ~10 vertices into ~3 changes where a Stop lands. Needs a mapping pass before implementation, not after.
+1. **Angle park mechanics → outer vertex.** `interrupt()` inside a sub-agent tool is not available: the leaf `create_agent` is deliberately checkpointer-free (ADR 0061 §1), and a dynamic interrupt has nowhere to persist its resume point — a process restart would lose the park. `angle_gate` stays a vertex under `interrupt_before`; the draft path exits through it exactly as today. The same argument applies to the image park.
+2. **Reviewer placement → outer.** The review cap and `_reviewer_fail_bump` are the clearest "product policy, not cognition" left in the pipeline; making the loop an agent tool would only blur the budget. `reviewer`/`review_exhausted` keep their edges; the agent owns the `edit_copy` revision leg they route back into.
+3. **Image path → plan in, gen out.** `executor_image_plan` (script+plan writing) folds into the agent as `plan_image`, and whether a post wants an image at all becomes a model decision. `executor_image_gen` stays outer: it is a deterministic media-adapter call gated by a durable human park, which needs the outer checkpointer anyway. Splitting at cognition/not-cognition mirrors `persist_preview`.
+4. **`ack_confirm` → pre-agent intercept.** Confirm-adjacent wording ("搞掂未？") is answered in the `fast_rule_checker` layer deterministically and never reaches the model — the strongest reading of ADR 0003.
+5. **Queue/interrupt plumbing → pre-implementation mapping pass.** ADR 0016/0035 semantics bind to superstep boundaries; collapsing ~10 vertices into ~3 changes where a Stop lands. Before code moves, list every ADR semantic against the vertex it currently binds to and where it re-binds in the new graph — checked into this ADR's implementation notes, not left implicit.
 
 ## Consequences (if accepted)
 
