@@ -172,7 +172,6 @@ async def _run_executor_post(state: dict[str, Any]) -> dict[str, Any]:
     }
     parsed = await EH.run_executor_post_agent(
         json.dumps(payload, ensure_ascii=False),
-        EH.ExecuteDeps(),
     )
     return {"parsed": parsed.model_dump() if parsed else None}
 

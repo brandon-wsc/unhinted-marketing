@@ -44,7 +44,7 @@ def _tavily_items(query: str) -> list[dict]:
 
 
 def test_research_lc_tool_allowlist_excludes_publish() -> None:
-    names = {t.name for t in RH.research_tools()}
+    names = {t.name for t in RH.research_tools(RH.ResearchDeps())}
     assert names == RH.RESEARCH_TOOL_NAMES
     assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
     assert "publish_social_post" not in names
@@ -252,10 +252,15 @@ async def test_run_query_generator_parse_miss_returns_none() -> None:
     assert parsed is None
 
 
+def _ingest_tool(deps: RH.ResearchDeps):
+    """Build the deps-bound ``ingest_web_search`` tool like the loop does."""
+    return next(t for t in RH.research_tools(deps) if t.name == "ingest_web_search")
+
+
 @pytest.mark.asyncio
 async def test_ingest_web_search_caps_at_three_queries() -> None:
     deps = RH.ResearchDeps(queries_run=["q1", "q2", "q3"])
-    out = await RH.ingest_web_search.ainvoke({"deps": deps, "query": "q4"})
+    out = await _ingest_tool(deps).ainvoke({"query": "q4"})
     assert json.loads(out) == []
     assert deps.queries_run == ["q1", "q2", "q3"]
 
@@ -270,7 +275,7 @@ async def test_ingest_web_search_reports_no_session_db(
 
     monkeypatch.setattr(ingest_mod, "fetch_and_upsert_tavily", fake_fetch)
     deps = RH.ResearchDeps()
-    out = await RH.ingest_web_search.ainvoke({"deps": deps, "query": "hk"})
+    out = await _ingest_tool(deps).ainvoke({"query": "hk"})
     assert json.loads(out) == [{"error": "no_session_db"}]
     assert deps.queries_run == []
     assert deps.ingested == []
@@ -287,7 +292,7 @@ async def test_ingest_web_search_reports_tavily_failure(
     monkeypatch.setattr(ingest_mod, "search_tavily", boom)
     deps = RH.ResearchDeps()
     with session_db(AsyncMock()):
-        out = await RH.ingest_web_search.ainvoke({"deps": deps, "query": "hk"})
+        out = await _ingest_tool(deps).ainvoke({"query": "hk"})
     assert json.loads(out) == [{"error": "tavily_failed"}]
     assert deps.queries_run == ["hk"]
     assert deps.ingested == []
@@ -295,10 +300,10 @@ async def test_ingest_web_search_reports_tavily_failure(
 
 @pytest.mark.asyncio
 async def test_ingest_web_search_deps_not_in_model_schema() -> None:
-    """``deps`` is an InjectedToolArg — the LLM must never see it."""
+    """``deps`` is bound at construction — the LLM must never see it."""
     from langchain_core.utils.function_calling import convert_to_openai_tool
 
-    schema = convert_to_openai_tool(RH.ingest_web_search)
+    schema = convert_to_openai_tool(_ingest_tool(RH.ResearchDeps()))
     params = schema["function"]["parameters"]["properties"]
     assert "deps" not in params
     assert "query" in params

@@ -1,6 +1,6 @@
 # ADR 0060 — LangChain inner harness; supersedes the Pydantic AI loop
 
-- **Status:** Accepted
+- **Status:** Accepted (§1 no-nested-graph clause + §Rejected restatement superseded by [ADR 0061](./0061-create-agent-inner-loop.md) — the inner loop adopts `create_agent` as a leaf graph)
 - **Date:** 2026-11-19
 - **Supersedes:** [ADR 0019](./0019-pydantic-ai-inner-harness.md)
 - **Related:** [ADR 0002](./0002-rest-source-of-truth-sse-enhancement.md) (REST SSOT + SSE dedupe unchanged); [ADR 0003](./0003-confirm-without-llm.md) (Confirm stays HTTP, never a tool); [ADR 0004](./0004-stop-discard-and-image-resume.md) (Stop → abort semantics unchanged); [ADR 0011](./0011-knowledge-commit-without-llm.md) (catalog upsert stays HTTP, never a tool); [ADR 0021](./0021-org-byok-native-gemini.md) (Vertex Express is api_key-only, no ADC); [ADR 0047](./0047-session-file-attachments.md) (`read_attachment` contract + budget)

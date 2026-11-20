@@ -1,20 +1,17 @@
-"""Execute inner loop for executor_post and edit_copy — LangChain chat models (ADR 0060).
+"""Execute inner loop for executor_post and edit_copy — ``create_agent`` (ADR 0061).
 
 Narrow agents: typed DraftOut / EditOut. Publish-class tools are never registered.
 Graph vertices stay unchanged; Confirm remains HTTP. DraftOut/EditOut ride
-the tool loop as bound schemas — the model finishes by "calling" one
-(ADR 0060 §1).
+the loop via ``ToolStrategy`` — the model finishes by "calling" one in the
+same model call.
 """
 
 from __future__ import annotations
 
-import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import BaseTool, tool
 
 from internal.llm.router import ModelTier
 from internal.session import harness as H
@@ -26,11 +23,6 @@ EXECUTE_TOOL_NAMES = frozenset({"query_market_trends"})
 
 _model_override: BaseChatModel | None = None
 _edit_model_override: BaseChatModel | None = None
-
-
-@dataclass
-class ExecuteDeps:
-    company_id: uuid.UUID | None = None
 
 
 def set_execute_model_override(model: BaseChatModel | None) -> None:
@@ -47,10 +39,7 @@ def set_edit_model_override(model: BaseChatModel | None) -> None:
 
 def execute_tools(extra_tools: Sequence[Any] = ()) -> list[Any]:
     """LangChain tools on the execute/edit loops — publish-class names never registered."""
-    tools: list[Any] = [H.query_market_trends]
-    for extra in extra_tools:
-        tools.append(extra if isinstance(extra, BaseTool) else tool(extra))
-    return tools
+    return H.with_extra_tools([H.query_market_trends], extra_tools)
 
 
 def _caption_ok(parsed: Any) -> bool:
@@ -59,7 +48,6 @@ def _caption_ok(parsed: Any) -> bool:
 
 async def run_executor_post_agent(
     user_prompt: str,
-    deps: ExecuteDeps,
 ) -> DraftOut | None:
     """Run the execute agent; return DraftOut or None on parse miss."""
     if _model_override is not None:
@@ -68,11 +56,10 @@ async def run_executor_post_agent(
         chat, label = H.live_lc_model(NODE_MODEL_TIERS["executor_post"] or ModelTier.MEDIUM)
     return await H.run_typed_lc_agent(
         chat=chat,
-        model_label=label,
+        label=label,
         tier=NODE_MODEL_TIERS["executor_post"],
         system=prompts.EXECUTOR_POST,
         user_prompt=user_prompt,
-        deps=deps,
         tools=execute_tools(),
         out_type=DraftOut,
         is_valid=_caption_ok,
@@ -82,7 +69,6 @@ async def run_executor_post_agent(
 
 async def run_edit_copy_agent(
     user_prompt: str,
-    deps: ExecuteDeps,
 ) -> EditOut | None:
     """Run the edit agent; return EditOut or None on parse miss."""
     if _edit_model_override is not None:
@@ -91,11 +77,10 @@ async def run_edit_copy_agent(
         chat, label = H.live_lc_model(NODE_MODEL_TIERS["edit_copy"] or ModelTier.MEDIUM)
     return await H.run_typed_lc_agent(
         chat=chat,
-        model_label=label,
+        label=label,
         tier=NODE_MODEL_TIERS["edit_copy"],
         system=prompts.EDIT_COPY,
         user_prompt=user_prompt,
-        deps=deps,
         tools=execute_tools(),
         out_type=EditOut,
         is_valid=_caption_ok,

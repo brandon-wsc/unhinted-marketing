@@ -21,6 +21,7 @@ dependencies = [
     "feedparser>=6.0.11",
     "litellm>=1.55.0",
     "google-genai>=2.33.0",
+    "langchain>=1.5.0,<1.5.1",
     "langchain-core>=1.8.3,<1.9",
     "langchain-openai>=1.7.4,<1.8",
     "langchain-anthropic>=1.7.10,<1.7.11",

@@ -1,12 +1,15 @@
-"""Session chat inner loop — LangChain chat models (ADR 0060).
+"""Session chat inner loop — ``langchain.agents.create_agent`` (ADR 0061).
 
-A hand-rolled ``bind_tools`` + ``astream`` loop (no ``create_agent`` /
-ToolNode per the ADR). Provider mapping lives in ``router.lc_harness_model``
-and mirrors the retired ``live_harness_model``: openai/openai_compatible →
-``ChatOpenAI``, anthropic + claude-by-name → ``ChatAnthropic``,
-gemini/vertex_ai → ``ChatGoogleGenerativeAI`` (Vertex Express api_key mode).
-Tools are built per call and discarded — never stored on graph state or
-FastAPI. Chat tools are read-only; publish-class names are never registered.
+The chat + typed-output inner loops run on ``create_agent`` — a leaf
+CompiledStateGraph that is never given a checkpointer or store (ADR 0061
+supersedes ADR 0060's no-nested-graph clause; ``SessionState`` ownership is
+unchanged). Typed outputs ride ``ToolStrategy`` — the model finishes by
+"calling" the output schema in the same model call. Provider mapping lives
+in ``router.lc_harness_model``: openai/openai_compatible → ``ChatOpenAI``,
+anthropic + claude-by-name → ``ChatAnthropic``, gemini/vertex_ai →
+``ChatGoogleGenerativeAI`` (Vertex Express api_key mode). Tools are built
+per call and close over ``deps`` — never stored on graph state or FastAPI.
+Chat tools are read-only; publish-class names are never registered.
 """
 
 from __future__ import annotations
@@ -17,12 +20,20 @@ import logging
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, TypeVar
+from typing import Any, TypeVar
 
+from langchain.agents import create_agent
+from langchain.agents.structured_output import StructuredOutputError, ToolStrategy
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    HumanMessage,
+    SystemMessage,
+)
 from langchain_core.messages.utils import message_chunk_to_message
-from langchain_core.tools import BaseTool, InjectedToolArg, tool
+from langchain_core.tools import BaseTool, tool
+from langgraph.errors import GraphRecursionError
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,9 +69,11 @@ CHAT_TOOL_NAMES = frozenset({"query_market_trends", "read_attachment"})
 # ADR 0047 §6 — per-turn read_attachment budget (chosen cap in the 2–3 range).
 MAX_ATTACHMENT_READS_PER_TURN = 3
 
-# Safety bound on the hand-rolled tool loop — far past any legit turn (the
-# 3-read attachment budget ends read loops on its own).
+# Safety bound on the agent loop — far past any legit turn (the 3-read
+# attachment budget ends read loops on its own). LangGraph counts supersteps
+# (model node + tool node ≈ 2 per round), not model calls.
 _MAX_TOOL_ROUNDS = 32
+_RECURSION_LIMIT = 2 * _MAX_TOOL_ROUNDS + 2
 
 # message.delta publish threshold — long replies must not overflow SSE queues.
 _DELTA_FLUSH_CHARS = 24
@@ -212,39 +225,42 @@ async def _run_read_attachment(
 
 
 @tool
-async def query_market_trends(
-    deps: Annotated[Any, InjectedToolArg],
-    region: str = "HK",
-    limit: int = 20,
-) -> str:
+async def query_market_trends(region: str = "HK", limit: int = 20) -> str:
     """Read-only lookup of recent Hong Kong market signals from PostgreSQL."""
-    del deps  # company_id reserved; corpus is still HK-wide (same as trend_searcher)
     response = await lookup_market_trends(region, limit)
     return response.model_dump_json()
 
 
-@tool
-async def read_attachment(
-    deps: Annotated[ChatDeps, InjectedToolArg],
-    attachment_id: str,
-    query: str | None = None,
-    section: str | None = None,
-) -> str:
-    """Read-only slices from one session attachment (never full document text).
+def read_attachment_tool(deps: ChatDeps) -> BaseTool:
+    """Build the ``read_attachment`` tool bound to this call's ``deps``."""
 
-    Pass ``attachment_id`` plus a ``query`` or ``section``; refusals return
-    ``slices=[]`` with a non-empty ``error`` (ADR 0047 §5/§6/§14).
-    """
-    response = await _run_read_attachment(deps, attachment_id, query, section)
-    return response.model_dump_json()
+    @tool
+    async def read_attachment(
+        attachment_id: str,
+        query: str | None = None,
+        section: str | None = None,
+    ) -> str:
+        """Read-only slices from one session attachment (never full document text).
+
+        Pass ``attachment_id`` plus a ``query`` or ``section``; refusals return
+        ``slices=[]`` with a non-empty ``error`` (ADR 0047 §5/§6/§14).
+        """
+        response = await _run_read_attachment(deps, attachment_id, query, section)
+        return response.model_dump_json()
+
+    return read_attachment
 
 
-def chat_tools(extra_tools: Sequence[Any] = ()) -> list[Any]:
-    """LangChain tools on the chat loop — publish-class names never registered."""
-    tools: list[Any] = [query_market_trends, read_attachment]
+def with_extra_tools(base: list[Any], extra_tools: Sequence[Any]) -> list[Any]:
+    """Append ``extra_tools`` — ``BaseTool`` instances pass through, callables wrap via ``tool``."""
     for extra in extra_tools:
-        tools.append(extra if isinstance(extra, BaseTool) else tool(extra))
-    return tools
+        base.append(extra if isinstance(extra, BaseTool) else tool(extra))
+    return base
+
+
+def chat_tools(deps: ChatDeps, extra_tools: Sequence[Any] = ()) -> list[Any]:
+    """LangChain tools on the chat loop — publish-class names never registered."""
+    return with_extra_tools([query_market_trends, read_attachment_tool(deps)], extra_tools)
 
 
 async def _publish_deltas(
@@ -289,149 +305,202 @@ def _merge_lc_usage(totals: dict[str, int], usage: Any) -> None:
         totals["cache_read_input_tokens"] = totals.get("cache_read_input_tokens", 0) + cached
 
 
-async def _run_lc_tool_call(call: dict, tools: dict[str, Any], deps: ChatDeps) -> ToolMessage:
-    """Dispatch one model tool_call; ``deps`` rides in as the injected arg."""
-    name = str(call.get("name") or "")
-    call_id = str(call.get("id") or name or "tool_call")
-    tool_obj = tools.get(name)
-    if tool_obj is None:
-        return ToolMessage(
-            content=f'{{"error": "unknown_tool:{name}"}}',
-            tool_call_id=call_id,
-        )
-    args = dict(call.get("args") or {})
-    args["deps"] = deps
-    result = await tool_obj.ainvoke({**call, "args": args, "id": call_id})
-    if isinstance(result, ToolMessage):
-        return result
-    return ToolMessage(content=str(result), tool_call_id=call_id)
-
-
-async def _stream_round(
-    bound: Any,
+def _estimate_if_no_usage(
     chat: Any,
-    messages: list[Any],
+    usage: dict[str, int],
+    *,
+    messages: Sequence[Any] = (),
+    completion_messages: Sequence[Any] = (),
+) -> None:
+    """One client-side estimate when the provider reported no usage at all.
+
+    Providers that ignore ``include_usage`` would otherwise record NULL token
+    counts; the final agent state's message list approximates every round's
+    prompt + completion in one estimate.
+    """
+    if usage:
+        return
+    estimate = estimate_lc_usage(chat, messages, completion_messages=completion_messages)
+    if estimate is not None:
+        _merge_lc_usage(usage, estimate)
+
+
+def _last_ai(messages: Sequence[Any]) -> AIMessage | None:
+    for message in reversed(messages):
+        if isinstance(message, AIMessage):
+            return message
+    return None
+
+
+async def _consume_agent_stream(
+    agen: Any,
     *,
     rec: LlmCallRecordBuilder,
     usage: dict[str, int],
     parts: list[str],
     pending: list[str],
     session_id: uuid.UUID | None,
-) -> Any:
-    """Stream one model round; return the merged reply or ``None`` on zero chunks."""
-    agen = bound.astream(messages)
-    acc = None
-    saw_usage = False
-    round_text: list[str] = []
-    try:
-        async for chunk in agen:
-            acc = chunk if acc is None else acc + chunk
-            chunk_usage = getattr(chunk, "usage_metadata", None)
-            if chunk_usage:
-                saw_usage = True
-                _merge_lc_usage(usage, chunk_usage)
-                rec.set_usage(usage)
-            piece = chunk.content if isinstance(chunk.content, str) else ""
-            if piece:
-                rec.mark_first_token()
-                parts.append(piece)
-                pending.append(piece)
-                round_text.append(piece)
-                if session_id:
-                    await _publish_deltas(session_id, pending)
-    except ValueError as exc:
-        # BaseChatModel.astream raises when a round yields zero
-        # chunks — treat as an empty reply, not a provider error.
-        if "generation chunks" not in str(exc):
-            raise
-    finally:
-        await aclose_stream(agen)
-        if acc is not None and not saw_usage:
-            estimate = estimate_lc_usage(
-                chat,
-                messages,
-                completion_messages=[message_chunk_to_message(acc)],
-                completion_text="".join(round_text),
-            )
-            if estimate is not None:
-                _merge_lc_usage(usage, estimate)
-                rec.set_usage(usage)
-    return acc
+    final_messages: list[Any],
+    acc_box: list[AIMessageChunk | None],
+) -> None:
+    """Consume the agent stream into ``final_messages`` / ``acc_box``.
+
+    ``messages`` payloads are ``(chunk, metadata)`` — only model-node
+    ``AIMessageChunk`` deltas fan out to ``message.delta``; ``values``
+    payloads carry the post-node state snapshot (full message list). Each
+    ``values`` event ends a superstep, so the model chunks that follow it
+    are a new round — ``acc`` holds only the current round's partial.
+    Both out-params update live so an aborted stream still yields the
+    committed messages plus the in-flight partial.
+    """
+    acc: AIMessageChunk | None = None
+    async for mode, payload in agen:
+        if mode == "values":
+            final_messages[:] = list(payload.get("messages") or [])
+            acc = None
+            acc_box[0] = None
+            continue
+        chunk, meta = payload
+        if not isinstance(chunk, AIMessageChunk) or meta.get("langgraph_node") != "model":
+            continue
+        acc = chunk if acc is None else acc + chunk
+        acc_box[0] = acc
+        chunk_usage = getattr(chunk, "usage_metadata", None)
+        if chunk_usage:
+            _merge_lc_usage(usage, chunk_usage)
+            rec.set_usage(usage)
+        piece = chunk.content if isinstance(chunk.content, str) else ""
+        if piece:
+            rec.mark_first_token()
+            parts.append(piece)
+            pending.append(piece)
+            if session_id:
+                await _publish_deltas(session_id, pending)
+
+
+def _estimate_prompt_and_completions(
+    system: str,
+    user_prompt: str,
+    final_messages: Sequence[Any],
+    acc: AIMessageChunk | None,
+    *,
+    aborted: bool = False,
+) -> tuple[Sequence[Any], Sequence[Any]]:
+    """Prompt/completion split for the usage estimate.
+
+    ``create_agent`` keeps ``system_prompt`` out of ``state.messages`` —
+    prepend it back so the estimate counts the real model input. On an
+    aborted stream (cancel / recursion cap) the last state snapshot is
+    everything the in-flight round was sent; the merged partial ``acc``
+    is its reply (ADR 0061 §2 — sent messages + merged partial).
+    """
+    if aborted:
+        return (
+            [SystemMessage(content=system), *final_messages],
+            [message_chunk_to_message(acc)] if acc is not None else [],
+        )
+    last_ai = _last_ai(final_messages)
+    if last_ai is not None:
+        return (
+            [SystemMessage(content=system), *[m for m in final_messages if m is not last_ai]],
+            [last_ai],
+        )
+    return (
+        [SystemMessage(content=system), HumanMessage(content=user_prompt)],
+        [message_chunk_to_message(acc)] if acc is not None else [],
+    )
 
 
 async def _stream_chat_reply_lc(
     *,
     chat: BaseChatModel,
-    model_label: str,
+    label: str,
     user_prompt: str,
     session_id: uuid.UUID | None,
     deps: ChatDeps,
     extra_tools: Sequence[Any],
 ) -> str | None:
-    """Hand-rolled ``bind_tools`` + ``astream`` loop (ADR 0060 — no ToolNode)."""
-    tools = chat_tools(extra_tools)
-    by_name = {t.name: t for t in tools}
-    bound = chat.bind_tools(tools)
-    messages: list[Any] = [
-        SystemMessage(content=prompts.CHAT),
-        HumanMessage(content=user_prompt),
-    ]
+    """``create_agent`` chat loop streamed via ``stream_mode="messages"``."""
+    agent = create_agent(
+        chat,
+        tools=chat_tools(deps, extra_tools),
+        system_prompt=prompts.CHAT,
+    )
     parts: list[str] = []
     pending: list[str] = []
     usage: dict[str, int] = {}
-    output: str | None = None
+    final_messages: list[Any] = []
+    acc_box: list[AIMessageChunk | None] = [None]
+    stream_done = False
     with track(
         kind="chat_text",
         tier=NODE_MODEL_TIERS["chat"],
-        model=model_label,
+        model=label,
         system=prompts.CHAT,
         user=user_prompt,
     ) as rec:
+        agen = agent.astream(
+            {"messages": [HumanMessage(content=user_prompt)]},
+            stream_mode=["messages", "values"],
+            config={"recursion_limit": _RECURSION_LIMIT},
+        )
         try:
-            for _ in range(_MAX_TOOL_ROUNDS):
-                acc = await _stream_round(
-                    bound,
-                    chat,
-                    messages,
-                    rec=rec,
-                    usage=usage,
-                    parts=parts,
-                    pending=pending,
-                    session_id=session_id,
-                )
-                if acc is None:
-                    break
-                reply = message_chunk_to_message(acc)
-                tool_calls = list(reply.tool_calls or [])
-                invalid = list(getattr(reply, "invalid_tool_calls", None) or [])
-                if not tool_calls and not invalid:
-                    output = reply.content if isinstance(reply.content, str) else ""
-                    break
-                messages.append(reply)
-                for call in tool_calls:
-                    messages.append(await _run_lc_tool_call(call, by_name, deps))
-                for call in invalid:
-                    call_id = str(call.get("id") or call.get("name") or "tool_call")
-                    messages.append(
-                        ToolMessage(
-                            content='{"error": "invalid_tool_call"}',
-                            tool_call_id=call_id,
-                        )
-                    )
-            else:
-                logger.warning("chat tool loop hit %s rounds; returning partial", _MAX_TOOL_ROUNDS)
-            if session_id:
-                await _publish_deltas(session_id, pending, force=True)
+            await _consume_agent_stream(
+                agen,
+                rec=rec,
+                usage=usage,
+                parts=parts,
+                pending=pending,
+                session_id=session_id,
+                final_messages=final_messages,
+                acc_box=acc_box,
+            )
+            stream_done = True
+        except ValueError as exc:
+            # BaseChatModel.astream raises when a round yields zero
+            # chunks — treat as an empty reply, not a provider error.
+            # audit-allow(ERR-01): the two swallowed paths are the ADR 0061
+            # §2 contract — "generation chunks" -> empty reply, and
+            # GraphRecursionError -> partial text; all other handlers
+            # stash the partial and re-raise.
+            if "generation chunks" not in str(exc):
+                _stash_partial(rec, parts)
+                raise map_lc_error(exc, model=label) from exc
         except asyncio.CancelledError:
             _stash_partial(rec, parts)
             raise
+        except GraphRecursionError:
+            logger.warning("chat agent hit %s supersteps; returning partial", _RECURSION_LIMIT)
         except LlmProviderError:
             _stash_partial(rec, parts)
             raise
         except Exception as exc:
             _stash_partial(rec, parts)
-            raise map_lc_error(exc, model=model_label) from exc
-        text = (output if output is not None else "".join(parts)).strip()
+            raise map_lc_error(exc, model=label) from exc
+        finally:
+            await aclose_stream(agen)
+            # Runs on cancel/error too (ADR 0061 §2) — on an aborted
+            # stream the estimate covers sent messages + merged partial.
+            prompt_messages, completions = _estimate_prompt_and_completions(
+                prompts.CHAT, user_prompt, final_messages, acc_box[0],
+                aborted=not stream_done,
+            )
+            _estimate_if_no_usage(
+                chat, usage, messages=prompt_messages, completion_messages=completions
+            )
+            if usage:
+                rec.set_usage(usage)
+        if session_id:
+            await _publish_deltas(session_id, pending, force=True)
+        last_ai = _last_ai(final_messages)
+        if stream_done and last_ai is not None and isinstance(last_ai.content, str):
+            output: str = last_ai.content
+        else:
+            # Aborted stream (cancel / recursion cap) — the committed
+            # snapshot lags the streamed deltas; the partial text is
+            # everything that was emitted.
+            output = "".join(parts)
+        text = output.strip()
         rec.response_text = text or None
     return text or None
 
@@ -444,9 +513,7 @@ def _structured_from_text(out_type: type[OutT], content: Any) -> OutT | None:
     if isinstance(content, str):
         text = content
     else:
-        text = "".join(
-            str(block.get("text") or "") for block in content if isinstance(block, dict)
-        )
+        text = "".join(str(block.get("text") or "") for block in content if isinstance(block, dict))
     try:
         return out_type.model_validate(omit_nulls(json.loads(text)))
     except (ValueError, TypeError):
@@ -458,72 +525,72 @@ async def run_lc_tool_loop(
     chat: BaseChatModel,
     system: str,
     user_prompt: str,
-    deps: Any,
     tools: Sequence[Any],
     out_type: type[OutT],
     rec: LlmCallRecordBuilder,
 ) -> OutT | None:
-    """``bind_tools`` loop for typed-output harnesses (ADR 0060 — no ToolNode).
+    """``create_agent`` loop for typed-output harnesses (ADR 0061).
 
-    ``out_type`` is bound alongside the real tools — the same mechanism
-    ``with_structured_output`` uses internally — so the model can interleave
-    real tool calls and finish by "calling" the output schema. A no-tool-call
-    reply falls back to parsing its text as JSON. Provider errors raise
-    ``LlmProviderError``; everything else (tool bugs, validation misses)
-    propagates for the caller's parse-fail path.
+    ``ToolStrategy`` binds ``out_type`` as a tool in the same loop — the
+    model interleaves real tool calls and finishes by "calling" the output
+    schema in a single model call. A
+    no-tool-call reply falls back to parsing its text as JSON. Provider
+    errors raise ``LlmProviderError``; everything else (tool bugs,
+    validation misses) propagates for the caller's parse-fail path.
     """
-    by_name = {t.name: t for t in tools}
-    out_name = out_type.__name__
-    bound = chat.bind_tools([*tools, out_type])
-    messages: list[Any] = [
-        SystemMessage(content=system),
-        HumanMessage(content=user_prompt),
-    ]
+    agent = create_agent(
+        chat,
+        tools=[*tools],
+        system_prompt=system,
+        response_format=ToolStrategy(out_type),
+    )
+    try:
+        result = await agent.ainvoke(
+            {"messages": [HumanMessage(content=user_prompt)]},
+            config={"recursion_limit": _RECURSION_LIMIT},
+        )
+    except asyncio.CancelledError:
+        raise
+    except GraphRecursionError:
+        logger.warning("lc agent hit %s supersteps; parse miss", _RECURSION_LIMIT)
+        return None
+    except StructuredOutputError:
+        # ToolStrategy exhausted its validation retries — a parse miss for
+        # the caller, not a provider error (ADR 0061 §3 contract).
+        raise
+    except Exception as exc:
+        raise map_lc_error(exc, model=model_label(chat)) from exc
+    messages = list(result.get("messages") or [])
     usage: dict[str, int] = {}
-    for _ in range(_MAX_TOOL_ROUNDS):
-        try:
-            reply = await bound.ainvoke(messages)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            raise map_lc_error(exc, model=model_label(chat)) from exc
-        if getattr(reply, "usage_metadata", None):
-            _merge_lc_usage(usage, reply.usage_metadata)
-        else:
-            estimate = estimate_lc_usage(chat, messages, completion_messages=[reply])
-            if estimate is not None:
-                _merge_lc_usage(usage, estimate)
-        if usage:
-            rec.set_usage(usage)
-        calls = list(getattr(reply, "tool_calls", None) or [])
-        invalid = list(getattr(reply, "invalid_tool_calls", None) or [])
-        out_calls = [c for c in calls if str(c.get("name") or "") == out_name]
-        real_calls = [c for c in calls if str(c.get("name") or "") != out_name]
-        if real_calls or invalid:
-            messages.append(reply)
-            for call in real_calls:
-                messages.append(await _run_lc_tool_call(call, by_name, deps))
-            for call in invalid:
-                call_id = str(call.get("id") or call.get("name") or "tool_call")
-                messages.append(
-                    ToolMessage(content='{"error": "invalid_tool_call"}', tool_call_id=call_id)
-                )
-        if out_calls:
-            return out_type.model_validate(omit_nulls(dict(out_calls[-1].get("args") or {})))
-        if not calls and not invalid:
-            return _structured_from_text(out_type, getattr(reply, "content", ""))
-    logger.warning("lc tool loop hit %s rounds; parse miss", _MAX_TOOL_ROUNDS)
-    return None
+    for message in messages:
+        message_usage = getattr(message, "usage_metadata", None)
+        if message_usage:
+            _merge_lc_usage(usage, message_usage)
+    ai_replies = [m for m in messages if isinstance(m, AIMessage)]
+    prompt_messages, completions = _estimate_prompt_and_completions(
+        system, user_prompt, messages, None
+    )
+    _estimate_if_no_usage(
+        chat, usage, messages=prompt_messages, completion_messages=completions
+    )
+    if usage:
+        rec.set_usage(usage)
+    parsed = result.get("structured_response")
+    if isinstance(parsed, out_type):
+        return parsed
+    if parsed is not None:
+        return out_type.model_validate(omit_nulls(dict(parsed)))
+    last_ai = ai_replies[-1] if ai_replies else None
+    return _structured_from_text(out_type, getattr(last_ai, "content", "") if last_ai else "")
 
 
 async def run_typed_lc_agent(
     *,
     chat: BaseChatModel,
-    model_label: str,
+    label: str,
     tier: ModelTier | None,
     system: str,
     user_prompt: str,
-    deps: Any,
     tools: Sequence[Any],
     out_type: type[OutT],
     is_valid: Callable[[OutT], bool],
@@ -531,14 +598,13 @@ async def run_typed_lc_agent(
 ) -> OutT | None:
     """Recorder + error contract shared by the research/execute LC paths.
 
-    Same contract as the retired Pydantic AI runners: provider errors raise
-    ``LlmProviderError``, cancels propagate, every other failure is a
-    parse miss → ``None``.
+    Provider errors raise ``LlmProviderError``, cancels propagate,
+    every other failure is a parse miss → ``None``.
     """
     with track(
         kind="chat_json",
         tier=tier,
-        model=model_label,
+        model=label,
         system=system,
         user=user_prompt,
     ) as rec:
@@ -547,7 +613,6 @@ async def run_typed_lc_agent(
                 chat=chat,
                 system=system,
                 user_prompt=user_prompt,
-                deps=deps,
                 tools=tools,
                 out_type=out_type,
                 rec=rec,
@@ -583,7 +648,7 @@ async def stream_chat_reply(
         chat, label = live_lc_chat_model()
     return await _stream_chat_reply_lc(
         chat=chat,
-        model_label=label,
+        label=label,
         user_prompt=user_prompt,
         session_id=session_id,
         deps=deps,

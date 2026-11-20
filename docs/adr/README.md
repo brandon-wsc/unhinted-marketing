@@ -62,7 +62,8 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0057](./0057-thread-recap-summary.md) | Rolling thread recap for long sessions | Accepted |
 | [0058](./0058-service-wake-hints.md) | Service wake hints: LISTEN/NOTIFY + HTTP kick; polls → backstop sweeps | Proposed |
 | [0059](./0059-release-branches-demo-track-split.md) | Release branches off `main` on demand; hosted demo on releases, NAS/local on `main` | Accepted |
-| [0060](./0060-langchain-inner-harness.md) | LangChain inner harness; supersedes the Pydantic AI loop | Accepted |
+| [0060](./0060-langchain-inner-harness.md) | LangChain inner harness; supersedes the Pydantic AI loop | Accepted (§1 no-nested-graph clause superseded by 0061) |
+| [0061](./0061-create-agent-inner-loop.md) | `create_agent` inner loop — leaf graph, ToolStrategy, closure deps | Accepted |
 
 ## Format
 

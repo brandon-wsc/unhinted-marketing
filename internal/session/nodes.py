@@ -854,7 +854,7 @@ def _chat_attachment_digests(state: SessionState) -> list[dict[str, Any]]:
 
 
 async def _chat_stream(state: SessionState, user: str) -> str | None:
-    """Stream the chat reply via the LangChain inner harness (ADR 0060)."""
+    """Stream the chat reply via the create_agent inner harness (ADR 0061)."""
     history = _live_messages(state)
     research = state.get("research") or {}
     pack = _voice_pack(state)
@@ -1206,7 +1206,6 @@ async def executor_post(state: SessionState) -> dict[str, Any]:
     if has_llm_credentials():
         parsed = await EH.run_executor_post_agent(
             json.dumps(payload, ensure_ascii=False),
-            EH.ExecuteDeps(),
         )
     allowed = set(signal_ids)
     if parsed:
@@ -1367,7 +1366,6 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     if has_llm_credentials():
         parsed = await EH.run_edit_copy_agent(
             json.dumps(payload, ensure_ascii=False),
-            EH.ExecuteDeps(),
         )
     allowed = set(allowed_ids)
     if parsed:
