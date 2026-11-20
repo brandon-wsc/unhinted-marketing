@@ -4,7 +4,7 @@
 (it raises) nor tool-calls through ``astream`` chunks (it yields nothing
 for empty-content messages). ``_ScriptedChat`` is the small shim the chat /
 research / execute harness tests script through the ``set_*_model_override``
-hooks: ``bind_tools`` returns ``self`` so the hand-rolled loops can bind,
+hooks: ``bind_tools`` returns ``self`` so ``create_agent`` can bind,
 ``_stream`` re-emits each scripted ``AIMessage`` as a chunk carrying
 ``tool_calls`` / ``usage_metadata``, and ``_generate`` (inherited) pops the
 same queue for the non-streaming ``ainvoke`` paths.

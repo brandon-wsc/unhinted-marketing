@@ -567,9 +567,11 @@ async def read_object_bytes(key: str) -> bytes | None:
 # tests/unit/test_session_chat_attachments.py and the zero-instruction
 # step defs in tests/api/bdd/step_defs/test_attachments.py):
 #
-# - ``internal.session.harness.read_attachment`` — async Pydantic AI tool fn
-#   ``(ctx: RunContext[ChatDeps], attachment_id: str, query: str | None = None,
-#   section: str | None = None) -> ReadAttachmentResponse``. Registered on the
+# - ``internal.session.harness.read_attachment_tool(deps)`` — per-call
+#   factory returning a LangChain tool ``"read_attachment"`` with args
+#   ``(attachment_id: str, query: str | None = None, section: str | None
+#   = None) -> str`` (the ``ReadAttachmentResponse`` JSON; ``deps`` binds at
+#   construction, never in the schema). Registered on the
 #   chat agent; ``CHAT_TOOL_NAMES`` gains ``"read_attachment"`` and stays
 #   disjoint from ``PUBLISH_TOOL_NAMES``.
 # - ``schemas.tools.ReadAttachmentSlice {chunk_id: str, ref: str, text: str}``

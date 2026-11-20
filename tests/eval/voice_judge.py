@@ -162,7 +162,6 @@ async def judge_draft(
                 chat=chat,
                 system=VOICE_JUDGE_SYSTEM,
                 user_prompt=user,
-                deps=None,
                 tools=[],
                 out_type=VoiceJudgeOut,
                 rec=rec,

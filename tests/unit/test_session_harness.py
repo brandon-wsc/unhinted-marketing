@@ -1,21 +1,20 @@
-"""Chat harness (ADR 0060) — scripted chat models, allowlist, cancel, SSE deltas.
+"""Chat harness (ADR 0061) — scripted chat models, allowlist, cancel, SSE deltas.
 
-``bind_tools`` + hand-rolled ``astream`` loop; provider mapping lives in
-``router.lc_harness_model`` (openai/compat → ChatOpenAI, claude-by-name →
-ChatAnthropic, gemini/vertex_ai → ChatGoogleGenerativeAI). ``_ScriptedChat``
-is the ``GenericFakeChatModel`` + ``bind_tools`` shim the tests script
-through ``set_chat_model_override``.
+``create_agent`` leaf graph streamed via ``stream_mode="messages"``; provider
+mapping lives in ``router.lc_harness_model`` (openai/compat → ChatOpenAI,
+claude-by-name → ChatAnthropic, gemini/vertex_ai → ChatGoogleGenerativeAI).
+``_ScriptedChat`` is the ``GenericFakeChatModel`` + ``bind_tools`` shim the
+tests script through ``set_chat_model_override``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Annotated
 
 import pytest
 from langchain_core.messages import AIMessage
-from langchain_core.tools import InjectedToolArg, tool
+from langchain_core.tools import tool
 
 from internal.session import harness as H
 from internal.session import nodes as N
@@ -32,7 +31,7 @@ def _clear_chat_model_override() -> None:
 
 
 def test_chat_agent_allowlist_excludes_publish() -> None:
-    names = {t.name for t in H.chat_tools()}
+    names = {t.name for t in H.chat_tools(H.ChatDeps())}
     assert names == H.CHAT_TOOL_NAMES
     assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
     assert "publish_social_post" not in names
@@ -40,14 +39,13 @@ def test_chat_agent_allowlist_excludes_publish() -> None:
 
 def test_slow_probe_is_opt_in() -> None:
     @tool
-    async def slow_probe(deps: Annotated[H.ChatDeps, InjectedToolArg]) -> str:
+    async def slow_probe() -> str:
         """Test-only sleep probe — never a prod-registered tool."""
-        del deps
         return "slept"
 
-    prod = {t.name for t in H.chat_tools()}
+    prod = {t.name for t in H.chat_tools(H.ChatDeps())}
     assert "slow_probe" not in prod
-    spiked = {t.name for t in H.chat_tools(extra_tools=[slow_probe])}
+    spiked = {t.name for t in H.chat_tools(H.ChatDeps(), extra_tools=[slow_probe])}
     assert "slow_probe" in spiked
 
 
@@ -105,18 +103,21 @@ async def test_query_market_trends_runs_without_db() -> None:
 
 @pytest.mark.asyncio
 async def test_stream_chat_reply_tool_loop_feeds_deps() -> None:
-    """The loop must inject ``ChatDeps`` into tools — read_attachment refuses
+    """Deps are bound into tools at construction — read_attachment refuses
     with ``missing_scope`` when ids are absent, and its JSON lands back as a
     ToolMessage the model can see."""
     seen: dict = {}
     deps = H.ChatDeps()  # no company/user ids → missing_scope refusal
 
-    @tool
-    async def probe(deps: Annotated[H.ChatDeps, InjectedToolArg], marker: str) -> str:
-        """Probe that records the injected deps."""
-        seen["deps"] = deps
-        seen["marker"] = marker
-        return "probe-ok"
+    def make_probe(bound: H.ChatDeps):
+        @tool
+        async def probe(marker: str) -> str:
+            """Probe that records the deps it was built with."""
+            seen["deps"] = bound
+            seen["marker"] = marker
+            return "probe-ok"
+
+        return probe
 
     H.set_chat_model_override(
         _ScriptedChat(
@@ -142,7 +143,7 @@ async def test_stream_chat_reply_tool_loop_feeds_deps() -> None:
         user_prompt="讀份嘢",
         session_id=None,
         deps=deps,
-        extra_tools=[probe],
+        extra_tools=[make_probe(deps)],
     )
     assert text == "done"
     assert seen["deps"] is deps
@@ -183,7 +184,7 @@ async def test_stream_chat_reply_cancels_mid_slow_tool(monkeypatch: pytest.Monke
     started = asyncio.Event()
 
     @tool
-    async def slow_probe(deps: Annotated[H.ChatDeps, InjectedToolArg]) -> str:
+    async def slow_probe() -> str:
         """Sleep so Stop/cancel can be observed mid-tool."""
         started.set()
         await asyncio.sleep(10)

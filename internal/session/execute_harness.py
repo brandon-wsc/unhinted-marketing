@@ -1,9 +1,9 @@
-"""Execute inner loop for executor_post and edit_copy — LangChain chat models (ADR 0060).
+"""Execute inner loop for executor_post and edit_copy — ``create_agent`` (ADR 0061).
 
 Narrow agents: typed DraftOut / EditOut. Publish-class tools are never registered.
 Graph vertices stay unchanged; Confirm remains HTTP. DraftOut/EditOut ride
-the tool loop as bound schemas — the model finishes by "calling" one
-(ADR 0060 §1).
+the loop via ``ToolStrategy`` — the model finishes by "calling" one in the
+same model call.
 """
 
 from __future__ import annotations
@@ -72,7 +72,6 @@ async def run_executor_post_agent(
         tier=NODE_MODEL_TIERS["executor_post"],
         system=prompts.EXECUTOR_POST,
         user_prompt=user_prompt,
-        deps=deps,
         tools=execute_tools(),
         out_type=DraftOut,
         is_valid=_caption_ok,
@@ -95,7 +94,6 @@ async def run_edit_copy_agent(
         tier=NODE_MODEL_TIERS["edit_copy"],
         system=prompts.EDIT_COPY,
         user_prompt=user_prompt,
-        deps=deps,
         tools=execute_tools(),
         out_type=EditOut,
         is_valid=_caption_ok,

@@ -40,9 +40,6 @@ def report(name: str, ok: bool, detail: str = "") -> None:
     print(f"{'PASS' if ok else 'FAIL'}  {name}  {detail}")
 
 
-# --- scripted SSE stub ------------------------------------------------------
-
-
 def _sse(obj: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(obj)}\n\n".encode()
 
@@ -214,8 +211,6 @@ def _model(port: int, **kw: Any) -> ChatOpenAI:
         **kw,
     )
 
-
-# --- tests ------------------------------------------------------------------
 
 
 async def t1_messages_mode_streams() -> None:

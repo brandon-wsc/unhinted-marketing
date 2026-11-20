@@ -1,9 +1,9 @@
-"""Research inner loop for query_generator — LangChain chat models (ADR 0060).
+"""Research inner loop for query_generator — ``create_agent`` (ADR 0061).
 
 Narrow agent: ingest via the existing Tavily∪PG adapter, then QueryGenOut.
 Publish-class tools are never registered. Graph vertices stay unchanged.
-``QueryGenOut`` rides the tool loop as a bound schema — the model finishes
-by "calling" it (ADR 0060 §1).
+``QueryGenOut`` rides the loop via ``ToolStrategy`` — the model finishes
+by "calling" it in the same model call.
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Annotated, Any
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import BaseTool, InjectedToolArg, tool
+from langchain_core.tools import BaseTool, tool
 
 from internal.llm.router import ModelTier
 from internal.session import harness as H
@@ -80,25 +80,24 @@ async def _run_ingest_web_search(
     return ingest_mod.signal_slices(items)
 
 
-@tool
-async def ingest_web_search(
-    deps: Annotated[ResearchDeps, InjectedToolArg],
-    query: str,
-    topic: str = "news",
-    time_range: str = "week",
-) -> str:
-    """Search the web via Tavily and persist hits to PostgreSQL.
-
-    At most 3 queries this turn, 5 hits each. Returns signal slices
-    (id, title, excerpt, metrics.query) — never full pages. Returns
-    ``[{"error": ...}]`` instead when the search could not run.
-    """
-    slices = await _run_ingest_web_search(deps, query, topic, time_range)
-    return json.dumps(slices, ensure_ascii=False, default=str)
-
-
-def research_tools(extra_tools: Sequence[Any] = ()) -> list[Any]:
+def research_tools(deps: ResearchDeps, extra_tools: Sequence[Any] = ()) -> list[Any]:
     """LangChain tools on the research loop — publish-class names never registered."""
+
+    @tool
+    async def ingest_web_search(
+        query: str,
+        topic: str = "news",
+        time_range: str = "week",
+    ) -> str:
+        """Search the web via Tavily and persist hits to PostgreSQL.
+
+        At most 3 queries this turn, 5 hits each. Returns signal slices
+        (id, title, excerpt, metrics.query) — never full pages. Returns
+        ``[{"error": ...}]`` instead when the search could not run.
+        """
+        slices = await _run_ingest_web_search(deps, query, topic, time_range)
+        return json.dumps(slices, ensure_ascii=False, default=str)
+
     tools: list[Any] = [ingest_web_search, H.query_market_trends]
     for extra in extra_tools:
         tools.append(extra if isinstance(extra, BaseTool) else tool(extra))
@@ -120,8 +119,7 @@ async def run_query_generator_agent(
         tier=NODE_MODEL_TIERS["query_generator"],
         system=prompts.QUERY_GENERATOR,
         user_prompt=user_prompt,
-        deps=deps,
-        tools=research_tools(),
+        tools=research_tools(deps),
         out_type=QueryGenOut,
         is_valid=lambda parsed: bool(parsed.atomic_queries()),
         log_tag="query_generator",

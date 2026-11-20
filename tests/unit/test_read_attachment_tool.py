@@ -4,17 +4,17 @@ The tool is a read-only LangChain ``@tool``: ``≤5`` slices
 ``{chunk_id, ref, text}`` + ``partial``, ``≤3`` calls per turn, owner scope
 re-checked on every call — the ids the LLM emits are untrusted (§14). Every
 refusal returns ``slices=[]`` + a non-empty ``error``; the tool never
-raises and never returns full document text (§5). ``ChatDeps`` rides in as
-an ``InjectedToolArg`` — tests invoke with ``deps`` inside the args dict,
-same as the harness loop.
+raises and never returns full document text (§5). ``ChatDeps`` is bound
+into the tool at construction (ADR 0061 — the agent's ToolNode injects
+nothing); tests build it via ``H.read_attachment_tool(deps)``.
 
 Invented names this step must satisfy (documented in
 tests/api/attachment_helpers.py as well):
 
-- ``internal.session.harness.read_attachment`` — a LangChain tool named
-  ``"read_attachment"`` whose args are ``attachment_id: str``,
-  ``query: str | None``, ``section: str | None`` (``deps`` is injected and
-  never appears in the model-facing schema); output is the
+- ``internal.session.harness.read_attachment_tool`` — a ``ChatDeps → tool``
+  factory building a LangChain tool named ``"read_attachment"`` whose args
+  are ``attachment_id: str``, ``query: str | None``, ``section: str | None``
+  (``deps`` never appears in the model-facing schema); output is the
   ``ReadAttachmentResponse`` JSON string.
 - ``schemas.tools.ReadAttachmentSlice {chunk_id, ref, text}`` and
   ``schemas.tools.ReadAttachmentResponse {slices, partial, error}``.
@@ -71,9 +71,9 @@ def _clear_chat_model_override() -> None:
     H.set_chat_model_override(None)
 
 
-def _tool():
-    """Get the tool object — AttributeError names the missing seam (right red)."""
-    return getattr(H, READ_ATTACHMENT_TOOL)
+def _tool(deps: H.ChatDeps):
+    """Build the tool bound to ``deps`` — how the chat loop registers it."""
+    return H.read_attachment_tool(deps)
 
 
 def _deps() -> H.ChatDeps:
@@ -81,8 +81,8 @@ def _deps() -> H.ChatDeps:
 
 
 async def _call_tool(deps: H.ChatDeps, **kwargs):
-    """Invoke like the harness loop does: ``deps`` injected inside args."""
-    return await _tool().ainvoke({"deps": deps, **kwargs})
+    """Invoke like ToolNode does — deps are already bound into the tool."""
+    return await _tool(deps).ainvoke(kwargs)
 
 
 def _result_dump(result) -> dict:
@@ -104,16 +104,16 @@ def test_read_attachment_in_chat_tool_names() -> None:
 
 
 def test_read_attachment_registered_on_chat_loop() -> None:
-    names = {t.name for t in H.chat_tools()}
+    names = {t.name for t in H.chat_tools(H.ChatDeps())}
     assert READ_ATTACHMENT_TOOL in names
     assert names.isdisjoint(H.PUBLISH_TOOL_NAMES)
 
 
 def test_read_attachment_deps_not_in_model_schema() -> None:
-    """``deps`` is an InjectedToolArg — the LLM must never see it."""
+    """``deps`` is bound at construction — the LLM must never see it."""
     from langchain_core.utils.function_calling import convert_to_openai_tool
 
-    schema = convert_to_openai_tool(_tool())
+    schema = convert_to_openai_tool(_tool(_deps()))
     params = schema["function"]["parameters"]["properties"]
     assert "deps" not in params
     assert set(params) == {"attachment_id", "query", "section"}
