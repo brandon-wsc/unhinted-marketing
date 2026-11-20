@@ -28,8 +28,6 @@ import type {
   SessionBrief,
 } from "./types";
 
-// Everything the event interpreter touches outside itself — grouped so the
-// seam reads as three roles: live refs, the in-flight kernel, and UI setters.
 export type SessionEventContext = {
   refs: {
     sessionIdRef: { current: string | null };

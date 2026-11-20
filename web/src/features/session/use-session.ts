@@ -477,9 +477,6 @@ export function useSession(
     return null;
   }, []);
 
-  // The interpreter lives in session-events.ts; everything it touches outside
-  // itself passes through this context (stable — all members are refs, state
-  // setters, or []-dep callbacks).
   const eventCtx = useMemo<SessionEventContext>(
     () => ({
       refs: {
