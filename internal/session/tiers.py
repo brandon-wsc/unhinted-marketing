@@ -9,6 +9,7 @@ NODE_MODEL_TIERS: dict[str, ModelTier | None] = {
     "query_generator": ModelTier.CHEAP,
     "research_ingest": None,
     "chat": ModelTier.CHEAP,
+    "session_agent": ModelTier.CHEAP,
     "ack_confirm": ModelTier.CHEAP,
     "trend_searcher": ModelTier.CHEAP,
     "product_matcher": None,

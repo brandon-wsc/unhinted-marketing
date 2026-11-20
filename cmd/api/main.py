@@ -40,7 +40,9 @@ from internal.session.trace import drain as drain_node_steps
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     pool, checkpointer = await open_postgres_checkpointer()
-    graph = build_session_graph(checkpointer=checkpointer)
+    graph = build_session_graph(
+        checkpointer=checkpointer, main_agent=settings.session_main_agent
+    )
     set_session_graph(graph)
     app.state.checkpoint_pool = pool
     app.state.checkpointer = checkpointer

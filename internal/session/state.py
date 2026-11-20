@@ -81,3 +81,6 @@ class SessionState(TypedDict, total=False):
     # summary_upto counts leading messages already folded in.
     thread_summary: NotRequired[str]
     summary_upto: NotRequired[int]
+    # ADR 0062 — session_agent's handoff marker: outer vertex name the
+    # conditional edge routes to, or None when the agent answered directly.
+    agent_next: NotRequired[str | None]

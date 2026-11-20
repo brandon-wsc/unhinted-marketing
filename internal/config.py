@@ -130,6 +130,11 @@ class Settings(BaseSettings):
 
     # Semantic research gate (ADR 0009) — FastEmbed local ONNX via semantic-router
     semantic_router_enabled: bool = True
+
+    # ADR 0062 — build the session graph in the session_agent topology
+    # (agent owns cognition, outer graph keeps guarantees). Off = legacy
+    # route_intent pipeline. Rollout flag during the incremental migration.
+    session_main_agent: bool = False
     # FastEmbed registry has no multilingual-e5-small; default MiniLM multilingual small.
     # e5-large works but ~2GB — set explicitly if desired.
     semantic_router_model: str = (

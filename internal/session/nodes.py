@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import Any, TypeVar
 
+from langgraph.graph import END
 from pydantic import BaseModel
 
 from internal.llm.recorder import mark_last_call
@@ -41,6 +42,7 @@ from internal.memory.repos import (
     upsert_signal,
 )
 from internal.perception.tavily import search_tavily
+from internal.session import agent as SA
 from internal.session import execute_harness as EH
 from internal.session import ingest as ingest_mod
 from internal.session import prompts
@@ -963,6 +965,87 @@ async def chat(state: SessionState) -> dict[str, Any]:
     return out
 
 
+def _session_agent_ids(state: SessionState) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+    def _parse(raw: Any) -> uuid.UUID | None:
+        try:
+            return uuid.UUID(str(raw)) if raw else None
+        except ValueError:
+            return None
+
+    return _parse(state.get("company_id")), _parse(state.get("user_id"))
+
+
+def _session_agent_payload(state: SessionState, user: str) -> str:
+    pack = _voice_pack(state)
+    return json.dumps(
+        {
+            "history": _live_messages(state),
+            "latest": user,
+            "thread_summary": _thread_summary(state),
+            "mode": state.get("mode", MODE_CHAT),
+            "has_draft": bool((state.get("draft") or {}).get("caption")),
+            "research_rule_pass": bool(state.get("research_rule_pass")),
+            "research_signals": (state.get("research_signals") or [])[:8],
+            "signals_trusted": _signals_trusted(state),
+            "voice_pack": {
+                "roast_level": pack.get("roast_level"),
+                "locale": pack.get("locale"),
+            },
+            "product_clarify": bool(state.get("product_clarify")),
+            "product_candidates": (state.get("product_candidates") or [])[:3],
+            "primary_product": state.get("primary_product"),
+            "attachments": _chat_attachment_digests(state),
+        },
+        ensure_ascii=False,
+    )
+
+
+@agent_progress("session_agent")
+async def session_agent(state: SessionState) -> dict[str, Any]:
+    """ADR 0062 main agent — replies directly or emits a handoff marker."""
+    user = _last_user_text(state)
+    chinese = any("\u4e00" <= c <= "\u9fff" for c in user)
+    company_id, user_id = _session_agent_ids(state)
+    deps = SA.SessionAgentDeps(company_id=company_id, user_id=user_id)
+    reply: str | None = None
+    llm_error: str | None = None
+    if has_llm_credentials():
+        try:
+            reply = await SA.stream_session_agent(
+                user_prompt=_session_agent_payload(state, user),
+                session_id=_thread_uuid(state),
+                deps=deps,
+            )
+        except LlmProviderError as exc:
+            logger.warning("session_agent LLM stream failed: %s", exc.message)
+            llm_error = exc.message
+            reply = _llm_failure_reply(exc, chinese=chinese)
+        except Exception:
+            logger.exception("session_agent LLM stream failed")
+    out: dict[str, Any] = {"agent_next": deps.next}
+    if deps.next:
+        out["intent"] = deps.intent
+        if reply:
+            out["messages"] = _append_assistant(state, reply)
+    else:
+        if not reply:
+            reply = (
+                "我可以幫你睇香港熱話同草擬社交貼文。想開始嘅話，揀一條推薦問題，"
+                "或者直接講你想做咩內容。"
+                if chinese
+                else (
+                    "I can help with HK trends and draft social posts. "
+                    "Pick a recommended question or tell me what you want to create."
+                )
+            )
+        out["messages"] = _append_assistant(state, reply)
+        out["mode"] = MODE_CHAT
+    if llm_error:
+        out["error"] = llm_error
+    record_node_step("session_agent", dict(state), out)
+    return out
+
+
 def _product_queries(state: SessionState) -> list[str]:
     research = state.get("research") or {}
     queries: list[str] = []
@@ -1577,6 +1660,19 @@ def route_after_intent(state: SessionState) -> str:
     if intent == "confirm_intent":
         return "ack_confirm"
     return "chat"
+
+
+def route_after_session_agent(state: SessionState) -> str:
+    """ADR 0062: follow the agent's handoff marker; END when it replied inline.
+
+    The research gate (``research_rule_pass``, set by fast_rule_checker) still
+    applies — a research handoff the rules disallow drops to the intent's own
+    vertex instead of searching anyway.
+    """
+    nxt = str(state.get("agent_next") or "")
+    if nxt == "query_generator" and not state.get("research_rule_pass", False):
+        nxt = SA.INTENT_VERTICES.get(str(state.get("intent") or ""), "")
+    return nxt or END
 
 
 def route_after_product_matcher(state: SessionState) -> str:
