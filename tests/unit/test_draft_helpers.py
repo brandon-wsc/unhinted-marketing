@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from internal.session.service import (
+from internal.session.previews import (
     normalize_draft_copy,
     preview_updated_payload,
     resolve_source_signals,
@@ -113,7 +113,7 @@ def test_preview_updated_payload_with_source_signals() -> None:
 
 
 async def test_resolve_source_signals_orders_and_drops_missing(monkeypatch) -> None:
-    from internal.session import service
+    from internal.session import previews
 
     rows = [
         SimpleNamespace(
@@ -124,7 +124,7 @@ async def test_resolve_source_signals_orders_and_drops_missing(monkeypatch) -> N
         ),
     ]
     monkeypatch.setattr(
-        service.repos, "get_signals_by_ids", AsyncMock(return_value=rows)
+        previews.repos, "get_signals_by_ids", AsyncMock(return_value=rows)
     )
     out = await resolve_source_signals(None, ["sig_a", "sig_missing", "sig_b"])
     assert [s["signal_id"] for s in out] == ["sig_a", "sig_b"]
@@ -134,10 +134,10 @@ async def test_resolve_source_signals_orders_and_drops_missing(monkeypatch) -> N
 async def test_resolve_source_signals_lookup_failure_returns_empty(
     monkeypatch,
 ) -> None:
-    from internal.session import service
+    from internal.session import previews
 
     monkeypatch.setattr(
-        service.repos,
+        previews.repos,
         "get_signals_by_ids",
         AsyncMock(side_effect=RuntimeError("db down")),
     )

@@ -10,8 +10,6 @@ import secrets
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Literal
 
 from sqlalchemy import select
@@ -25,10 +23,10 @@ from internal.memory import repos
 from internal.memory.models import (
     Attachment,
     AttachmentSession,
-    PreviewImage,
     Session,
     SessionMessage,
 )
+from internal.session import graph_state, previews
 from internal.session.context import session_db
 from internal.session.events import session_event_bus
 from internal.session.graph import (
@@ -37,25 +35,17 @@ from internal.session.graph import (
     get_session_graph,
 )
 from internal.session.image_format import adapt_plan_to_format, plan_direction_changed
-from internal.session.media import image_format_from_plan, media_item_payload
+from internal.session.media import image_format_from_plan
 from internal.session.nodes import angle_pick_payload, offered_angles, offered_personas
-from internal.session.state import MODE_CHAT, MODE_PREVIEW
+from internal.session.state import MODE_PREVIEW
 from internal.session.trace import turn_trace
 from internal.session.turn_registry import (
     TurnEntry,
     TurnInFlightError,
     session_turn_registry,
 )
-from schemas.contracts import (
-    DraftCopy,
-    PreviewMediaItem,
-    PreviewUpdatedData,
-    SourceSignal,
-)
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_PLATFORM = "instagram"
 
 
 class SessionTurnConflict(Exception):
@@ -108,10 +98,6 @@ async def _rollback_quietly(db: AsyncSession, *, session_id: uuid.UUID) -> None:
         )
 
 
-def _session_config(session_id: uuid.UUID) -> dict[str, Any]:
-    return {"configurable": {"thread_id": str(session_id)}}
-
-
 def user_turn_metadata(
     existing: dict[str, Any] | None,
     progress_events: list[dict[str, Any]],
@@ -133,287 +119,6 @@ def user_turn_metadata(
     if duration_ms is not None and duration_ms >= 0:
         meta["duration_ms"] = int(duration_ms)
     return meta
-
-
-def normalize_draft_copy(copy: dict[str, Any] | None) -> dict[str, Any]:
-    raw = copy or {}
-    hashtags = raw.get("hashtags") or []
-    if not isinstance(hashtags, list):
-        hashtags = []
-    return DraftCopy(
-        caption=str(raw.get("caption") or ""),
-        hashtags=[str(h) for h in hashtags if str(h).strip()],
-        cta=str(raw.get("cta") or ""),
-    ).model_dump()
-
-
-async def resolve_source_signals(db: AsyncSession, signal_ids: list[Any]) -> list[dict[str, Any]]:
-    """Resolve draft grounding ids to display rows, preserving draft order (ADR 0038).
-
-    Best-effort: missing rows are dropped, a failed lookup yields [] — never a
-    failed preview payload.
-    """
-    ids = [str(s) for s in (signal_ids or []) if s]
-    if not ids:
-        return []
-    try:
-        rows = await repos.get_signals_by_ids(db, ids)
-    except Exception:
-        logger.debug("source signal lookup failed", exc_info=True)
-        return []
-    by_id = {r.signal_id: r for r in rows}
-    return [
-        {
-            "signal_id": row.signal_id,
-            "source": row.source,
-            "title": row.title,
-            "url": row.url,
-            "excerpt": row.excerpt,
-        }
-        for row in (by_id[i] for i in ids if i in by_id)
-    ]
-
-
-def preview_updated_payload(
-    *,
-    revision: int,
-    approval_token: str,
-    image_url: str | None,
-    copy: dict[str, Any] | None,
-    platform: str | None = None,
-    media: list[dict[str, Any]] | None = None,
-    source_signals: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    items = [PreviewMediaItem.model_validate(m) for m in (media or [])]
-    primary = resolve_stored_url(image_url)
-    if primary is None and items:
-        primary = items[0].url
-    return PreviewUpdatedData(
-        revision=revision,
-        approval_token=approval_token,
-        image_url=primary,
-        media=items,
-        draft_copy=DraftCopy.model_validate(normalize_draft_copy(copy)),
-        platform=platform or DEFAULT_PLATFORM,
-        source_signals=[SourceSignal.model_validate(s) for s in (source_signals or [])],
-    ).model_dump(by_alias=True)
-
-
-def _coerce_preview_draft(
-    draft: Any,
-) -> tuple[int, str, dict[str, Any], str | None, dict[str, Any] | None, list[Any], str] | None:
-    """Real preview row fields, or None for a missing / non-row stand-in."""
-    if draft is None:
-        return None
-    revision = getattr(draft, "revision", None)
-    token = getattr(draft, "approval_token", None)
-    if not isinstance(revision, int) or not isinstance(token, str) or not token:
-        return None
-    copy = getattr(draft, "copy", None)
-    if not isinstance(copy, dict):
-        copy = {}
-    image_url = getattr(draft, "image_url", None)
-    if not isinstance(image_url, str):
-        image_url = None
-    plan = getattr(draft, "image_plan", None)
-    if not isinstance(plan, dict):
-        plan = None
-    media_ids = getattr(draft, "media_ids", None)
-    if not isinstance(media_ids, list):
-        media_ids = []
-    platform = getattr(draft, "platform", None)
-    if not isinstance(platform, str) or not platform:
-        platform = DEFAULT_PLATFORM
-    return revision, token, copy, image_url, plan, media_ids, platform
-
-
-def _discard_revision_ceiling(restored: dict[str, Any], accepted_revision: int | None) -> int:
-    """Highest revision Discard keeps.
-
-    Prefer the lower of the anchor's ``accepted_revision`` and the pre-turn
-    ``revision`` so a pending number on either field still drops the unexecuted
-    row (ADR 0036).
-    """
-    raw = restored.get("revision")
-    state_rev = raw if isinstance(raw, int) else None
-    explicit = accepted_revision if isinstance(accepted_revision, int) else None
-    if explicit is not None and state_rev is not None:
-        return min(explicit, state_rev)
-    if explicit is not None:
-        return explicit
-    if state_rev is not None:
-        return state_rev
-    return 0
-
-
-def _apply_surviving_draft(restored: dict[str, Any], draft: Any) -> None:
-    """Copy the surviving preview row onto session state after a discard."""
-    parsed = _coerce_preview_draft(draft)
-    if parsed is None:
-        return
-    revision, token, copy, image_url, plan, media_ids, _platform = parsed
-    restored["draft"] = normalize_draft_copy(copy)
-    restored["revision"] = revision
-    restored["approval_token"] = token
-    restored["image_url"] = image_url
-    if plan is not None:
-        restored["image_plan"] = plan
-        restored["image_format"] = image_format_from_plan(
-            plan, fallback=str(restored.get("image_format") or "single")
-        )
-    ids: list[str] = []
-    for raw_id in media_ids:
-        if isinstance(raw_id, uuid.UUID):
-            ids.append(str(raw_id))
-        elif isinstance(raw_id, str):
-            ids.append(raw_id)
-    restored["media_ids"] = ids
-
-
-async def latest_preview_payload(db: AsyncSession, session: Session) -> dict[str, Any] | None:
-    """`preview.updated` body for the latest draft, or None when there is no row."""
-    draft = await repos.get_latest_preview_draft(db, session.id)
-    parsed = _coerce_preview_draft(draft)
-    if parsed is None:
-        return None
-    revision, token, copy, image_url, _plan, _media_ids, platform = parsed
-    media: list[dict[str, Any]] = []
-    try:
-        loaded = await list_latest_session_media(db, session)
-    except Exception:
-        logger.debug("latest preview media lookup failed", exc_info=True)
-        loaded = []
-    if isinstance(loaded, list):
-        media = [
-            item for item in loaded if isinstance(item, dict) and isinstance(item.get("id"), str)
-        ]
-    source_signals = await resolve_source_signals(
-        db, list(getattr(draft, "source_signal_ids", None) or [])
-    )
-    return preview_updated_payload(
-        revision=revision,
-        approval_token=token,
-        image_url=image_url,
-        copy=copy,
-        platform=platform,
-        media=media,
-        source_signals=source_signals,
-    )
-
-
-def _payloads_from_image_rows(
-    rows: list[PreviewImage],
-) -> tuple[list[dict[str, Any]], str | None, dict[str, Any] | None]:
-    """HTTP media payloads (resolved URLs) plus raw stored primary for Postgres/graph."""
-    media = [
-        media_item_payload(
-            image_id=r.id,
-            url=r.url,
-            plan=r.plan,
-            format=r.format,
-            role=r.role,
-            seq=r.seq,
-            status=r.status,
-        )
-        for r in rows
-    ]
-    if not rows:
-        return media, None, None
-    primary = rows[0]
-    return media, primary.url, dict(primary.plan or {})
-
-
-async def _media_for_new_draft(
-    db: AsyncSession,
-    session: Session,
-    *,
-    image_url: str | None,
-    image_plan: dict[str, Any] | None,
-    image_format: str | None,
-    reuse_media_ids: list[uuid.UUID] | None,
-    create_image_row: bool,
-) -> tuple[list[uuid.UUID], list[dict[str, Any]], str | None, dict[str, Any] | None]:
-    """Resolve media_ids for a new draft revision (ADR 0008).
-
-    - create_image_row: insert append-only preview_images from url/plan (gen path).
-    - else reuse_media_ids: caption-only path keeps same image versions.
-    """
-    if create_image_row and (image_url or image_plan):
-        fmt = image_format_from_plan(image_plan, fallback=image_format or "single")
-        row = await repos.insert_preview_image(
-            db,
-            session_id=session.id,
-            url=image_url,
-            plan=image_plan,
-            format=fmt,
-            role="primary",
-            seq=0,
-            status="ready" if image_url else "pending",
-        )
-        media = [
-            media_item_payload(
-                image_id=row.id,
-                url=row.url,
-                plan=row.plan,
-                format=row.format,
-                role=row.role,
-                seq=row.seq,
-                status=row.status,
-            )
-        ]
-        return [row.id], media, row.url, dict(row.plan or {})
-
-    ids = list(reuse_media_ids or [])
-    rows = await repos.get_preview_images_by_ids(db, ids)
-    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
-    if primary_url is None:
-        primary_url = image_url
-    if primary_plan is None:
-        primary_plan = image_plan
-    return ids, media, primary_url, primary_plan
-
-
-def _graph_values(session: Session, messages: list[dict[str, Any]]) -> dict[str, Any]:
-    state = dict(session.state or {})
-    return {
-        "messages": messages,
-        "mode": session.mode or MODE_CHAT,
-        "company_id": str(session.company_id),
-        "user_id": str(session.user_id),
-        "thread_id": str(session.id),
-        "brief": state.get("brief") or {},
-        "draft": state.get("draft") or {},
-        "image_plan": state.get("image_plan") or {},
-        "image_url": state.get("image_url"),
-        "revision": state.get("revision") or 0,
-        "source_signal_ids": state.get("source_signal_ids") or [],
-        "reviewer_feedback": state.get("reviewer_feedback") or "",
-        "review_attempts": state.get("review_attempts") or 0,
-        "pending_confirm": state.get("pending_confirm") or False,
-        "approval_token": state.get("approval_token"),
-        "need_image": state.get("need_image", False),
-        "company_context": state.get("company_context") or {},
-        "voice_pack": state.get("voice_pack") or {},
-        "audience_catalog": state.get("audience_catalog") or [],
-        "active_persona": state.get("active_persona"),
-        "ranked_signals": state.get("ranked_signals") or [],
-        "trend_notes": state.get("trend_notes") or "",
-        "primary_product": state.get("primary_product"),
-        "related_products": state.get("related_products") or [],
-        "product_clarify": bool(state.get("product_clarify")),
-        "product_context_ids": state.get("product_context_ids") or [],
-        "product_candidates": state.get("product_candidates") or [],
-        "grounding_ok": state.get("grounding_ok", True),
-        "chosen_persona": state.get("chosen_persona"),
-        "image_format": state.get("image_format"),
-        "chosen_image_format": state.get("chosen_image_format"),
-        # ADR 0047 — last persisted digests carry over; run_session_turn
-        # refreshes them from the attachment_sessions join each message turn.
-        "attachments": list(state.get("attachments") or []),
-        # ADR 0057 — rolling recap pair; summary_upto counts folded messages.
-        "thread_summary": state.get("thread_summary") or "",
-        "summary_upto": state.get("summary_upto") or 0,
-    }
 
 
 # ADR 0047 §5 — the doc_profile subset carried on a hydrated digest.
@@ -460,109 +165,16 @@ async def _hydrate_session_attachments(
     return [_attachment_digest(row) for row in rows]
 
 
-def _strip_discard_meta(state: dict[str, Any] | None) -> dict[str, Any]:
-    out = copy.deepcopy(state or {})
-    out.pop("turn_discard", None)
-    out.pop("awaiting_image_ok", None)
-    out.pop("awaiting_angle_pick", None)
-    return out
-
-
-@dataclass
-class ForkPreviewCopy:
-    """Facts about a fork's preview copy, for the route to derive preview_note."""
-
-    copied: bool
-    copied_revision: int | None
-    latest_revision: int | None
-
-
-async def copy_session_preview(
-    db: AsyncSession,
-    source: Session,
-    target: Session,
-    *,
-    as_of: datetime | None = None,
-) -> ForkPreviewCopy:
-    """Copy the source's preview draft + media into a forked session (ADR 0017).
-
-    With ``as_of`` (the fork-point message's created_at) the copy is
-    time-aligned: the revision that existed at that moment, or nothing when the
-    preview postdates the fork point. The fork restarts at revision=1 with a
-    freshly minted approval_token — tokens are never shared across sessions
-    (ADR 0003). preview_images rows are duplicated into the target session
-    (append-only per ADR 0008; same asset URLs) and media_ids are remapped to
-    the new row ids. The copied draft keeps the source row's created_at so the
-    timeline stays aligned for fork-of-fork.
-    """
-    latest = await repos.get_latest_preview_draft(db, source.id)
-    draft = (
-        await repos.get_preview_draft_as_of(db, source.id, as_of) if as_of is not None else latest
-    )
-    latest_revision = latest.revision if latest is not None else None
-    if draft is None:
-        return ForkPreviewCopy(copied=False, copied_revision=None, latest_revision=latest_revision)
-
-    id_map: dict[uuid.UUID, uuid.UUID] = {}
-    for img in await repos.get_preview_images_by_ids(db, list(draft.media_ids or [])):
-        row = await repos.insert_preview_image(
-            db,
-            session_id=target.id,
-            url=img.url,
-            plan=img.plan,
-            format=img.format,
-            role=img.role,
-            seq=img.seq,
-            status=img.status,
-        )
-        id_map[img.id] = row.id
-    media_ids = [id_map[i] for i in (draft.media_ids or []) if i in id_map]
-
-    token = secrets.token_urlsafe(24)
-    await repos.upsert_preview_draft(
-        db,
-        session_id=target.id,
-        revision=1,
-        copy=copy.deepcopy(draft.copy or {}),
-        image_url=draft.image_url,
-        image_plan=copy.deepcopy(draft.image_plan) if draft.image_plan else None,
-        source_signal_ids=list(draft.source_signal_ids or []),
-        approval_token=token,
-        platform=draft.platform,
-        media_ids=media_ids,
-        created_at=draft.created_at,
-    )
-
-    state: dict[str, Any] = {
-        "draft": copy.deepcopy(draft.copy or {}),
-        "revision": 1,
-        "approval_token": token,
-        "image_url": draft.image_url,
-        "media_ids": [str(i) for i in media_ids],
-        "pending_confirm": False,
-        "need_image": False,
-        "awaiting_image_ok": False,
-    }
-    if draft.image_plan is not None:
-        state["image_plan"] = copy.deepcopy(draft.image_plan)
-    target.state = state
-    if source.mode == MODE_PREVIEW:
-        target.mode = MODE_PREVIEW
-    return ForkPreviewCopy(
-        copied=True, copied_revision=draft.revision, latest_revision=latest_revision
-    )
-
-
 async def graph_is_parked(session_id: uuid.UUID) -> bool:
     graph = get_session_graph()
-    snapshot = await graph.aget_state(_session_config(session_id))
+    snapshot = await graph.aget_state(graph_state._session_config(session_id))
     return bool(snapshot.next)
 
 
 async def graph_parked_node(session_id: uuid.UUID) -> str | None:
     """First node name the graph is parked before, or None."""
     graph = get_session_graph()
-    snapshot = await graph.aget_state(_session_config(session_id))
+    snapshot = await graph.aget_state(graph_state._session_config(session_id))
     nxt = snapshot.next or ()
     return str(nxt[0]) if nxt else None
 
@@ -655,10 +267,10 @@ async def _repark_graph_at_interrupt(
     await _adelete_graph_thread(session.id)
     msgs = await repos.list_session_messages(db, session.id)
     message_dicts = [{"role": m.role, "content": m.content} for m in msgs]
-    values = _graph_values(session, message_dicts)
+    values = graph_state._graph_values(session, message_dicts)
     values.update(extra_values)
     graph = get_session_graph()
-    config = _session_config(session.id)
+    config = graph_state._session_config(session.id)
     try:
         await graph.aupdate_state(config, values, as_node=as_node)
     except Exception:
@@ -720,20 +332,20 @@ async def _discard_turn_state(
     the surviving preview payload (or None when no draft row remains).
     """
     session_event_bus.end_turn_progress(session.id)
-    restored = _strip_discard_meta(pre_state)
+    restored = graph_state._strip_discard_meta(pre_state)
     restored.update(_park_flag_data(None))
     if isinstance(pre_mode, str) and pre_mode:
         session.mode = pre_mode
     if message_ids:
         await repos.delete_session_messages_by_ids(db, session.id, message_ids)
-    accepted = _discard_revision_ceiling(restored, accepted_revision)
+    accepted = previews._discard_revision_ceiling(restored, accepted_revision)
     await repos.delete_preview_drafts_above(db, session.id, accepted)
     surviving = await repos.get_latest_preview_draft(db, session.id)
-    _apply_surviving_draft(restored, surviving)
+    previews._apply_surviving_draft(restored, surviving)
     session.state = restored
     await _adelete_graph_thread(session.id)
     await db.flush()
-    preview = await latest_preview_payload(db, session)
+    preview = await previews.latest_preview_payload(db, session)
     await session_event_bus.publish_many(
         session.id,
         [
@@ -768,7 +380,7 @@ async def _interrupt_turn_state(
     """
     session_event_bus.end_turn_progress(session.id)
     try:
-        snapshot = await get_session_graph().aget_state(_session_config(session.id))
+        snapshot = await get_session_graph().aget_state(graph_state._session_config(session.id))
         values = dict(snapshot.values or {})
     except Exception:
         logger.warning(
@@ -960,7 +572,7 @@ async def _persist_after_invoke(
     if still_interrupted:
         if user_msg is not None:
             next_state["turn_discard"] = {
-                "pre_state": _strip_discard_meta(pre_state),
+                "pre_state": graph_state._strip_discard_meta(pre_state),
                 "pre_mode": pre_mode if isinstance(pre_mode, str) and pre_mode else original_mode,
                 "accepted_revision": int((pre_state or {}).get("revision") or 0),
                 "user_message_id": str(user_msg.id),
@@ -1030,7 +642,7 @@ async def _persist_after_invoke(
             events.append(
                 {
                     "type": "preview.updated",
-                    "data": preview_updated_payload(
+                    "data": previews.preview_updated_payload(
                         revision=int(staged_preview["revision"]),
                         approval_token=str(staged_preview["approval_token"]),
                         image_url=staged_preview.get("image_url"),
@@ -1060,9 +672,9 @@ async def _persist_after_invoke(
             existing_draft = await repos.get_latest_preview_draft(db, session.id)
             rev = int(values["revision"])
             if not existing_draft or existing_draft.revision < rev:
-                platform = (existing_draft.platform if existing_draft else None) or DEFAULT_PLATFORM
-                draft_copy = normalize_draft_copy(values.get("draft"))
-                media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
+                platform = (existing_draft.platform if existing_draft else None) or previews.DEFAULT_PLATFORM
+                draft_copy = previews.normalize_draft_copy(values.get("draft"))
+                media_ids, media, primary_url, primary_plan = await previews._media_for_new_draft(
                     db,
                     session,
                     image_url=values.get("image_url"),
@@ -1090,14 +702,14 @@ async def _persist_after_invoke(
                 events.append(
                     {
                         "type": "preview.updated",
-                        "data": preview_updated_payload(
+                        "data": previews.preview_updated_payload(
                             revision=rev,
                             approval_token=str(values["approval_token"]),
                             image_url=primary_url,
                             copy=draft_copy,
                             platform=platform,
                             media=media,
-                            source_signals=await resolve_source_signals(
+                            source_signals=await previews.resolve_source_signals(
                                 db, list(values.get("source_signal_ids") or [])
                             ),
                         ),
@@ -1141,7 +753,7 @@ async def _invoke_graph(
     user_id = session.user_id
     company_id = session.company_id
     graph = get_session_graph()
-    config = _session_config(session_id)
+    config = graph_state._session_config(session_id)
     provider_error: LlmProviderError | None = None
     values: dict[str, Any] = {}
     still_interrupted = False
@@ -1244,7 +856,7 @@ async def revise_while_image_parked(
     state = dict(session.state or {})
     anchor = state.get("turn_discard") if isinstance(state.get("turn_discard"), dict) else {}
     accepted = anchor.get("pre_state") if isinstance(anchor.get("pre_state"), dict) else state
-    accepted = _strip_discard_meta(accepted)
+    accepted = graph_state._strip_discard_meta(accepted)
     pre_mode = anchor.get("pre_mode") if isinstance(anchor.get("pre_mode"), str) else session.mode
     await _adelete_graph_thread(session.id)
     cleared = dict(state)
@@ -1282,7 +894,7 @@ async def run_session_turn(
     ``attachment_ids`` comes pre-validated from POST /messages (ADR 0047 §3/§14).
     ``None`` marks a non-message entry point (initial message, parked resumes)
     — hydration is skipped and the persisted digests carry over via
-    ``_graph_values``. A list (even empty) re-hydrates from the join.
+    ``graph_state._graph_values``. A list (even empty) re-hydrates from the join.
     """
     session_id = session.id
     if session_turn_registry.is_busy(session_id):
@@ -1312,9 +924,9 @@ async def run_session_turn(
 
     turn_mode = session.mode
     pre_state = (
-        _strip_discard_meta(discard_pre_state)
+        graph_state._strip_discard_meta(discard_pre_state)
         if discard_pre_state is not None
-        else _strip_discard_meta(session.state)
+        else graph_state._strip_discard_meta(session.state)
     )
     user_msg = await repos.add_session_message(
         db,
@@ -1328,7 +940,7 @@ async def run_session_turn(
     repos.touch_session(session)
     existing = await repos.list_session_messages(db, session_id)
     message_dicts = [{"role": m.role, "content": m.content} for m in existing]
-    graph_input = _graph_values(session, message_dicts)
+    graph_input = graph_state._graph_values(session, message_dicts)
     if attachment_ids is not None:
         # ADR 0047 §5/§13 — message turns hydrate digests fresh from the
         # attachment_sessions join; this message's refs land join rows first.
@@ -1480,7 +1092,7 @@ async def _resume_parked_turn(
         entry = await session_turn_registry.begin(
             session_id,
             task=task,
-            pre_state=_strip_discard_meta(parked_restore),
+            pre_state=graph_state._strip_discard_meta(parked_restore),
             user_message_id=user_msg.id if user_msg else uuid.uuid4(),
         )
     except TurnInFlightError as exc:
@@ -1516,7 +1128,7 @@ async def _resume_parked_turn(
             still_interrupted = True
             parked_node = _PARK_NODE[kind]
             values = {
-                **_strip_discard_meta(parked_restore),
+                **graph_state._strip_discard_meta(parked_restore),
                 **values,
                 **error_state_extra,
                 "error": values.get("error") or provider_error.message,
@@ -1535,7 +1147,7 @@ async def _resume_parked_turn(
             progress_events=progress_events,
             provider_error=provider_error,
             user_content="",
-            pre_state=_strip_discard_meta(parked_restore),
+            pre_state=graph_state._strip_discard_meta(parked_restore),
             entry=entry,
             duration_ms=duration_ms,
         )
@@ -1656,7 +1268,7 @@ async def choose_angle_turn(
             update["attachments"] = await _hydrate_session_attachments(
                 db, session.id, referenced_ids=attachment_ids
             )
-        await graph.aupdate_state(_session_config(session.id), update)
+        await graph.aupdate_state(graph_state._session_config(session.id), update)
 
     return await _resume_parked_turn(
         db,
@@ -1673,7 +1285,7 @@ async def choose_angle_turn(
 async def _stop_response(db: AsyncSession, session: Session, **fields: Any) -> dict[str, Any]:
     """Attach the latest preview so the Stop body can repaint the pane."""
     if "preview" not in fields:
-        fields["preview"] = await latest_preview_payload(db, session)
+        fields["preview"] = await previews.latest_preview_payload(db, session)
     return fields
 
 
@@ -1751,7 +1363,7 @@ async def stop_session_turn(
         state = dict(session.state or {})
         anchor = state.get("turn_discard") if isinstance(state.get("turn_discard"), dict) else {}
         pre_state = anchor.get("pre_state") if isinstance(anchor.get("pre_state"), dict) else {}
-        pre_state = _strip_discard_meta(pre_state)
+        pre_state = graph_state._strip_discard_meta(pre_state)
         message_ids: list[uuid.UUID] = []
         raw_ids = anchor.get("message_ids") or []
         if isinstance(raw_ids, list):
@@ -1790,188 +1402,6 @@ async def stop_session_turn(
     )
 
 
-async def update_session_draft(
-    db: AsyncSession,
-    session: Session,
-    *,
-    caption: str,
-    hashtags: list[str],
-    cta: str,
-) -> dict[str, Any]:
-    """Persist a user manual caption edit in PREVIEW mode — no LangGraph / LLM turn."""
-    if session.mode != MODE_PREVIEW:
-        raise ValueError("Session is not in PREVIEW mode")
-
-    state = dict(session.state or {})
-    copy = normalize_draft_copy({"caption": caption, "hashtags": hashtags, "cta": cta})
-    if not copy["caption"].strip():
-        raise ValueError("caption is required")
-
-    existing = await repos.get_latest_preview_draft(db, session.id)
-    # Caption-only: reuse media_ids (ADR 0008). Do not invent a new image row.
-    reuse_ids = list(existing.media_ids or []) if existing else []
-    media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
-        db,
-        session,
-        image_url=state.get("image_url") or (existing.image_url if existing else None),
-        image_plan=state.get("image_plan")
-        if isinstance(state.get("image_plan"), dict)
-        else (existing.image_plan if existing else None),
-        image_format=None,
-        reuse_media_ids=reuse_ids,
-        create_image_row=False,
-    )
-    # Legacy drafts without media_ids but with image_url: create one image once.
-    if not media_ids and (primary_url or primary_plan):
-        media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
-            db,
-            session,
-            image_url=primary_url,
-            image_plan=primary_plan if isinstance(primary_plan, dict) else None,
-            image_format=None,
-            reuse_media_ids=None,
-            create_image_row=True,
-        )
-    return await _bump_preview_revision(
-        db,
-        session,
-        media_ids=media_ids,
-        media=media,
-        primary_url=primary_url,
-        primary_plan=primary_plan if isinstance(primary_plan, dict) else None,
-        copy=copy,
-    )
-
-
-async def _bump_preview_revision(
-    db: AsyncSession,
-    session: Session,
-    *,
-    media_ids: list[uuid.UUID],
-    media: list[dict[str, Any]],
-    primary_url: str | None,
-    primary_plan: dict[str, Any] | None,
-    copy: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Insert a new preview_drafts row + sync session.state / SSE (ADR 0008)."""
-    if session.status == "confirmed":
-        raise ValueError("Session already confirmed")
-
-    state = dict(session.state or {})
-    existing = await repos.get_latest_preview_draft(db, session.id)
-    draft_copy = normalize_draft_copy(
-        copy if copy is not None else (existing.copy if existing else state.get("draft"))
-    )
-    if not draft_copy["caption"].strip():
-        raise ValueError("caption is required")
-
-    base_rev = existing.revision if existing else int(state.get("revision") or 0)
-    rev = base_rev + 1
-    token = secrets.token_urlsafe(24)
-    source_signal_ids = list(state.get("source_signal_ids") or [])
-    if existing and existing.source_signal_ids and not source_signal_ids:
-        source_signal_ids = list(existing.source_signal_ids)
-    platform = (existing.platform if existing else None) or DEFAULT_PLATFORM
-
-    await repos.upsert_preview_draft(
-        db,
-        session_id=session.id,
-        revision=rev,
-        copy=draft_copy,
-        image_url=primary_url,
-        image_plan=primary_plan,
-        media_ids=media_ids,
-        source_signal_ids=source_signal_ids,
-        approval_token=token,
-        platform=platform,
-    )
-
-    state["draft"] = draft_copy
-    state["revision"] = rev
-    state["approval_token"] = token
-    state["image_url"] = primary_url
-    image_format = image_format_from_plan(
-        primary_plan, fallback=str(state.get("image_format") or "single")
-    )
-    if primary_plan is not None:
-        state["image_plan"] = primary_plan
-        state["image_format"] = image_format
-    state["media_ids"] = [str(i) for i in media_ids]
-    state["pending_confirm"] = False
-    state["need_image"] = False
-    state["awaiting_image_ok"] = False
-    state.pop("turn_discard", None)
-    session.state = state
-    session.mode = MODE_PREVIEW
-
-    graph = get_session_graph()
-    config = _session_config(session.id)
-    graph_update: dict[str, Any] = {
-        "draft": draft_copy,
-        "revision": rev,
-        "approval_token": token,
-        "image_url": primary_url,
-        "image_plan": primary_plan or {},
-        "mode": MODE_PREVIEW,
-        "pending_confirm": False,
-        "need_image": False,
-    }
-    if primary_plan is not None:
-        graph_update["image_format"] = image_format
-    try:
-        await graph.aupdate_state(
-            config,
-            graph_update,
-        )
-    except Exception:
-        logger.warning(
-            "Failed to sync graph checkpoint after preview revision (session=%s)",
-            session.id,
-            exc_info=True,
-        )
-
-    resolved_signals = await resolve_source_signals(db, source_signal_ids)
-    events = [
-        {"type": "draft.copy_updated", "data": draft_copy},
-        {
-            "type": "preview.updated",
-            "data": preview_updated_payload(
-                revision=rev,
-                approval_token=token,
-                image_url=primary_url,
-                copy=draft_copy,
-                platform=platform,
-                media=media,
-                source_signals=resolved_signals,
-            ),
-        },
-    ]
-    await db.flush()
-    await session_event_bus.publish_many(session.id, events)
-    return {
-        "revision": rev,
-        "approval_token": token,
-        "copy": draft_copy,
-        "image_url": resolve_stored_url(primary_url),
-        "media": media,
-        "platform": platform,
-        "mode": MODE_PREVIEW,
-        "source_signals": resolved_signals,
-        "events": events,
-    }
-
-
-async def list_latest_session_media(db: AsyncSession, session: Session) -> list[dict[str, Any]]:
-    draft = await repos.get_latest_preview_draft(db, session.id)
-    ids = list(draft.media_ids or []) if draft else []
-    if not ids:
-        state_ids = (session.state or {}).get("media_ids") or []
-        ids = [uuid.UUID(str(i)) for i in state_ids]
-    rows = await repos.get_preview_images_by_ids(db, ids)
-    media, _, _ = _payloads_from_image_rows(rows)
-    return media
-
-
 def _replace_media_id(
     media_ids: list[uuid.UUID], old_id: uuid.UUID, new_id: uuid.UUID
 ) -> list[uuid.UUID]:
@@ -1988,7 +1418,7 @@ def _fallback_direction_copy(
     detail = (note or str(plan.get("prompt") or "")).strip()
     line = f"（{vehicle}：{detail[:180]}）"
     caption = base if line and line in base else f"{base}\n\n{line}".strip()
-    return normalize_draft_copy(
+    return previews.normalize_draft_copy(
         {
             "caption": caption or line or "（修訂草稿）",
             "hashtags": draft.get("hashtags") or [],
@@ -2028,7 +1458,7 @@ async def _rewrite_copy_for_direction(
                 json.dumps(payload, ensure_ascii=False),
             )
         if parsed and str(parsed.caption or "").strip():
-            return normalize_draft_copy(
+            return previews.normalize_draft_copy(
                 {
                     "caption": parsed.caption,
                     "hashtags": parsed.hashtags,
@@ -2049,7 +1479,7 @@ def _apply_pending_image_state(
     state = dict(session.state or {})
     if not isinstance(state.get("turn_discard"), dict):
         state["turn_discard"] = {
-            "pre_state": _strip_discard_meta(pre_state),
+            "pre_state": graph_state._strip_discard_meta(pre_state),
             "pre_mode": pre_mode,
             "message_ids": [],
             "accepted_revision": int(pre_state.get("revision") or 0),
@@ -2079,7 +1509,7 @@ async def _stage_pending_image_draft(
 
     Returns None when the latest row already matches (resume re-park).
     """
-    draft_copy = normalize_draft_copy(copy)
+    draft_copy = previews.normalize_draft_copy(copy)
     if not draft_copy["caption"].strip():
         return None
     fmt = image_format_from_plan(
@@ -2090,7 +1520,7 @@ async def _stage_pending_image_draft(
 
     existing = await repos.get_latest_preview_draft(db, session.id)
     if existing is not None:
-        same_copy = normalize_draft_copy(existing.copy) == draft_copy
+        same_copy = previews.normalize_draft_copy(existing.copy) == draft_copy
         same_plan = dict(existing.image_plan or {}) == dict(plan)
         if same_copy and same_plan:
             return None
@@ -2106,7 +1536,7 @@ async def _stage_pending_image_draft(
     )
     if existing and existing.source_signal_ids and not signal_ids:
         signal_ids = list(existing.source_signal_ids)
-    platform = (existing.platform if existing else None) or DEFAULT_PLATFORM
+    platform = (existing.platform if existing else None) or previews.DEFAULT_PLATFORM
 
     old_ids = list(existing.media_ids or []) if existing else []
     row = await repos.insert_preview_image(
@@ -2121,7 +1551,7 @@ async def _stage_pending_image_draft(
     )
     media_ids = [row.id, *old_ids[1:]]
     rows = await repos.get_preview_images_by_ids(db, media_ids)
-    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
+    media, primary_url, primary_plan = previews._payloads_from_image_rows(rows)
     stored_plan = primary_plan or plan
 
     await repos.upsert_preview_draft(
@@ -2138,10 +1568,10 @@ async def _stage_pending_image_draft(
     )
 
     graph = get_session_graph()
-    config = _session_config(session.id)
+    config = graph_state._session_config(session.id)
     msgs = await repos.list_session_messages(db, session.id)
     message_dicts = [{"role": m.role, "content": m.content} for m in msgs]
-    graph_values = _graph_values(session, message_dicts)
+    graph_values = graph_state._graph_values(session, message_dicts)
     graph_values.update(
         {
             "draft": draft_copy,
@@ -2168,7 +1598,7 @@ async def _stage_pending_image_draft(
         "media": media,
         "platform": platform,
         "mode": MODE_PREVIEW,
-        "source_signals": await resolve_source_signals(db, signal_ids),
+        "source_signals": await previews.resolve_source_signals(db, signal_ids),
     }
 
 
@@ -2199,7 +1629,7 @@ async def update_session_image_plan(
     new_plan = adapt_plan_to_format(dict(plan), fmt, previous_format=old_fmt)
     fmt = image_format_from_plan(new_plan, fallback=fmt)
     if plan_direction_changed(dict(old.plan or {}), new_plan):
-        current_copy = normalize_draft_copy(existing.copy or (session.state or {}).get("draft"))
+        current_copy = previews.normalize_draft_copy(existing.copy or (session.state or {}).get("draft"))
         note = (
             f"創作方向變咗。新圖格式係 {fmt}。"
             f"畫面：{str(new_plan.get('prompt') or '')[:300]}。"
@@ -2208,11 +1638,11 @@ async def update_session_image_plan(
         copy = await _rewrite_copy_for_direction(
             db, session, draft=current_copy, plan=new_plan, note=note
         )
-        pre_state = _strip_discard_meta(session.state)
+        pre_state = graph_state._strip_discard_meta(session.state)
         pre_mode = session.mode
         anchor = (session.state or {}).get("turn_discard")
         if isinstance(anchor, dict) and isinstance(anchor.get("pre_state"), dict):
-            pre_state = _strip_discard_meta(anchor["pre_state"])
+            pre_state = graph_state._strip_discard_meta(anchor["pre_state"])
             if isinstance(anchor.get("pre_mode"), str):
                 pre_mode = anchor["pre_mode"]
         staged = await _stage_pending_image_draft(
@@ -2229,7 +1659,7 @@ async def update_session_image_plan(
             {"type": "draft.copy_updated", "data": staged["copy"]},
             {
                 "type": "preview.updated",
-                "data": preview_updated_payload(
+                "data": previews.preview_updated_payload(
                     revision=int(staged["revision"]),
                     approval_token=str(staged["approval_token"]),
                     image_url=staged.get("image_url"),
@@ -2256,8 +1686,8 @@ async def update_session_image_plan(
     )
     new_ids = _replace_media_id(media_ids, image_id, row.id)
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
-    return await _bump_preview_revision(
+    media, primary_url, primary_plan = previews._payloads_from_image_rows(rows)
+    return await previews._bump_preview_revision(
         db,
         session,
         media_ids=new_ids,
@@ -2334,8 +1764,8 @@ async def regen_session_image(
     )
     new_ids = _replace_media_id(media_ids, image_id, row.id)
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
-    return await _bump_preview_revision(
+    media, primary_url, primary_plan = previews._payloads_from_image_rows(rows)
+    return await previews._bump_preview_revision(
         db,
         session,
         media_ids=new_ids,
@@ -2375,8 +1805,8 @@ async def add_session_image(
     )
     new_ids = media_ids + [row.id]
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
-    return await _bump_preview_revision(
+    media, primary_url, primary_plan = previews._payloads_from_image_rows(rows)
+    return await previews._bump_preview_revision(
         db,
         session,
         media_ids=new_ids,
@@ -2408,8 +1838,8 @@ async def remove_session_image(
         raise ValueError("Cannot remove the last remaining image")
     new_ids = [i for i in media_ids if i != image_id]
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
-    return await _bump_preview_revision(
+    media, primary_url, primary_plan = previews._payloads_from_image_rows(rows)
+    return await previews._bump_preview_revision(
         db,
         session,
         media_ids=new_ids,
@@ -2474,8 +1904,8 @@ async def upload_session_image(
     )
     new_ids = _replace_media_id(media_ids, image_id, row.id)
     rows = await repos.get_preview_images_by_ids(db, new_ids)
-    media, primary_url, primary_plan = _payloads_from_image_rows(rows)
-    return await _bump_preview_revision(
+    media, primary_url, primary_plan = previews._payloads_from_image_rows(rows)
+    return await previews._bump_preview_revision(
         db,
         session,
         media_ids=new_ids,

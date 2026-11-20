@@ -41,7 +41,7 @@ from internal.memory.models import (
     Session,
     SessionMessage,
 )
-from internal.session import service
+from internal.session import previews
 from internal.session.graph import set_session_graph
 from internal.session.guards import MemberTokenLimitExceeded
 from internal.session.state import MODE_PREVIEW
@@ -352,7 +352,7 @@ async def test_manual_edit_after_failed_turn_reports_ready(client) -> None:
 
     async with open_session() as db:
         session = await repos.get_session(db, sid)
-        await service.update_session_draft(db, session, caption="中秋快樂", hashtags=[], cta="")
+        await previews.update_session_draft(db, session, caption="中秋快樂", hashtags=[], cta="")
         await db.commit()
 
     result = await tools.get_post_draft(ctx, SessionToolArgs(session_id=sid))
@@ -369,7 +369,7 @@ async def test_ready_carries_the_latest_assistant_message(client) -> None:
         session.mode = MODE_PREVIEW
         session.state = {"revision": 0}
         await db.flush()
-        await service.update_session_draft(db, session, caption="中秋快樂", hashtags=[], cta="")
+        await previews.update_session_draft(db, session, caption="中秋快樂", hashtags=[], cta="")
         db.add(SessionMessage(session_id=session.id, role="assistant", content="要唔要加優惠碼？"))
         await db.commit()
         sid = session.id

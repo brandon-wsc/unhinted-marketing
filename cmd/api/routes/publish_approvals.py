@@ -24,7 +24,7 @@ from internal.memory.database import get_db
 from internal.memory.models import ToolReceipt, User
 from internal.session.events import session_event_bus
 from internal.session.media import media_item_payload
-from internal.session.service import DEFAULT_PLATFORM
+from internal.session.previews import DEFAULT_PLATFORM
 from internal.tools.publish import (
     PUBLISH_SUCCESS_STATUSES,
     PublishPreconditionError,

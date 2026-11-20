@@ -324,7 +324,7 @@ def test_thread_recap_edges() -> None:
 
 
 def test_graph_values_carries_recap_pair() -> None:
-    from internal.session.service import _graph_values
+    from internal.session.graph_state import _graph_values
 
     session = SimpleNamespace(
         id=uuid.uuid4(),

@@ -43,7 +43,7 @@ def test_preview_updated_payload_resolves_store_key(monkeypatch) -> None:
     """preview.updated emit path: store key → browser-fetchable URL (ADR 0024 §3)."""
     from internal.media import storage as S
     from internal.media.config import reset_snapshot_cache
-    from internal.session.service import preview_updated_payload
+    from internal.session.previews import preview_updated_payload
 
     monkeypatch.setattr(S.settings, "deployment_mode", "onprem")
     monkeypatch.setattr(S.settings, "s3_endpoint_url", None)
