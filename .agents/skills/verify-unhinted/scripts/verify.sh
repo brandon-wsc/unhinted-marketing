@@ -55,7 +55,7 @@ asyncio.run(main())
 PY
 }
 
-pg_probe() { # reachable + creds valid on the shared admin DSN?
+pg_probe() {
   "$PY" - "$ADMIN_DSN" <<'PY' >/dev/null 2>&1
 import asyncio, sys, asyncpg
 async def main():

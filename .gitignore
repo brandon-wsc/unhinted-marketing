@@ -64,7 +64,7 @@ reports/eval/*
 *.log
 logs/
 
-# Verify-skill scratch + captured proof (kept locally, never committed)
+# Verify-skill scratch + captured proof
 .agents/skills/*/evidence/
 .agents/skills/*/runs/
 
