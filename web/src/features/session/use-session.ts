@@ -6,43 +6,29 @@ import {
   apiConfirmSession,
   apiCreateSession,
   apiDeleteSession,
-  apiDownloadAttachment,
   apiForkSession,
   apiGetSessionMessages,
-  apiListSessionAttachments,
-  apiListSessions,
-  apiPostAttachmentTranscript,
   apiPostSessionMessage,
   apiRegenImage,
   apiRemoveImage,
   apiResumeSessionImage,
-  apiSaveAttachment,
   apiStopSessionTurn,
   apiUpdateImagePlan,
   apiUpdateSession,
   apiUpdateSessionDraft,
   apiUploadImage,
-  apiUploadSessionAttachment,
 } from "./api";
-import { OcrAbortError, ocrAttachmentToTranscript } from "./ocr/run";
-import { defaultOcrDeps } from "./ocr/runtime";
 import {
   agentActionsFromMessages,
   anglePickParkFromEvents,
-  bumpSessionInHistory,
   EMPTY_COMPOSER_DRAFT,
   filterOfferedAngles,
   filterOfferedPersonas,
   type ImageFormat,
   isConfirmSuccessStatus,
-  isUserFacingAgentNode,
-  MAX_ATTACHMENTS,
   MAX_QUEUED_SESSION_MESSAGES,
   mergePreviewDraft,
-  newActionId,
   newQueuedChatMessage,
-  newStagedAttachment,
-  OUTCOME_NODE,
   parseAgentProgress,
   parseAngleIndex,
   parseBrief,
@@ -71,15 +57,16 @@ import type {
   DraftCopy,
   ForkOrigin,
   ForkPreviewNote,
-  OcrRunState,
   PreviewDraft,
   PreviewMediaMutationResponse,
   QueuedChatMessage,
   Session,
   SessionBrief,
   SessionListItem,
-  StagedAttachment,
 } from "./types";
+import { useAgentTrail } from "./use-agent-trail";
+import { useAttachmentStaging } from "./use-attachment-staging";
+import { useSessionHistory } from "./use-session-history";
 
 export { parseBrief } from "./session-helpers";
 
@@ -87,11 +74,6 @@ type SseReadyHandle = { promise: Promise<void>; resolve: () => void };
 
 // Identical send inside this window is treated as a double-click and dropped.
 const DUP_SEND_WINDOW_MS = 1200;
-
-// After a transcript POST lands, a GET already in flight can still report the
-// pre-commit needs_ocr — treat that read as stale for this window so it cannot
-// regress the row's pending patch and stall the resumed ingest poll (ADR 0048).
-const OCR_SUBMITTED_STALE_MS = 30_000;
 
 type LiveChatSnapshot = {
   messages: ChatMessage[];
@@ -143,10 +125,6 @@ export function useSession(
   const [sseReconnectNonce, setSseReconnectNonce] = useState(0);
   // In-flight assistant reply while message.delta events stream in; null when idle.
   const [streamingText, setStreamingText] = useState<string | null>(null);
-  // Latest agent.progress while a graph turn runs; null when idle.
-  const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null);
-  // Cursor-style action trail — accumulates across turns for this session.
-  const [agentActions, setAgentActions] = useState<AgentActionRecord[]>([]);
   const [brief, setBrief] = useState<SessionBrief | null>(null);
   // Anchor cards after the user message that produced them (not after the whole list).
   const [briefAfterMessageId, setBriefAfterMessageId] = useState<string | null>(null);
@@ -170,22 +148,15 @@ export function useSession(
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatMessage[]>([]);
   const [composerInput, setComposerInputState] = useState("");
   const [editInsertAt, setEditInsertAtState] = useState<number | null>(null);
-  // ADR 0047 scratch attachments staged in the composer for the next message.
-  const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
-  const [ocrProgress, setOcrProgress] = useState<Record<string, OcrRunState>>({});
   const [draft, setDraft] = useState<PreviewDraft | null>(null);
   const [confirmReceipt, setConfirmReceipt] = useState<ConfirmSessionResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [draftSaving, setDraftSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [history, setHistory] = useState<SessionListItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
   // Where this session was forked from (ADR 0017); null for non-forked chats.
   const [forkedFrom, setForkedFrom] = useState<ForkOrigin | null>(null);
   const [forking, setForking] = useState(false);
-  // Guards against out-of-order history list/search responses.
-  const historyReqSeq = useRef(0);
   // Guards against out-of-order openSession / startNewChat hydrates.
   const sessionNavSeq = useRef(0);
 
@@ -233,18 +204,43 @@ export function useSession(
   const lastPersonaPickRef = useRef<string | null>(null);
   const lastImageFormatPickRef = useRef<ImageFormat | null>(null);
   const queuedRef = useRef<QueuedChatMessage[]>([]);
-  const stagedRef = useRef<StagedAttachment[]>([]);
-  const ocrRunsRef = useRef(new Map<string, AbortController>());
-  // attachmentId → Date.now() of its accepted transcript POST; lets the
-  // attachment poll ignore stale needs_ocr reads for a bounded window.
-  const ocrSubmittedRef = useRef(new Map<string, number>());
-  const attachPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drainQueueRef = useRef<() => void>(() => {});
   // resyncCurrentSession is defined after the SSE effect; same ref pattern
   // as drainQueueRef so onOpen can call it on a post-failure reconnect.
   const resyncRef = useRef<() => void>(() => {});
+
+  const { history, historyLoading, setHistory, refreshHistory, bumpHistoryRecency, searchHistory } =
+    useSessionHistory(accessToken, companyId);
+  const {
+    stagedAttachments,
+    ocrProgress,
+    uploadAttachment,
+    retryAttachment,
+    unstageAttachment,
+    consumeStagedAttachments,
+    restoreStagedAttachments,
+    saveAttachment,
+    ocrAttachment,
+    cancelAttachmentOcr,
+  } = useAttachmentStaging({
+    accessToken,
+    companyId,
+    session,
+    sessionIdRef,
+    setSession,
+    refreshHistory,
+  });
+  const {
+    agentProgress,
+    agentActions,
+    setAgentProgress,
+    setAgentActions,
+    finishRunningActions,
+    appendAgentAction,
+    ensureOutcomeActions,
+  } = useAgentTrail(turnAnchorRef);
+
   queuedRef.current = queuedMessages;
-  stagedRef.current = stagedAttachments;
   sendingRef.current = sending;
   stoppingRef.current = stopping;
   awaitingImageOkRef.current = awaitingImageOk;
@@ -326,42 +322,45 @@ export function useSession(
     });
   }, []);
 
-  const restoreLiveChat = useCallback((snap: LiveChatSnapshot) => {
-    turnAnchorRef.current = snap.turnAnchor;
-    suppressLiveTurnEventsRef.current = false;
-    stoppingRef.current = false;
-    setStopping(false);
-    messagesRef.current = snap.messages;
-    setMessages(snap.messages);
-    setAgentActions(snap.agentActions);
-    setStreamingText(snap.streamingText);
-    setAgentProgress(snap.agentProgress);
-    setBrief(snap.brief);
-    setBriefAfterMessageId(snap.briefAfterMessageId);
-    setInterruptAfterMessageId(snap.interruptAfterMessageId);
-    setPreviewAfterMessageId(snap.previewAfterMessageId);
-    awaitingImageOkRef.current = snap.awaitingImageOk;
-    setAwaitingImageOk(snap.awaitingImageOk);
-    awaitingAnglePickRef.current = snap.awaitingAnglePick;
-    setAwaitingAnglePick(snap.awaitingAnglePick);
-    setAngleOptions(snap.angleOptions);
-    setAnglePersonas(snap.anglePersonas);
-    setRecommendedPersona(snap.recommendedPersona);
-    setRecommendedAngleIndex(snap.recommendedAngleIndex);
-    setRecommendedImageFormat(snap.recommendedImageFormat);
-    lastAnglePickRef.current = snap.lastAnglePick;
-    setLastAnglePick(snap.lastAnglePick);
-    lastPersonaPickRef.current = snap.lastPersonaPick;
-    setLastPersonaPick(snap.lastPersonaPick);
-    lastImageFormatPickRef.current = snap.lastImageFormatPick;
-    setLastImageFormatPick(snap.lastImageFormatPick);
-    setDraft(snap.draft);
-    setConfirmReceipt(snap.confirmReceipt);
-    setLlmError(snap.llmError);
-    setMode(snap.mode);
-    setDraftSaving(false);
-    setConfirming(false);
-  }, []);
+  const restoreLiveChat = useCallback(
+    (snap: LiveChatSnapshot) => {
+      turnAnchorRef.current = snap.turnAnchor;
+      suppressLiveTurnEventsRef.current = false;
+      stoppingRef.current = false;
+      setStopping(false);
+      messagesRef.current = snap.messages;
+      setMessages(snap.messages);
+      setAgentActions(snap.agentActions);
+      setStreamingText(snap.streamingText);
+      setAgentProgress(snap.agentProgress);
+      setBrief(snap.brief);
+      setBriefAfterMessageId(snap.briefAfterMessageId);
+      setInterruptAfterMessageId(snap.interruptAfterMessageId);
+      setPreviewAfterMessageId(snap.previewAfterMessageId);
+      awaitingImageOkRef.current = snap.awaitingImageOk;
+      setAwaitingImageOk(snap.awaitingImageOk);
+      awaitingAnglePickRef.current = snap.awaitingAnglePick;
+      setAwaitingAnglePick(snap.awaitingAnglePick);
+      setAngleOptions(snap.angleOptions);
+      setAnglePersonas(snap.anglePersonas);
+      setRecommendedPersona(snap.recommendedPersona);
+      setRecommendedAngleIndex(snap.recommendedAngleIndex);
+      setRecommendedImageFormat(snap.recommendedImageFormat);
+      lastAnglePickRef.current = snap.lastAnglePick;
+      setLastAnglePick(snap.lastAnglePick);
+      lastPersonaPickRef.current = snap.lastPersonaPick;
+      setLastPersonaPick(snap.lastPersonaPick);
+      lastImageFormatPickRef.current = snap.lastImageFormatPick;
+      setLastImageFormatPick(snap.lastImageFormatPick);
+      setDraft(snap.draft);
+      setConfirmReceipt(snap.confirmReceipt);
+      setLlmError(snap.llmError);
+      setMode(snap.mode);
+      setDraftSaving(false);
+      setConfirming(false);
+    },
+    [setAgentActions, setAgentProgress],
+  );
 
   const disconnectSse = useCallback(() => {
     sseAbortRef.current?.abort();
@@ -464,7 +463,7 @@ export function useSession(
     lastAnglePickRef.current = null;
     lastPersonaPickRef.current = null;
     lastImageFormatPickRef.current = null;
-  }, []);
+  }, [setAgentActions, setAgentProgress]);
 
   const lastUserMessageId = useCallback(() => {
     if (turnAnchorRef.current) return turnAnchorRef.current;
@@ -474,124 +473,6 @@ export function useSession(
     }
     return null;
   }, []);
-
-  const finishRunningActions = useCallback(() => {
-    setAgentActions((prev) =>
-      prev.map((a) => (a.status === "running" ? { ...a, status: "done" as const } : a)),
-    );
-    setAgentProgress(null);
-  }, []);
-
-  const appendAgentAction = useCallback(
-    (progress: AgentProgress, afterMessageId: string | null) => {
-      if (!isUserFacingAgentNode(progress.node)) return;
-      const anchor = afterMessageId ?? turnAnchorRef.current;
-      setAgentActions((prev) => {
-        const marked = prev.map((a) =>
-          a.status === "running" ? { ...a, status: "done" as const } : a,
-        );
-        const last = marked[marked.length - 1];
-        if (last && last.node === progress.node && last.afterMessageId === anchor) {
-          return [
-            ...marked.slice(0, -1),
-            {
-              ...last,
-              model_tier: progress.model_tier,
-              model: progress.model,
-              status: "running" as const,
-            },
-          ];
-        }
-        // Dedupe identical completed node already recorded for this turn (REST replay).
-        if (
-          marked.some(
-            (a) => a.node === progress.node && a.afterMessageId === anchor && a.status === "done",
-          )
-        ) {
-          return marked;
-        }
-        return [
-          ...marked,
-          {
-            id: newActionId(progress.node),
-            node: progress.node,
-            model_tier: progress.model_tier,
-            model: progress.model,
-            status: "running" as const,
-            afterMessageId: anchor,
-          },
-        ];
-      });
-      setAgentProgress(progress);
-    },
-    [],
-  );
-
-  const ensureOutcomeActions = useCallback(
-    (events: { type: string; data?: Record<string, unknown> }[], afterMessageId: string | null) => {
-      if (!afterMessageId) return;
-      // Prefer explicit agent.progress from the turn response.
-      const progressFromEvents = events
-        .filter((ev) => ev.type === "agent.progress")
-        .map((ev) => parseAgentProgress((ev.data ?? {}) as Record<string, unknown>))
-        .filter((p): p is AgentProgress => !!p && isUserFacingAgentNode(p.node));
-      if (progressFromEvents.length > 0) {
-        setAgentActions((prev) => {
-          const withoutTurn = prev.filter((a) => a.afterMessageId !== afterMessageId);
-          const built: AgentActionRecord[] = progressFromEvents.map((p) => ({
-            id: newActionId(p.node),
-            node: p.node,
-            model_tier: p.model_tier,
-            model: p.model,
-            status: "done" as const,
-            afterMessageId,
-          }));
-          // Keep live SSE rows for this turn if REST somehow omitted progress.
-          if (prev.some((a) => a.afterMessageId === afterMessageId) && built.length === 0) {
-            return prev.map((a) =>
-              a.status === "running" ? { ...a, status: "done" as const } : a,
-            );
-          }
-          // Merge: if we already have live rows, mark done and fill any missing nodes.
-          const existingForTurn = prev.filter((a) => a.afterMessageId === afterMessageId);
-          if (existingForTurn.length > 0) {
-            const seen = new Set(existingForTurn.map((a) => a.node));
-            const extras = built.filter((a) => !seen.has(a.node));
-            return [
-              ...withoutTurn,
-              ...existingForTurn.map((a) => ({ ...a, status: "done" as const })),
-              ...extras,
-            ];
-          }
-          return [...withoutTurn, ...built];
-        });
-        return;
-      }
-      setAgentActions((prev) => {
-        const hasForTurn = prev.some((a) => a.afterMessageId === afterMessageId);
-        if (hasForTurn) {
-          return prev.map((a) => (a.status === "running" ? { ...a, status: "done" as const } : a));
-        }
-        const seen = new Set<string>();
-        const synthesized: AgentActionRecord[] = [];
-        for (const ev of events) {
-          const node = OUTCOME_NODE[ev.type];
-          if (!node || seen.has(node)) continue;
-          seen.add(node);
-          synthesized.push({
-            id: newActionId(node),
-            node,
-            model_tier: null,
-            model: null,
-            status: "done",
-            afterMessageId,
-          });
-        }
-        return [...prev, ...synthesized];
-      });
-    },
-    [],
-  );
 
   // Shared reducer for turn events — SSE delivers them live mid-turn, while the
   // POST /messages response repeats them at the end for the no-SSE path.
@@ -751,7 +632,15 @@ export function useSession(
         finishRunningActions();
       }
     },
-    [lastUserMessageId, appendAgentAction, finishRunningActions, bumpEpoch, dropInFlight],
+    [
+      lastUserMessageId,
+      appendAgentAction,
+      finishRunningActions,
+      bumpEpoch,
+      dropInFlight,
+      setAgentActions,
+      setAgentProgress,
+    ],
   );
 
   useEffect(() => {
@@ -928,50 +817,6 @@ export function useSession(
     sseReconnectNonce,
   ]);
 
-  // Active server-side history search ("" = browse mode). Ref so that
-  // refreshHistory re-applies it — opening a result must not drop the
-  // sidebar back to the plain list.
-  const historyQueryRef = useRef("");
-
-  const fetchHistory = useCallback(
-    async (q: string, { keepOnError = false }: { keepOnError?: boolean } = {}) => {
-      const seq = ++historyReqSeq.current;
-      if (!accessToken || !companyId) {
-        setHistory([]);
-        return;
-      }
-      setHistoryLoading(true);
-      try {
-        const rows = q
-          ? await apiListSessions(accessToken, companyId, q)
-          : await apiListSessions(accessToken, companyId);
-        if (seq === historyReqSeq.current) setHistory(rows);
-      } catch {
-        // Search failure keeps the previous list — a transient error should
-        // not blank out the sidebar mid-typing.
-        if (!keepOnError && seq === historyReqSeq.current) setHistory([]);
-      } finally {
-        if (seq === historyReqSeq.current) setHistoryLoading(false);
-      }
-    },
-    [accessToken, companyId],
-  );
-
-  const refreshHistory = useCallback(() => fetchHistory(historyQueryRef.current), [fetchHistory]);
-
-  const bumpHistoryRecency = useCallback((targetSessionId: string) => {
-    const now = new Date().toISOString();
-    setHistory((prev) => bumpSessionInHistory(prev, targetSessionId, now));
-  }, []);
-
-  const searchHistory = useCallback(
-    async (query: string) => {
-      historyQueryRef.current = query.trim();
-      await fetchHistory(historyQueryRef.current, { keepOnError: true });
-    },
-    [fetchHistory],
-  );
-
   // Transcript + card state from a messages fetch. Shared by session open and
   // post-reconnect resync — deliberately excludes composer draft (the stash for
   // the session on screen is stale next to what the user is typing right now).
@@ -1035,7 +880,7 @@ export function useSession(
         drainQueueRef.current();
       }
     },
-    [resetTransientUi, syncSendingForCurrent],
+    [resetTransientUi, syncSendingForCurrent, setAgentActions],
   );
 
   const applyHydratedSession = useCallback(
@@ -1254,6 +1099,7 @@ export function useSession(
     disconnectSse,
     syncSendingForCurrent,
     refreshHistory,
+    setHistory,
   ]);
 
   const renameSession = useCallback(
@@ -1270,7 +1116,7 @@ export function useSession(
       );
       return updated;
     },
-    [accessToken],
+    [accessToken, setHistory],
   );
 
   const pinSession = useCallback(
@@ -1282,7 +1128,7 @@ export function useSession(
       );
       return updated;
     },
-    [accessToken],
+    [accessToken, setHistory],
   );
 
   const deleteSession = useCallback(
@@ -1297,7 +1143,7 @@ export function useSession(
         setRememberedSessionId(companyId, null);
       }
     },
-    [accessToken, companyId, startNewChat, forgetSessionLocal],
+    [accessToken, companyId, startNewChat, forgetSessionLocal, setHistory],
   );
 
   useEffect(() => {
@@ -1430,6 +1276,8 @@ export function useSession(
       bumpEpoch,
       stillOn,
       dropInFlight,
+      setAgentActions,
+      setAgentProgress,
     ],
   );
 
@@ -1455,222 +1303,6 @@ export function useSession(
     },
     [],
   );
-
-  // --- Attachments (ADR 0047) ---
-
-  const refreshStagedStatuses = useCallback(async () => {
-    const sid = sessionIdRef.current;
-    if (!accessToken || !sid) return;
-    try {
-      const list = await apiListSessionAttachments(accessToken, sid);
-      const byId = new Map(list.attachments.map((a) => [a.id, a]));
-      const next = stagedRef.current.map((s) => {
-        const row = s.attachmentId ? byId.get(s.attachmentId) : null;
-        if (!row || !s.attachmentId) return s;
-        const submittedAt = ocrSubmittedRef.current.get(s.attachmentId);
-        if (row.status !== "needs_ocr") {
-          ocrSubmittedRef.current.delete(s.attachmentId);
-        } else if (submittedAt !== undefined && Date.now() - submittedAt < OCR_SUBMITTED_STALE_MS) {
-          return s;
-        }
-        return { ...s, status: row.status, error: row.error ?? null };
-      });
-      stagedRef.current = next;
-      setStagedAttachments(next);
-    } catch {
-      /* poll is best-effort */
-    }
-  }, [accessToken]);
-
-  useEffect(() => {
-    if (attachPollTimerRef.current) {
-      clearTimeout(attachPollTimerRef.current);
-      attachPollTimerRef.current = null;
-    }
-    const needsPoll = stagedAttachments.some(
-      (s) => s.attachmentId && (s.status === "pending" || s.status === "ready_lexical"),
-    );
-    if (!needsPoll) return;
-    attachPollTimerRef.current = setTimeout(() => {
-      attachPollTimerRef.current = null;
-      void refreshStagedStatuses();
-    }, 1200);
-    return () => {
-      if (attachPollTimerRef.current) clearTimeout(attachPollTimerRef.current);
-      attachPollTimerRef.current = null;
-    };
-  }, [stagedAttachments, refreshStagedStatuses]);
-
-  // Staged rows are session-scoped — switching sessions drops them.
-  const stagedSessionRef = useRef<string | null>(null);
-  useEffect(() => {
-    const id = session?.id ?? null;
-    if (stagedSessionRef.current === id) return;
-    stagedSessionRef.current = id;
-    for (const controller of ocrRunsRef.current.values()) controller.abort();
-    ocrSubmittedRef.current.clear();
-    stagedRef.current = [];
-    setStagedAttachments([]);
-  }, [session?.id]);
-
-  const patchStaged = useCallback(
-    (localId: string) => (mut: (s: StagedAttachment) => StagedAttachment) => {
-      const next = stagedRef.current.map((s) => (s.localId === localId ? mut(s) : s));
-      stagedRef.current = next;
-      setStagedAttachments(next);
-    },
-    [],
-  );
-
-  const uploadAttachment = useCallback(
-    async (file: File): Promise<void> => {
-      if (!accessToken || !companyId) return;
-      if (stagedRef.current.length >= MAX_ATTACHMENTS) {
-        throw new Error("attachment_limit");
-      }
-      let active = session;
-      if (!active) {
-        active = await apiCreateSession(accessToken, companyId);
-        if (sessionIdRef.current === null || sessionIdRef.current === active.id) {
-          sessionIdRef.current = active.id;
-          setSession(active);
-          setRememberedSessionId(companyId, active.id);
-          void refreshHistory();
-        }
-      }
-      const staged = newStagedAttachment(file);
-      const patch = patchStaged(staged.localId);
-      stagedRef.current = [...stagedRef.current, staged];
-      setStagedAttachments(stagedRef.current);
-      try {
-        const out = await apiUploadSessionAttachment(accessToken, active.id, file);
-        patch((s) => ({
-          ...s,
-          attachmentId: out.id,
-          status: out.status,
-          error: out.error ?? null,
-        }));
-      } catch (err) {
-        patch((s) => ({
-          ...s,
-          status: "failed",
-          error: err instanceof Error ? err.message : "upload_failed",
-        }));
-        throw err;
-      }
-    },
-    [accessToken, companyId, session, refreshHistory, patchStaged],
-  );
-
-  const unstageAttachment = useCallback((localId: string) => {
-    ocrRunsRef.current.get(localId)?.abort();
-    const cur = stagedRef.current.find((s) => s.localId === localId);
-    if (cur?.attachmentId) ocrSubmittedRef.current.delete(cur.attachmentId);
-    const next = stagedRef.current.filter((s) => s.localId !== localId);
-    stagedRef.current = next;
-    setStagedAttachments(next);
-  }, []);
-
-  /** Re-POST the same File for a failed staged row (ADR 0047 §10 — no auto-retry). */
-  const retryAttachment = useCallback(
-    async (localId: string): Promise<void> => {
-      const cur = stagedRef.current.find((s) => s.localId === localId);
-      const sid = sessionIdRef.current;
-      if (!cur?.file || !accessToken || !sid) return;
-      const patch = patchStaged(localId);
-      patch((s) => ({ ...s, status: "uploading", error: null }));
-      try {
-        const out = await apiUploadSessionAttachment(accessToken, sid, cur.file);
-        patch((s) => ({
-          ...s,
-          attachmentId: out.id,
-          status: out.status,
-          error: out.error ?? null,
-        }));
-      } catch (err) {
-        patch((s) => ({
-          ...s,
-          status: "failed",
-          error: err instanceof Error ? err.message : "upload_failed",
-        }));
-        throw err;
-      }
-    },
-    [accessToken, patchStaged],
-  );
-
-  /** Take staged items for the next send; returns them so callers can restore on error. */
-  const consumeStagedAttachments = useCallback((): StagedAttachment[] => {
-    const cur = stagedRef.current;
-    stagedRef.current = [];
-    setStagedAttachments([]);
-    return cur;
-  }, []);
-
-  const restoreStagedAttachments = useCallback((items: StagedAttachment[]) => {
-    stagedRef.current = items;
-    setStagedAttachments(items);
-  }, []);
-
-  const saveAttachment = useCallback(
-    async (attachmentId: string) => {
-      if (!accessToken) return;
-      return apiSaveAttachment(accessToken, attachmentId);
-    },
-    [accessToken],
-  );
-
-  // ADR 0049 — browser OCR for rows parked at needs_ocr: download the bytes,
-  // transcribe client-side, POST the transcript, then let the existing ingest
-  // poll carry the re-parked row to ready. Park stays the safe state on abort
-  // or failure — no auto-retry (0048 §9).
-  const setOcrRunState = useCallback((localId: string, state: OcrRunState | null) => {
-    setOcrProgress((m) => {
-      const next = { ...m };
-      if (state) next[localId] = state;
-      else delete next[localId];
-      return next;
-    });
-  }, []);
-
-  const ocrAttachment = useCallback(
-    async (localId: string): Promise<void> => {
-      const cur = stagedRef.current.find((s) => s.localId === localId);
-      if (!cur?.attachmentId || cur.status !== "needs_ocr" || !accessToken) return;
-      if (ocrRunsRef.current.has(localId)) return;
-      const controller = new AbortController();
-      ocrRunsRef.current.set(localId, controller);
-      try {
-        setOcrRunState(localId, { phase: "loading" });
-        const { blob } = await apiDownloadAttachment(accessToken, cur.attachmentId);
-        const engine = await defaultOcrDeps.makeEngine();
-        const pages = await ocrAttachmentToTranscript(blob, {
-          engine,
-          makeRenderer: defaultOcrDeps.makeRenderer,
-          onProgress: ({ page, total }) => setOcrRunState(localId, { phase: "ocr", page, total }),
-          signal: controller.signal,
-        });
-        setOcrRunState(localId, { phase: "submitting" });
-        const out = await apiPostAttachmentTranscript(accessToken, cur.attachmentId, {
-          engine: engine.id,
-          pages,
-        });
-        ocrSubmittedRef.current.set(cur.attachmentId, Date.now());
-        patchStaged(localId)((s) => ({ ...s, status: out.status, error: out.error ?? null }));
-      } catch (err) {
-        if (err instanceof OcrAbortError) return;
-        throw err;
-      } finally {
-        ocrRunsRef.current.delete(localId);
-        setOcrRunState(localId, null);
-      }
-    },
-    [accessToken, patchStaged, setOcrRunState],
-  );
-
-  const cancelAttachmentOcr = useCallback((localId: string) => {
-    ocrRunsRef.current.get(localId)?.abort();
-  }, []);
 
   const sendMessage = useCallback(
     async (
@@ -1940,6 +1572,8 @@ export function useSession(
       registerInFlight,
       dropInFlight,
       bumpHistoryRecency,
+      setAgentActions,
+      setAgentProgress,
     ],
   );
 
