@@ -105,7 +105,7 @@ max-complexity = 12
 # LLM / graph glue: broad catch is intentional around optional checkpoint sync
 "internal/llm/**" = ["UP042", "I001"]  # I001: pydantic.root_model must import before litellm
 "internal/perception/**" = ["BLE001"]
-"internal/session/service.py" = ["BLE001", "RUF005", "C901", "PLR0912", "PLR0915"]
+"internal/session/service.py" = ["C901", "PLR0912", "PLR0915"]
 "internal/session/semantic_gate.py" = ["BLE001"]
 "internal/memory/database.py" = ["BLE001", "S110"]
 "internal/memory/embeddings.py" = ["BLE001"]

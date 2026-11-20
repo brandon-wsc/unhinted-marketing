@@ -44,6 +44,13 @@ from internal.memory.models import (
 from internal.session.events import format_sse, session_event_bus
 from internal.session.graph import ANGLE_GATE_NODE, IMAGE_PARK_NODE
 from internal.session.guards import enforce_member_token_limit, require_owned_session
+from internal.session.image_plan import (
+    add_session_image,
+    regen_session_image,
+    remove_session_image,
+    update_session_image_plan,
+    upload_session_image,
+)
 from internal.session.nodes import angle_pick_payload, recommended_image_format
 from internal.session.previews import (
     DEFAULT_PLATFORM,
@@ -55,15 +62,10 @@ from internal.session.previews import (
 )
 from internal.session.service import (
     SessionTurnConflict,
-    add_session_image,
     choose_angle_turn,
-    regen_session_image,
-    remove_session_image,
     resume_image_turn,
     run_session_turn,
     stop_session_turn,
-    update_session_image_plan,
-    upload_session_image,
 )
 from internal.tools.publish import (
     PublishPreconditionError,
