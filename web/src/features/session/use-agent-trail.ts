@@ -7,10 +7,17 @@ import {
 } from "./session-helpers";
 import type { AgentActionRecord, AgentProgress } from "./types";
 
+// REST replays progress SSE already delivered — the same node can arrive done
+// twice for one turn.
+const replayedDoneAction = (
+  rows: AgentActionRecord[],
+  node: string,
+  anchor: string | null,
+): boolean =>
+  rows.some((a) => a.node === node && a.afterMessageId === anchor && a.status === "done");
+
 export function useAgentTrail(turnAnchorRef: { current: string | null }) {
-  // Latest agent.progress while a graph turn runs; null when idle.
   const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null);
-  // Cursor-style action trail — accumulates across turns for this session.
   const [agentActions, setAgentActions] = useState<AgentActionRecord[]>([]);
 
   const finishRunningActions = useCallback(() => {
@@ -40,12 +47,7 @@ export function useAgentTrail(turnAnchorRef: { current: string | null }) {
             },
           ];
         }
-        // Dedupe identical completed node already recorded for this turn (REST replay).
-        if (
-          marked.some(
-            (a) => a.node === progress.node && a.afterMessageId === anchor && a.status === "done",
-          )
-        ) {
+        if (replayedDoneAction(marked, progress.node, anchor)) {
           return marked;
         }
         return [
@@ -68,7 +70,6 @@ export function useAgentTrail(turnAnchorRef: { current: string | null }) {
   const ensureOutcomeActions = useCallback(
     (events: { type: string; data?: Record<string, unknown> }[], afterMessageId: string | null) => {
       if (!afterMessageId) return;
-      // Prefer explicit agent.progress from the turn response.
       const progressFromEvents = events
         .filter((ev) => ev.type === "agent.progress")
         .map((ev) => parseAgentProgress((ev.data ?? {}) as Record<string, unknown>))
@@ -84,13 +85,6 @@ export function useAgentTrail(turnAnchorRef: { current: string | null }) {
             status: "done" as const,
             afterMessageId,
           }));
-          // Keep live SSE rows for this turn if REST somehow omitted progress.
-          if (prev.some((a) => a.afterMessageId === afterMessageId) && built.length === 0) {
-            return prev.map((a) =>
-              a.status === "running" ? { ...a, status: "done" as const } : a,
-            );
-          }
-          // Merge: if we already have live rows, mark done and fill any missing nodes.
           const existingForTurn = prev.filter((a) => a.afterMessageId === afterMessageId);
           if (existingForTurn.length > 0) {
             const seen = new Set(existingForTurn.map((a) => a.node));

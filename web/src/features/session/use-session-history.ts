@@ -30,8 +30,6 @@ export function useSessionHistory(
           : await apiListSessions(accessToken, companyId);
         if (seq === historyReqSeq.current) setHistory(rows);
       } catch {
-        // Search failure keeps the previous list — a transient error should
-        // not blank out the sidebar mid-typing.
         if (!keepOnError && seq === historyReqSeq.current) setHistory([]);
       } finally {
         if (seq === historyReqSeq.current) setHistoryLoading(false);

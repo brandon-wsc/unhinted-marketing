@@ -43,32 +43,28 @@ export function useAttachmentStaging({
   // attachment poll ignore stale needs_ocr reads for a bounded window.
   const ocrSubmittedRef = useRef(new Map<string, number>());
   const attachPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Staged rows are session-scoped — switching sessions drops them.
   const stagedSessionRef = useRef<string | null>(null);
   stagedRef.current = stagedAttachments;
 
   const refreshStagedStatuses = useCallback(async () => {
     const sid = sessionIdRef.current;
     if (!accessToken || !sid) return;
-    try {
-      const list = await apiListSessionAttachments(accessToken, sid);
-      const byId = new Map(list.attachments.map((a) => [a.id, a]));
-      const next = stagedRef.current.map((s) => {
-        const row = s.attachmentId ? byId.get(s.attachmentId) : null;
-        if (!row || !s.attachmentId) return s;
-        const submittedAt = ocrSubmittedRef.current.get(s.attachmentId);
-        if (row.status !== "needs_ocr") {
-          ocrSubmittedRef.current.delete(s.attachmentId);
-        } else if (submittedAt !== undefined && Date.now() - submittedAt < OCR_SUBMITTED_STALE_MS) {
-          return s;
-        }
-        return { ...s, status: row.status, error: row.error ?? null };
-      });
-      stagedRef.current = next;
-      setStagedAttachments(next);
-    } catch {
-      /* poll is best-effort */
-    }
+    const list = await apiListSessionAttachments(accessToken, sid).catch(() => null);
+    if (!list) return;
+    const byId = new Map(list.attachments.map((a) => [a.id, a]));
+    const next = stagedRef.current.map((s) => {
+      const row = s.attachmentId ? byId.get(s.attachmentId) : null;
+      if (!row || !s.attachmentId) return s;
+      const submittedAt = ocrSubmittedRef.current.get(s.attachmentId);
+      if (row.status !== "needs_ocr") {
+        ocrSubmittedRef.current.delete(s.attachmentId);
+      } else if (submittedAt !== undefined && Date.now() - submittedAt < OCR_SUBMITTED_STALE_MS) {
+        return s;
+      }
+      return { ...s, status: row.status, error: row.error ?? null };
+    });
+    stagedRef.current = next;
+    setStagedAttachments(next);
   }, [accessToken, sessionIdRef]);
 
   useEffect(() => {
