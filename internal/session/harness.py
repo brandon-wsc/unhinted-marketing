@@ -459,6 +459,10 @@ async def _stream_chat_reply_lc(
         except ValueError as exc:
             # BaseChatModel.astream raises when a round yields zero
             # chunks — treat as an empty reply, not a provider error.
+            # audit-allow(ERR-01): the two swallowed paths are the ADR 0061
+            # §2 contract — "generation chunks" -> empty reply, and
+            # GraphRecursionError -> partial text; all other handlers
+            # stash the partial and re-raise.
             if "generation chunks" not in str(exc):
                 _stash_partial(rec, parts)
                 raise map_lc_error(exc, model=label) from exc
