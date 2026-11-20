@@ -58,6 +58,7 @@ Follow the [Conventional Branch](https://conventionalbranch.org/) purpose prefix
 - **Title** — same format as commit subjects (`type(scope): summary`, ≤72 chars, ASCII-only); use the dominant change's type/scope. CI's `conventions` job rejects non-conforming titles. Release notes (`generate_release_notes`) read PR titles, so keep them accurate.
 - **Body** — follow `.github/pull_request_template.md`: `## Summary` (what + why), `#### Test plan`, plus the `ADR:` / `Breaking:` lines.
 - **Merge method** — merge commit only (squash/rebase disabled): commit subjects land on `main` individually; the PR title does not.
+- **Self-verified evidence** — run the gates that cover your diff yourself and paste commands + outcomes into `#### Test plan`: the path-tiered pytest targets and `cd web && pnpm run lint && pnpm test && pnpm run build` per `docs/TESTING.md` and `.agents/skills/repo-commands`. A change that touches `/api` behavior, the session flow, or a contract surface carries live proof — a real `pytest tests/api` run (needs `TEST_DATABASE_URL`) or `python -m scripts.check_contract_drift <base> <head>` output; green unit tests alone do not prove the HTTP surface. Live LLM evals stay on-demand — never a PR requirement.
 - **Comment sweep** — run `.agents/skills/no-comments` (Comment Sicko) on the branch diff before `gh pr create`; hooks in `.devin/hooks.v1.json` and `.cursor/hooks.json` (shared script: `.agents/hooks/pr-gate.sh`) block the command until the subagent has stamped HEAD.
 
 ## When reviewing changes
