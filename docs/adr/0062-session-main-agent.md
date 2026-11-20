@@ -92,9 +92,31 @@ New gap admitted: no session-level eval exists today (message in → which tool 
 2. **Reviewer placement → outer.** The review cap and `_reviewer_fail_bump` are the clearest "product policy, not cognition" left in the pipeline; making the loop an agent tool would only blur the budget. `reviewer`/`review_exhausted` keep their edges; the agent owns the `edit_copy` revision leg they route back into.
 3. **Image path → plan in, gen out.** `executor_image_plan` (script+plan writing) folds into the agent as `plan_image`, and whether a post wants an image at all becomes a model decision. `executor_image_gen` stays outer: it is a deterministic media-adapter call gated by a durable human park, which needs the outer checkpointer anyway. Splitting at cognition/not-cognition mirrors `persist_preview`.
 4. **`ack_confirm` → pre-agent intercept.** Confirm-adjacent wording ("搞掂未？") is answered in the `fast_rule_checker` layer deterministically and never reaches the model — the strongest reading of ADR 0003.
-5. **Queue/interrupt plumbing → pre-implementation mapping pass.** ADR 0016/0035 semantics bind to superstep boundaries; collapsing ~10 vertices into ~3 changes where a Stop lands. Before code moves, list every ADR semantic against the vertex it currently binds to and where it re-binds in the new graph — checked into this ADR's implementation notes, not left implicit.
+5. **Queue/interrupt plumbing → pre-implementation mapping pass.** ADR 0016/0035 semantics bind to superstep boundaries; collapsing ~10 vertices into ~3 changes where a Stop lands. The mapping below is the result of that pass — kept here as implementation notes.
 
-## Consequences (if accepted)
+## Implementation notes — semantic re-binding map
+
+Park/resume/stop survives unchanged because the mechanics key off *vertex names under `interrupt_before`*, and both park vertices stay: `service.py` reads `snapshot.next[0]` to set `awaiting_image_ok`/`awaiting_angle_pick` and to pick the resume verb (`_PARK_NOT_PARKED`); `turn_registry` holds in-flight turns and re-parks via `_repark_graph_at_interrupt`. What actually re-binds:
+
+| Semantic | Bound today at | Re-binds at |
+|---|---|---|
+| Angle park (0028) + `choose_angle` resume | `angle_gate` vertex, `interrupt_before`; `snapshot.next[0]` | unchanged |
+| Image park (0004/0036) + `resume_image`, `hold_locked_plan` | `executor_image_gen` vertex, `interrupt_before` | unchanged |
+| Stop → abort upstream (0004) | `turn_registry` task cancel → `aclose_stream` in inner agent | unchanged — cancel propagates through `session_agent.astream` identically |
+| Queue while in-flight / empty-Enter interrupt (0016/0035) | `turn_registry` busy check + `TurnEntry.mode` at turn entry | unchanged — entry/exit shape identical |
+| Image-park explicit Send → new script (0036) | `revise_while_image_parked` writes state, graph re-parks | revise leg becomes the `plan_image`/edit tools; the re-park write is unchanged |
+| Confirm/publish (0003), catalog upsert (0011) | HTTP only, never graph | unchanged; plus new pre-agent `ack_confirm` intercept |
+| Canonical draft persist (0001/0008) | `persist_preview` vertex | unchanged |
+| `grounding_check` on every draft | fixed edge `executor_post → grounding_check` | outer edge or middleware after any draft-producing agent return — must not depend on which tool fired |
+| Thread recap (0057) | vertex before `route_intent` | unchanged position (pre-agent) |
+| LLM call records (0005) | `_with_llm_record_context` per vertex name | one context on `session_agent` + per-sub-agent caller tags inside tools, or trace loses per-step attribution |
+| `read_attachment` budget (0047), Tavily caps (0009) | deps closed over per call | unchanged — tool closures still per-turn |
+| `agent.progress` SSE | `publish_agent_progress(state, node)` per vertex | fewer vertices = fewer progress beats; emit per-tool-call progress or the UX regresses |
+| Interrupt salvage | `prior_message_count` diff cursor keeps committed node output | fewer vertices = fewer commit points; mid-agent cancel already keeps streamed partial text (0061 §2) — verify no silent loss vs. today |
+
+Two reads to audit before deleting anything: whatever still keys on `state["intent"]` (the field `route_intent` wrote — UI flags, service branches) and every `route_after_*` state's field consumption, since the agent's tool choice replaces them without writing those fields.
+
+## Consequences
 
 - SessionState shrinks: fields that exist only to hand data node-to-node (`ranked_signals`, product payloads, angle scratch) collapse into tool-call inputs/outputs. Fields that are product state (parks, preview, draft, queue) stay.
 - Prompt surface concentrates: five thin node prompts → one main prompt + per-sub-agent prompts. Voice rules (`VOICE.md`, `roast_level`) move into the draft sub-agent prompt — the eval voice judge keeps them honest.
