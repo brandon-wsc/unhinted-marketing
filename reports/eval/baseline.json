@@ -1,30 +1,30 @@
 {
   "suite": "all",
-  "when": "2026-09-25T09:58:32.962330+00:00",
-  "elapsed_ms": 268481,
-  "ok": true,
-  "passed": 35,
-  "total": 35,
-  "pass_rate": 1.0,
-  "mean_voice": 0.539,
-  "p50_ms": 4044,
-  "p95_ms": 29471,
-  "p50_ttft_ms": 1300,
-  "p95_ttft_ms": 5498,
-  "total_prompt_tokens": 69830,
-  "total_completion_tokens": 18635,
-  "total_tokens": 88465,
+  "when": "2026-11-20T17:45:36.093512+00:00",
+  "elapsed_ms": 251063,
+  "ok": false,
+  "passed": 38,
+  "total": 39,
+  "pass_rate": 0.974,
+  "mean_voice": 0.579,
+  "p50_ms": 3727,
+  "p95_ms": 24295,
+  "p50_ttft_ms": 1672,
+  "p95_ttft_ms": 3502,
+  "total_prompt_tokens": 98416,
+  "total_completion_tokens": 29200,
+  "total_tokens": 127616,
   "total_usd": null,
   "usd_unknown_models": [
     "deepseek/deepseek-v4.1-flash"
   ],
-  "total_cached_tokens": 58633,
-  "cache_hit_rate": 0.84,
+  "total_cached_tokens": 22772,
+  "cache_hit_rate": 0.231,
   "models_used": [
     "deepseek/deepseek-v4.1-flash"
   ],
   "status_counts": {
-    "ok": 36
+    "ok": 43
   },
   "cases": [
     {
@@ -36,15 +36,15 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 6395,
+      "latency_ms": 2972,
       "usage": {
         "calls": 1,
-        "llm_ms": 6394,
-        "prompt_tokens": 1045,
-        "completion_tokens": 526,
-        "total_tokens": 1571,
+        "llm_ms": 2542,
+        "prompt_tokens": 1162,
+        "completion_tokens": 120,
+        "total_tokens": 1282,
         "models": [
-          "openai/deepseek/deepseek-v4.1-flash"
+          "deepseek/deepseek-v4.1-flash"
         ],
         "unknown_models": [
           "deepseek/deepseek-v4.1-flash"
@@ -53,9 +53,9 @@
           "ok": 1
         },
         "ttft_ms": [
-          5498
+          1959
         ],
-        "cached_tokens": 1024
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -72,15 +72,15 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 517,
+      "latency_ms": 2018,
       "usage": {
         "calls": 1,
-        "llm_ms": 516,
-        "prompt_tokens": 1023,
-        "completion_tokens": 122,
-        "total_tokens": 1145,
+        "llm_ms": 2017,
+        "prompt_tokens": 1125,
+        "completion_tokens": 92,
+        "total_tokens": 1217,
         "models": [
-          "openai/deepseek/deepseek-v4.1-flash"
+          "deepseek/deepseek-v4.1-flash"
         ],
         "unknown_models": [
           "deepseek/deepseek-v4.1-flash"
@@ -89,9 +89,9 @@
           "ok": 1
         },
         "ttft_ms": [
-          366
+          1316
         ],
-        "cached_tokens": 896
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -108,15 +108,15 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 2875,
+      "latency_ms": 1945,
       "usage": {
         "calls": 1,
-        "llm_ms": 2875,
-        "prompt_tokens": 1027,
-        "completion_tokens": 262,
-        "total_tokens": 1289,
+        "llm_ms": 1944,
+        "prompt_tokens": 1131,
+        "completion_tokens": 94,
+        "total_tokens": 1225,
         "models": [
-          "openai/deepseek/deepseek-v4.1-flash"
+          "deepseek/deepseek-v4.1-flash"
         ],
         "unknown_models": [
           "deepseek/deepseek-v4.1-flash"
@@ -125,9 +125,9 @@
           "ok": 1
         },
         "ttft_ms": [
-          2273
+          1258
         ],
-        "cached_tokens": 1024
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -144,15 +144,15 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 2159,
+      "latency_ms": 2889,
       "usage": {
         "calls": 1,
-        "llm_ms": 2158,
-        "prompt_tokens": 1023,
-        "completion_tokens": 186,
-        "total_tokens": 1209,
+        "llm_ms": 2888,
+        "prompt_tokens": 1124,
+        "completion_tokens": 64,
+        "total_tokens": 1188,
         "models": [
-          "openai/deepseek/deepseek-v4.1-flash"
+          "deepseek/deepseek-v4.1-flash"
         ],
         "unknown_models": [
           "deepseek/deepseek-v4.1-flash"
@@ -161,9 +161,9 @@
           "ok": 1
         },
         "ttft_ms": [
-          1300
+          2430
         ],
-        "cached_tokens": 896
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -180,21 +180,21 @@
       "passed": true,
       "reasons": [],
       "scores": {
-        "overall": 0.8,
+        "overall": 0.85,
         "scene": 5,
         "layers": 4,
-        "bridge": 3,
+        "bridge": 4,
         "locale": 4,
         "safety": 5,
-        "reason": "Scene 教科書級：三點三、阿姐收碟、凍檸茶篤兩下、西多士切半，畫面即出，零公關腔。Layers 有口水廣東話＋「meeting mode」港式英文＋「嚴禁開會」標語體，混得自然，惟文言味偏薄。Bridge 收在「守住呢條線」嘅品牌立場，soft 但好隱，幾乎冇接到產品／benefit。Locale 純港式繁體，無強國網語。Safety 安全，只係 tag 同事嘅 CTA 溫和。整體屬貼地佳作，bridge 可再明確一點。"
+        "reason": "Scene 極貼：三點三、姐姐收杯、上司 laptop 開到全速、凍檸茶菠蘿油，畫面同港式細節齊。Layers 有口水廣東話（變返你嘅私人地盤、唔使等放工先去唞）＋港式英文（OT/meeting/laptop），標語味靠「嚴禁…嚴禁…」撐住，文言層較薄但唔突兀。Bridge 用「飲一啖＝叉電」軟收，扣到產品但品牌連結略淡，未夠一針見血。Locale 純港式書面＋口語，無支語無公關腔，小瑕疵係「返去至夠腳力打下半場」稍書面。Safety 無政治、無災難玩笑、無踩同行，品牌安全。"
       },
-      "latency_ms": 20634,
+      "latency_ms": 27049,
       "usage": {
         "calls": 2,
-        "llm_ms": 20605,
-        "prompt_tokens": 7583,
-        "completion_tokens": 2262,
-        "total_tokens": 9845,
+        "llm_ms": 27046,
+        "prompt_tokens": 6449,
+        "completion_tokens": 2963,
+        "total_tokens": 9412,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -205,17 +205,64 @@
           "ok": 2
         },
         "ttft_ms": [],
-        "cached_tokens": 3200
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
-        "caption": "三點三，嚴禁開會。🕒\n茶餐廳阿姐一收碟，成枱人自動望錶——呢個就係香港人嘅生理時鐘。\n凍檸茶篤兩下、西多士切開一半，兩分鐘就由 meeting mode 切返做人。\n所以我哋守住呢條線：三點三，唔傾工作，唔催進度。😌",
+        "caption": "三點三，姐姐手一伸、茶杯一收，成張枱即刻變返你嘅私人地盤。🥱\n\n隔籬上司仲喺度 laptop 開到全速，你部電話一震——又係 meeting 通知。呢 15 分鐘，嚴禁講 OT，嚴禁覆 message，凍檸茶同菠蘿油行先。🫖🍞\n\n其實唔使等到放工先去唞。Test Co 都想你記住：坐低飲一啖，冰落喉嗰下先係叉電，返去至夠腳力打下半場。",
         "hashtags": [
           "#三點三",
-          "#港式下午茶",
-          "#茶餐廳情懷"
+          "#茶餐廳下午茶",
+          "#港式情懷"
         ],
-        "cta": "Tag 個成日三點三搵你開會嘅同事 👀"
+        "cta": "Tag 個每日 3 點 15 分準時人間蒸發嘅同事"
+      }
+    },
+    {
+      "id": "draft_footrest_brake_pun",
+      "suites": [
+        "regression"
+      ],
+      "node": "executor_post",
+      "passed": true,
+      "reasons": [],
+      "scores": {
+        "overall": 0.8,
+        "scene": 4,
+        "layers": 4,
+        "bridge": 4,
+        "locale": 4,
+        "safety": 4,
+        "reason": "Scene 好貼：開會第三個鐘、枱底踩空氣、老細行過收腳，係實景唔係 PR 口號。Layers 有口水廣東話（老細、心虛、腳軟、隔籬位）＋港式英文 take a break，惟欠文言標語一層。Bridge 由 break/brake 諧音自然落到減壓腳踏＋抗壓耐踩，收得順。Locale 純港式繁中、無強國網語、無公關腔。Safety：抽水新聞但無點名品牌、無踩同行、無假調查，只係輕巧雙關；貼近危機抽水邊界但未越線。"
+      },
+      "latency_ms": 19417,
+      "usage": {
+        "calls": 2,
+        "llm_ms": 19414,
+        "prompt_tokens": 6645,
+        "completion_tokens": 2663,
+        "total_tokens": 9308,
+        "models": [
+          "deepseek/deepseek-v4.1-flash"
+        ],
+        "unknown_models": [
+          "deepseek/deepseek-v4.1-flash"
+        ],
+        "status_counts": {
+          "ok": 2
+        },
+        "ttft_ms": [],
+        "cached_tokens": 2560
+      },
+      "usd": null,
+      "output": {
+        "caption": "開會開到第三個鐘，枱底隻腳已經自己踩空氣 🦶💨\n老細一行過即刻收埋對腳——唔係心虛，係腳軟。\n人係需要 take a break 嘅，但腳踏凳就唔可以 break 😌\nIKEA 呢張減壓腳踏，任你點踩都抗壓耐踩，OT 到八點都仲撐住你對腳。\n嚴禁偷踩隔籬位嗰張，請自重。",
+        "hashtags": [
+          "#辦公室日常",
+          "#減壓好物",
+          "#IKEA"
+        ],
+        "cta": "留言話我哋知你枱底最想踩走邊個 meeting"
       }
     },
     {
@@ -233,15 +280,15 @@
         "bridge": 4,
         "locale": 4,
         "safety": 5,
-        "reason": "月台逼到面貼玻璃＋車門開咗又閂，畫面好貼港鐵日常，唔抽象。口水廣東話（趕唔切、醒一醒）加《職場鐵律》文言標語，層次分明。結尾袋定罐能量飲，落車前醒一醒，soft sell 自然、唔硬銷。全篇繁體港式，無大陸網語、無公關腔。安全無踩界，唯一可再收緊嘅係 hashtag 略為罐頭。"
+        "reason": "月台塞到似年宵、跑贏班車跑輸老細——好貼地嘅HK畫面。口語（叉電、氣都喘埋）＋告示體文言（嚴禁邊跑邊睇錶）＋港式英文（meeting、lift）三層混得自然。結尾兩啖入lift前軟sell，唔硬銷。繁中無陸網腔、無公關腔。內容乾淨，無危機/政治/踩同行。"
       },
-      "latency_ms": 7606,
+      "latency_ms": 15178,
       "usage": {
         "calls": 2,
-        "llm_ms": 7602,
-        "prompt_tokens": 3472,
-        "completion_tokens": 1231,
-        "total_tokens": 4703,
+        "llm_ms": 15174,
+        "prompt_tokens": 3568,
+        "completion_tokens": 2103,
+        "total_tokens": 5671,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -252,17 +299,17 @@
           "ok": 2
         },
         "ttft_ms": [],
-        "cached_tokens": 3200
+        "cached_tokens": 2048
       },
       "usd": null,
       "output": {
-        "caption": "月台逼到面貼玻璃，車門開咗又閂——今朝嘅 OT，由呢一秒開始計。😮‍💨\n趕唔切返工，人未到，呵欠已經率先到齊。\n《職場鐵律》第一條：嚴禁開會眼瞓。\n袋定罐能量飲，落車前醒一醒，遲到都唔輸氣勢。",
+        "caption": "今朝月台塞到似年宵，車一延誤，個九點 meeting 就已經輸咗。😮‍💨\n嚴禁邊跑邊睇錶——跑到鞋都濕，氣都喘埋，跑贏班車都跑輸老細。\n趕到返埋位先發現，最需要叉電嘅其實係自己。\nTest Co 支能量飲一直擺喺袋，入 lift 前兩啖，起碼開會把聲唔會震。",
         "hashtags": [
           "#返工日常",
-          "#港式打工",
-          "#醒神早晨"
+          "#月台人生",
+          "#趕住返工"
         ],
-        "cta": "Tag 個今朝同你一齊追車嘅同事"
+        "cta": "留言講吓你今朝塞咗幾耐，我哋一齊取暖"
       }
     },
     {
@@ -279,16 +326,16 @@
         "layers": 4,
         "bridge": 4,
         "locale": 4,
-        "safety": 5,
-        "reason": "場景具體貼地（開會第4個鐘、老細「好快完」），口水廣東話＋港式英文（off-line、OT）＋標語式文言（嚴禁中途斷電）三層混得自然。收尾由「一罐落肚」軟接到提神效益，無硬銷亦無作數字，品牌安全。屬明顯紮實嘅 Unhinted 稿。"
+        "safety": 4,
+        "reason": "Pantry 貼紙、6:59 message 響、meeting 自動加時——好貼地嘅香港辦公室畫面。口水廣東話（冇人理過、死過、續命水）＋港式英文（OT、pantry、Excel）混得自然；bridge 由「意志力」滑去「雪凍一罐」算順，只係「即刻返嚟」稍微硬銷。無危機幽默、無假研究數字，安全。瑕疵：欠一句文言標語層，句尾「OT 專用」可再收得細膩。"
       },
-      "latency_ms": 14124,
+      "latency_ms": 13612,
       "usage": {
         "calls": 2,
-        "llm_ms": 14118,
-        "prompt_tokens": 6516,
-        "completion_tokens": 1180,
-        "total_tokens": 7696,
+        "llm_ms": 13606,
+        "prompt_tokens": 6406,
+        "completion_tokens": 2066,
+        "total_tokens": 8472,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -299,17 +346,17 @@
           "ok": 2
         },
         "ttft_ms": [],
-        "cached_tokens": 6016
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
-        "caption": "開會開到第 4 個鐘，老細句「好快完」仲喺半空飄住 🌫️\n對住個芒，隻字都打唔出，個人已經率先 off-line。\n嚴禁中途斷電——就係呢種時候，一罐落肚，醒神返嚟，先夠撐住最後嗰段 OT。⚡",
+        "caption": "「嚴禁 OT。」貼喺 pantry 張紙，貼到邊都係，冇人理過。🫠\n六點五十九，message 一響，個 meeting 就自動加時。\n呢個時候你唔需要意志力，你需要一罐擺喺枱頭嘅續命水。\n一開，一啖，個人即刻返嚟——眼耳口鼻重新上線，繼續同 Excel 死過。\nTest Co 呢罐，雪凍佢，OT 專用。🧊",
         "hashtags": [
-          "#OT生存指南",
-          "#醒神",
-          "#香港打工仔"
+          "#OT日常",
+          "#香港打工仔",
+          "#醒神續命水"
         ],
-        "cta": "Tag 個同你一齊 OT 嘅戰友"
+        "cta": "留言講吓你今晚 OT 到幾點，我哋一齊捱"
       }
     },
     {
@@ -327,15 +374,15 @@
         "bridge": 4,
         "locale": 4,
         "safety": 5,
-        "reason": "場景好實在：「出門口五分鐘背脊印咗幅世界地圖」「lunch break 都未到塊面溶到七七八八」係好地道嘅香港夏日畫面。口水廣東話（搽、黏笠、糊咗層油）撞港式英文 lunch break，開頭「嚴禁…踏出家門」有標語文言味，層次夠。收尾用「出街前30秒嘅基本步」輕輕帶返產品利益，唔硬銷，符合 brief。繁體、無大陸網語、無公關腔。安全乾淨，冇天災/政治/踩同行/假權威。整體係穩陣之上嘅 Unhinted 稿。"
+        "reason": "開頭畫面夠地道：出門太陽似開最大火、行到地鐵站件衫黐背脊、OT後趕見 friend，係實景唔係 PR 抽水。語言層次齊：口水廣東話（黐住背脊、快手補完就走得）＋港式英文 OT／friend，再加一句半文言標語腔「嚴禁喺大熱天時仲要靠長袖遮手臂，好嗎？」。收尾 soft sell 落「唔黏唔立先肯日日搽」屬產品利益，唔算純發洩，但連結略快略淡。全篇繁體、無大陸網語、無公關腔。無危機幽默／政治／踩同行／假權威，安全。"
       },
-      "latency_ms": 9798,
+      "latency_ms": 14863,
       "usage": {
         "calls": 2,
-        "llm_ms": 9791,
-        "prompt_tokens": 3500,
-        "completion_tokens": 1234,
-        "total_tokens": 4734,
+        "llm_ms": 14859,
+        "prompt_tokens": 6401,
+        "completion_tokens": 2153,
+        "total_tokens": 8554,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -346,17 +393,17 @@
           "ok": 2
         },
         "ttft_ms": [],
-        "cached_tokens": 3200
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
-        "caption": "嚴禁未搽防曬就踏出家門 🚫\\n出門口五分鐘，背脊已經印咗幅世界地圖 🌏 lunch break 都未到，塊面已經溶到七七八八。\\n其實唔使咁苦——揀支薄身清爽、搽完唔黏笠嘅防曬，補多少次都唔會有陣「糊咗層油」感，落妝仲爽快啲。\\n防曬唔係儀式感，係出街前30秒嘅基本步 😌",
+        "caption": "一出門口，太陽就似開咗最大火 🔥 行到地鐵站，件衫已經黐住背脊，OT 完仲要趕住出去見 friend。\n\n嚴禁喺大熱天時仲要靠長袖遮手臂，好嗎？\n\n防曬最緊要搽得落手——唔黏唔立，先至肯日日搽。Test Co 支防曬薄薄一層，出門口前快手補完就走得。🧴",
         "hashtags": [
           "#香港夏天",
           "#防曬日常",
-          "#出街前30秒"
+          "#唔想再兩截色"
         ],
-        "cta": "Tag 個每次都話「我唔怕黑」嘅朋友 🌚"
+        "cta": "留言講吓你今個夏天邊度最黑"
       }
     },
     {
@@ -373,16 +420,16 @@
         "layers": 4,
         "bridge": 4,
         "locale": 4,
-        "safety": 5,
-        "reason": "開頭「熄晒燈、同影印機對望」畫面好實，OT 場景一望就中。口水廣東話（死頂、拾返嚟、唔識睇中文）加港式英文（meeting、pantry、to-do list）混得自然，只係少咗文言標語一層。結尾用「雪櫃拎罐凍嘅」軟性帶入產品同「手腳都快啲」嘅好處，唔硬銷。全篇繁中港腔，冇大陸網絡語、冇公關腔；內容乾淨無踩界。屬扎實 Unhinted 級，未到罕見嘅滿分。"
+        "safety": 4,
+        "reason": "六點半 meeting room 嗰盞燈、講三次「最後一個改動」— 好實嘅香港 OT 畫面。口水廣東話（人走晒、一啖落肚、對住個芒發呆）撞港式英文（meeting room/OT）再加文言式標語「嚴禁硬撐到眼瞓」，層次夠。尾段由「擺枱頭」自然接到產品同凍飲賣點，soft sell 唔硬銷。全篇繁體港式，無大陸網語亦無公關腔；無危機幽默、踩同行或假數據，安全。"
       },
-      "latency_ms": 21535,
+      "latency_ms": 13824,
       "usage": {
         "calls": 2,
-        "llm_ms": 21530,
-        "prompt_tokens": 3460,
-        "completion_tokens": 1283,
-        "total_tokens": 4743,
+        "llm_ms": 13821,
+        "prompt_tokens": 6377,
+        "completion_tokens": 1794,
+        "total_tokens": 8171,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -393,17 +440,64 @@
           "ok": 2
         },
         "ttft_ms": [],
-        "cached_tokens": 3200
+        "cached_tokens": 2432
       },
       "usd": null,
       "output": {
-        "caption": "六點半 meeting 一散，成層樓熄晒燈，剩返你同部影印機對望 🫠\\n「嚴禁加班」四個字明明貼喺 pantry，但係你個 to-do list 唔識睇中文。\\n與其靠意志力死頂，不如雪櫃拎罐凍嘅能量飲 —— 一啖入喉，個人即刻拾返嚟，手腳都快啲 🥤",
+        "caption": "六點半，人走晒，剩返你同 meeting room 嗰盞燈。💡\n「最後一個改動」講咗三次，OT 就咁變成日常。\n嚴禁硬撐到眼瞓——雪櫃拎罐凍嘅擺枱頭，一啖落肚，最尾嗰粒鐘起碼唔使對住個芒發呆。\nTest Co 出品，凍住飲最爽，開完會返到屋企都仲有氣。🫠",
         "hashtags": [
           "#OT日常",
-          "#打工仔日常",
-          "#開夜車"
+          "#能量飲",
+          "#香港打工仔"
         ],
-        "cta": "留言講吓你試過最癲嘅 OT 幾點先走得"
+        "cta": "Tag 個成日陪你 OT 嘅同事出嚟"
+      }
+    },
+    {
+      "id": "draft_soup_pack_level0",
+      "suites": [
+        "regression"
+      ],
+      "node": "executor_post",
+      "passed": true,
+      "reasons": [],
+      "scores": {
+        "overall": 0.85,
+        "scene": 5,
+        "layers": 4,
+        "bridge": 4,
+        "locale": 4,
+        "safety": 5,
+        "reason": "場景教科書級：十一點半落車、淨係便利店招牌仲亮、過期沙律加半盒凍飯，具體到唔似文案。層次有口水廣東話（成條街淨係得、唔使煮三餸一湯）＋港式英文 OT＋「嚴禁空肚瞓」一句標語腔，混得自然；bridge 用「湯包幫你兜住個人」輕輕接返產品，收尾「先覺得自己真係收咗工」有共鳴唔硬銷。全篇港式書面語＋廣東話，無強國網語、無公關腔；無抽水、無踩同行、無假權威，安全。"
+      },
+      "latency_ms": 12491,
+      "usage": {
+        "calls": 2,
+        "llm_ms": 12486,
+        "prompt_tokens": 3626,
+        "completion_tokens": 2275,
+        "total_tokens": 5901,
+        "models": [
+          "deepseek/deepseek-v4.1-flash"
+        ],
+        "unknown_models": [
+          "deepseek/deepseek-v4.1-flash"
+        ],
+        "status_counts": {
+          "ok": 2
+        },
+        "ttft_ms": [],
+        "cached_tokens": 2304
+      },
+      "usd": null,
+      "output": {
+        "caption": "十一點半落車，成條街淨係得便利店個招牌仲亮住。🫠\nOT 完返到屋企開雪櫃 — 兩盒過期沙律、半盒凍飯，突然好想飲啖有人煲嘅湯。\n屋企規矩：嚴禁空肚瞓。煲滾水淥一淥，靚湯坊嘅湯包幫你兜住個人。\n唔使煮三餸一湯，坐低飲完，先覺得自己真係收咗工。🍲",
+        "hashtags": [
+          "#靚湯坊",
+          "#OT日常",
+          "#深夜一碗湯"
+        ],
+        "cta": "留言講吓你今晚幾點先走得，飲返碗先瞓啦"
       }
     },
     {
@@ -420,16 +514,16 @@
         "layers": 4,
         "bridge": 4,
         "locale": 4,
-        "safety": 4,
-        "reason": "Hook 好有畫面：鞋襪擰得出水、老細 message 響住，典型港式返工苦況。語言層混得靚——口水廣東話（撐到收工先算贏）、港式英文（OT、message、Tag）、文言標語「風雨不改」互相扣住，冇書面語腔。結尾用「雪櫃有罐凍嘅」軟 sell 能量飲，CTA 叫人 tag 同事請飲，收得自然唔硬銷。全篇繁中港話，無大陸網語、無公關腔。打風只作日常背景，無戲謔災情或踩同行，安全。各項穩陣但未到教科書級，故唔俾 5。"
+        "safety": 2,
+        "reason": "Scene 好有畫面：濕鞋養魚、背囊當防潮箱、飲水機最精神，係實打實嘅打工仔 HK 日常。Layers 混得靚：口水廣東話（冇得早收、啪一啖、頂埋下半場）＋港式英文（OT、standby）＋文言標語（《颱風守則・第一條》），有層次唔死板。Bridge 由共鳴軟著陸到冰凍能量飲同「唔可以外判」，soft sell 自然。Locale 係純正 HK 繁體，無大陸網語、無公關腔。但成篇 premise 建基於打風返工嘅 crisis humor，按規矩 safety 落 0–2。"
       },
-      "latency_ms": 44518,
+      "latency_ms": 24295,
       "usage": {
         "calls": 2,
-        "llm_ms": 44511,
-        "prompt_tokens": 7118,
-        "completion_tokens": 2232,
-        "total_tokens": 9350,
+        "llm_ms": 24291,
+        "prompt_tokens": 6448,
+        "completion_tokens": 2539,
+        "total_tokens": 8987,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -440,17 +534,60 @@
           "ok": 2
         },
         "ttft_ms": [],
-        "cached_tokens": 6656
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
-        "caption": "橫風橫雨行到返公司，鞋襪濕到擰得出水，手機仲響住老細句 message 📱\n地鐵照迫、OT 照做——「風雨不改」呢四個字，打工仔先係真專家。\n唔求奇蹟，只想雪櫃有罐凍嘅，一啖落肚醒返個腦，撐到收工先算贏 💪",
+        "caption": "《颱風守則・第一條》風球係戶外嘅事，OT 係室內嘅事。\n\n對鞋濕到可以養魚 🐟 laptop 用背囊包到似防潮箱，返到 office 全場最精神嗰位…係部飲水機。\n\n老細一句「今朝 standby 呀」，你就知今日冇得早收。😮💨\n\n雪櫃拎罐冰凍能量飲，開工前啪一啖 —— 精神呢家嘢，唔可以外判。Test Co 同你一齊頂埋下半場。",
         "hashtags": [
           "#打風返工",
           "#打工仔日常",
-          "#叉電先講"
+          "#颱風下的OT"
         ],
-        "cta": "Tag 個聽日都要照返工嘅同事，請佢飲罐"
+        "cta": "留言講吓你今日濕咗幾對鞋 👟"
+      }
+    },
+    {
+      "id": "draft_workplace_meme_level3",
+      "suites": [
+        "regression"
+      ],
+      "node": "executor_post",
+      "passed": true,
+      "reasons": [],
+      "scores": {
+        "overall": 0.8,
+        "scene": 4,
+        "layers": 4,
+        "bridge": 4,
+        "locale": 4,
+        "safety": 5,
+        "reason": "開場老細對白＋Excel 逐格 copy paste＋搭尾班車，畫面好實淨，係典型港式 OT 場景。層次有口水廣東話（老細、聽日交到貨啦、慳返嚟）、港式英文（OT、Excel、copy paste）同仿公文標語（「嚴禁⋯請自重」），唔係一味書面語。結尾由怨氣收到工具效益，soft sell 得自然。全篇繁體、無大陸網語、無公關腔；無抽水災難/政治/踩同行/假數據，安全。"
+      },
+      "latency_ms": 15362,
+      "usage": {
+        "calls": 2,
+        "llm_ms": 15357,
+        "prompt_tokens": 3609,
+        "completion_tokens": 1764,
+        "total_tokens": 5373,
+        "models": [
+          "deepseek/deepseek-v4.1-flash"
+        ],
+        "unknown_models": [
+          "deepseek/deepseek-v4.1-flash"
+        ],
+        "status_counts": {
+          "ok": 2
+        },
+        "ttft_ms": [],
+        "cached_tokens": null
+      },
+      "usd": null,
+      "output": {
+        "caption": "老細：「呢個需求好簡單，聽日交到貨啦？」🙂\n我：望住個 Excel 成版都要逐格 copy paste，嘴角抽搐。\n嚴禁喺放工前一分鐘講「好簡單」，請自重。😮‍💨\nOT 到搭尾班車嘅夜晚，其實呢啲重複步驟交畀 FlowWork Automation 自動跑，慳返嚟嘅時間你先真係有得放工。",
+        "hashtags": [],
+        "cta": "Tag 個成日俾「好簡單」三個字害到 OT 嘅同事"
       }
     },
     {
@@ -478,8 +615,8 @@
       "usd": null,
       "output": {
         "grounding_ok": true,
-        "source_signal_ids": null,
-        "reviewer_feedback": "No HK signals in DB — draft is template-only"
+        "source_signal_ids": [],
+        "reviewer_feedback": ""
       }
     },
     {
@@ -506,9 +643,9 @@
       },
       "usd": null,
       "output": {
-        "grounding_ok": false,
+        "grounding_ok": true,
         "source_signal_ids": [],
-        "reviewer_feedback": "Draft has no source_signal_ids but signals exist in DB"
+        "reviewer_feedback": ""
       }
     },
     {
@@ -616,15 +753,15 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 3008,
+      "latency_ms": 3514,
       "usage": {
         "calls": 1,
-        "llm_ms": 3008,
-        "prompt_tokens": 1041,
-        "completion_tokens": 275,
-        "total_tokens": 1316,
+        "llm_ms": 3512,
+        "prompt_tokens": 1155,
+        "completion_tokens": 68,
+        "total_tokens": 1223,
         "models": [
-          "openai/deepseek/deepseek-v4.1-flash"
+          "deepseek/deepseek-v4.1-flash"
         ],
         "unknown_models": [
           "deepseek/deepseek-v4.1-flash"
@@ -633,9 +770,9 @@
           "ok": 1
         },
         "ttft_ms": [
-          2503
+          3502
         ],
-        "cached_tokens": 1024
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -652,15 +789,15 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 2367,
+      "latency_ms": 2703,
       "usage": {
         "calls": 1,
-        "llm_ms": 2365,
-        "prompt_tokens": 1039,
-        "completion_tokens": 153,
-        "total_tokens": 1192,
+        "llm_ms": 2701,
+        "prompt_tokens": 1151,
+        "completion_tokens": 74,
+        "total_tokens": 1225,
         "models": [
-          "openai/deepseek/deepseek-v4.1-flash"
+          "deepseek/deepseek-v4.1-flash"
         ],
         "unknown_models": [
           "deepseek/deepseek-v4.1-flash"
@@ -669,9 +806,9 @@
           "ok": 1
         },
         "ttft_ms": [
-          1462
+          2365
         ],
-        "cached_tokens": 1024
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -688,15 +825,15 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 1189,
+      "latency_ms": 1781,
       "usage": {
         "calls": 1,
-        "llm_ms": 1189,
-        "prompt_tokens": 1027,
-        "completion_tokens": 254,
-        "total_tokens": 1281,
+        "llm_ms": 1780,
+        "prompt_tokens": 1133,
+        "completion_tokens": 135,
+        "total_tokens": 1268,
         "models": [
-          "openai/deepseek/deepseek-v4.1-flash"
+          "deepseek/deepseek-v4.1-flash"
         ],
         "unknown_models": [
           "deepseek/deepseek-v4.1-flash"
@@ -705,9 +842,9 @@
           "ok": 1
         },
         "ttft_ms": [
-          938
+          1381
         ],
-        "cached_tokens": 1024
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -724,15 +861,15 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 774,
+      "latency_ms": 1278,
       "usage": {
         "calls": 1,
-        "llm_ms": 773,
-        "prompt_tokens": 1029,
-        "completion_tokens": 160,
-        "total_tokens": 1189,
+        "llm_ms": 1276,
+        "prompt_tokens": 1133,
+        "completion_tokens": 74,
+        "total_tokens": 1207,
         "models": [
-          "openai/deepseek/deepseek-v4.1-flash"
+          "deepseek/deepseek-v4.1-flash"
         ],
         "unknown_models": [
           "deepseek/deepseek-v4.1-flash"
@@ -741,13 +878,49 @@
           "ok": 1
         },
         "ttft_ms": [
-          536
+          1061
         ],
-        "cached_tokens": 1024
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
         "intent": "chat",
+        "parse_ok": true
+      }
+    },
+    {
+      "id": "preview_reject_restart",
+      "suites": [
+        "regression"
+      ],
+      "node": "route_intent",
+      "passed": true,
+      "reasons": [],
+      "scores": {},
+      "latency_ms": 2182,
+      "usage": {
+        "calls": 1,
+        "llm_ms": 2181,
+        "prompt_tokens": 1165,
+        "completion_tokens": 110,
+        "total_tokens": 1275,
+        "models": [
+          "deepseek/deepseek-v4.1-flash"
+        ],
+        "unknown_models": [
+          "deepseek/deepseek-v4.1-flash"
+        ],
+        "status_counts": {
+          "ok": 1
+        },
+        "ttft_ms": [
+          1672
+        ],
+        "cached_tokens": null
+      },
+      "usd": null,
+      "output": {
+        "intent": "revise",
         "parse_ok": true
       }
     },
@@ -761,13 +934,13 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 5854,
+      "latency_ms": 4628,
       "usage": {
         "calls": 1,
-        "llm_ms": 5849,
-        "prompt_tokens": 3103,
-        "completion_tokens": 451,
-        "total_tokens": 3554,
+        "llm_ms": 4624,
+        "prompt_tokens": 3393,
+        "completion_tokens": 620,
+        "total_tokens": 4013,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -778,15 +951,15 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 2432
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
-        "search_query": "Hong Kong cha chaan teng afternoon tea",
+        "search_query": "茶餐廳 下午茶 新產品",
         "search_queries": [
-          "Hong Kong cha chaan teng afternoon tea",
-          "Hong Kong cafe afternoon tea promotion",
-          "茶餐廳 下午茶 新"
+          "茶餐廳 下午茶 新產品",
+          "trending topics Hong Kong",
+          "Hong Kong cha chaan teng afternoon tea trends"
         ],
         "query_source": "llm"
       }
@@ -801,13 +974,13 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 26378,
+      "latency_ms": 8133,
       "usage": {
         "calls": 1,
-        "llm_ms": 26374,
-        "prompt_tokens": 3122,
-        "completion_tokens": 699,
-        "total_tokens": 3821,
+        "llm_ms": 8129,
+        "prompt_tokens": 5189,
+        "completion_tokens": 727,
+        "total_tokens": 5916,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -818,15 +991,15 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 2230
+        "cached_tokens": 1792
       },
       "usd": null,
       "output": {
-        "search_query": "iPhone resale price Hong Kong",
+        "search_query": "iPhone Hong Kong",
         "search_queries": [
+          "iPhone Hong Kong",
           "iPhone resale price Hong Kong",
-          "iPhone scalper price",
-          "iPhone 17 launch resale"
+          "iPhone 17 Hong Kong"
         ],
         "query_source": "llm"
       }
@@ -841,13 +1014,13 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 2953,
+      "latency_ms": 4802,
       "usage": {
         "calls": 1,
-        "llm_ms": 2949,
-        "prompt_tokens": 3101,
-        "completion_tokens": 575,
-        "total_tokens": 3676,
+        "llm_ms": 4799,
+        "prompt_tokens": 3181,
+        "completion_tokens": 592,
+        "total_tokens": 3773,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -858,15 +1031,15 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 2688
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
-        "search_query": "MIRROR concert ticket sale date",
+        "search_query": "MIRROR concert tickets",
         "search_queries": [
-          "MIRROR concert ticket sale date",
-          "MIRROR concert 2025 Hong Kong",
-          "MIRROR Hong Kong"
+          "MIRROR concert tickets",
+          "MIRROR Hong Kong",
+          "MIRROR 2026 Hong Kong"
         ],
         "query_source": "llm"
       }
@@ -881,13 +1054,13 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 1363,
+      "latency_ms": 4938,
       "usage": {
         "calls": 1,
-        "llm_ms": 1359,
-        "prompt_tokens": 1212,
-        "completion_tokens": 229,
-        "total_tokens": 1441,
+        "llm_ms": 4935,
+        "prompt_tokens": 3141,
+        "completion_tokens": 483,
+        "total_tokens": 3624,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -898,15 +1071,15 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 1152
+        "cached_tokens": 2304
       },
       "usd": null,
       "output": {
         "search_query": "Hong Kong typhoon work arrangements",
         "search_queries": [
           "Hong Kong typhoon work arrangements",
-          "Typhoon Signal 8 work hours",
-          "勞工處 颱風 上班指引"
+          "typhoon signal No. 8 work rules",
+          "Hong Kong Observatory typhoon signal"
         ],
         "query_source": "llm"
       }
@@ -920,13 +1093,13 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 3998,
+      "latency_ms": 5004,
       "usage": {
         "calls": 1,
-        "llm_ms": 3994,
-        "prompt_tokens": 2962,
-        "completion_tokens": 343,
-        "total_tokens": 3305,
+        "llm_ms": 5000,
+        "prompt_tokens": 5123,
+        "completion_tokens": 622,
+        "total_tokens": 5745,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -937,7 +1110,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 2560
+        "cached_tokens": 2304
       },
       "usd": null,
       "output": {
@@ -960,13 +1133,13 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 1833,
+      "latency_ms": 3276,
       "usage": {
         "calls": 1,
-        "llm_ms": 1829,
-        "prompt_tokens": 3065,
-        "completion_tokens": 391,
-        "total_tokens": 3456,
+        "llm_ms": 3273,
+        "prompt_tokens": 3387,
+        "completion_tokens": 490,
+        "total_tokens": 3877,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -977,7 +1150,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 2560
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -985,7 +1158,7 @@
         "search_queries": [
           "Chiikawa Usagi",
           "Chiikawa Usagi favorite food",
-          "ちいかわ うさぎ"
+          "ちいかわ うさぎ 好物"
         ],
         "query_source": "llm"
       }
@@ -1000,13 +1173,13 @@
       "passed": true,
       "reasons": [],
       "scores": {},
-      "latency_ms": 5231,
+      "latency_ms": 4709,
       "usage": {
         "calls": 1,
-        "llm_ms": 5227,
-        "prompt_tokens": 3338,
-        "completion_tokens": 463,
-        "total_tokens": 3801,
+        "llm_ms": 4706,
+        "prompt_tokens": 5275,
+        "completion_tokens": 449,
+        "total_tokens": 5724,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1017,7 +1190,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 2688
+        "cached_tokens": 2304
       },
       "usd": null,
       "output": {
@@ -1025,7 +1198,7 @@
         "search_queries": [
           "MTR delays",
           "港鐵 延誤",
-          "MTR service disruption Hong Kong"
+          "MTR service disruption"
         ],
         "query_source": "llm"
       }
@@ -1037,16 +1210,18 @@
         "regression"
       ],
       "node": "query_generator",
-      "passed": true,
-      "reasons": [],
+      "passed": false,
+      "reasons": [
+        "queries miss ['skincare', 'beauty', '護膚', '防曬']: ['sunscreen trends', 'Hong Kong sunscreen market', 'sunscreen new product launches']"
+      ],
       "scores": {},
-      "latency_ms": 6306,
+      "latency_ms": 4763,
       "usage": {
         "calls": 1,
-        "llm_ms": 6302,
-        "prompt_tokens": 3169,
-        "completion_tokens": 541,
-        "total_tokens": 3710,
+        "llm_ms": 4761,
+        "prompt_tokens": 3160,
+        "completion_tokens": 795,
+        "total_tokens": 3955,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1057,15 +1232,15 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 2688
+        "cached_tokens": 2432
       },
       "usd": null,
       "output": {
-        "search_query": "sunscreen",
+        "search_query": "sunscreen trends",
         "search_queries": [
-          "sunscreen",
-          "防曬 推薦",
-          "Hong Kong sunscreen trends"
+          "sunscreen trends",
+          "Hong Kong sunscreen market",
+          "sunscreen new product launches"
         ],
         "query_source": "llm"
       }
@@ -1079,21 +1254,21 @@
       "passed": true,
       "reasons": [],
       "scores": {
-        "overall": 0.1,
-        "scene": 1,
+        "overall": 0.05,
+        "scene": 0,
         "layers": 0,
         "bridge": 1,
         "locale": 0,
         "safety": 4,
-        "reason": "全英文公關稿式宣傳：We are thrilled to announce / crafted with passion and excellence 完全係新聞稿腔，零 HK 生活場景、零粵語／港英／文言層次，亦唔係繁體中文，locale 直接 fail。冇任何具體畫面或貼地 bridge。內容本身無害、品牌安全，safety 過關但毫無 HK voice。"
+        "reason": "整段係英文企業新聞稿腔（\"thrilled to announce\"、\"crafted with passion and excellence\"），完全冇廣東話／港式英文／文言層次，亦冇任何香港日常場景。唔係 zh-HK locale，bridge 只係硬推 \"Learn more\"，非軟性連接產品利益。安全無問題，但根本唔似 Unhinted 要嘅 HK IG voice。"
       },
-      "latency_ms": 14453,
+      "latency_ms": 3635,
       "usage": {
         "calls": 1,
-        "llm_ms": 14451,
-        "prompt_tokens": 841,
-        "completion_tokens": 362,
-        "total_tokens": 1203,
+        "llm_ms": 3634,
+        "prompt_tokens": 833,
+        "completion_tokens": 331,
+        "total_tokens": 1164,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1104,7 +1279,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 768
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -1131,15 +1306,15 @@
         "bridge": 2,
         "locale": 4,
         "safety": 1,
-        "reason": "場景夠貼地（八號波、老闆、浸屋），廣東話口水位自然，冇公關腔。但打風黑雨災難玩笑屬 crisis humor，safety 要壓到 1；產品只在中段閃過，結尾去咗「笑住先」而唔係 benefit，bridge 偏弱。亦欠港式英文／文言層次。"
+        "reason": "Scene 好貼地（八號風球、老闆召喚、黑雨浸屋）夠港式日常，廣東話口水位自然。但 safety 出事：打風／黑雨災難玩笑屬 rubric 明列 crisis humor，就算文筆流暢都要壓至 0–2。Bridge 亦弱——能量飲叫人「繼續瞓」，同 product benefit 自相矛盾，只係 soft 收尾近乎 venting。Layers 有廣東話但缺港式英文／文言層次。"
       },
-      "latency_ms": 4253,
+      "latency_ms": 3727,
       "usage": {
         "calls": 1,
-        "llm_ms": 4251,
-        "prompt_tokens": 858,
-        "completion_tokens": 442,
-        "total_tokens": 1300,
+        "llm_ms": 3727,
+        "prompt_tokens": 845,
+        "completion_tokens": 348,
+        "total_tokens": 1193,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1150,7 +1325,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 768
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -1172,20 +1347,20 @@
       "reasons": [],
       "scores": {
         "overall": 0.5,
-        "scene": 3,
+        "scene": 2,
         "layers": 3,
         "bridge": 2,
-        "locale": 2,
+        "locale": 3,
         "safety": 1,
-        "reason": "開場有隔籬貨架嘅生活感，廣東話口水位夠（糖水啫、交智商稅前後語氣）。但全篇係踩同行：「智商稅」「水魚」直接貶低對手同其用戶，香港品牌安全度唔合格；「智商稅」亦係內地網語，唔屬 zh-HK 語域。結尾只係叫你自己試，冇真正 soft bridge 到產品好處。"
+        "reason": "口水廣東話夠地道（隔籬、啫、水魚、一早轉咗會），加「fans」港式英文，語感自然。但成篇係踩同行＋「智商稅」嘲諷消費者，屬明確禁區，brand-safe 唔過關；scene 亦停留喺攻擊對手多過畫香港日常；bridge 只硬銷「平」而唔係柔和扣產品利益。locale 大致 OK，惟「智商稅」帶大陸網絡味。"
       },
-      "latency_ms": 4044,
+      "latency_ms": 6410,
       "usage": {
         "calls": 1,
-        "llm_ms": 4043,
-        "prompt_tokens": 880,
-        "completion_tokens": 395,
-        "total_tokens": 1275,
+        "llm_ms": 6409,
+        "prompt_tokens": 867,
+        "completion_tokens": 743,
+        "total_tokens": 1610,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1196,7 +1371,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 768
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
@@ -1217,21 +1392,21 @@
       "passed": true,
       "reasons": [],
       "scores": {
-        "overall": 0.5,
-        "scene": 2,
+        "overall": 0.35,
+        "scene": 1,
         "layers": 2,
         "bridge": 2,
-        "locale": 4,
+        "locale": 2,
         "safety": 1,
-        "reason": "Safety fail: 偽權威數據（「權威研究證實 97%…效率提升 3 倍」）屬虛構調查／百分比，直接踩線。場景只有「打工仔飲能量飲」＋飛簽口語，未構成畫面感；語氣係純口水廣東話，冇港英／文言層次；結尾硬銷「快啲入手」，唔算 soft bridge。用字係香港繁中、無大陸網語，唯一可取。"
+        "reason": "捏造「權威研究／97%」數據屬假權威 claim，直接踩 safety 紅線。場景抽象公關腔，冇日常 HK 畫面；只有「我哋」「快過飛簽」帶少少口水，整體仍似廣告稿，bridge 靠假數據硬銷。"
       },
-      "latency_ms": 29471,
+      "latency_ms": 7307,
       "usage": {
         "calls": 1,
-        "llm_ms": 29469,
-        "prompt_tokens": 852,
-        "completion_tokens": 597,
-        "total_tokens": 1449,
+        "llm_ms": 7306,
+        "prompt_tokens": 839,
+        "completion_tokens": 345,
+        "total_tokens": 1184,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1242,7 +1417,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 851
+        "cached_tokens": 628
       },
       "usd": null,
       "output": {
@@ -1263,21 +1438,21 @@
       "passed": true,
       "reasons": [],
       "scores": {
-        "overall": 0.25,
+        "overall": 0.2,
         "scene": 1,
         "layers": 1,
-        "bridge": 2,
+        "bridge": 1,
         "locale": 1,
         "safety": 1,
-        "reason": "全篇係硬銷口號堆砌，冇一個具體香港日常畫面（只提「打工仔」二字）。語言基本書面語＋內地式極限詞（史上最强、全港第一、銷量冠軍），仲混入簡體「强」，零口水廣東話、零港式英文、零文言層次。結尾只係「保證一試難忘」式吹噓，唔算柔和帶出產品。安全度低：全港第一／銷量冠軍／保證屬無憑證權威宣稱，屬fake-authority claim，hashtag 亦重複同一問題。"
+        "reason": "典型硬銷新聞稿腔：「全港第一」「銷量冠軍」「史上最強」「保證」全部係無憑據嘅假權威claim，安全分要低。冇任何香港日常場景，只有口號堆砌；除咗「龍精虎猛」一個文言詞，全篇書面語公關腔，冇口水廣東話或港式英文層次；結尾亦非軟性連繫產品，純粹「立即搶購」。建議改寫成具體打工仔情境＋誠實賣點。"
       },
-      "latency_ms": 4688,
+      "latency_ms": 2961,
       "usage": {
         "calls": 1,
-        "llm_ms": 4685,
-        "prompt_tokens": 845,
-        "completion_tokens": 592,
-        "total_tokens": 1437,
+        "llm_ms": 2959,
+        "prompt_tokens": 833,
+        "completion_tokens": 474,
+        "total_tokens": 1307,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1288,11 +1463,11 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 768
+        "cached_tokens": 640
       },
       "usd": null,
       "output": {
-        "caption": "全港第一！銷量冠軍！史上最强能量飲正式登場，\n飲一罐即刻龍精虎猛，效果立竿見影，保證全港打工仔一試難忘！\n",
+        "caption": "全港第一！銷量冠軍！史上最強能量飲正式登場，\n飲一罐即刻龍精虎猛，效果立竿見影，保證全港打工仔一試難忘！\n",
         "hashtags": [
           "#全港第一",
           "#銷量冠軍"
@@ -1309,21 +1484,21 @@
       "passed": true,
       "reasons": [],
       "scores": {
-        "overall": 0.6,
+        "overall": 0.65,
         "scene": 3,
         "layers": 3,
-        "bridge": 2,
+        "bridge": 3,
         "locale": 4,
         "safety": 1,
-        "reason": "場景夠地道（立法會拉布／悶過返工），廣東話口水味自然，無大陸網語亦無公關腔。但條尾係政治互動bait——「邊個政黨最醒神？留言區見」拉埋品牌落政黨比較，屬政治punchline，安全分要低；bridge亦被政治engagement騎劫，產品只係中段提一提。"
+        "reason": "場景算貼地（立法會拉布、OT捱夜），口水廣東話到位，但無港式英文/文言層次。惟『邊個政黨最醒神』屬政治 punchline + 拉布調侃，觸及政治紅線，品牌安全不合格。"
       },
-      "latency_ms": 9896,
+      "latency_ms": 3742,
       "usage": {
         "calls": 1,
-        "llm_ms": 9894,
-        "prompt_tokens": 858,
-        "completion_tokens": 513,
-        "total_tokens": 1371,
+        "llm_ms": 3741,
+        "prompt_tokens": 846,
+        "completion_tokens": 399,
+        "total_tokens": 1245,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1334,7 +1509,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 768
+        "cached_tokens": 512
       },
       "usd": null,
       "output": {
@@ -1355,21 +1530,21 @@
       "passed": true,
       "reasons": [],
       "scores": {
-        "overall": 0.1,
+        "overall": 0.0,
         "scene": 0,
         "layers": 0,
-        "bridge": 1,
-        "locale": 1,
+        "bridge": 0,
+        "locale": 0,
         "safety": 4,
-        "reason": "通篇係新聞稿式公關腔：「秉持以客為尊之理念」「攜手共創美好未來」，零香港生活場景、零口水廣東話／港式英文／標語文言，完全書面語。橋段只係硬銷「歡迎蒞臨選購」，產品（能量飲品）冇任何具體連結。內容本身無危機幽默、無政治、無踩同行，安全但空泛。"
+        "reason": "全篇係新聞稿式公關腔（「秉持以客為尊之理念」「攜手共創美好未來」），零香港日常畫面、零廣東話/港式英文/文言標語層次，亦冇任何產品利益點掛鉤，只係空泛企業宣言。繁體字正確但語體離地，唔似 IG caption。安全上無危機幽默或踩同行，合格。"
       },
-      "latency_ms": 7612,
+      "latency_ms": 2986,
       "usage": {
         "calls": 1,
-        "llm_ms": 7611,
-        "prompt_tokens": 862,
-        "completion_tokens": 392,
-        "total_tokens": 1254,
+        "llm_ms": 2985,
+        "prompt_tokens": 850,
+        "completion_tokens": 297,
+        "total_tokens": 1147,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1380,7 +1555,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 768
+        "cached_tokens": 512
       },
       "usd": null,
       "output": {
@@ -1401,21 +1576,21 @@
       "passed": true,
       "reasons": [],
       "scores": {
-        "overall": 0.05,
-        "scene": 0,
+        "overall": 0.15,
+        "scene": 1,
         "layers": 0,
         "bridge": 1,
-        "locale": 0,
+        "locale": 1,
         "safety": 4,
-        "reason": "純新聞稿公關腔：「欣然宣布」「回饋廣大市民」「容後公布」零畫面、零生活場景，全書面語無廣東話/港英/文言層次。僅結尾勉強指向產品，但無實際好處。品牌安全無問題，惟完全唔似 IG caption。"
+        "reason": "整篇係典型新聞稿公關腔：「欣然宣布」「回饋廣大市民」「容後公布」全書面語，零口水廣東話、零港式英文、零場景。冇生活畫面、冇具體產品利益，bridge 只係空泛承諾。安全但完全唔似 IG caption。"
       },
-      "latency_ms": 2634,
+      "latency_ms": 2648,
       "usage": {
         "calls": 1,
-        "llm_ms": 2632,
-        "prompt_tokens": 859,
-        "completion_tokens": 290,
-        "total_tokens": 1149,
+        "llm_ms": 2647,
+        "prompt_tokens": 846,
+        "completion_tokens": 334,
+        "total_tokens": 1180,
         "models": [
           "deepseek/deepseek-v4.1-flash"
         ],
@@ -1426,7 +1601,7 @@
           "ok": 1
         },
         "ttft_ms": [],
-        "cached_tokens": 768
+        "cached_tokens": null
       },
       "usd": null,
       "output": {
