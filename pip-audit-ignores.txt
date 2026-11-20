@@ -77,6 +77,7 @@ GHSA-78g4-xqwv-q3g8
 # vulnerable surface is mcp client/server handling; we only run
 # `semgrep scan`). Remove once a semgrep release unpins mcp.
 CVE-2026-59951
+CVE-2026-115563
 CVE-2026-116684
 CVE-2026-116685
 CVE-2026-116686
