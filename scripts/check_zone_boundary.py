@@ -1,6 +1,6 @@
 """LLM-zone commit boundary check — mechanizes the AGENTS.md hard boundaries.
 
-Zone (LangGraph / LLM code): ``internal/session/**`` minus the two HTTP-side
+Zone (LangGraph / LLM code): ``internal/session/**`` minus the HTTP-side
 siblings, ``internal/perception/**``, ``internal/llm/**``. Commit paths are
 HTTP-only: publishing via ``POST /confirm`` (ADR 0003), org-catalog upserts
 via the proposals/approvals routes (ADR 0011), preview persist + confirm in
@@ -50,6 +50,9 @@ ZONE_DIRS = ("internal/session", "internal/perception", "internal/llm")
 # they are not graph code and this gate does not constrain them.
 ZONE_EXCLUDE = {
     "internal/session/service.py",  # confirm / preview persist / park-resume bridge
+    "internal/session/previews.py",  # preview/draft payload persist
+    "internal/session/image_plan.py",  # pending image plan staging
+    "internal/session/graph_state.py",  # graph invoke/state helpers shared by the HTTP-side modules
     "internal/session/guards.py",  # access guards imported by cmd/ and internal/mcp
 }
 
@@ -58,6 +61,9 @@ ZONE_EXCLUDE = {
 BANNED_MODULES = {
     "internal.tools": "publish adapters — publishing is confirm-only (ADR 0003/0022)",
     "internal.session.service": "HTTP-side orchestration — confirm/persist lives here (ADR 0005)",
+    "internal.session.previews": "HTTP-side draft/preview persist — same tier as service (ADR 0005)",
+    "internal.session.image_plan": "HTTP-side image-plan staging — same tier as service (ADR 0005)",
+    "internal.session.graph_state": "HTTP-side invoke/state helpers — same tier as service (ADR 0005)",
     "internal.mcp": "remote-agent surface — it calls the zone, never the reverse (ADR 0051)",
     "cmd": "HTTP layer",
 }

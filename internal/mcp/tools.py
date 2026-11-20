@@ -21,7 +21,7 @@ from internal.instance.config import get_snapshot
 from internal.memory import repos
 from internal.memory.database import open_session
 from internal.memory.models import Session
-from internal.session import service
+from internal.session import previews, service
 from internal.session.guards import enforce_member_token_limit, require_owned_session
 from internal.session.nodes import angle_pick_payload
 from internal.session.turn_registry import session_turn_registry
@@ -341,7 +341,7 @@ async def get_post_draft(ctx: McpContext, args: SessionToolArgs) -> PostDraftSta
             return DraftFailed(session_id=session.id, error=str(error))
 
         messages = await repos.list_session_messages(db, session.id)
-        preview = await service.latest_preview_payload(db, session)
+        preview = await previews.latest_preview_payload(db, session)
     # Surface the last assistant turn output so a question asked after the
     # preview exists is not hidden behind `ready`.
     last = next((m for m in reversed(messages) if m.role == "assistant"), None)

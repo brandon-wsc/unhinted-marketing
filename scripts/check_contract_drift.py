@@ -15,6 +15,8 @@ product-contract or behavior-rule change:
     internal/mcp/server.py      remote-MCP endpoint surface
     internal/session/service.py park/resume/confirm/stop behavior — the
                                 subjects of ADR 0003/0004/0016/0028/0031/0035/0036
+    internal/session/previews.py  canonical draft payloads — ADR 0001/0008/0047
+    internal/session/image_plan.py pending image script/plan — ADR 0031/0036
 
 internal/session/nodes.py and graph.py are *not* gated: every session
 feature touches them, so requiring docs per edit would train everyone to
@@ -36,7 +38,7 @@ import sys
 
 CONTRACT_SURFACE = re.compile(
     r"^(?:schemas/|migrations/|internal/tools/|internal/mcp/(?:tools|server)\.py"
-    r"|internal/session/service\.py)"
+    r"|internal/session/(?:service|previews|image_plan)\.py)"
 )
 CONTRACT_DOCS = re.compile(r"^docs/(?:adr/|STATUS\.md)")
 
