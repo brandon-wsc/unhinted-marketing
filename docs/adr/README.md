@@ -64,6 +64,7 @@ Immutable-ish product/architecture decisions. STATUS may summarize; **ADRs are t
 | [0059](./0059-release-branches-demo-track-split.md) | Release branches off `main` on demand; hosted demo on releases, NAS/local on `main` | Accepted |
 | [0060](./0060-langchain-inner-harness.md) | LangChain inner harness; supersedes the Pydantic AI loop | Accepted (§1 no-nested-graph clause superseded by 0061) |
 | [0061](./0061-create-agent-inner-loop.md) | `create_agent` inner loop — leaf graph, ToolStrategy, closure deps | Accepted |
+| [0062](./0062-session-main-agent.md) | Session main agent — collapse cognition pipeline; graph keeps guarantees | Draft |
 
 ## Format
 
