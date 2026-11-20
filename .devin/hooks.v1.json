@@ -1,0 +1,26 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "^exec$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".agents/hooks/pr-gate.sh",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "^run_subagent$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".agents/hooks/pr-gate.sh",
+          "timeout": 10
+        }
+      ]
+    }
+  ]
+}

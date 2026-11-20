@@ -64,6 +64,10 @@ reports/eval/*
 *.log
 logs/
 
+# Verify-skill scratch + captured proof
+.agents/skills/*/evidence/
+.agents/skills/*/runs/
+
 # PostgreSQL local
 pgdata/
 .neon

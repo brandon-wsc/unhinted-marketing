@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": ".agents/hooks/pr-gate.sh",
+        "matcher": "gh\\s+pr\\s+create"
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": ".agents/hooks/pr-gate.sh",
+        "matcher": "comment-sicko"
+      }
+    ]
+  }
+}
