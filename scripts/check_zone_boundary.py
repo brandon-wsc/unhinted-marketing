@@ -50,8 +50,8 @@ ZONE_DIRS = ("internal/session", "internal/perception", "internal/llm")
 # they are not graph code and this gate does not constrain them.
 ZONE_EXCLUDE = {
     "internal/session/service.py",  # confirm / preview persist / park-resume bridge
-    "internal/session/previews.py",  # preview/draft payload persist — split from service.py
-    "internal/session/image_plan.py",  # pending image plan staging — split from service.py
+    "internal/session/previews.py",  # preview/draft payload persist
+    "internal/session/image_plan.py",  # pending image plan staging
     "internal/session/graph_state.py",  # graph invoke/state helpers shared by the HTTP-side modules
     "internal/session/guards.py",  # access guards imported by cmd/ and internal/mcp
 }

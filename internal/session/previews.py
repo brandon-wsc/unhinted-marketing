@@ -35,7 +35,6 @@ from schemas.contracts import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_PLATFORM = "instagram"
-
 async def list_latest_session_media(db: AsyncSession, session: Session) -> list[dict[str, Any]]:
     draft = await repos.get_latest_preview_draft(db, session.id)
     ids = list(draft.media_ids or []) if draft else []
@@ -370,6 +369,25 @@ async def copy_session_preview(
     )
 
 
+async def _backfill_primary_image_row(
+    db: AsyncSession,
+    session: Session,
+    *,
+    primary_url: str | None,
+    primary_plan: dict[str, Any] | None,
+) -> tuple[list[uuid.UUID], list[dict[str, Any]], str | None, dict[str, Any] | None]:
+    """Pre-media_ids drafts carry only a loose primary url/plan — materialize the row once."""
+    return await _media_for_new_draft(
+        db,
+        session,
+        image_url=primary_url,
+        image_plan=primary_plan if isinstance(primary_plan, dict) else None,
+        image_format=None,
+        reuse_media_ids=None,
+        create_image_row=True,
+    )
+
+
 async def update_session_draft(
     db: AsyncSession,
     session: Session,
@@ -388,7 +406,6 @@ async def update_session_draft(
         raise ValueError("caption is required")
 
     existing = await repos.get_latest_preview_draft(db, session.id)
-    # Caption-only: reuse media_ids (ADR 0008). Do not invent a new image row.
     reuse_ids = list(existing.media_ids or []) if existing else []
     media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
         db,
@@ -401,16 +418,9 @@ async def update_session_draft(
         reuse_media_ids=reuse_ids,
         create_image_row=False,
     )
-    # Legacy drafts without media_ids but with image_url: create one image once.
     if not media_ids and (primary_url or primary_plan):
-        media_ids, media, primary_url, primary_plan = await _media_for_new_draft(
-            db,
-            session,
-            image_url=primary_url,
-            image_plan=primary_plan if isinstance(primary_plan, dict) else None,
-            image_format=None,
-            reuse_media_ids=None,
-            create_image_row=True,
+        media_ids, media, primary_url, primary_plan = await _backfill_primary_image_row(
+            db, session, primary_url=primary_url, primary_plan=primary_plan
         )
     return await _bump_preview_revision(
         db,
@@ -539,6 +549,3 @@ async def _bump_preview_revision(
         "source_signals": resolved_signals,
         "events": events,
     }
-
-
-DEFAULT_PLATFORM = "instagram"
