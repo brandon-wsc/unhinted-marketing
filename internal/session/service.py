@@ -2026,7 +2026,6 @@ async def _rewrite_copy_for_direction(
         async with company_llm_scope(db, session.company_id):
             parsed = await EH.run_edit_copy_agent(
                 json.dumps(payload, ensure_ascii=False),
-                EH.ExecuteDeps(),
             )
         if parsed and str(parsed.caption or "").strip():
             return normalize_draft_copy(

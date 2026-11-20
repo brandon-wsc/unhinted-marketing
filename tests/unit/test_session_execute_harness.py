@@ -52,7 +52,7 @@ async def test_executor_post_agent_parses_draftout() -> None:
             )
         )
     )
-    parsed = await EH.run_executor_post_agent("draft me", EH.ExecuteDeps())
+    parsed = await EH.run_executor_post_agent("draft me")
     assert parsed is not None
     assert parsed.caption == "Hello HK"
     assert parsed.source_signal_ids == ["sig_a"]
@@ -79,7 +79,7 @@ async def test_execute_agent_can_call_query_market_trends() -> None:
             )
         )
     )
-    parsed = await EH.run_executor_post_agent("draft me", EH.ExecuteDeps())
+    parsed = await EH.run_executor_post_agent("draft me")
     assert parsed is not None
     assert parsed.caption == "Hello HK"
 
@@ -109,7 +109,7 @@ async def test_run_executor_post_records_chat_json(monkeypatch: pytest.MonkeyPat
         node="executor_post",
         session_id=str(sid),
     ):
-        parsed = await EH.run_executor_post_agent("draft me", EH.ExecuteDeps())
+        parsed = await EH.run_executor_post_agent("draft me")
     assert parsed is not None
     assert len(sent) == 1
     rec = sent[0]
@@ -145,7 +145,7 @@ async def test_edit_copy_agent_parses_editout() -> None:
             )
         )
     )
-    parsed = await EH.run_edit_copy_agent("shorten", EH.ExecuteDeps())
+    parsed = await EH.run_edit_copy_agent("shorten")
     assert parsed is not None
     assert parsed.caption == "短啲 caption"
     assert parsed.need_image is True
@@ -160,7 +160,7 @@ async def test_edit_copy_empty_caption_is_parse_miss() -> None:
             messages=iter([out_call("EditOut", {"caption": "   ", "hashtags": []})])
         )
     )
-    parsed = await EH.run_edit_copy_agent("shorten", EH.ExecuteDeps())
+    parsed = await EH.run_edit_copy_agent("shorten")
     assert parsed is None
 
 
@@ -189,7 +189,7 @@ async def test_run_edit_copy_records_chat_json(monkeypatch: pytest.MonkeyPatch) 
         node="edit_copy",
         session_id=str(sid),
     ):
-        parsed = await EH.run_edit_copy_agent("shorten", EH.ExecuteDeps())
+        parsed = await EH.run_edit_copy_agent("shorten")
     assert parsed is not None
     assert len(sent) == 1
     rec = sent[0]

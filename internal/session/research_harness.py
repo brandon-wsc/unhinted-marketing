@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import tool
 
 from internal.llm.router import ModelTier
 from internal.session import harness as H
@@ -98,10 +98,7 @@ def research_tools(deps: ResearchDeps, extra_tools: Sequence[Any] = ()) -> list[
         slices = await _run_ingest_web_search(deps, query, topic, time_range)
         return json.dumps(slices, ensure_ascii=False, default=str)
 
-    tools: list[Any] = [ingest_web_search, H.query_market_trends]
-    for extra in extra_tools:
-        tools.append(extra if isinstance(extra, BaseTool) else tool(extra))
-    return tools
+    return H.with_extra_tools([ingest_web_search, H.query_market_trends], extra_tools)
 
 
 async def run_query_generator_agent(
@@ -115,7 +112,7 @@ async def run_query_generator_agent(
         chat, label = H.live_lc_model(NODE_MODEL_TIERS["query_generator"] or ModelTier.CHEAP)
     return await H.run_typed_lc_agent(
         chat=chat,
-        model_label=label,
+        label=label,
         tier=NODE_MODEL_TIERS["query_generator"],
         system=prompts.QUERY_GENERATOR,
         user_prompt=user_prompt,

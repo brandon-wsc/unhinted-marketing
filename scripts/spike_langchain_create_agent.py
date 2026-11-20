@@ -104,6 +104,8 @@ class ScriptStub:
         self.client_eof_at = time.monotonic()
 
     async def _serve_json(self, writer: asyncio.StreamWriter, spec: dict[str, Any]) -> None:
+        if spec.get("delay_s"):
+            await asyncio.sleep(spec["delay_s"])
         message: dict[str, Any] = {"role": "assistant", "content": None}
         finish = "stop"
         if spec["kind"] == "text":
@@ -158,7 +160,11 @@ class ScriptStub:
         self.request_bodies.append(body_json)
         spec = self.responses[min(len(self.request_bodies), len(self.responses)) - 1]
         if not body_json.get("stream"):
-            await self._serve_json(writer, spec)
+            # audit-allow(ERR-03): client abort mid-delay is the outcome under test.
+            with contextlib.suppress(
+                ConnectionResetError, BrokenPipeError, asyncio.CancelledError
+            ):
+                await self._serve_json(writer, spec)
             writer.close()
             await watcher
             return
@@ -270,6 +276,34 @@ async def t2_cancel_through_graph() -> None:
         "cancel: mid-stream cancel through graph aborts HTTP connection",
         cancelled and aborted,
         f"chunks={len(parts)} served_fully={stub.served_fully} "
+        f"eof={None if stub.client_eof_at is None else round(stub.client_eof_at - t0, 2)}s",
+    )
+
+
+async def t7_ainvoke_cancel_through_graph() -> None:
+    stub = ScriptStub([text_resp(["slow"], delay_s=2.0)])
+    port = await stub.start()
+    agent = create_agent(_model(port), tools=[])
+    t0 = time.monotonic()
+    task = asyncio.create_task(
+        agent.ainvoke({"messages": [HumanMessage(content="hi")]})
+    )
+    await asyncio.sleep(0.3)  # let the request reach the stub
+    task.cancel()
+    cancelled = False
+    try:
+        await task
+    except asyncio.CancelledError:
+        cancelled = True
+    await asyncio.sleep(0.1)
+    await stub.close()
+    aborted = (stub.client_eof_at is not None and stub.client_eof_at - t0 < 3.0) or (
+        not stub.served_fully
+    )
+    report(
+        "cancel: mid-ainvoke cancel through graph aborts HTTP connection",
+        cancelled and aborted,
+        f"served_fully={stub.served_fully} "
         f"eof={None if stub.client_eof_at is None else round(stub.client_eof_at - t0, 2)}s",
     )
 
@@ -406,6 +440,7 @@ async def main() -> None:
     await t4_response_format()
     await t5_closure_deps()
     await t6_usage_metadata_in_stream()
+    await t7_ainvoke_cancel_through_graph()
     failed = [n for n, ok, _ in RESULTS if not ok]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
     if failed:

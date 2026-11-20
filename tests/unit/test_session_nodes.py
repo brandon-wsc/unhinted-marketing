@@ -851,7 +851,7 @@ async def test_executor_post_payload_includes_image_format(
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     captured: dict = {}
 
-    async def fake_run(payload: str, _deps: object) -> DraftOut:
+    async def fake_run(payload: str) -> DraftOut:
         captured.update(json.loads(payload))
         return DraftOut(caption="c", source_signal_ids=["sig_a"])
 
@@ -877,7 +877,7 @@ async def test_executor_post_payload_defaults_image_format_single(
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     captured: dict = {}
 
-    async def fake_run(payload: str, _deps: object) -> DraftOut:
+    async def fake_run(payload: str) -> DraftOut:
         captured.update(json.loads(payload))
         return DraftOut(caption="c", source_signal_ids=["sig_a"])
 
@@ -901,7 +901,7 @@ async def test_executor_post_payload_uses_sticky_chosen_format(
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
     captured: dict = {}
 
-    async def fake_run(payload: str, _deps: object) -> DraftOut:
+    async def fake_run(payload: str) -> DraftOut:
         captured.update(json.loads(payload))
         return DraftOut(caption="c", source_signal_ids=["sig_a"])
 

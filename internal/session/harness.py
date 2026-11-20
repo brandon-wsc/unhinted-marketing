@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
+from langchain.agents.structured_output import StructuredOutputError, ToolStrategy
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -251,12 +251,16 @@ def read_attachment_tool(deps: ChatDeps) -> BaseTool:
     return read_attachment
 
 
+def with_extra_tools(base: list[Any], extra_tools: Sequence[Any]) -> list[Any]:
+    """Append ``extra_tools`` — ``BaseTool`` instances pass through, callables wrap via ``tool``."""
+    for extra in extra_tools:
+        base.append(extra if isinstance(extra, BaseTool) else tool(extra))
+    return base
+
+
 def chat_tools(deps: ChatDeps, extra_tools: Sequence[Any] = ()) -> list[Any]:
     """LangChain tools on the chat loop — publish-class names never registered."""
-    tools: list[Any] = [query_market_trends, read_attachment_tool(deps)]
-    for extra in extra_tools:
-        tools.append(extra if isinstance(extra, BaseTool) else tool(extra))
-    return tools
+    return with_extra_tools([query_market_trends, read_attachment_tool(deps)], extra_tools)
 
 
 async def _publish_deltas(
@@ -336,29 +340,31 @@ async def _consume_agent_stream(
     parts: list[str],
     pending: list[str],
     session_id: uuid.UUID | None,
-) -> tuple[list[Any], AIMessageChunk | None]:
-    """Consume the agent stream; return ``(final_state_messages, last acc)``.
+    final_messages: list[Any],
+    acc_box: list[AIMessageChunk | None],
+) -> None:
+    """Consume the agent stream into ``final_messages`` / ``acc_box``.
 
     ``messages`` payloads are ``(chunk, metadata)`` — only model-node
     ``AIMessageChunk`` deltas fan out to ``message.delta``; ``values``
-    payloads carry the post-node state snapshot (full message list).
+    payloads carry the post-node state snapshot (full message list). Each
+    ``values`` event ends a superstep, so the model chunks that follow it
+    are a new round — ``acc`` holds only the current round's partial.
+    Both out-params update live so an aborted stream still yields the
+    committed messages plus the in-flight partial.
     """
-    final_messages: list[Any] = []
     acc: AIMessageChunk | None = None
-    prev_round_called_tools = False
     async for mode, payload in agen:
         if mode == "values":
-            final_messages = list(payload.get("messages") or [])
+            final_messages[:] = list(payload.get("messages") or [])
+            acc = None
+            acc_box[0] = None
             continue
         chunk, meta = payload
         if not isinstance(chunk, AIMessageChunk) or meta.get("langgraph_node") != "model":
             continue
-        if prev_round_called_tools:
-            acc = None
-            prev_round_called_tools = False
         acc = chunk if acc is None else acc + chunk
-        if chunk.tool_call_chunks:
-            prev_round_called_tools = True
+        acc_box[0] = acc
         chunk_usage = getattr(chunk, "usage_metadata", None)
         if chunk_usage:
             _merge_lc_usage(usage, chunk_usage)
@@ -370,7 +376,6 @@ async def _consume_agent_stream(
             pending.append(piece)
             if session_id:
                 await _publish_deltas(session_id, pending)
-    return final_messages, acc
 
 
 def _estimate_prompt_and_completions(
@@ -378,12 +383,22 @@ def _estimate_prompt_and_completions(
     user_prompt: str,
     final_messages: Sequence[Any],
     acc: AIMessageChunk | None,
+    *,
+    aborted: bool = False,
 ) -> tuple[Sequence[Any], Sequence[Any]]:
     """Prompt/completion split for the usage estimate.
 
     ``create_agent`` keeps ``system_prompt`` out of ``state.messages`` —
-    prepend it back so the estimate counts the real model input.
+    prepend it back so the estimate counts the real model input. On an
+    aborted stream (cancel / recursion cap) the last state snapshot is
+    everything the in-flight round was sent; the merged partial ``acc``
+    is its reply (ADR 0061 §2 — sent messages + merged partial).
     """
+    if aborted:
+        return (
+            [SystemMessage(content=system), *final_messages],
+            [message_chunk_to_message(acc)] if acc is not None else [],
+        )
     last_ai = _last_ai(final_messages)
     if last_ai is not None:
         return (
@@ -399,7 +414,7 @@ def _estimate_prompt_and_completions(
 async def _stream_chat_reply_lc(
     *,
     chat: BaseChatModel,
-    model_label: str,
+    label: str,
     user_prompt: str,
     session_id: uuid.UUID | None,
     deps: ChatDeps,
@@ -415,11 +430,12 @@ async def _stream_chat_reply_lc(
     pending: list[str] = []
     usage: dict[str, int] = {}
     final_messages: list[Any] = []
-    acc: AIMessageChunk | None = None
+    acc_box: list[AIMessageChunk | None] = [None]
+    stream_done = False
     with track(
         kind="chat_text",
         tier=NODE_MODEL_TIERS["chat"],
-        model=model_label,
+        model=label,
         system=prompts.CHAT,
         user=user_prompt,
     ) as rec:
@@ -429,20 +445,23 @@ async def _stream_chat_reply_lc(
             config={"recursion_limit": _RECURSION_LIMIT},
         )
         try:
-            final_messages, acc = await _consume_agent_stream(
+            await _consume_agent_stream(
                 agen,
                 rec=rec,
                 usage=usage,
                 parts=parts,
                 pending=pending,
                 session_id=session_id,
+                final_messages=final_messages,
+                acc_box=acc_box,
             )
+            stream_done = True
         except ValueError as exc:
             # BaseChatModel.astream raises when a round yields zero
             # chunks — treat as an empty reply, not a provider error.
             if "generation chunks" not in str(exc):
                 _stash_partial(rec, parts)
-                raise map_lc_error(exc, model=model_label) from exc
+                raise map_lc_error(exc, model=label) from exc
         except asyncio.CancelledError:
             _stash_partial(rec, parts)
             raise
@@ -453,24 +472,31 @@ async def _stream_chat_reply_lc(
             raise
         except Exception as exc:
             _stash_partial(rec, parts)
-            raise map_lc_error(exc, model=model_label) from exc
+            raise map_lc_error(exc, model=label) from exc
         finally:
             await aclose_stream(agen)
-        prompt_messages, completions = _estimate_prompt_and_completions(
-            prompts.CHAT, user_prompt, final_messages, acc
-        )
-        _estimate_if_no_usage(
-            chat, usage, messages=prompt_messages, completion_messages=completions
-        )
-        if usage:
-            rec.set_usage(usage)
+            # Runs on cancel/error too (ADR 0061 §2) — on an aborted
+            # stream the estimate covers sent messages + merged partial.
+            prompt_messages, completions = _estimate_prompt_and_completions(
+                prompts.CHAT, user_prompt, final_messages, acc_box[0],
+                aborted=not stream_done,
+            )
+            _estimate_if_no_usage(
+                chat, usage, messages=prompt_messages, completion_messages=completions
+            )
+            if usage:
+                rec.set_usage(usage)
         if session_id:
             await _publish_deltas(session_id, pending, force=True)
         last_ai = _last_ai(final_messages)
-        output = (
-            last_ai.content if last_ai is not None and isinstance(last_ai.content, str) else None
-        )
-        text = (output if output is not None else "".join(parts)).strip()
+        if stream_done and last_ai is not None and isinstance(last_ai.content, str):
+            output: str = last_ai.content
+        else:
+            # Aborted stream (cancel / recursion cap) — the committed
+            # snapshot lags the streamed deltas; the partial text is
+            # everything that was emitted.
+            output = "".join(parts)
+        text = output.strip()
         rec.response_text = text or None
     return text or None
 
@@ -524,6 +550,10 @@ async def run_lc_tool_loop(
     except GraphRecursionError:
         logger.warning("lc agent hit %s supersteps; parse miss", _RECURSION_LIMIT)
         return None
+    except StructuredOutputError:
+        # ToolStrategy exhausted its validation retries — a parse miss for
+        # the caller, not a provider error (ADR 0061 §3 contract).
+        raise
     except Exception as exc:
         raise map_lc_error(exc, model=model_label(chat)) from exc
     messages = list(result.get("messages") or [])
@@ -533,14 +563,11 @@ async def run_lc_tool_loop(
         if message_usage:
             _merge_lc_usage(usage, message_usage)
     ai_replies = [m for m in messages if isinstance(m, AIMessage)]
+    prompt_messages, completions = _estimate_prompt_and_completions(
+        system, user_prompt, messages, None
+    )
     _estimate_if_no_usage(
-        chat,
-        usage,
-        messages=[
-            SystemMessage(content=system),
-            *([m for m in messages if m is not ai_replies[-1]] if ai_replies else messages),
-        ],
-        completion_messages=ai_replies[-1:] if ai_replies else [],
+        chat, usage, messages=prompt_messages, completion_messages=completions
     )
     if usage:
         rec.set_usage(usage)
@@ -556,7 +583,7 @@ async def run_lc_tool_loop(
 async def run_typed_lc_agent(
     *,
     chat: BaseChatModel,
-    model_label: str,
+    label: str,
     tier: ModelTier | None,
     system: str,
     user_prompt: str,
@@ -573,7 +600,7 @@ async def run_typed_lc_agent(
     with track(
         kind="chat_json",
         tier=tier,
-        model=model_label,
+        model=label,
         system=system,
         user=user_prompt,
     ) as rec:
@@ -617,7 +644,7 @@ async def stream_chat_reply(
         chat, label = live_lc_chat_model()
     return await _stream_chat_reply_lc(
         chat=chat,
-        model_label=label,
+        label=label,
         user_prompt=user_prompt,
         session_id=session_id,
         deps=deps,

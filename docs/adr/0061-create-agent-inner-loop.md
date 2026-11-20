@@ -14,7 +14,7 @@ What the hand-rolled loop costs:
 - ~150 lines of loop machinery (`_stream_round`, `_run_lc_tool_call`, `run_lc_tool_loop`) duplicating what `ToolNode` + `create_agent` already do — parallel tool calls, malformed-call handling, unknown-tool error messages, iteration caps.
 - Every edge case is ours to test: tool calls mid-round vs end-round, invalid args, models that answer instead of calling the out-schema, usage across multi-round prompts.
 
-What changed the calculus — a keyless spike (`scripts/spike_langchain_create_agent.py`, 8/8 checks) verified the two semantics the objection rested on:
+What changed the calculus — a keyless spike (`scripts/spike_langchain_create_agent.py`, 9/9 checks) verified the two semantics the objection rested on:
 
 1. **Cancel still aborts upstream through the graph.** `agent.astream(..., stream_mode="messages")` cancelled mid-stream closes the ChatOpenAI HTTP connection (stub-observed client EOF at 0.32s) — the ADR 0004 Stop→abort requirement survives the graph boundary.
 2. **State ownership stays unambiguous because we give the inner graph nothing.** `create_agent` returns a leaf `CompiledStateGraph`; we never pass `checkpointer`, `store`, `context_schema`, or callbacks that touch `SessionState`. Its state is a per-call scratchpad (`messages` + `structured_response`) discarded when the node returns — the 0019 objection was about *shared* state, which this still does not do.
