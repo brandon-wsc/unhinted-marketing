@@ -37,9 +37,12 @@ from internal.config import settings
 from internal.llm import recorder
 from internal.llm.pricing import normalize_model_id, summarize_usage
 from internal.llm.router import LlmProviderError, has_llm_credentials
+from internal.session import draft_harness as DH
 from internal.session import execute_harness as EH
+from internal.session import image_harness as IH
 from internal.session import ingest as ingest_mod
 from internal.session import nodes as N
+from internal.session import research_harness as RH
 from internal.session.context import session_db
 from schemas.tools import QueryMarketTrendsResponse, QueryMarketTrendsSignal
 from tests.eval.graders import grade_case
@@ -49,7 +52,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CASES_DIR = REPO_ROOT / "tests" / "eval" / "cases"
 DEFAULT_CASSETTE = REPO_ROOT / "tests" / "eval" / "cassettes" / "signals.json"
 REPORT_DIR = REPO_ROOT / "reports" / "eval"
-SUITES = ("smoke", "research", "regression", "all")
+SUITES = ("smoke", "research", "regression", "session_agent", "all")
 
 
 def _silence_recording() -> None:
@@ -203,9 +206,98 @@ async def _run_grounding_check(case: dict[str, Any], state: dict[str, Any]) -> d
     return dict(out)
 
 
+async def _run_session_agent(state: dict[str, Any]) -> dict[str, Any]:
+    """Main-agent routing eval — canned tool bodies, real routing cognition.
+
+    The point is the model's tool/route decisions, not tool internals (each
+    tool has its own node eval). Canned results keep the loop deterministic
+    after the first call so later decisions still read real state.
+    """
+    tools: list[str] = []
+
+    async def _research(payload: dict[str, Any]) -> RH.ResearchToolResult:
+        tools.append("research")
+        return RH.ResearchToolResult(
+            reply=json.dumps(
+                {
+                    "queries": ["hk trends"],
+                    "signals": [{"signal_id": "s1", "title": "t1"}],
+                },
+                ensure_ascii=False,
+            ),
+            state_update={
+                "research_signals": [{"signal_id": "s1", "title": "t1"}],
+                "search_query": "hk trends",
+                "source_signal_ids": ["s1"],
+                "research": {
+                    "search_queries": ["hk trends"],
+                    "query_source": "llm",
+                    "signals_trusted": True,
+                },
+            },
+        )
+
+    async def _propose(payload: dict[str, Any]) -> DH.ProposeAnglesResult:
+        tools.append("propose_angles")
+        return DH.ProposeAnglesResult(
+            reply=json.dumps({"angles": ["角度甲", "角度乙"]}, ensure_ascii=False),
+            state_update={
+                "mode": "AGENT",
+                "brief": {"angles": ["角度甲", "角度乙"], "summary": "s"},
+                "active_persona": "hk_gen_z",
+            },
+            ready=True,
+        )
+
+    async def _draft(payload: dict[str, Any]) -> DH.DraftWriteResult:
+        tools.append("draft_post")
+        return DH.DraftWriteResult(
+            reply=json.dumps({"drafted": True}),
+            state_update={
+                "draft": {"caption": "c", "hashtags": [], "cta": "x"},
+                "source_signal_ids": ["s1"],
+                "need_image": True,
+                "grounding_ok": True,
+            },
+        )
+
+    async def _revise(payload: dict[str, Any]) -> DH.DraftWriteResult:
+        tools.append("revise_draft")
+        return DH.DraftWriteResult(
+            reply=json.dumps({"drafted": True}),
+            state_update={
+                "draft": {"caption": "c2", "hashtags": [], "cta": "x"},
+                "grounding_ok": True,
+            },
+        )
+
+    async def _plan(payload: dict[str, Any]) -> IH.PlanImageResult:
+        tools.append("plan_image")
+        return IH.PlanImageResult(
+            reply=json.dumps({"planned": True, "format": "single"}),
+            state_update={
+                "image_plan": {"format": "single", "prompt": "p"},
+                "image_format": "single",
+            },
+        )
+
+    with (
+        patch.object(RH, "run_research_tool", _research),
+        patch.object(DH, "run_propose_angles", _propose),
+        patch.object(DH, "run_draft_post", _draft),
+        patch.object(DH, "run_revise_draft", _revise),
+        patch.object(IH, "run_plan_image", _plan),
+    ):
+        out = await N.session_agent(state)
+    out["_eval_tools_called"] = tools
+    return dict(out)
+
+
 async def _run_case(case: dict[str, Any]) -> dict[str, Any]:
     node = case.get("node")
     state = dict(case.get("state") or {})
+    if node == "session_agent":
+        return await _run_session_agent(state)
     if node == "query_generator":
         return await _run_query_generator(state)
     if node == "route_intent":
@@ -262,6 +354,13 @@ def _summarize_output(node: str, output: dict[str, Any]) -> dict[str, Any]:
             "grounding_ok": output.get("grounding_ok"),
             "source_signal_ids": output.get("source_signal_ids"),
             "reviewer_feedback": output.get("reviewer_feedback"),
+        }
+    if node == "session_agent":
+        return {
+            "agent_next": output.get("agent_next"),
+            "intent": output.get("intent"),
+            "tools_called": output.get("_eval_tools_called"),
+            "drafted": bool((output.get("draft") or {}).get("caption")),
         }
     return output
 

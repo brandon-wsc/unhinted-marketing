@@ -1,0 +1,14 @@
+id: agent_new_post_parks_angles
+suites: [session_agent]
+node: session_agent
+state:
+  mode: CHAT
+  company_id: "11111111-1111-1111-1111-111111111111"
+  research_rule_pass: false
+  messages:
+    - role: user
+      content: 幫我做個post推下星期嘅新能量飲
+expect:
+  agent_next: angle_gate
+  tools: [propose_angles]
+  tools_forbid: [draft_post, revise_draft, plan_image]

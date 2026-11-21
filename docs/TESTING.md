@@ -148,10 +148,13 @@ Draft cases get a cheap-model VOICE judge (`scene` / `layers` / `bridge` / `loca
 
 Query cases grade the **set**: `queries_require_any` (each group must match at least one query — follow-up must keep prior intent **and** the new sense). Do **not** ban kana/CJK globally. `queries_forbid_cjk` is only for cases that must gloss mixed `entity_surface` (e.g. first-turn `usagi 兔糧` → English). A red live case means fix the node, not the grader or prompt example. Graders: `tests/unit/test_eval_graders.py` · `tests/unit/test_eval_voice_judge.py`.
 
+`session_agent` cases (ADR 0062) grade the main agent's **routing cognition**: the runner stubs each cognition-tool body (`research`, `propose_angles`, `draft_post`, `revise_draft`, `plan_image`) with canned results — the model really decides which tool fires and where `agent_next` routes — and grades `expect.agent_next`, `tools`, `tools_forbid`, `replied`. Tool internals stay covered by their own node cases.
+
 ```bash
 python -m scripts.eval_agent              # suite=smoke (fast subset)
 python -m scripts.eval_agent --suite research
 python -m scripts.eval_agent --suite regression   # the big pack
+python -m scripts.eval_agent --suite session_agent  # ADR 0062 main-agent routing
 python -m scripts.eval_agent --suite all
 python -m scripts.eval_agent --skip-judge
 ```
