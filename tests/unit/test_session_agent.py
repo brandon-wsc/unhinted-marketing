@@ -527,6 +527,23 @@ async def test_plan_image_refuses_unreviewed_draft(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_plan_image_refuses_reviewer_pending() -> None:
+    """ADR 0062: the retry budget is not cognition — a bounced draft must be
+    revised, never parked at Execute."""
+    deps = SA.SessionAgentDeps(
+        draft_in={
+            "draft": {"caption": "x"},
+            "need_image": True,
+            "reviewer_feedback": "tone too salesy",
+            "reviewer_passed": False,
+        }
+    )
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "plan_image")
+    out = await tool.ainvoke({})
+    assert "reviewer_pending" in out
+
+
+@pytest.mark.asyncio
 async def test_plan_image_requires_need_image_flag() -> None:
     deps = SA.SessionAgentDeps(
         draft_in={"need_image": False, "draft": {"caption": "x"}}
@@ -554,4 +571,21 @@ async def test_to_preview_refuses_while_image_parked() -> None:
     tool = next(t for t in SA.session_agent_tools(deps) if t.name == "handoff")
     out = await tool.ainvoke({"intent": "to_preview"})
     assert "park" in out
+    assert deps.next is None
+
+
+@pytest.mark.asyncio
+async def test_to_preview_refuses_reviewer_pending() -> None:
+    """A bounced draft cannot be persisted to preview behind the reviewer's back."""
+    deps = SA.SessionAgentDeps(
+        draft_in={
+            "draft": {"caption": "x"},
+            "need_image": True,
+            "reviewer_feedback": "tone too salesy",
+            "reviewer_passed": False,
+        }
+    )
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "handoff")
+    out = await tool.ainvoke({"intent": "to_preview"})
+    assert "reviewer_pending" in out
     assert deps.next is None

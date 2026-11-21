@@ -21,6 +21,7 @@ from typing import Any, Literal
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import tool
 
+from internal.llm import recorder
 from internal.llm.router import ModelTier, resolve_model
 from internal.session import draft_harness as DH
 from internal.session import harness as H
@@ -84,12 +85,16 @@ def set_agent_model_override(model: BaseChatModel | None) -> None:
 
 
 async def _emit_tool_progress(deps: SessionAgentDeps, name: str, tier_key: str) -> None:
-    """Per-tool ``agent.progress`` — keeps the SSE beat count the outer nodes had."""
+    """Per-tool ``agent.progress`` — keeps the SSE beat count the outer nodes had.
+
+    ``node`` carries the legacy vertex name so the trail label and persisted
+    ``agent_actions`` read identically under both topologies.
+    """
     if not deps.session_id:
         return
     tier = NODE_MODEL_TIERS.get(tier_key)
     payload = {
-        "node": name,
+        "node": tier_key,
         "model_tier": tier.value if tier else None,
         "model": resolve_model(tier) if tier else None,
     }
@@ -98,6 +103,18 @@ async def _emit_tool_progress(deps: SessionAgentDeps, name: str, tier_key: str) 
         await session_event_bus.publish(deps.session_id, "agent.progress", payload)
     except Exception:
         logger.exception("failed to publish agent.progress (%s)", name)
+
+
+def _reviewer_pending(ctx: dict[str, Any]) -> bool:
+    """A bounced draft must be revised before preview/image work.
+
+    Reviewer failure leaves ``reviewer_passed=False`` with non-empty feedback
+    (ADR 0062: the retry budget is not cognition — the model cannot route
+    around it by planning an image or persisting the preview).
+    """
+    return bool(
+        ctx.get("draft") and ctx.get("reviewer_feedback") and not ctx.get("reviewer_passed")
+    )
 
 
 def handoff_tool(deps: SessionAgentDeps):
@@ -125,6 +142,8 @@ def handoff_tool(deps: SessionAgentDeps):
         if intent == "to_preview":
             if deps.draft_in.get("hold_image_park"):
                 return "error: image park is awaiting — call plan_image to write the new plan"
+            if _reviewer_pending(deps.draft_in):
+                return "error: reviewer_pending — revise_draft against the feedback first"
             if not deps.draft_in.get("need_image"):
                 return "error: nothing awaiting a preview — reply or use a draft tool"
             deps.image_out = {"need_image": False}
@@ -153,9 +172,10 @@ def research_tool(deps: SessionAgentDeps):
         if not deps.research_allowed:
             return json.dumps({"error": "research_not_allowed"})
         await _emit_tool_progress(deps, "research", "query_generator")
-        result = await RH.run_research_tool(
-            {**deps.research_in, "focus": (focus or "").strip()[:200]}
-        )
+        with recorder.call_context(caller="tool:research"):
+            result = await RH.run_research_tool(
+                {**deps.research_in, "focus": (focus or "").strip()[:200]}
+            )
         deps.research_out = result.state_update
         return result.reply
 
@@ -179,9 +199,10 @@ def propose_angles_tool(deps: SessionAgentDeps):
         brainstorm (e.g. feedback on prior angles).
         """
         await _emit_tool_progress(deps, "propose_angles", "brainstormer")
-        result = await DH.run_propose_angles(
-            {**deps.draft_in, "agent_notes": (notes or "").strip()[:400]}
-        )
+        with recorder.call_context(caller="tool:propose_angles"):
+            result = await DH.run_propose_angles(
+                {**deps.draft_in, "agent_notes": (notes or "").strip()[:400]}
+            )
         deps.draft_out = result.state_update
         deps.draft_ready = result.ready
         return result.reply
@@ -210,7 +231,8 @@ def draft_post_tool(deps: SessionAgentDeps):
             if not ctx.get("brief"):
                 return "error: no brief — call propose_angles first"
         await _emit_tool_progress(deps, "draft_post", "executor_post")
-        result = await DH.run_draft_post(ctx)
+        with recorder.call_context(caller="tool:draft_post"):
+            result = await DH.run_draft_post(ctx)
         deps.write_out = result.state_update
         return result.reply
 
@@ -233,7 +255,8 @@ def revise_draft_tool(deps: SessionAgentDeps):
         if not ctx.get("draft"):
             return "error: no_draft — nothing to revise; propose_angles then draft_post"
         await _emit_tool_progress(deps, "revise_draft", "edit_copy")
-        result = await DH.run_revise_draft(ctx)
+        with recorder.call_context(caller="tool:revise_draft"):
+            result = await DH.run_revise_draft(ctx)
         deps.write_out = result.state_update
         return result.reply
 
@@ -252,17 +275,21 @@ def plan_image_tool(deps: SessionAgentDeps):
         picks Discard | Execute) before any generation; you never render or
         publish. If the draft genuinely needs no image, handoff to_preview
         instead. Refuses when a draft was written this call — it must pass
-        review first.
+        review first — and while reviewer feedback is pending on the current
+        draft (revise_draft first).
         """
         if (deps.write_out or {}).get("draft"):
             return "error: draft_changed — the new draft must pass review first"
         ctx = {**deps.draft_in, **(deps.draft_out or {})}
+        if _reviewer_pending(ctx):
+            return "error: reviewer_pending — revise_draft against the feedback first"
         if not ctx.get("need_image"):
             return "error: no_image_needed — the pipeline did not flag this draft"
         if not ctx.get("draft"):
             return "error: no_draft — nothing to plan an image for"
         await _emit_tool_progress(deps, "plan_image", "executor_image_plan")
-        result = await IH.run_plan_image(ctx)
+        with recorder.call_context(caller="tool:plan_image"):
+            result = await IH.run_plan_image(ctx)
         deps.image_out = result.state_update
         return result.reply
 

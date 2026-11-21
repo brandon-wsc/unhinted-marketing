@@ -311,9 +311,6 @@ async def test_ingest_web_search_deps_not_in_model_schema() -> None:
     assert "query" in params
 
 
-# --- ADR 0062: run_research_tool (main-agent research tool) ---
-
-
 def _pg_row(signal_id: str) -> SimpleNamespace:
     return SimpleNamespace(
         signal_id=signal_id,

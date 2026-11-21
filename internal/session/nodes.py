@@ -979,6 +979,7 @@ def _draft_in_payload(state: SessionState, user: str) -> dict[str, Any]:
         "chosen_angle": state.get("chosen_angle"),
         "chosen_persona": state.get("chosen_persona"),
         "reviewer_feedback": state.get("reviewer_feedback"),
+        "reviewer_passed": bool(state.get("reviewer_passed")),
         "need_image": bool(state.get("need_image")),
         "hold_image_park": bool(state.get("hold_image_park")),
         "image_plan": state.get("image_plan") or {},

@@ -43,6 +43,32 @@ async def test_track_ok_buffers_in_context_and_flushes_on_exit(collected: list) 
     assert rec.response_text == '{"passed": true}'
 
 
+async def test_nested_context_inherits_unset_fields(collected: list) -> None:
+    """A tool scope inside a node re-tags caller without dropping correlation.
+
+    ADR 0062: tools inside session_agent tag ``tool:<name>`` while node and
+    session/user/company correlation inherit from the ambient context.
+    """
+    sid = uuid.uuid4()
+    uid = uuid.uuid4()
+    cid = uuid.uuid4()
+    with (
+        recorder.call_context(
+            caller="node:session_agent", node="session_agent",
+            session_id=sid, user_id=uid, company_id=cid,
+        ),
+        recorder.call_context(caller="tool:draft_post"),
+        recorder.track(kind="chat_json", model="gpt-test") as rec,
+    ):
+        rec.response_text = "{}"
+
+    assert len(collected) == 1
+    rec = collected[0]
+    assert rec.caller == "tool:draft_post"
+    assert rec.node == "session_agent"
+    assert (rec.session_id, rec.user_id, rec.company_id) == (sid, uid, cid)
+
+
 async def test_track_without_context_submits_immediately(collected: list) -> None:
     with recorder.track(kind="chat_text", model="gpt-test"):
         pass
