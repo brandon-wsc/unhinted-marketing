@@ -239,6 +239,7 @@
         "running": {
           "working": "Working…",
           "route_intent": "Understanding your request…",
+          "session_agent": "Working out next step…",
           "query_generator": "Looking up information…",
           "research_ingest": "Gathering market context…",
           "load_context": "Loading company context…",
@@ -256,6 +257,7 @@
         "done": {
           "working": "Worked",
           "route_intent": "Understood your request",
+          "session_agent": "Worked out next step",
           "query_generator": "Looked up information",
           "research_ingest": "Gathered market context",
           "load_context": "Loaded company context",

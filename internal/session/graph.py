@@ -49,11 +49,84 @@ async def _wrap_reviewer_fail(state: SessionState) -> dict[str, Any]:
     return N.bump_review_attempt(state)
 
 
-def build_session_graph(*, checkpointer: Any | None = None):
+def _wire_fast_rules(g: StateGraph, main_agent: bool) -> None:
+    """Post-gate routing — ADR 0062 confirm intercept vs plain recap edge."""
+    if main_agent:
+        # Confirm-adjacent wording is intercepted deterministically before
+        # the agent (ack_confirm); it never reaches model discretion.
+        g.add_conditional_edges(
+            "fast_rule_checker",
+            N.route_after_fast_rules,
+            {"ack_confirm": "ack_confirm", "thread_recap": "thread_recap"},
+        )
+        return
+    g.add_edge("fast_rule_checker", "thread_recap")
+
+
+def _wire_entry_routing(g: StateGraph, main_agent: bool) -> None:
+    """Post-recap routing — legacy ``route_intent`` pipeline vs ADR 0062 agent.
+
+    The agent replies inline (END) or hands off to the still-outer pipeline
+    via ``route_after_session_agent`` markers.
+    """
+    if main_agent:
+        g.add_edge("thread_recap", "session_agent")
+        g.add_conditional_edges(
+            "session_agent",
+            N.route_after_session_agent,
+            {
+                "angle_gate": "angle_gate",
+                "grounding_check": "grounding_check",
+                "executor_image_gen": "executor_image_gen",
+                "persist_preview": "persist_preview",
+                "ack_confirm": "ack_confirm",
+                END: END,
+            },
+        )
+        return
+    g.add_edge("thread_recap", "route_intent")
+    g.add_conditional_edges(
+        "route_intent",
+        N.route_after_intent,
+        {
+            "query_generator": "query_generator",
+            "load_context": "load_context",
+            "edit_copy": "edit_copy",
+            "ack_confirm": "ack_confirm",
+            "chat": "chat",
+        },
+    )
+
+
+def _wire_angle_gate(g: StateGraph, main_agent: bool) -> None:
+    """Angle-park exit — pick drafts; feedback re-briefs (legacy vertex or agent)."""
+    if main_agent:
+        # ADR 0062 — pick and free-text feedback both re-enter the agent:
+        # ``chosen_angle`` → draft_post; ``angle_feedback`` → propose_angles.
+        g.add_edge("angle_gate", "session_agent")
+        return
+    g.add_conditional_edges(
+        "angle_gate",
+        N.route_after_angle_gate,
+        {
+            "executor_post": "executor_post",
+            "brainstormer": "brainstormer",
+        },
+    )
+
+
+def build_session_graph(
+    *, checkpointer: Any | None = None, main_agent: bool = False
+):
     """Build and compile the session graph.
 
     Prefer AsyncPostgresSaver from lifespan (thread_id = session.id).
     MemorySaver is only for local scripts/tests when no checkpointer is passed.
+
+    ``main_agent`` selects the ADR 0062 topology: ``session_agent`` replaces
+    ``route_intent`` as the post-recap vertex and hands off to the still-outer
+    pipeline via markers. Incremental migration — every vertex stays
+    registered; only edges differ.
     """
     g: StateGraph = StateGraph(SessionState)
 
@@ -88,24 +161,17 @@ def build_session_graph(*, checkpointer: Any | None = None):
     g.add_node("hold_locked_plan", N.hold_locked_plan)
     g.add_node("persist_preview", N.persist_preview)
     g.add_node("chat", _with_llm_record_context("chat", N.chat))
+    # ADR 0062 — registered unconditionally; only wired in when main_agent.
+    g.add_node(
+        "session_agent", _with_llm_record_context("session_agent", N.session_agent)
+    )
     g.add_node("ack_confirm", _with_llm_record_context("ack_confirm", N.ack_confirm))
     g.add_node("review_exhausted", N.review_exhausted)
     g.add_node("_reviewer_fail_bump", _wrap_reviewer_fail)
 
     g.add_edge(START, "fast_rule_checker")
-    g.add_edge("fast_rule_checker", "thread_recap")
-    g.add_edge("thread_recap", "route_intent")
-    g.add_conditional_edges(
-        "route_intent",
-        N.route_after_intent,
-        {
-            "query_generator": "query_generator",
-            "load_context": "load_context",
-            "edit_copy": "edit_copy",
-            "ack_confirm": "ack_confirm",
-            "chat": "chat",
-        },
-    )
+    _wire_fast_rules(g, main_agent)
+    _wire_entry_routing(g, main_agent)
     g.add_edge("query_generator", "research_ingest")
     g.add_conditional_edges(
         "research_ingest",
@@ -138,14 +204,7 @@ def build_session_graph(*, checkpointer: Any | None = None):
             "executor_post": "executor_post",
         },
     )
-    g.add_conditional_edges(
-        "angle_gate",
-        N.route_after_angle_gate,
-        {
-            "executor_post": "executor_post",
-            "brainstormer": "brainstormer",
-        },
-    )
+    _wire_angle_gate(g, main_agent)
     g.add_edge("executor_post", "grounding_check")
     g.add_edge("grounding_check", "reviewer")
     g.add_edge("edit_copy", "grounding_check")
@@ -155,13 +214,15 @@ def build_session_graph(*, checkpointer: Any | None = None):
         N.route_after_reviewer,
         {
             "edit_copy": "_reviewer_fail_bump",
-            "executor_image_plan": "executor_image_plan",
+            # ADR 0062: the plan hop re-enters the agent (plan_image tool);
+            # the vertex stays for the legacy topology.
+            "executor_image_plan": "session_agent" if main_agent else "executor_image_plan",
             "hold_locked_plan": "hold_locked_plan",
             "persist_preview": "persist_preview",
             "review_exhausted": "review_exhausted",
         },
     )
-    g.add_edge("_reviewer_fail_bump", "edit_copy")
+    g.add_edge("_reviewer_fail_bump", "session_agent" if main_agent else "edit_copy")
     g.add_edge("review_exhausted", END)
 
     g.add_edge("executor_image_plan", "executor_image_gen")

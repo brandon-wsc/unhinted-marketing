@@ -199,18 +199,25 @@ def call_context(
     user_id: Any = None,
     company_id: Any = None,
 ) -> Iterator[CallContext]:
-    """Scope correlation for contained ``track`` calls; flush records on exit."""
+    """Scope correlation for contained ``track`` calls; flush records on exit.
+
+    Unset fields inherit from the ambient context — a nested scope (e.g. a
+    tool inside a node) re-tags ``caller`` without dropping correlation.
+    """
     # Prefer explicit turn_id; else inherit from session turn_trace ContextVar.
     from internal.session.trace import current_turn_id
 
-    resolved_turn = _uuid_or_none(turn_id) or current_turn_id()
+    prev = _context.get()
+    resolved_turn = (
+        _uuid_or_none(turn_id) or (prev.turn_id if prev else None) or current_turn_id()
+    )
     ctx = CallContext(
         caller=caller,
-        node=node,
-        session_id=_uuid_or_none(session_id),
+        node=node if node is not None else (prev.node if prev else None),
+        session_id=_uuid_or_none(session_id) or (prev.session_id if prev else None),
         turn_id=resolved_turn,
-        user_id=_uuid_or_none(user_id),
-        company_id=_uuid_or_none(company_id),
+        user_id=_uuid_or_none(user_id) or (prev.user_id if prev else None),
+        company_id=_uuid_or_none(company_id) or (prev.company_id if prev else None),
     )
     token = _context.set(ctx)
     try:

@@ -5,6 +5,12 @@ from __future__ import annotations
 import re
 
 from internal.session.semantic_gate import classify_semantic_route
+from internal.session.state import MODE_PREVIEW
+
+# ``research.query_source`` provenance — who wrote ``search_queries``.
+QUERY_SOURCE_LLM = "llm"
+QUERY_SOURCE_NORMALIZE = "normalize"
+QUERY_SOURCE_FALLBACK = "fallback"
 
 # Pure greetings / product-howto — skip Tavily / query_generator (regex fallback).
 _SKIP_RESEARCH = re.compile(
@@ -218,3 +224,18 @@ def normalize_search_query(text: str, *, max_len: int = 160) -> str | None:
     if "hong kong" not in lower and "香港" not in q and not re.search(r"\bhk\b", lower):
         q = f"{q} Hong Kong"
     return q[:max_len].strip() or None
+
+
+# ADR 0062 / ADR 0003 — pre-agent confirm intercept. Confirm-adjacent wording
+# in PREVIEW mode routes to ack_confirm deterministically; it never reaches
+# the model. Same phrase gate the legacy ``_heuristic_intent`` used, plus the
+# status-check wording ADR 0062 names (「搞掂未」).
+CONFIRM_PHRASES = ("可以出", "confirm", "publish", "發佈", "发布", "搞掂未")
+
+
+def confirm_adjacent(text: str, mode: str) -> bool:
+    """True when PREVIEW-mode wording is confirm-adjacent — deterministic."""
+    if mode != MODE_PREVIEW:
+        return False
+    lower = text.lower()
+    return any(k in lower for k in CONFIRM_PHRASES)

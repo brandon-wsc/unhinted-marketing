@@ -419,12 +419,13 @@ async def _stream_chat_reply_lc(
     session_id: uuid.UUID | None,
     deps: ChatDeps,
     extra_tools: Sequence[Any],
+    system: str = prompts.CHAT,
 ) -> str | None:
     """``create_agent`` chat loop streamed via ``stream_mode="messages"``."""
     agent = create_agent(
         chat,
         tools=chat_tools(deps, extra_tools),
-        system_prompt=prompts.CHAT,
+        system_prompt=system,
     )
     parts: list[str] = []
     pending: list[str] = []
@@ -436,7 +437,7 @@ async def _stream_chat_reply_lc(
         kind="chat_text",
         tier=NODE_MODEL_TIERS["chat"],
         model=label,
-        system=prompts.CHAT,
+        system=system,
         user=user_prompt,
     ) as rec:
         agen = agent.astream(
@@ -482,7 +483,7 @@ async def _stream_chat_reply_lc(
             # Runs on cancel/error too (ADR 0061 §2) — on an aborted
             # stream the estimate covers sent messages + merged partial.
             prompt_messages, completions = _estimate_prompt_and_completions(
-                prompts.CHAT, user_prompt, final_messages, acc_box[0],
+                system, user_prompt, final_messages, acc_box[0],
                 aborted=not stream_done,
             )
             _estimate_if_no_usage(
@@ -634,12 +635,41 @@ async def run_typed_lc_agent(
         return parsed
 
 
+async def run_typed(
+    tier_key: str,
+    system: str,
+    user_prompt: str,
+    out_type: Any,
+    override: BaseChatModel | None,
+) -> Any | None:
+    """Typed inner call keyed by NODE_MODEL_TIERS; provider outage → parse miss."""
+    if override is not None:
+        chat, label = override, model_label(override)
+    else:
+        chat, label = live_lc_model(NODE_MODEL_TIERS[tier_key] or ModelTier.CHEAP)
+    try:
+        return await run_typed_lc_agent(
+            chat=chat,
+            label=label,
+            tier=NODE_MODEL_TIERS[tier_key],
+            system=system,
+            user_prompt=user_prompt,
+            tools=[],
+            out_type=out_type,
+            is_valid=lambda _parsed: True,
+            log_tag=tier_key,
+        )
+    except LlmProviderError:
+        return None
+
+
 async def stream_chat_reply(
     *,
     user_prompt: str,
     session_id: uuid.UUID | None,
     deps: ChatDeps,
     extra_tools: Sequence[Any] = (),
+    system: str = prompts.CHAT,
 ) -> str | None:
     """Run the chat agent, fan out message.delta, return the final text."""
     if _model_override is not None:
@@ -653,4 +683,5 @@ async def stream_chat_reply(
         session_id=session_id,
         deps=deps,
         extra_tools=extra_tools,
+        system=system,
     )

@@ -239,6 +239,7 @@
         "running": {
           "working": "处理中…",
           "route_intent": "正在分析需求…",
+          "session_agent": "正在规划下一步…",
           "query_generator": "正在查询资料…",
           "research_ingest": "正在整理市场资料…",
           "load_context": "正在加载公司资料…",
@@ -256,6 +257,7 @@
         "done": {
           "working": "已处理",
           "route_intent": "已分析需求",
+          "session_agent": "已规划下一步",
           "query_generator": "已查询资料",
           "research_ingest": "已整理市场资料",
           "load_context": "已加载公司资料",

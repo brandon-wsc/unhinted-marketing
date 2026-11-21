@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import Any, TypeVar
 
+from langgraph.graph import END
 from pydantic import BaseModel
 
 from internal.llm.recorder import mark_last_call
@@ -41,6 +42,7 @@ from internal.memory.repos import (
     upsert_signal,
 )
 from internal.perception.tavily import search_tavily
+from internal.session import agent as SA
 from internal.session import execute_harness as EH
 from internal.session import ingest as ingest_mod
 from internal.session import prompts
@@ -48,6 +50,9 @@ from internal.session import research_harness as RH
 from internal.session.context import get_db
 from internal.session.events import session_event_bus
 from internal.session.fast_rules import (
+    QUERY_SOURCE_FALLBACK,
+    QUERY_SOURCE_LLM,
+    QUERY_SOURCE_NORMALIZE,
     fallback_search_queries,
     normalize_search_query,
     polish_search_queries,
@@ -65,9 +70,11 @@ from internal.session.image_format import (
     compose_generation_prompt,
     default_avoid,
     image_format_from_text,
+    image_still_pending,
     lock_brief_to_format,
     merge_default_avoid,
     normalize_image_format,
+    wants_image_change,
 )
 from internal.session.io import (
     BriefOut,
@@ -79,6 +86,7 @@ from internal.session.io import (
     ResearchFlags,
     ReviewOut,
     TrendRank,
+    offered_angles,
     omit_nulls,
 )
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW, SessionState
@@ -95,9 +103,6 @@ logger = logging.getLogger(__name__)
 MAX_REVIEW_RETRIES = 2
 T = TypeVar("T", bound=BaseModel)
 
-QUERY_SOURCE_LLM = "llm"
-QUERY_SOURCE_NORMALIZE = "normalize"
-QUERY_SOURCE_FALLBACK = "fallback"
 REVIEWER_PARSE_MISS_FEEDBACK = "Review could not be completed — tighten grounding and craft."
 
 
@@ -168,19 +173,6 @@ def _append_assistant(state: SessionState, content: str) -> list[dict[str, Any]]
     return messages
 
 
-def _signals_payload(signals: list) -> list[dict[str, Any]]:
-    return [
-        {
-            "signal_id": s.signal_id,
-            "source": s.source,
-            "title": s.title,
-            "excerpt": s.excerpt,
-            "metrics": s.metrics or {},
-        }
-        for s in signals
-    ]
-
-
 def _heuristic_intent(state: SessionState) -> str:
     mode = state.get("mode", MODE_CHAT)
     lower = _last_user_text(state).lower()
@@ -206,57 +198,6 @@ def _signals_trusted(state: SessionState) -> bool | None:
     if "signals_trusted" not in research:
         return None
     return bool(research.get("signals_trusted"))
-
-
-_IMAGE_WORDS = ("圖", "图片", "圖片", "image", "photo", "visual", "封面", "畫面", "背景")
-_DIRECTION_CUES = ("唔要", "不要", "改成", "換成", "改做", "instead of", "change to")
-# Caption-only edits must not force a new image (ADR 0036).
-_COPY_ONLY = (
-    "caption",
-    "文案",
-    "hashtag",
-    "cta",
-    "短",
-    "長",
-    "語氣",
-    "抽水",
-    "tone",
-    "搞笑",
-    "認真",
-)
-
-
-def _wants_image_change(text: str) -> bool:
-    """True when the user is changing the picture, not only the words.
-
-    「唔要黃色雨傘，改成藍色天空」 is a direction change even without 圖.
-    「改成短啲」 stays caption-only.
-    """
-    lower = text.lower()
-    if any(k.lower() in lower for k in _IMAGE_WORDS):
-        return True
-    if image_format_from_text(text):
-        return True
-    if any(k in text or k in lower for k in _DIRECTION_CUES):
-        return not any(k in lower for k in _COPY_ONLY)
-    return False
-
-
-def _image_still_pending(state: SessionState | dict[str, Any]) -> bool:
-    """An image was already demanded for this version and never generated.
-
-    ``EditOut.need_image`` only means "this edit changes the picture" — a
-    reviewer-retry caption edit must not silently drop the image pipeline
-    ``executor_post`` already owed the draft. The ``hold_image_park`` revise
-    (ADR 0036) decides from the edit alone: a caption-only answer keeps the
-    locked plan via ``hold_locked_plan``.
-    """
-    return bool(state.get("need_image")) and not state.get("hold_image_park")
-
-
-def offered_angles(brief: dict[str, Any] | None) -> list[str]:
-    """Non-empty angle strings from a brief — the ADR 0028 pick options."""
-    return [a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()]
 
 
 def offered_personas(catalog: list[dict[str, Any]] | None) -> list[dict[str, str]]:
@@ -462,7 +403,7 @@ def _should_research(state: SessionState) -> bool:
 @agent_progress("fast_rule_checker")
 async def fast_rule_checker(state: SessionState) -> dict[str, Any]:
     text = _last_user_text(state)
-    from internal.session.fast_rules import research_pass_for_route
+    from internal.session.fast_rules import confirm_adjacent, research_pass_for_route
     from internal.session.semantic_gate import classify_semantic_route
 
     route = await asyncio.to_thread(classify_semantic_route, text)
@@ -472,7 +413,15 @@ async def fast_rule_checker(state: SessionState) -> dict[str, Any]:
             **(state.get("research") or {}),
             "semantic_route": route,
         },
+        # ADR 0062 — pre-agent confirm intercept; only the agent topology's
+        # conditional edge reads this (legacy routes confirm via route_intent).
+        "confirm_intent": confirm_adjacent(text, state.get("mode", MODE_CHAT)),
     }
+
+
+def route_after_fast_rules(state: SessionState) -> str:
+    """ADR 0062: deterministic confirm intercept — ack_confirm before the agent."""
+    return "ack_confirm" if state.get("confirm_intent") else "thread_recap"
 
 
 # ADR 0057 — rolling recap of messages older than the raw window.
@@ -713,7 +662,7 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
         )
 
     pg_signals = await list_top_signals(db, limit=20, region="HK")
-    pg_rows = _signals_payload(pg_signals)
+    pg_rows = ingest_mod.signal_row_dicts(pg_signals)
     merged = ingest_mod.merge_pg_and_tavily(tavily_items, pg_rows)
 
     query_source = str(research.get("query_source") or "")
@@ -810,7 +759,7 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
     payload = {
         "company": company,
         "user_request": _last_user_text(state),
-        "signals": _signals_payload(signals),
+        "signals": ingest_mod.signal_row_dicts(signals),
         "signals_trusted": _signals_trusted(state),
     }
     parsed = await _parse_llm_json(
@@ -832,7 +781,7 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
     )
     out = {
         "source_signal_ids": ranked_ids,
-        "ranked_signals": _signals_payload(ranked),
+        "ranked_signals": ingest_mod.signal_row_dicts(ranked),
     }
     if parsed and parsed.notes:
         out["trend_notes"] = parsed.notes
@@ -960,6 +909,182 @@ async def chat(state: SessionState) -> dict[str, Any]:
     if llm_error:
         out["error"] = llm_error
     record_node_step("chat", dict(state), out)
+    return out
+
+
+def _session_agent_ids(state: SessionState) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+    def _parse(raw: Any) -> uuid.UUID | None:
+        try:
+            return uuid.UUID(str(raw)) if raw else None
+        except ValueError:
+            return None
+
+    return _parse(state.get("company_id")), _parse(state.get("user_id"))
+
+
+def _session_agent_payload(state: SessionState, user: str) -> str:
+    pack = _voice_pack(state)
+    return json.dumps(
+        {
+            "history": _live_messages(state),
+            "latest": user,
+            "thread_summary": _thread_summary(state),
+            "mode": state.get("mode", MODE_CHAT),
+            "has_draft": bool((state.get("draft") or {}).get("caption")),
+            "research_rule_pass": bool(state.get("research_rule_pass")),
+            "research_signals": (state.get("research_signals") or [])[:8],
+            "signals_trusted": _signals_trusted(state),
+            "voice_pack": {
+                "roast_level": pack.get("roast_level"),
+                "locale": pack.get("locale"),
+            },
+            "product_clarify": bool(state.get("product_clarify")),
+            "product_candidates": (state.get("product_candidates") or [])[:3],
+            "primary_product": state.get("primary_product"),
+            "offered_angles": offered_angles(state.get("brief")),
+            "chosen_angle": state.get("chosen_angle"),
+            "angle_feedback": state.get("angle_feedback"),
+            "draft": state.get("draft") or {},
+            "reviewer_feedback": state.get("reviewer_feedback"),
+            "review_attempts": int(state.get("review_attempts") or 0),
+            "need_image": bool(state.get("need_image")),
+            "image_plan": state.get("image_plan"),
+            "attachments": _chat_attachment_digests(state),
+        },
+        ensure_ascii=False,
+    )
+
+
+def _draft_in_payload(state: SessionState, user: str) -> dict[str, Any]:
+    """Context payload for the agent's draft tools (propose/draft/revise)."""
+    return {
+        "user_request": user,
+        "company_id": state.get("company_id"),
+        "user_id": state.get("user_id"),
+        "research": state.get("research") or {},
+        "research_signals": (state.get("research_signals") or [])[:20],
+        "source_signal_ids": state.get("source_signal_ids") or [],
+        "signals_trusted": _signals_trusted(state),
+        "handoff_signal_ids": state.get("handoff_signal_ids") or [],
+        "prior_brief": state.get("brief") or {},
+        "brief": state.get("brief") or {},
+        "angle_feedback": state.get("angle_feedback"),
+        "image_format": recommended_image_format(state),
+        "chosen_image_format": state.get("chosen_image_format"),
+        "current_image_format": state.get("image_format"),
+        # draft_post / revise_draft context (post-park or revise turns).
+        "draft": state.get("draft") or {},
+        "ranked_signals": _ranked_signals(state)[:20],
+        "active_persona": state.get("active_persona"),
+        "chosen_angle": state.get("chosen_angle"),
+        "chosen_persona": state.get("chosen_persona"),
+        "reviewer_feedback": state.get("reviewer_feedback"),
+        "reviewer_passed": bool(state.get("reviewer_passed")),
+        "need_image": bool(state.get("need_image")),
+        "hold_image_park": bool(state.get("hold_image_park")),
+        "image_plan": state.get("image_plan") or {},
+        "primary_product": state.get("primary_product"),
+        "related_products": state.get("related_products") or [],
+        "company": _slim_company(state),
+        "voice_pack": _voice_pack(state),
+    }
+
+
+def _research_in_payload(state: SessionState, user: str) -> dict[str, Any]:
+    """Query-generator payload pieces for the agent's ``research`` tool."""
+    research = state.get("research") or {}
+    hint = user
+    if _is_follow_up(state):
+        prior_users = [m["content"] for m in _recent_thread(state) if m["role"] == "user"]
+        hint = " ".join(prior_users) or user
+    return {
+        "last_user_message": user,
+        "recent_thread": _live_thread(state),
+        "thread_summary": _thread_summary(state),
+        "research": research,
+        "entity_surface": str(research.get("entity_surface") or "").strip(),
+        "company": _slim_company(state).get("name"),
+        "fallback_hint": hint,
+    }
+
+
+@agent_progress("session_agent")
+async def session_agent(state: SessionState) -> dict[str, Any]:
+    """ADR 0062 main agent — replies directly, researches inline, or hands off."""
+    user = _last_user_text(state)
+    chinese = any("\u4e00" <= c <= "\u9fff" for c in user)
+    company_id, user_id = _session_agent_ids(state)
+    deps = SA.SessionAgentDeps(
+        company_id=company_id,
+        user_id=user_id,
+        session_id=_thread_uuid(state),
+        research_allowed=bool(state.get("research_rule_pass")),
+        research_in=_research_in_payload(state, user),
+        draft_in=_draft_in_payload(state, user),
+    )
+    reply: str | None = None
+    llm_error: str | None = None
+    if has_llm_credentials():
+        try:
+            reply = await SA.stream_session_agent(
+                user_prompt=_session_agent_payload(state, user),
+                session_id=_thread_uuid(state),
+                deps=deps,
+            )
+        except LlmProviderError as exc:
+            logger.warning("session_agent LLM stream failed: %s", exc.message)
+            llm_error = exc.message
+            reply = _llm_failure_reply(exc, chinese=chinese)
+        except Exception:
+            # audit-allow(ERR-03): same contract as _chat_stream — an unexpected
+            # failure degrades to the generic fallback reply, never a half-run turn.
+            logger.exception("session_agent LLM stream failed")
+    out = _session_agent_out(state, deps, reply, chinese=chinese)
+    if llm_error:
+        out["error"] = llm_error
+    record_node_step("session_agent", dict(state), out)
+    return out
+
+
+def _session_agent_out(
+    state: SessionState, deps: Any, reply: str | None, *, chinese: bool
+) -> dict[str, Any]:
+    """Assemble the node result — deterministic post-conditions first.
+
+    A draft written this call routes to ``grounding_check``; an image plan
+    routes to the ``executor_image_gen`` park. Handoff markers only apply
+    when neither fired, so the model cannot route around the outer edges.
+    """
+    drafted = bool((deps.write_out or {}).get("draft"))
+    planned = bool((deps.image_out or {}).get("image_plan"))
+    if drafted:
+        nxt = "grounding_check"
+    elif planned:
+        nxt = "executor_image_gen"
+    else:
+        nxt = deps.next
+    out: dict[str, Any] = {"agent_next": nxt}
+    for slice_ in (deps.research_out, deps.draft_out, deps.write_out, deps.image_out):
+        if slice_:
+            out.update(slice_)
+    if deps.next:
+        out["intent"] = deps.intent
+    if nxt:
+        if reply:
+            out["messages"] = _append_assistant(state, reply)
+        return out
+    if not reply:
+        reply = (
+            "我可以幫你睇香港熱話同草擬社交貼文。想開始嘅話，揀一條推薦問題，"
+            "或者直接講你想做咩內容。"
+            if chinese
+            else (
+                "I can help with HK trends and draft social posts. "
+                "Pick a recommended question or tell me what you want to create."
+            )
+        )
+    out["messages"] = _append_assistant(state, reply)
+    out["mode"] = MODE_CHAT
     return out
 
 
@@ -1378,8 +1503,8 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
             },
             "source_signal_ids": refs,
             "need_image": parsed.need_image
-            or _wants_image_change(user)
-            or _image_still_pending(state),
+            or wants_image_change(user)
+            or image_still_pending(dict(state)),
             "grounding_ok": True,
         }
         fmt = image_format_from_text(user)
@@ -1396,7 +1521,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     draft["caption"] = caption
     out: dict[str, Any] = {
         "draft": draft,
-        "need_image": _wants_image_change(user) or _image_still_pending(state),
+        "need_image": wants_image_change(user) or image_still_pending(dict(state)),
         "grounding_ok": True,
     }
     fmt = image_format_from_text(user)
@@ -1577,6 +1702,22 @@ def route_after_intent(state: SessionState) -> str:
     if intent == "confirm_intent":
         return "ack_confirm"
     return "chat"
+
+
+def route_after_session_agent(state: SessionState) -> str:
+    """ADR 0062: follow the agent's handoff marker; END when it replied inline.
+
+    Whitelist only — an unknown marker never routes. The research gate moved
+    inside the ``research`` tool itself (``research_allowed`` mirrors
+    ``research_rule_pass``), so a disallowed search fails closed and the agent
+    answers or hands off without fresh signals. A ``start`` handoff lands on
+    the angle park; the 0-angle bypass lives in the tools themselves — the
+    ``handoff`` tool rejects a start with no offered angles, and
+    ``draft_post`` drafts them directly (``route_after_brainstormer`` rule,
+    preserved). A draft written this call routes to ``grounding_check``.
+    """
+    nxt = str(state.get("agent_next") or "")
+    return nxt if nxt in SA.HANDOFF_VERTICES else END
 
 
 def route_after_product_matcher(state: SessionState) -> str:

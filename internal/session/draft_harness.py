@@ -1,0 +1,544 @@
+"""Draft-pipeline tool bodies for the main agent — ADR 0062.
+
+``run_propose_angles`` folds the legacy ``load_context → trend_searcher →
+product_matcher → brainstormer`` chain into one tool call: deterministic
+context assembly, a TrendRank inner call, the SQL catalog match, then the
+BriefOut sub-agent (``create_agent`` + ``ToolStrategy``, ADR 0061). The
+``state_update`` mirrors what those vertices wrote so downstream guarantees
+(angle_gate park, executor_post grounding allowlist) see identical state.
+
+``run_draft_post`` / ``run_revise_draft`` fold the legacy ``executor_post`` /
+``edit_copy`` vertices into tools: the DraftOut / EditOut sub-agent seams in
+``execute_harness`` stay untouched (eval cases keep working), while the
+deterministic post-write (refs allowlist, need_image, pick-field clears)
+lives here so outer grounding/review/persist see identical state.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from dataclasses import dataclass, field
+from typing import Any
+
+from langchain_core.language_models import BaseChatModel
+
+from internal.llm.router import LlmProviderError
+from internal.memory.knowledge_seed import ensure_default_personas
+from internal.memory.product_retrieve import (
+    ProductHit,
+    hit_to_payload,
+    pick_primary,
+    search_products_for_member,
+)
+from internal.memory.repos import (
+    get_company,
+    get_signals_by_ids,
+    list_personas,
+    list_top_signals,
+)
+from internal.session import execute_harness as EH
+from internal.session import harness as H
+from internal.session import ingest as ingest_mod
+from internal.session import prompts
+from internal.session.context import get_db
+from internal.session.image_format import (
+    IMAGE_FORMAT_OPTIONS,
+    image_format_from_text,
+    image_still_pending,
+    lock_brief_to_format,
+    wants_image_change,
+)
+from internal.session.io import BriefOut, TrendRank, offered_angles
+from internal.session.state import MODE_AGENT
+from internal.session.voice import (
+    audience_catalog_from_entities,
+    pick_active_persona,
+    voice_pack,
+)
+
+logger = logging.getLogger(__name__)
+
+_trend_override: BaseChatModel | None = None
+_brainstorm_override: BaseChatModel | None = None
+
+
+def set_trend_model_override(model: BaseChatModel | None) -> None:
+    """Test hook: inject a scripted chat model for the trend-rank call."""
+    global _trend_override
+    _trend_override = model
+
+
+def set_brainstorm_model_override(model: BaseChatModel | None) -> None:
+    """Test hook: inject a scripted chat model for the brainstorm call."""
+    global _brainstorm_override
+    _brainstorm_override = model
+
+
+@dataclass
+class ProposeAnglesResult:
+    reply: str  # JSON string the tool returns to the main agent
+    state_update: dict[str, Any] = field(default_factory=dict)
+    ready: bool = False  # brief written — handoff("start") may proceed
+
+
+def _propose_error(code: str) -> ProposeAnglesResult:
+    return ProposeAnglesResult(reply=json.dumps({"error": code}))
+
+
+async def _load_context(
+    db: Any, payload: dict[str, Any], update: dict[str, Any]
+) -> dict[str, Any]:
+    """Port of ``load_context`` — company, voice pack, audience catalog."""
+    company_id = payload.get("company_id")
+    slim: dict[str, Any] = {"company_id": company_id} if company_id else {}
+    pack = voice_pack(None)
+    if company_id:
+        company = await get_company(db, uuid.UUID(str(company_id)))
+        if company:
+            slim = {
+                "company_id": str(company.id),
+                "name": company.name,
+                "slug": company.slug,
+            }
+            pack = voice_pack(company.profile)
+    await ensure_default_personas(db)
+    update["company_context"] = slim
+    update["voice_pack"] = pack
+    update["audience_catalog"] = audience_catalog_from_entities(await list_personas(db))
+    return slim
+
+
+async def _rank_trends(
+    db: Any, payload: dict[str, Any], company: dict[str, Any], update: dict[str, Any]
+) -> None:
+    """Port of ``trend_searcher`` — prefer research_signals, else PG(+handoff)."""
+    user = str(payload.get("user_request") or "")
+    signals_trusted = payload.get("signals_trusted")
+    prior = list(payload.get("research_signals") or [])
+    if prior:
+        signals_payload = prior[:20]
+        ranked_ids = [s["signal_id"] for s in signals_payload if s.get("signal_id")][:8]
+        parsed: TrendRank | None = await H.run_typed(
+            "trend_searcher",
+            prompts.TREND_SEARCH,
+            json.dumps(
+                {
+                    "company": company,
+                    "user_request": user,
+                    "signals": signals_payload,
+                    "signals_trusted": signals_trusted,
+                },
+                ensure_ascii=False,
+            ),
+            TrendRank,
+            _trend_override,
+        )
+        valid = {s["signal_id"] for s in signals_payload if s.get("signal_id")}
+        if parsed and parsed.ranked_signal_ids:
+            ranked_ids = [sid for sid in parsed.ranked_signal_ids if sid in valid][:8]
+        order = {sid: i for i, sid in enumerate(ranked_ids)}
+        update["source_signal_ids"] = ranked_ids
+        update["ranked_signals"] = sorted(
+            [s for s in signals_payload if s.get("signal_id") in order],
+            key=lambda s: order[str(s["signal_id"])],
+        )
+        if parsed and parsed.notes:
+            update["trend_notes"] = parsed.notes
+        return
+
+    signals = await list_top_signals(db, limit=20, region="HK")
+    handoff_ids = [
+        str(sid) for sid in (payload.get("handoff_signal_ids") or []) if sid
+    ]
+    if handoff_ids:
+        handoff = await get_signals_by_ids(db, handoff_ids)
+        if handoff:
+            signals = handoff + [s for s in signals if s.signal_id not in set(handoff_ids)]
+    if not signals:
+        update["source_signal_ids"] = []
+        update["ranked_signals"] = []
+        update["trend_notes"] = ""
+        return
+
+    parsed = await H.run_typed(
+        "trend_searcher",
+        prompts.TREND_SEARCH,
+        json.dumps(
+            {
+                "company": company,
+                "user_request": user,
+                "signals": ingest_mod.signal_row_dicts(signals),
+                "signals_trusted": signals_trusted,
+            },
+            ensure_ascii=False,
+        ),
+        TrendRank,
+        _trend_override,
+    )
+    if parsed and parsed.ranked_signal_ids:
+        valid = {s.signal_id for s in signals}
+        ranked_ids = [sid for sid in parsed.ranked_signal_ids if sid in valid][:8]
+    else:
+        ranked_ids = [s.signal_id for s in signals[:5]]
+    order = {sid: i for i, sid in enumerate(ranked_ids)}
+    update["source_signal_ids"] = ranked_ids
+    update["ranked_signals"] = ingest_mod.signal_row_dicts(
+        sorted([s for s in signals if s.signal_id in order], key=lambda s: order[s.signal_id])
+    )
+    if parsed and parsed.notes:
+        update["trend_notes"] = parsed.notes
+
+
+def _product_queries(research: dict[str, Any], user: str) -> list[str]:
+    queries: list[str] = []
+    for raw in (
+        str(research.get("product_surface") or "").strip(),
+        str(research.get("entity_surface") or "").strip(),
+        user.strip()[:200],
+    ):
+        if raw and raw not in queries:
+            queries.append(raw)
+    return queries
+
+
+def _should_match_product(research: dict[str, Any]) -> bool:
+    """Port of ``_should_match_product`` — inside the tool, intent is always start."""
+    if research.get("need_product"):
+        return True
+    if str(research.get("sell_intent") or "none") in ("explicit", "implicit"):
+        return True
+    return bool(str(research.get("product_surface") or "").strip())
+
+
+def _related_payloads(
+    user_hits: list[ProductHit],
+    signal_hits: list[ProductHit],
+    *,
+    exclude: set[uuid.UUID],
+) -> list[dict[str, Any]]:
+    """Org-scope related products (ADR 0040): user-pool first, dedupe, cap 2."""
+    out: list[dict[str, Any]] = []
+    seen = set(exclude)
+    for hit in (*user_hits, *signal_hits):
+        if hit.product.owner_scope != "org" or hit.product.id in seen:
+            continue
+        seen.add(hit.product.id)
+        out.append(hit_to_payload(hit))
+        if len(out) >= 2:
+            break
+    return out
+
+
+async def _match_products(
+    db: Any, payload: dict[str, Any], update: dict[str, Any]
+) -> dict[str, Any]:
+    """Port of ``product_matcher`` — SQL catalog match, no LLM."""
+    empty = {
+        "primary_product": None,
+        "related_products": [],
+        "product_clarify": False,
+        "product_context_ids": [],
+        "product_candidates": [],
+    }
+    ranked = update.get("ranked_signals") or []
+    signal_queries = [str(s["title"]).strip()[:200] for s in ranked[:2] if s.get("title")]
+    research = dict(payload.get("research") or {})
+    if not _should_match_product(research) and not signal_queries:
+        return empty
+    company_id, user_id = payload.get("company_id"), payload.get("user_id")
+    if not company_id or not user_id:
+        return empty
+
+    cid, uid = uuid.UUID(str(company_id)), uuid.UUID(str(user_id))
+    queries = _product_queries(research, str(payload.get("user_request") or ""))
+    hits = (
+        await search_products_for_member(db, company_id=cid, user_id=uid, queries=queries, limit=5)
+        if queries
+        else []
+    )
+    signal_hits = (
+        await search_products_for_member(
+            db, company_id=cid, user_id=uid, queries=signal_queries, limit=4
+        )
+        if signal_queries
+        else []
+    )
+    if not hits:
+        return {**empty, "related_products": _related_payloads([], signal_hits, exclude=set())}
+
+    primary, clarify = pick_primary(hits)
+    candidates = [hit_to_payload(h) for h in hits[:3]]
+    if clarify or primary is None:
+        return {
+            "primary_product": None,
+            "related_products": [],
+            "product_clarify": True,
+            "product_context_ids": [],
+            "product_candidates": candidates,
+        }
+    primary_payload = hit_to_payload(primary)
+    return {
+        "primary_product": primary_payload,
+        "related_products": _related_payloads(
+            hits[1:], signal_hits, exclude={primary.product.id}
+        ),
+        "product_clarify": False,
+        "product_context_ids": [primary_payload["product_id"]],
+        "product_candidates": [],
+    }
+
+
+def _fallback_brief(catalog: list[dict[str, Any]], signals: list[dict[str, Any]]) -> dict[str, Any]:
+    titles = [s.get("title") for s in signals[:3] if s.get("title")]
+    topic = titles[0] if titles else "香港熱話"
+    return {
+        "can_do": [f"圍繞「{topic}」寫一則社交貼文", "加入品牌語氣同 CTA"],
+        "cannot_do": ["未按 Confirm 前唔可以真正發佈", "唔好捏造未有 signal 支撐嘅數據"],
+        "angles": [f"用「{topic}」連結品牌價值", "短片/靜態圖配合熱搜節奏"],
+        "recommended_angle_index": 0,
+        "persona": catalog[0].get("slug") if catalog else None,
+        "summary": f"基於近期 HK signals，建議做一則同「{topic}」相關嘅 grounded post。",
+    }
+
+
+async def run_propose_angles(payload: dict[str, Any]) -> ProposeAnglesResult:
+    """Context → trend rank → product match → BriefOut, as one tool call."""
+    try:
+        db = get_db()
+    except RuntimeError:
+        return _propose_error("no_session_db")
+
+    update: dict[str, Any] = {"mode": MODE_AGENT}
+    company = await _load_context(db, payload, update)
+    await _rank_trends(db, payload, company, update)
+
+    update.update(await _match_products(db, payload, update))
+    if update["product_clarify"]:
+        reply = json.dumps(
+            {"clarify": True, "candidates": update["product_candidates"][:3]},
+            ensure_ascii=False,
+        )
+        return ProposeAnglesResult(reply=reply, state_update=update)
+
+    signals = list(update.get("ranked_signals") or [])[:8]
+    brief_payload = {
+        "company": company,
+        "voice_pack": update["voice_pack"],
+        "audience_catalog": update["audience_catalog"],
+        "user_request": str(payload.get("user_request") or ""),
+        "signals": signals,
+        "signals_trusted": payload.get("signals_trusted"),
+        "source_signal_ids": update.get("source_signal_ids") or [],
+        "primary_product": update.get("primary_product"),
+        "related_products": (update.get("related_products") or [])[:2],
+        "prior_brief": payload.get("prior_brief") or {},
+        "angle_feedback": payload.get("angle_feedback"),
+        "agent_notes": payload.get("agent_notes"),
+        "image_format": payload.get("image_format"),
+    }
+    parsed: BriefOut | None = await H.run_typed(
+        "brainstormer",
+        prompts.BRAINSTORM,
+        json.dumps(brief_payload, ensure_ascii=False),
+        BriefOut,
+        _brainstorm_override,
+    )
+    if parsed:
+        brief = parsed.model_dump()
+        idx = brief.get("recommended_angle_index")
+        if (
+            not isinstance(idx, int)
+            or isinstance(idx, bool)
+            or not (0 <= idx < len(offered_angles(brief)))
+        ):
+            brief["recommended_angle_index"] = None
+    else:
+        brief = _fallback_brief(update["audience_catalog"], signals)
+
+    sticky = str(payload.get("chosen_image_format") or "").strip()
+    current = str(payload.get("current_image_format") or "").strip()
+    if sticky in IMAGE_FORMAT_OPTIONS or current in IMAGE_FORMAT_OPTIONS:
+        brief = lock_brief_to_format(brief, str(payload.get("image_format") or ""))
+
+    update["brief"] = brief
+    update["active_persona"] = pick_active_persona(
+        update["audience_catalog"], brief.get("persona")
+    )
+    update["angle_feedback"] = None
+    reply = json.dumps(
+        {
+            "angles": offered_angles(brief),
+            "recommended_angle_index": brief.get("recommended_angle_index"),
+            "persona": brief.get("persona"),
+            "summary": brief.get("summary"),
+        },
+        ensure_ascii=False,
+    )
+    return ProposeAnglesResult(reply=reply, state_update=update, ready=True)
+
+
+@dataclass
+class DraftWriteResult:
+    """Reply to the main agent plus the state slice a draft-producing tool wrote."""
+
+    reply: str
+    state_update: dict[str, Any] = field(default_factory=dict)
+
+
+async def run_draft_post(payload: dict[str, Any]) -> DraftWriteResult:
+    """Port of ``executor_post`` — DraftOut sub-agent plus deterministic state write.
+
+    The ``state_update`` mirrors the vertex exactly: draft, filtered source
+    refs, ``need_image=True``, ``grounding_ok=True``, and the pick fields
+    cleared. Grounding/review stay outer — the agent's job ends at the draft.
+    """
+    signal_ids = [
+        str(s)
+        for s in payload.get("allowed_signal_ids") or payload.get("source_signal_ids") or []
+    ]
+    signals = list(payload.get("ranked_signals") or [])[:8]
+    company = payload.get("company") or payload.get("company_context") or {}
+    exec_payload = {
+        "company": company,
+        "voice_pack": payload.get("voice_pack"),
+        "active_persona": payload.get("active_persona"),
+        "brief": payload.get("brief") or {},
+        "signals": signals,
+        "signals_trusted": payload.get("signals_trusted"),
+        "allowed_signal_ids": signal_ids,
+        "user_request": payload.get("user_request"),
+        "primary_product": payload.get("primary_product"),
+        "related_products": (payload.get("related_products") or [])[:2],
+        "chosen_angle": payload.get("chosen_angle"),
+        "image_format": payload.get("image_format"),
+    }
+    parsed = await _run_execute(
+        EH.run_executor_post_agent,
+        json.dumps(exec_payload, ensure_ascii=False),
+        "executor_post",
+    )
+    allowed = set(signal_ids)
+    if parsed:
+        # Only ids the draft actually relied on — an empty list is an honest
+        # "no market sources used", not a reason to attach unrelated signals.
+        refs = [sid for sid in parsed.source_signal_ids if sid in allowed]
+        draft = {
+            "caption": parsed.caption,
+            "hashtags": parsed.hashtags or ["#HongKong", "#Marketing"],
+            "cta": parsed.cta or "了解更多",
+        }
+    else:
+        title = signals[0].get("title") if signals else "香港熱話"
+        company_name = company.get("name") or "我哋"
+        draft = {
+            "caption": (
+                f"最近成日聽到「{title}」？"
+                f"「{company_name}」都睇住——嚟緊有啲貼地內容，留言話我哋知你最想知邊方面。"
+            ),
+            "hashtags": ["#HongKong", "#熱話"],
+            "cta": "留言話我哋知",
+        }
+        # The fallback caption references only the top ranked signal.
+        refs = signal_ids[:1]
+
+    update: dict[str, Any] = {
+        "draft": draft,
+        "source_signal_ids": refs,
+        "need_image": True,
+        "grounding_ok": True,
+        "chosen_angle": None,
+        "chosen_persona": None,
+        "chosen_image_format": None,
+    }
+    reply = json.dumps(
+        {"drafted": True, "caption": draft["caption"], "source_signal_ids": refs},
+        ensure_ascii=False,
+    )
+    return DraftWriteResult(reply=reply, state_update=update)
+
+
+async def run_revise_draft(payload: dict[str, Any]) -> DraftWriteResult:
+    """Port of ``edit_copy`` — EditOut sub-agent plus deterministic state write.
+
+    ``user_request`` is the user's edit instruction; ``reviewer_feedback``
+    rides along when the reviewer loop sent the agent back (ADR 0036 image
+    semantics preserved: caption-only edits keep the locked plan via
+    ``image_still_pending``).
+    """
+    user = str(payload.get("user_request") or "")
+    feedback = str(payload.get("reviewer_feedback") or "")
+    signal_ids = [str(s) for s in payload.get("source_signal_ids") or []]
+    ranked = list(payload.get("ranked_signals") or [])
+    # The cited set may legitimately be empty; a reviewer ask for a citation
+    # can only be satisfied from the ranked pool, so allow that pool too.
+    ranked_ids = [str(s["signal_id"]) for s in ranked[:8] if s.get("signal_id")]
+    allowed_ids = list(dict.fromkeys([*signal_ids, *ranked_ids]))
+    edit_payload = {
+        "draft": payload.get("draft") or {},
+        "company": payload.get("company") or {},
+        "user_feedback": user,
+        "reviewer_feedback": feedback,
+        "voice_pack": payload.get("voice_pack"),
+        "signals": ranked[:8],
+        "allowed_signal_ids": allowed_ids,
+    }
+    parsed = await _run_execute(
+        EH.run_edit_copy_agent,
+        json.dumps(edit_payload, ensure_ascii=False),
+        "edit_copy",
+    )
+    allowed = set(allowed_ids)
+    fmt = image_format_from_text(user)
+    if parsed:
+        refs = [sid for sid in parsed.source_signal_ids if sid in allowed] or signal_ids
+        update = {
+            "draft": {
+                "caption": parsed.caption,
+                "hashtags": parsed.hashtags,
+                "cta": parsed.cta,
+            },
+            "source_signal_ids": refs,
+            "need_image": bool(
+                parsed.need_image
+                or wants_image_change(user)
+                or image_still_pending(payload)
+            ),
+            "grounding_ok": True,
+        }
+    else:
+        draft = dict(payload.get("draft") or {})
+        note = feedback or user
+        caption = draft.get("caption") or "（修訂草稿）"
+        if note:
+            caption = f"{caption}\n\n（修訂：{note[:200]}）"
+        draft["caption"] = caption
+        update = {
+            "draft": draft,
+            "need_image": bool(
+                wants_image_change(user) or image_still_pending(payload)
+            ),
+            "grounding_ok": True,
+        }
+    if fmt:
+        update["image_format"] = fmt
+        update["need_image"] = True
+    draft = update["draft"]
+    reply = json.dumps(
+        {"drafted": True, "caption": draft.get("caption")}, ensure_ascii=False
+    )
+    return DraftWriteResult(reply=reply, state_update=update)
+
+
+async def _run_execute(
+    runner: Any,
+    user_prompt: str,
+    log_tag: str,
+) -> Any:
+    """Execute-harness seam with provider-error → parse-miss equivalence."""
+    try:
+        return await runner(user_prompt)
+    except LlmProviderError:
+        logger.exception("%s provider error — falling back", log_tag)
+        return None

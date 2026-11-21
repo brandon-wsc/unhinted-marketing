@@ -79,6 +79,11 @@ class BriefOut(BaseModel):
     summary: str = ""
 
 
+def offered_angles(brief: dict[str, Any] | None) -> list[str]:
+    """Non-empty angle strings from a brief — the ADR 0028 pick options."""
+    return [a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()]
+
+
 class DraftOut(BaseModel):
     caption: str
     hashtags: list[str] = Field(default_factory=list)

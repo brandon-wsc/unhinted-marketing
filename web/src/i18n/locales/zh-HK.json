@@ -239,6 +239,7 @@
         "running": {
           "working": "處理緊…",
           "route_intent": "分析緊要求…",
+          "session_agent": "諗緊點幫你…",
           "query_generator": "搵緊料…",
           "research_ingest": "執緊市場資料…",
           "load_context": "load緊公司資料…",
@@ -256,6 +257,7 @@
         "done": {
           "working": "處理咗",
           "route_intent": "分析咗要求",
+          "session_agent": "諗咗點幫你",
           "query_generator": "搵咗料",
           "research_ingest": "執咗市場資料",
           "load_context": "load咗公司資料",

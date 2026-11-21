@@ -16,11 +16,18 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import tool
 
-from internal.llm.router import ModelTier
+from internal.llm.router import LlmProviderError, ModelTier
+from internal.memory.repos import list_top_signals
 from internal.session import harness as H
 from internal.session import ingest as ingest_mod
 from internal.session import prompts
 from internal.session.context import get_db
+from internal.session.fast_rules import (
+    QUERY_SOURCE_FALLBACK,
+    QUERY_SOURCE_LLM,
+    fallback_search_queries,
+    polish_search_queries,
+)
 from internal.session.io import QueryGenOut
 from internal.session.tiers import NODE_MODEL_TIERS
 
@@ -121,3 +128,103 @@ async def run_query_generator_agent(
         is_valid=lambda parsed: bool(parsed.atomic_queries()),
         log_tag="query_generator",
     )
+
+
+@dataclass
+class ResearchToolResult:
+    """Outcome of the main agent's ``research`` tool call (ADR 0062)."""
+
+    reply: str  # JSON string the tool returns to the main agent
+    state_update: dict[str, Any] = field(default_factory=dict)
+
+
+def _research_tool_error(code: str) -> ResearchToolResult:
+    return ResearchToolResult(reply=json.dumps({"error": code}))
+
+
+async def run_research_tool(payload: dict[str, Any]) -> ResearchToolResult:
+    """Query-gen sub-agent + deterministic PG∪Tavily ingest, as one tool call.
+
+    Mirrors ``query_generator`` → ``research_ingest``: the sub-agent may ingest
+    via ``ingest_web_search`` (its items are then the Tavily contribution);
+    otherwise the generated queries are searched here. The reply carries only
+    what the main agent needs — queries + merged signal slices; the
+    ``state_update`` mirrors ``research_ingest``'s SessionState slice so
+    downstream grounding sees identical shape.
+    """
+    try:
+        db = get_db()
+    except RuntimeError:
+        return _research_tool_error("no_session_db")
+
+    rdeps = ResearchDeps()
+    try:
+        parsed = await run_query_generator_agent(
+            json.dumps(payload, ensure_ascii=False), rdeps
+        )
+    except LlmProviderError:
+        return _research_tool_error("research_unavailable")
+
+    research = dict(payload.get("research") or {})
+    queries = polish_search_queries(parsed.atomic_queries()) if parsed else []
+    if queries:
+        query_source = QUERY_SOURCE_LLM
+        topic_s = ingest_mod.normalize_tavily_topic(parsed.topic)
+        range_s = ingest_mod.normalize_tavily_time_range(parsed.time_range)
+    else:
+        query_source = QUERY_SOURCE_FALLBACK
+        topic_s, range_s = "news", "week"
+        entity = str(payload.get("entity_surface") or "").strip()
+        queries = fallback_search_queries(
+            entity, str(payload.get("fallback_hint") or "")
+        )
+    queries = queries[: ingest_mod.MAX_QUERIES]
+
+    tavily_errors: list[str] = []
+    if rdeps.queries_run:
+        tavily_items = [
+            item
+            for item in rdeps.ingested
+            if isinstance(item, dict) and item.get("signal_id")
+        ]
+    else:
+        tavily_items = await ingest_mod.fetch_and_upsert_tavily(
+            db,
+            queries,
+            topic=topic_s,
+            time_range=range_s,
+            max_results=ingest_mod.MAX_HITS_PER_QUERY,
+            errors=tavily_errors,
+        )
+
+    pg_signals = await list_top_signals(db, limit=20, region="HK")
+    merged = ingest_mod.merge_pg_and_tavily(
+        tavily_items, ingest_mod.signal_row_dicts(pg_signals)
+    )
+
+    research_out = {
+        **research,
+        "search_queries": queries,
+        "tavily_topic": topic_s,
+        "tavily_time_range": range_s,
+        "query_source": query_source,
+        "signals_trusted": query_source != QUERY_SOURCE_FALLBACK
+        and bool(tavily_items),
+    }
+    if rdeps.queries_run:
+        research_out["ingest_via_agent"] = True
+    if tavily_errors:
+        research_out["tavily_failed_queries"] = tavily_errors
+
+    state_update = {
+        "research_signals": merged[:20],
+        "search_query": queries[0] if queries else "",
+        "source_signal_ids": [r["signal_id"] for r in merged[:8]],
+        "research": research_out,
+    }
+    reply = json.dumps(
+        {"queries": queries, "signals": ingest_mod.signal_slices(merged[:10])},
+        ensure_ascii=False,
+        default=str,
+    )
+    return ResearchToolResult(reply=reply, state_update=state_update)

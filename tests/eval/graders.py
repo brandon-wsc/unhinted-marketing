@@ -73,6 +73,30 @@ def grade_query_generator(output: dict[str, Any], expect: dict[str, Any]) -> lis
     return reasons
 
 
+def grade_session_agent(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
+    """Main-agent routing: which tools fired and where the turn goes (ADR 0062)."""
+    reasons: list[str] = []
+    tools = [str(t) for t in output.get("_eval_tools_called") or []]
+    nxt = output.get("agent_next")
+    if "agent_next" in expect and nxt != expect["agent_next"]:
+        reasons.append(f"agent_next={nxt!r} want {expect['agent_next']!r}")
+    banned = expect.get("agent_next_not")
+    if banned and nxt == banned:
+        reasons.append(f"agent_next must not be {banned!r}")
+    for t in expect.get("tools") or []:
+        if t not in tools:
+            reasons.append(f"tool {t!r} not called: {tools!r}")
+    for t in expect.get("tools_forbid") or []:
+        if t in tools:
+            reasons.append(f"tool {t!r} called but forbidden: {tools!r}")
+    if expect.get("replied"):
+        messages = output.get("messages") or []
+        last = messages[-1] if messages else {}
+        if last.get("role") != "assistant":
+            reasons.append("no assistant reply appended")
+    return reasons
+
+
 def grade_intent(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     if expect.get("parse_ok") and not output.get("_eval_parse_ok"):
@@ -202,6 +226,8 @@ def grade_retrieve(output: dict[str, Any], expect: dict[str, Any]) -> list[str]:
 def grade_case(case: dict[str, Any], output: dict[str, Any]) -> list[str]:
     expect = case.get("expect") or {}
     node = case.get("node")
+    if node == "session_agent":
+        return grade_session_agent(output, expect)
     if node == "query_generator":
         return grade_query_generator(output, expect)
     if node == "route_intent":

@@ -33,6 +33,7 @@ def test_eval_cases_yaml_shape() -> None:
             "executor_post",
             "voice_fixture",
             "grounding_check",
+            "session_agent",
         }
         assert data.get("suites")
         assert data.get("state")
