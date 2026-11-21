@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -19,6 +20,7 @@ from internal.session import ingest as ingest_mod
 from internal.session import nodes as N
 from internal.session import research_harness as RH
 from internal.session.context import session_db
+from internal.session.io import QueryGenOut
 from tests.unit.lc_fakes import _ScriptedChat, out_call
 from tests.unit.test_session_nodes import _base_state
 
@@ -307,3 +309,138 @@ async def test_ingest_web_search_deps_not_in_model_schema() -> None:
     params = schema["function"]["parameters"]["properties"]
     assert "deps" not in params
     assert "query" in params
+
+
+# --- ADR 0062: run_research_tool (main-agent research tool) ---
+
+
+def _pg_row(signal_id: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        signal_id=signal_id,
+        source="pg",
+        title="stored signal",
+        excerpt="from postgres",
+        metrics={},
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_research_tool_merges_agent_queries_and_pg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sub-agent didn't ingest → deterministic fetch runs the generated queries."""
+    fetched: list[list[str]] = []
+
+    async def fake_agent(_prompt: str, _deps: RH.ResearchDeps) -> QueryGenOut:
+        return QueryGenOut(
+            search_queries=["HK skincare trends", "sunscreen Hong Kong"],
+            topic="news",
+            time_range="week",
+        )
+
+    async def fake_fetch(_db: object, queries: list[str], **_kw: object) -> list[dict]:
+        fetched.append(list(queries))
+        return _tavily_items(queries[0])
+
+    async def fake_pg(_db: object, *, limit: int, region: str) -> list:
+        return [_pg_row("pg:1")]
+
+    monkeypatch.setattr(RH, "run_query_generator_agent", fake_agent)
+    monkeypatch.setattr(ingest_mod, "fetch_and_upsert_tavily", fake_fetch)
+    monkeypatch.setattr(RH, "list_top_signals", fake_pg)
+    with session_db(AsyncMock()):
+        result = await RH.run_research_tool(
+            {"research": {"entity_surface": "skincare"}, "focus": "護膚"}
+        )
+    reply = json.loads(result.reply)
+    assert fetched == [["HK skincare trends", "sunscreen Hong Kong"]]
+    assert {s["signal_id"] for s in reply["signals"]} == {"tavily:abc", "pg:1"}
+    update = result.state_update
+    assert update["search_query"] == "HK skincare trends"
+    assert update["research"]["query_source"] == "llm"
+    assert update["research"]["signals_trusted"] is True
+    assert update["research"]["entity_surface"] == "skincare"
+    assert "tavily_items" not in update["research"]
+    assert update["source_signal_ids"] == ["tavily:abc", "pg:1"]
+
+
+@pytest.mark.asyncio
+async def test_run_research_tool_reuses_agent_ingested_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ingest_via_agent semantics — agent-searched items are the Tavily share."""
+    fetch_called = False
+
+    async def fake_agent(_prompt: str, rdeps: RH.ResearchDeps) -> QueryGenOut:
+        rdeps.queries_run.append("usagi")
+        rdeps.ingested.extend(_tavily_items("usagi"))
+        return QueryGenOut(search_queries=["usagi", "Usagi favorite food"])
+
+    async def fake_fetch(*_a: object, **_kw: object) -> list[dict]:
+        nonlocal fetch_called
+        fetch_called = True
+        return []
+
+    async def fake_pg(_db: object, **_kw: object) -> list:
+        return []
+
+    monkeypatch.setattr(RH, "run_query_generator_agent", fake_agent)
+    monkeypatch.setattr(ingest_mod, "fetch_and_upsert_tavily", fake_fetch)
+    monkeypatch.setattr(RH, "list_top_signals", fake_pg)
+    with session_db(AsyncMock()):
+        result = await RH.run_research_tool({"research": {}})
+    assert fetch_called is False
+    assert result.state_update["research"]["ingest_via_agent"] is True
+    assert result.state_update["research"]["signals_trusted"] is True
+    assert result.state_update["research_signals"][0]["signal_id"] == "tavily:abc"
+
+
+@pytest.mark.asyncio
+async def test_run_research_tool_parse_miss_uses_fallback_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_agent(_prompt: str, _deps: RH.ResearchDeps) -> None:
+        return None
+
+    fetched: list[list[str]] = []
+
+    async def fake_fetch(_db: object, queries: list[str], **_kw: object) -> list[dict]:
+        fetched.append(list(queries))
+        return []
+
+    async def fake_pg(_db: object, **_kw: object) -> list:
+        return []
+
+    monkeypatch.setattr(RH, "run_query_generator_agent", fake_agent)
+    monkeypatch.setattr(ingest_mod, "fetch_and_upsert_tavily", fake_fetch)
+    monkeypatch.setattr(RH, "list_top_signals", fake_pg)
+    with session_db(AsyncMock()):
+        result = await RH.run_research_tool(
+            {"entity_surface": "", "fallback_hint": "Hong Kong overtime", "research": {}}
+        )
+    assert fetched, "fallback queries still searched deterministically"
+    assert result.state_update["research"]["query_source"] == "fallback"
+    assert result.state_update["research"]["signals_trusted"] is False
+
+
+@pytest.mark.asyncio
+async def test_run_research_tool_no_session_db() -> None:
+    result = await RH.run_research_tool({"research": {}})
+    assert json.loads(result.reply) == {"error": "no_session_db"}
+    assert result.state_update == {}
+
+
+@pytest.mark.asyncio
+async def test_run_research_tool_provider_error_fails_soft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from internal.llm.router import LlmProviderError
+
+    async def fake_agent(_prompt: str, _deps: RH.ResearchDeps) -> QueryGenOut:
+        raise LlmProviderError("down")
+
+    monkeypatch.setattr(RH, "run_query_generator_agent", fake_agent)
+    with session_db(AsyncMock()):
+        result = await RH.run_research_tool({"research": {}})
+    assert json.loads(result.reply) == {"error": "research_unavailable"}
+    assert result.state_update == {}

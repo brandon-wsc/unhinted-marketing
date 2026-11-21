@@ -6,6 +6,11 @@ import re
 
 from internal.session.semantic_gate import classify_semantic_route
 
+# ``research.query_source`` provenance — who wrote ``search_queries``.
+QUERY_SOURCE_LLM = "llm"
+QUERY_SOURCE_NORMALIZE = "normalize"
+QUERY_SOURCE_FALLBACK = "fallback"
+
 # Pure greetings / product-howto — skip Tavily / query_generator (regex fallback).
 _SKIP_RESEARCH = re.compile(
     r"("

@@ -50,6 +50,9 @@ from internal.session import research_harness as RH
 from internal.session.context import get_db
 from internal.session.events import session_event_bus
 from internal.session.fast_rules import (
+    QUERY_SOURCE_FALLBACK,
+    QUERY_SOURCE_LLM,
+    QUERY_SOURCE_NORMALIZE,
     fallback_search_queries,
     normalize_search_query,
     polish_search_queries,
@@ -97,9 +100,6 @@ logger = logging.getLogger(__name__)
 MAX_REVIEW_RETRIES = 2
 T = TypeVar("T", bound=BaseModel)
 
-QUERY_SOURCE_LLM = "llm"
-QUERY_SOURCE_NORMALIZE = "normalize"
-QUERY_SOURCE_FALLBACK = "fallback"
 REVIEWER_PARSE_MISS_FEEDBACK = "Review could not be completed — tighten grounding and craft."
 
 
@@ -168,19 +168,6 @@ def _append_assistant(state: SessionState, content: str) -> list[dict[str, Any]]
     messages = list(state.get("messages") or [])
     messages.append({"role": "assistant", "content": content})
     return messages
-
-
-def _signals_payload(signals: list) -> list[dict[str, Any]]:
-    return [
-        {
-            "signal_id": s.signal_id,
-            "source": s.source,
-            "title": s.title,
-            "excerpt": s.excerpt,
-            "metrics": s.metrics or {},
-        }
-        for s in signals
-    ]
 
 
 def _heuristic_intent(state: SessionState) -> str:
@@ -715,7 +702,7 @@ async def research_ingest(state: SessionState) -> dict[str, Any]:
         )
 
     pg_signals = await list_top_signals(db, limit=20, region="HK")
-    pg_rows = _signals_payload(pg_signals)
+    pg_rows = ingest_mod.signal_row_dicts(pg_signals)
     merged = ingest_mod.merge_pg_and_tavily(tavily_items, pg_rows)
 
     query_source = str(research.get("query_source") or "")
@@ -812,7 +799,7 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
     payload = {
         "company": company,
         "user_request": _last_user_text(state),
-        "signals": _signals_payload(signals),
+        "signals": ingest_mod.signal_row_dicts(signals),
         "signals_trusted": _signals_trusted(state),
     }
     parsed = await _parse_llm_json(
@@ -834,7 +821,7 @@ async def trend_searcher(state: SessionState) -> dict[str, Any]:
     )
     out = {
         "source_signal_ids": ranked_ids,
-        "ranked_signals": _signals_payload(ranked),
+        "ranked_signals": ingest_mod.signal_row_dicts(ranked),
     }
     if parsed and parsed.notes:
         out["trend_notes"] = parsed.notes
@@ -1000,13 +987,36 @@ def _session_agent_payload(state: SessionState, user: str) -> str:
     )
 
 
+def _research_in_payload(state: SessionState, user: str) -> dict[str, Any]:
+    """Query-generator payload pieces for the agent's ``research`` tool."""
+    research = state.get("research") or {}
+    hint = user
+    if _is_follow_up(state):
+        prior_users = [m["content"] for m in _recent_thread(state) if m["role"] == "user"]
+        hint = " ".join(prior_users) or user
+    return {
+        "last_user_message": user,
+        "recent_thread": _live_thread(state),
+        "thread_summary": _thread_summary(state),
+        "research": research,
+        "entity_surface": str(research.get("entity_surface") or "").strip(),
+        "company": _slim_company(state).get("name"),
+        "fallback_hint": hint,
+    }
+
+
 @agent_progress("session_agent")
 async def session_agent(state: SessionState) -> dict[str, Any]:
-    """ADR 0062 main agent — replies directly or emits a handoff marker."""
+    """ADR 0062 main agent — replies directly, researches inline, or hands off."""
     user = _last_user_text(state)
     chinese = any("\u4e00" <= c <= "\u9fff" for c in user)
     company_id, user_id = _session_agent_ids(state)
-    deps = SA.SessionAgentDeps(company_id=company_id, user_id=user_id)
+    deps = SA.SessionAgentDeps(
+        company_id=company_id,
+        user_id=user_id,
+        research_allowed=bool(state.get("research_rule_pass")),
+        research_in=_research_in_payload(state, user),
+    )
     reply: str | None = None
     llm_error: str | None = None
     if has_llm_credentials():
@@ -1023,6 +1033,8 @@ async def session_agent(state: SessionState) -> dict[str, Any]:
         except Exception:
             logger.exception("session_agent LLM stream failed")
     out: dict[str, Any] = {"agent_next": deps.next}
+    if deps.research_out:
+        out.update(deps.research_out)
     if deps.next:
         out["intent"] = deps.intent
         if reply:
@@ -1665,14 +1677,13 @@ def route_after_intent(state: SessionState) -> str:
 def route_after_session_agent(state: SessionState) -> str:
     """ADR 0062: follow the agent's handoff marker; END when it replied inline.
 
-    The research gate (``research_rule_pass``, set by fast_rule_checker) still
-    applies — a research handoff the rules disallow drops to the intent's own
-    vertex instead of searching anyway.
+    Whitelist only — an unknown marker never routes. The research gate moved
+    inside the ``research`` tool itself (``research_allowed`` mirrors
+    ``research_rule_pass``), so a disallowed search fails closed and the agent
+    answers or hands off without fresh signals.
     """
     nxt = str(state.get("agent_next") or "")
-    if nxt == "query_generator" and not state.get("research_rule_pass", False):
-        nxt = SA.INTENT_VERTICES.get(str(state.get("intent") or ""), "")
-    return nxt or END
+    return nxt if nxt in SA.HANDOFF_VERTICES else END
 
 
 def route_after_product_matcher(state: SessionState) -> str:

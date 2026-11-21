@@ -120,6 +120,20 @@ async def fetch_and_upsert_tavily(
     return tavily_items
 
 
+def signal_row_dicts(signals: list) -> list[dict[str, Any]]:
+    """PG signal rows → merge-ready dicts (full metrics, unlike ``signal_slices``)."""
+    return [
+        {
+            "signal_id": s.signal_id,
+            "source": s.source,
+            "title": s.title,
+            "excerpt": s.excerpt,
+            "metrics": s.metrics or {},
+        }
+        for s in signals
+    ]
+
+
 def merge_pg_and_tavily(
     tavily_items: list[dict[str, Any]],
     pg_rows: list[dict[str, Any]],

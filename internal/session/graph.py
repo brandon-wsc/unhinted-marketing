@@ -61,7 +61,6 @@ def _wire_entry_routing(g: StateGraph, main_agent: bool) -> None:
             "session_agent",
             N.route_after_session_agent,
             {
-                "query_generator": "query_generator",
                 "load_context": "load_context",
                 "edit_copy": "edit_copy",
                 "ack_confirm": "ack_confirm",
