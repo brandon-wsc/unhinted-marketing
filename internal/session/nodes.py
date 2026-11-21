@@ -70,9 +70,11 @@ from internal.session.image_format import (
     compose_generation_prompt,
     default_avoid,
     image_format_from_text,
+    image_still_pending,
     lock_brief_to_format,
     merge_default_avoid,
     normalize_image_format,
+    wants_image_change,
 )
 from internal.session.io import (
     BriefOut,
@@ -196,52 +198,6 @@ def _signals_trusted(state: SessionState) -> bool | None:
     if "signals_trusted" not in research:
         return None
     return bool(research.get("signals_trusted"))
-
-
-_IMAGE_WORDS = ("圖", "图片", "圖片", "image", "photo", "visual", "封面", "畫面", "背景")
-_DIRECTION_CUES = ("唔要", "不要", "改成", "換成", "改做", "instead of", "change to")
-# Caption-only edits must not force a new image (ADR 0036).
-_COPY_ONLY = (
-    "caption",
-    "文案",
-    "hashtag",
-    "cta",
-    "短",
-    "長",
-    "語氣",
-    "抽水",
-    "tone",
-    "搞笑",
-    "認真",
-)
-
-
-def _wants_image_change(text: str) -> bool:
-    """True when the user is changing the picture, not only the words.
-
-    「唔要黃色雨傘，改成藍色天空」 is a direction change even without 圖.
-    「改成短啲」 stays caption-only.
-    """
-    lower = text.lower()
-    if any(k.lower() in lower for k in _IMAGE_WORDS):
-        return True
-    if image_format_from_text(text):
-        return True
-    if any(k in text or k in lower for k in _DIRECTION_CUES):
-        return not any(k in lower for k in _COPY_ONLY)
-    return False
-
-
-def _image_still_pending(state: SessionState | dict[str, Any]) -> bool:
-    """An image was already demanded for this version and never generated.
-
-    ``EditOut.need_image`` only means "this edit changes the picture" — a
-    reviewer-retry caption edit must not silently drop the image pipeline
-    ``executor_post`` already owed the draft. The ``hold_image_park`` revise
-    (ADR 0036) decides from the edit alone: a caption-only answer keeps the
-    locked plan via ``hold_locked_plan``.
-    """
-    return bool(state.get("need_image")) and not state.get("hold_image_park")
 
 
 def offered_personas(catalog: list[dict[str, Any]] | None) -> list[dict[str, str]]:
@@ -980,6 +936,9 @@ def _session_agent_payload(state: SessionState, user: str) -> str:
             "offered_angles": offered_angles(state.get("brief")),
             "chosen_angle": state.get("chosen_angle"),
             "angle_feedback": state.get("angle_feedback"),
+            "draft": state.get("draft") or {},
+            "reviewer_feedback": state.get("reviewer_feedback"),
+            "review_attempts": int(state.get("review_attempts") or 0),
             "attachments": _chat_attachment_digests(state),
         },
         ensure_ascii=False,
@@ -987,7 +946,7 @@ def _session_agent_payload(state: SessionState, user: str) -> str:
 
 
 def _draft_in_payload(state: SessionState, user: str) -> dict[str, Any]:
-    """Context payload for the agent's ``propose_angles`` tool."""
+    """Context payload for the agent's draft tools (propose/draft/revise)."""
     return {
         "user_request": user,
         "company_id": state.get("company_id"),
@@ -998,10 +957,24 @@ def _draft_in_payload(state: SessionState, user: str) -> dict[str, Any]:
         "signals_trusted": _signals_trusted(state),
         "handoff_signal_ids": state.get("handoff_signal_ids") or [],
         "prior_brief": state.get("brief") or {},
+        "brief": state.get("brief") or {},
         "angle_feedback": state.get("angle_feedback"),
         "image_format": recommended_image_format(state),
         "chosen_image_format": state.get("chosen_image_format"),
         "current_image_format": state.get("image_format"),
+        # draft_post / revise_draft context (post-park or revise turns).
+        "draft": state.get("draft") or {},
+        "ranked_signals": _ranked_signals(state)[:20],
+        "active_persona": state.get("active_persona"),
+        "chosen_angle": state.get("chosen_angle"),
+        "chosen_persona": state.get("chosen_persona"),
+        "reviewer_feedback": state.get("reviewer_feedback"),
+        "need_image": bool(state.get("need_image")),
+        "hold_image_park": bool(state.get("hold_image_park")),
+        "primary_product": state.get("primary_product"),
+        "related_products": state.get("related_products") or [],
+        "company": _slim_company(state),
+        "voice_pack": _voice_pack(state),
     }
 
 
@@ -1052,13 +1025,21 @@ async def session_agent(state: SessionState) -> dict[str, Any]:
             reply = _llm_failure_reply(exc, chinese=chinese)
         except Exception:
             logger.exception("session_agent LLM stream failed")
-    out: dict[str, Any] = {"agent_next": deps.next}
+    # A draft written by draft_post/revise_draft always routes to
+    # grounding_check — an outer post-condition the model cannot hand off
+    # around. Handoff markers only apply when no draft was written.
+    drafted = bool((deps.write_out or {}).get("draft"))
+    nxt = "grounding_check" if drafted else deps.next
+    out: dict[str, Any] = {"agent_next": nxt}
     if deps.research_out:
         out.update(deps.research_out)
     if deps.draft_out:
         out.update(deps.draft_out)
+    if deps.write_out:
+        out.update(deps.write_out)
     if deps.next:
         out["intent"] = deps.intent
+    if nxt:
         if reply:
             out["messages"] = _append_assistant(state, reply)
     else:
@@ -1495,8 +1476,8 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
             },
             "source_signal_ids": refs,
             "need_image": parsed.need_image
-            or _wants_image_change(user)
-            or _image_still_pending(state),
+            or wants_image_change(user)
+            or image_still_pending(dict(state)),
             "grounding_ok": True,
         }
         fmt = image_format_from_text(user)
@@ -1513,7 +1494,7 @@ async def edit_copy(state: SessionState) -> dict[str, Any]:
     draft["caption"] = caption
     out: dict[str, Any] = {
         "draft": draft,
-        "need_image": _wants_image_change(user) or _image_still_pending(state),
+        "need_image": wants_image_change(user) or image_still_pending(dict(state)),
         "grounding_ok": True,
     }
     fmt = image_format_from_text(user)
@@ -1703,12 +1684,12 @@ def route_after_session_agent(state: SessionState) -> str:
     inside the ``research`` tool itself (``research_allowed`` mirrors
     ``research_rule_pass``), so a disallowed search fails closed and the agent
     answers or hands off without fresh signals. A ``start`` handoff lands on
-    the angle park, except a 0-angle brief which drafts immediately (the
-    ``route_after_brainstormer`` rule, unchanged).
+    the angle park; the 0-angle bypass lives in the tools themselves — the
+    ``handoff`` tool rejects a start with no offered angles, and
+    ``draft_post`` drafts them directly (``route_after_brainstormer`` rule,
+    preserved). A draft written this call routes to ``grounding_check``.
     """
     nxt = str(state.get("agent_next") or "")
-    if nxt == "angle_gate" and not offered_angles(state.get("brief")):
-        nxt = "executor_post"
     return nxt if nxt in SA.HANDOFF_VERTICES else END
 
 
@@ -1737,13 +1718,6 @@ def route_after_angle_gate(state: SessionState) -> str:
     if str(state.get("chosen_angle") or "").strip():
         return "executor_post"
     return "brainstormer"
-
-
-def route_after_angle_gate_agent(state: SessionState) -> str:
-    """ADR 0062: pick → draft; free-text feedback → the agent re-plans angles."""
-    if str(state.get("chosen_angle") or "").strip():
-        return "executor_post"
-    return "session_agent"
 
 
 def route_after_research(state: SessionState) -> str:

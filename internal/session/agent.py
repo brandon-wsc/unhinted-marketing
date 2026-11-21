@@ -1,11 +1,11 @@
 """Session main agent — ADR 0062, ``create_agent`` vertex owning cognition.
 
 The agent answers chat directly, researches inline via the ``research`` tool,
-and prepares drafts via ``propose_angles`` (context → trend rank → product
-match → BriefOut sub-agent). ``handoff`` only records ``deps.intent`` /
-``deps.next`` — outer conditional edges do the routing, so the angle park,
-grounding, persist, and confirm keep their current owners. Remaining
-cognition tools (draft_post / revise_draft / plan_image) land in later steps;
+prepares drafts via ``propose_angles``, writes them via ``draft_post``, and
+edits them via ``revise_draft`` (DraftOut/EditOut sub-agents). ``handoff``
+only records ``deps.intent`` / ``deps.next`` — outer conditional edges do the
+routing, so the angle park, grounding, reviewer cap, persist, and confirm
+keep their current owners. ``plan_image`` lands in a later step;
 publish-class names are never registered.
 """
 
@@ -27,18 +27,20 @@ from internal.session import harness as H
 from internal.session import prompts
 from internal.session import research_harness as RH
 from internal.session.events import session_event_bus
+from internal.session.io import offered_angles
 from internal.session.tiers import NODE_MODEL_TIERS
 
 logger = logging.getLogger(__name__)
 
 # Outer vertex names the agent may hand off to — routing targets only, never
-# cognition the agent performs itself. "start" lands on the angle park.
+# cognition the agent performs itself. "start" lands on the angle park;
+# "grounding_check" is written by draft tools, never by handoff — a draft
+# cannot skip it.
 INTENT_VERTICES = {
     "start": "angle_gate",
-    "revise": "edit_copy",
     "confirm_intent": "ack_confirm",
 }
-HANDOFF_VERTICES = frozenset({*INTENT_VERTICES.values(), "executor_post"})
+HANDOFF_VERTICES = frozenset({*INTENT_VERTICES.values(), "grounding_check"})
 
 _model_override: BaseChatModel | None = None
 
@@ -63,6 +65,9 @@ class SessionAgentDeps(H.ChatDeps):
     draft_in: dict[str, Any] = field(default_factory=dict)
     draft_out: dict[str, Any] | None = None
     draft_ready: bool = False
+    # draft_post / revise_draft write here; the node merges it and routes the
+    # turn into grounding_check — an outer edge, not an agent decision.
+    write_out: dict[str, Any] | None = None
 
 
 def set_agent_model_override(model: BaseChatModel | None) -> None:
@@ -93,17 +98,21 @@ def handoff_tool(deps: SessionAgentDeps):
 
     @tool
     async def handoff(
-        intent: Literal["start", "revise", "confirm_intent"],
+        intent: Literal["start", "confirm_intent"],
     ) -> str:
         """Hand control back to the session pipeline for an action the agent must not do inline.
 
-        ``intent``: "start" = user wants a new post/draft (requires a
-        propose_angles call first); "revise" = change the existing draft;
+        ``intent``: "start" = angles are ready and the user must pick one at
+        the angle park (requires a propose_angles call first);
         "confirm_intent" = user is trying to confirm or publish (never
-        confirm yourself — Confirm is a UI button).
+        confirm yourself — Confirm is a UI button). Edits never hand off —
+        call revise_draft instead.
         """
-        if intent == "start" and not deps.draft_ready:
-            return "error: call propose_angles before handoff — the pipeline needs its brief"
+        if intent == "start":
+            if not deps.draft_ready:
+                return "error: call propose_angles before handoff — the pipeline needs its brief"
+            if not offered_angles((deps.draft_out or {}).get("brief")):
+                return "error: brief has no angles to pick — call draft_post directly"
         deps.intent = intent
         deps.next = INTENT_VERTICES[intent]
         return f"handoff:{deps.next}"
@@ -165,6 +174,57 @@ def propose_angles_tool(deps: SessionAgentDeps):
     return propose_angles
 
 
+def draft_post_tool(deps: SessionAgentDeps):
+    """Build the ``draft_post`` tool — DraftOut sub-agent (ADR 0062)."""
+
+    @tool
+    async def draft_post() -> str:
+        """Write the post draft once the angle pick is resolved.
+
+        Runs the DraftOut sub-agent over the session's brief, signals and
+        product context, then stores the draft — the outer pipeline takes it
+        through grounding → review → preview automatically. The tool refuses
+        while offered angles are unpicked (the angle park must run first) or
+        when no brief exists (call propose_angles first). A brief with no
+        angles may draft directly.
+        """
+        ctx = {**deps.draft_in, **(deps.draft_out or {})}
+        if not ctx.get("chosen_angle"):
+            if offered_angles(ctx.get("brief")):
+                return "error: angles unpicked — handoff(intent=\"start\") for the angle pick"
+            if not ctx.get("brief"):
+                return "error: no brief — call propose_angles first"
+        await _emit_tool_progress(deps, "draft_post", "executor_post")
+        result = await DH.run_draft_post(ctx)
+        deps.write_out = result.state_update
+        return result.reply
+
+    return draft_post
+
+
+def revise_draft_tool(deps: SessionAgentDeps):
+    """Build the ``revise_draft`` tool — EditOut sub-agent (ADR 0062)."""
+
+    @tool
+    async def revise_draft() -> str:
+        """Revise the existing draft per the user's latest instruction.
+
+        Runs the EditOut sub-agent; reviewer feedback rides along when the
+        outer reviewer sent the turn back. The rewritten draft flows through
+        grounding → review → preview automatically. Requires an existing
+        draft — for a new post call propose_angles then draft_post instead.
+        """
+        ctx = {**deps.draft_in, **(deps.draft_out or {}), **(deps.write_out or {})}
+        if not ctx.get("draft"):
+            return "error: no_draft — nothing to revise; propose_angles then draft_post"
+        await _emit_tool_progress(deps, "revise_draft", "edit_copy")
+        result = await DH.run_revise_draft(ctx)
+        deps.write_out = result.state_update
+        return result.reply
+
+    return revise_draft
+
+
 def session_agent_tools(deps: SessionAgentDeps, extra_tools: Sequence[Any] = ()) -> list[Any]:
     """LangChain tools on the main agent — publish-class names never registered."""
     return H.with_extra_tools(
@@ -173,6 +233,8 @@ def session_agent_tools(deps: SessionAgentDeps, extra_tools: Sequence[Any] = ())
             H.read_attachment_tool(deps),
             research_tool(deps),
             propose_angles_tool(deps),
+            draft_post_tool(deps),
+            revise_draft_tool(deps),
             handoff_tool(deps),
         ],
         extra_tools,
@@ -197,6 +259,13 @@ async def stream_session_agent(
         user_prompt=user_prompt,
         session_id=session_id,
         deps=deps,
-        extra_tools=[research_tool(deps), propose_angles_tool(deps), handoff_tool(deps), *extra_tools],
+        extra_tools=[
+            research_tool(deps),
+            propose_angles_tool(deps),
+            draft_post_tool(deps),
+            revise_draft_tool(deps),
+            handoff_tool(deps),
+            *extra_tools,
+        ],
         system=prompts.SESSION_AGENT,
     )

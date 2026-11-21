@@ -60,6 +60,14 @@ def _propose_call(notes: str = "") -> AIMessage:
     return _tool_call("propose_angles", {"notes": notes}, "p1")
 
 
+def _draft_post_call() -> AIMessage:
+    return _tool_call("draft_post", {}, "d1")
+
+
+def _revise_call() -> AIMessage:
+    return _tool_call("revise_draft", {}, "e1")
+
+
 def _fake_propose(brief_angles: list[str] | None = None) -> DH.ProposeAnglesResult:
     angles = brief_angles if brief_angles is not None else ["角度甲", "角度乙"]
     return DH.ProposeAnglesResult(
@@ -145,14 +153,65 @@ async def test_agent_propose_clarify_leaves_next_unset(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_handoff_revise_routes_to_edit_copy(monkeypatch) -> None:
+async def test_agent_draft_post_routes_to_grounding(monkeypatch) -> None:
+    """Angle picked → draft_post writes the draft; node routes to grounding."""
     monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
-    SA.set_agent_model_override(_scripted(_handoff_call("revise"), ""))
+    seen: list[dict] = []
+
+    async def fake_draft(payload: dict) -> DH.DraftWriteResult:
+        seen.append(payload)
+        return DH.DraftWriteResult(
+            reply=json.dumps({"drafted": True, "caption": "新 caption"}),
+            state_update={
+                "draft": {"caption": "新 caption", "hashtags": [], "cta": "x"},
+                "source_signal_ids": ["s1"],
+                "need_image": True,
+                "grounding_ok": True,
+                "chosen_angle": None,
+            },
+        )
+
+    monkeypatch.setattr(DH, "run_draft_post", fake_draft)
+    SA.set_agent_model_override(_scripted(_draft_post_call(), "寫緊個稿…"))
+    out = await N.session_agent(
+        _base_state(
+            mode=MODE_AGENT,
+            chosen_angle="角度甲",
+            brief={"angles": ["角度甲", "角度乙"]},
+        )
+    )
+    assert seen and seen[0]["chosen_angle"] == "角度甲"
+    assert out["agent_next"] == "grounding_check"
+    assert out["draft"]["caption"] == "新 caption"
+    assert out["chosen_angle"] is None
+    assert out["messages"][-1]["content"].startswith("寫緊")
+
+
+@pytest.mark.asyncio
+async def test_agent_revise_draft_routes_to_grounding(monkeypatch) -> None:
+    """User edit → revise_draft; the draft flows to grounding, never a handoff."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    seen: list[dict] = []
+
+    async def fake_revise(payload: dict) -> DH.DraftWriteResult:
+        seen.append(payload)
+        return DH.DraftWriteResult(
+            reply=json.dumps({"drafted": True, "caption": "改咗 caption"}),
+            state_update={
+                "draft": {"caption": "改咗 caption", "hashtags": [], "cta": "x"},
+                "grounding_ok": True,
+            },
+        )
+
+    monkeypatch.setattr(DH, "run_revise_draft", fake_revise)
+    SA.set_agent_model_override(_scripted(_revise_call(), ""))
     out = await N.session_agent(
         _base_state(mode=MODE_PREVIEW, draft={"caption": "old"})
     )
-    assert out["agent_next"] == "edit_copy"
-    assert out["intent"] == "revise"
+    assert seen and seen[0]["draft"]["caption"] == "old"
+    assert out["agent_next"] == "grounding_check"
+    assert out["draft"]["caption"] == "改咗 caption"
+    assert "intent" not in out
     assert "messages" not in out
 
 
@@ -236,22 +295,77 @@ async def test_route_after_session_agent_no_marker_goes_end() -> None:
 def test_route_after_session_agent_follows_marker() -> None:
     briefed = _base_state(agent_next="angle_gate", brief={"angles": ["a"]})
     assert N.route_after_session_agent(briefed) == "angle_gate"
-    assert N.route_after_session_agent(_base_state(agent_next="edit_copy")) == (
-        "edit_copy"
+    assert N.route_after_session_agent(_base_state(agent_next="grounding_check")) == (
+        "grounding_check"
     )
     assert N.route_after_session_agent(_base_state(agent_next="ack_confirm")) == (
         "ack_confirm"
     )
 
 
-def test_route_after_session_agent_zero_angle_bypass() -> None:
-    """0-angle brief drafts immediately — the route_after_brainstormer rule."""
-    out = N.route_after_session_agent(
-        _base_state(agent_next="angle_gate", brief={"angles": []})
+@pytest.mark.asyncio
+async def test_draft_post_refuses_unpicked_angles(monkeypatch) -> None:
+    """ADR 0028: offered angles must pass the park — the tool fails closed."""
+    called = False
+
+    async def fake_draft(payload: dict) -> DH.DraftWriteResult:
+        nonlocal called
+        called = True
+        return DH.DraftWriteResult(reply="{}")
+
+    monkeypatch.setattr(DH, "run_draft_post", fake_draft)
+    deps = SA.SessionAgentDeps(
+        draft_in={"brief": {"angles": ["a", "b"]}, "chosen_angle": None}
     )
-    assert out == "executor_post"
-    out = N.route_after_session_agent(_base_state(agent_next="angle_gate", brief={}))
-    assert out == "executor_post"
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "draft_post")
+    out = await tool.ainvoke({})
+    assert "unpicked" in out
+    assert called is False
+    assert deps.write_out is None
+
+
+@pytest.mark.asyncio
+async def test_draft_post_requires_brief(monkeypatch) -> None:
+    deps = SA.SessionAgentDeps(draft_in={"brief": {}})
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "draft_post")
+    out = await tool.ainvoke({})
+    assert "no brief" in out
+
+
+@pytest.mark.asyncio
+async def test_draft_post_allows_zero_angle_brief(monkeypatch) -> None:
+    """0-angle brief drafts directly — the route_after_brainstormer rule."""
+    async def fake_draft(payload: dict) -> DH.DraftWriteResult:
+        return DH.DraftWriteResult(
+            reply="{}",
+            state_update={"draft": {"caption": "x"}, "grounding_ok": True},
+        )
+
+    monkeypatch.setattr(DH, "run_draft_post", fake_draft)
+    deps = SA.SessionAgentDeps(draft_in={"brief": {"angles": []}})
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "draft_post")
+    await tool.ainvoke({})
+    assert deps.write_out["draft"]["caption"] == "x"
+
+
+@pytest.mark.asyncio
+async def test_handoff_start_refuses_zero_angle_brief() -> None:
+    """No angles → no park: the tool steers the agent to draft_post instead."""
+    deps = SA.SessionAgentDeps(
+        draft_ready=True, draft_out={"brief": {"angles": []}}
+    )
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "handoff")
+    out = await tool.ainvoke({"intent": "start"})
+    assert "draft_post" in out
+    assert deps.next is None
+
+
+@pytest.mark.asyncio
+async def test_revise_draft_requires_draft() -> None:
+    deps = SA.SessionAgentDeps(draft_in={"draft": {}})
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "revise_draft")
+    out = await tool.ainvoke({})
+    assert "no_draft" in out
 
 
 def test_route_after_session_agent_whitelist() -> None:
@@ -261,19 +375,12 @@ def test_route_after_session_agent_whitelist() -> None:
         "research_ingest",
         "load_context",
         "brainstormer",
+        "edit_copy",
+        "executor_post",
         "chat",
         "bogus",
     ):
         assert N.route_after_session_agent(_base_state(agent_next=marker)) == "__end__"
-
-
-def test_route_after_angle_gate_agent() -> None:
-    assert N.route_after_angle_gate_agent(_base_state(chosen_angle="a")) == (
-        "executor_post"
-    )
-    assert N.route_after_angle_gate_agent(
-        _base_state(chosen_angle=None, angle_feedback="唔好咁寫")
-    ) == "session_agent"
 
 
 @pytest.mark.asyncio
@@ -305,10 +412,18 @@ def test_graph_topology_switch() -> None:
         ("query_generator", "research_ingest"),
         ("load_context", "trend_searcher"),
         ("product_matcher", "brainstormer"),
+        ("brainstormer", "angle_gate"),
+        ("edit_copy", "grounding_check"),
+        ("executor_post", "grounding_check"),
+        ("_reviewer_fail_bump", "edit_copy"),
     ):
         assert gone in legacy
         assert gone not in agent
+    # Agent-owned draft legs: drafts enter grounding inline; reviewer retries
+    # re-enter the agent, not the edit_copy vertex.
+    assert ("session_agent", "grounding_check") in agent
+    assert ("_reviewer_fail_bump", "session_agent") in agent
     # Shared downstream topology untouched in both variants.
     for edges in (legacy, agent):
-        assert ("executor_post", "grounding_check") in edges
+        assert ("grounding_check", "reviewer") in edges
         assert ("executor_image_gen", "persist_preview") in edges

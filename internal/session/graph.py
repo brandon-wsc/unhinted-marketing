@@ -62,8 +62,7 @@ def _wire_entry_routing(g: StateGraph, main_agent: bool) -> None:
             N.route_after_session_agent,
             {
                 "angle_gate": "angle_gate",
-                "executor_post": "executor_post",
-                "edit_copy": "edit_copy",
+                "grounding_check": "grounding_check",
                 "ack_confirm": "ack_confirm",
                 END: END,
             },
@@ -86,15 +85,9 @@ def _wire_entry_routing(g: StateGraph, main_agent: bool) -> None:
 def _wire_angle_gate(g: StateGraph, main_agent: bool) -> None:
     """Angle-park exit — pick drafts; feedback re-briefs (legacy vertex or agent)."""
     if main_agent:
-        # ADR 0062 — feedback re-enters the agent to re-plan angles.
-        g.add_conditional_edges(
-            "angle_gate",
-            N.route_after_angle_gate_agent,
-            {
-                "executor_post": "executor_post",
-                "session_agent": "session_agent",
-            },
-        )
+        # ADR 0062 — pick and free-text feedback both re-enter the agent:
+        # ``chosen_angle`` → draft_post; ``angle_feedback`` → propose_angles.
+        g.add_edge("angle_gate", "session_agent")
         return
     g.add_conditional_edges(
         "angle_gate",
@@ -211,7 +204,7 @@ def build_session_graph(
             "review_exhausted": "review_exhausted",
         },
     )
-    g.add_edge("_reviewer_fail_bump", "edit_copy")
+    g.add_edge("_reviewer_fail_bump", "session_agent" if main_agent else "edit_copy")
     g.add_edge("review_exhausted", END)
 
     g.add_edge("executor_image_plan", "executor_image_gen")

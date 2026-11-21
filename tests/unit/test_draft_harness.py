@@ -164,3 +164,140 @@ async def test_run_propose_angles_no_session_db() -> None:
     assert json.loads(result.reply) == {"error": "no_session_db"}
     assert result.state_update == {}
     assert result.ready is False
+
+
+def _write_payload(**extra) -> dict:
+    base = {
+        "user_request": "幫我改下",
+        "company": {"name": "美心"},
+        "voice_pack": {"roast_level": 1},
+        "active_persona": "hk_gen_z",
+        "brief": {"angles": ["a"]},
+        "draft": {"caption": "舊 caption", "hashtags": ["#x"], "cta": "c"},
+        "ranked_signals": [{"signal_id": "s9", "title": "t9"}],
+        "signals_trusted": True,
+        "source_signal_ids": ["s1"],
+        "primary_product": None,
+        "related_products": [],
+        "chosen_angle": "a",
+        "image_format": "single",
+        "need_image": True,
+        "hold_image_park": False,
+        "reviewer_feedback": "",
+    }
+    base.update(extra)
+    return base
+
+
+@pytest.mark.asyncio
+async def test_run_draft_post_seam_and_ref_filter(monkeypatch) -> None:
+    """DraftOut seam kept; refs filtered to the source_signal_ids allowlist."""
+    from internal.session import execute_harness as EH
+    from internal.session.io import DraftOut
+
+    async def fake_exec(prompt: str) -> DraftOut:
+        return DraftOut(
+            caption="新 caption",
+            hashtags=["#hk"],
+            cta="留言",
+            source_signal_ids=["s1", "bogus"],
+        )
+
+    monkeypatch.setattr(EH, "run_executor_post_agent", fake_exec)
+    result = await DH.run_draft_post(_write_payload())
+    update = result.state_update
+    assert update["draft"]["caption"] == "新 caption"
+    assert update["source_signal_ids"] == ["s1"]
+    assert update["need_image"] is True
+    assert update["grounding_ok"] is True
+    assert update["chosen_angle"] is None
+    assert json.loads(result.reply)["drafted"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_draft_post_fallback_on_parse_miss(monkeypatch) -> None:
+    """Parse miss → deterministic fallback draft referencing the top signal."""
+    from internal.session import execute_harness as EH
+
+    async def fake_exec(prompt: str):
+        return None
+
+    monkeypatch.setattr(EH, "run_executor_post_agent", fake_exec)
+    result = await DH.run_draft_post(_write_payload())
+    update = result.state_update
+    assert "t9" in update["draft"]["caption"]
+    assert update["source_signal_ids"] == ["s1"]
+
+
+@pytest.mark.asyncio
+async def test_run_draft_post_provider_error_falls_back(monkeypatch) -> None:
+    """LlmProviderError ≡ parse miss — the tool degrades, not dies."""
+    from internal.llm.router import LlmProviderError
+    from internal.session import execute_harness as EH
+
+    async def fake_exec(prompt: str):
+        raise LlmProviderError("provider down")
+
+    monkeypatch.setattr(EH, "run_executor_post_agent", fake_exec)
+    result = await DH.run_draft_post(_write_payload())
+    assert result.state_update["draft"]["caption"]
+
+
+@pytest.mark.asyncio
+async def test_run_revise_draft_keeps_pending_image(monkeypatch) -> None:
+    """Caption-only edit still owes the image the draft demanded (ADR 0036)."""
+    from internal.session import execute_harness as EH
+    from internal.session.io import EditOut
+
+    async def fake_edit(prompt: str) -> EditOut:
+        return EditOut(
+            caption="改咗",
+            hashtags=["#hk"],
+            cta="留言",
+            need_image=False,
+            source_signal_ids=["s9"],
+        )
+
+    monkeypatch.setattr(EH, "run_edit_copy_agent", fake_edit)
+    result = await DH.run_revise_draft(
+        _write_payload(user_request="改成短啲", need_image=True)
+    )
+    update = result.state_update
+    assert update["draft"]["caption"] == "改咗"
+    # Ranked pool ids are citable for revise even when not previously cited.
+    assert update["source_signal_ids"] == ["s9"]
+    assert update["need_image"] is True
+    assert update["grounding_ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_revise_draft_format_change_sets_image(monkeypatch) -> None:
+    from internal.session import execute_harness as EH
+    from internal.session.io import EditOut
+
+    async def fake_edit(prompt: str) -> EditOut:
+        return EditOut(caption="改咗", need_image=False, source_signal_ids=[])
+
+    monkeypatch.setattr(EH, "run_edit_copy_agent", fake_edit)
+    result = await DH.run_revise_draft(
+        _write_payload(user_request="換做四格漫畫", need_image=False)
+    )
+    update = result.state_update
+    assert update["image_format"] == "comic_4panel"
+    assert update["need_image"] is True
+    # Fallback refs keep the previously cited set.
+    assert update["source_signal_ids"] == ["s1"]
+
+
+@pytest.mark.asyncio
+async def test_run_revise_draft_fallback_appends_note(monkeypatch) -> None:
+    from internal.session import execute_harness as EH
+
+    async def fake_edit(prompt: str):
+        return None
+
+    monkeypatch.setattr(EH, "run_edit_copy_agent", fake_edit)
+    result = await DH.run_revise_draft(_write_payload(user_request="改 caption"))
+    caption = result.state_update["draft"]["caption"]
+    assert caption.startswith("舊 caption")
+    assert "修訂" in caption

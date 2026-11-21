@@ -6,6 +6,12 @@ context assembly, a TrendRank inner call, the SQL catalog match, then the
 BriefOut sub-agent (``create_agent`` + ``ToolStrategy``, ADR 0061). The
 ``state_update`` mirrors what those vertices wrote so downstream guarantees
 (angle_gate park, executor_post grounding allowlist) see identical state.
+
+``run_draft_post`` / ``run_revise_draft`` fold the legacy ``executor_post`` /
+``edit_copy`` vertices into tools: the DraftOut / EditOut sub-agent seams in
+``execute_harness`` stay untouched (eval cases keep working), while the
+deterministic post-write (refs allowlist, need_image, pick-field clears)
+lives here so outer grounding/review/persist see identical state.
 """
 
 from __future__ import annotations
@@ -32,11 +38,18 @@ from internal.memory.repos import (
     list_personas,
     list_top_signals,
 )
+from internal.session import execute_harness as EH
 from internal.session import harness as H
 from internal.session import ingest as ingest_mod
 from internal.session import prompts
 from internal.session.context import get_db
-from internal.session.image_format import IMAGE_FORMAT_OPTIONS, lock_brief_to_format
+from internal.session.image_format import (
+    IMAGE_FORMAT_OPTIONS,
+    image_format_from_text,
+    image_still_pending,
+    lock_brief_to_format,
+    wants_image_change,
+)
 from internal.session.io import BriefOut, TrendRank, offered_angles
 from internal.session.state import MODE_AGENT
 from internal.session.tiers import NODE_MODEL_TIERS
@@ -393,3 +406,168 @@ async def run_propose_angles(payload: dict[str, Any]) -> ProposeAnglesResult:
         ensure_ascii=False,
     )
     return ProposeAnglesResult(reply=reply, state_update=update, ready=True)
+
+
+@dataclass
+class DraftWriteResult:
+    """Reply to the main agent plus the state slice a draft-producing tool wrote."""
+
+    reply: str
+    state_update: dict[str, Any] = field(default_factory=dict)
+
+
+async def run_draft_post(payload: dict[str, Any]) -> DraftWriteResult:
+    """Port of ``executor_post`` — DraftOut sub-agent plus deterministic state write.
+
+    The ``state_update`` mirrors the vertex exactly: draft, filtered source
+    refs, ``need_image=True``, ``grounding_ok=True``, and the pick fields
+    cleared. Grounding/review stay outer — the agent's job ends at the draft.
+    """
+    signal_ids = [
+        str(s)
+        for s in payload.get("allowed_signal_ids") or payload.get("source_signal_ids") or []
+    ]
+    signals = list(payload.get("ranked_signals") or [])[:8]
+    company = payload.get("company") or payload.get("company_context") or {}
+    exec_payload = {
+        "company": company,
+        "voice_pack": payload.get("voice_pack"),
+        "active_persona": payload.get("active_persona"),
+        "brief": payload.get("brief") or {},
+        "signals": signals,
+        "signals_trusted": payload.get("signals_trusted"),
+        "allowed_signal_ids": signal_ids,
+        "user_request": payload.get("user_request"),
+        "primary_product": payload.get("primary_product"),
+        "related_products": (payload.get("related_products") or [])[:2],
+        "chosen_angle": payload.get("chosen_angle"),
+        "image_format": payload.get("image_format"),
+    }
+    parsed = await _run_execute(
+        EH.run_executor_post_agent,
+        json.dumps(exec_payload, ensure_ascii=False),
+        "executor_post",
+    )
+    allowed = set(signal_ids)
+    if parsed:
+        # Only ids the draft actually relied on — an empty list is an honest
+        # "no market sources used", not a reason to attach unrelated signals.
+        refs = [sid for sid in parsed.source_signal_ids if sid in allowed]
+        draft = {
+            "caption": parsed.caption,
+            "hashtags": parsed.hashtags or ["#HongKong", "#Marketing"],
+            "cta": parsed.cta or "了解更多",
+        }
+    else:
+        title = signals[0].get("title") if signals else "香港熱話"
+        company_name = company.get("name") or "我哋"
+        draft = {
+            "caption": (
+                f"最近成日聽到「{title}」？"
+                f"「{company_name}」都睇住——嚟緊有啲貼地內容，留言話我哋知你最想知邊方面。"
+            ),
+            "hashtags": ["#HongKong", "#熱話"],
+            "cta": "留言話我哋知",
+        }
+        # The fallback caption references only the top ranked signal.
+        refs = signal_ids[:1]
+
+    update: dict[str, Any] = {
+        "draft": draft,
+        "source_signal_ids": refs,
+        "need_image": True,
+        "grounding_ok": True,
+        "chosen_angle": None,
+        "chosen_persona": None,
+        "chosen_image_format": None,
+    }
+    reply = json.dumps(
+        {"drafted": True, "caption": draft["caption"], "source_signal_ids": refs},
+        ensure_ascii=False,
+    )
+    return DraftWriteResult(reply=reply, state_update=update)
+
+
+async def run_revise_draft(payload: dict[str, Any]) -> DraftWriteResult:
+    """Port of ``edit_copy`` — EditOut sub-agent plus deterministic state write.
+
+    ``user_request`` is the user's edit instruction; ``reviewer_feedback``
+    rides along when the reviewer loop sent the agent back (ADR 0036 image
+    semantics preserved: caption-only edits keep the locked plan via
+    ``image_still_pending``).
+    """
+    user = str(payload.get("user_request") or "")
+    feedback = str(payload.get("reviewer_feedback") or "")
+    signal_ids = [str(s) for s in payload.get("source_signal_ids") or []]
+    ranked = list(payload.get("ranked_signals") or [])
+    # The cited set may legitimately be empty; a reviewer ask for a citation
+    # can only be satisfied from the ranked pool, so allow that pool too.
+    ranked_ids = [str(s["signal_id"]) for s in ranked[:8] if s.get("signal_id")]
+    allowed_ids = list(dict.fromkeys([*signal_ids, *ranked_ids]))
+    edit_payload = {
+        "draft": payload.get("draft") or {},
+        "company": payload.get("company") or {},
+        "user_feedback": user,
+        "reviewer_feedback": feedback,
+        "voice_pack": payload.get("voice_pack"),
+        "signals": ranked[:8],
+        "allowed_signal_ids": allowed_ids,
+    }
+    parsed = await _run_execute(
+        EH.run_edit_copy_agent,
+        json.dumps(edit_payload, ensure_ascii=False),
+        "edit_copy",
+    )
+    allowed = set(allowed_ids)
+    fmt = image_format_from_text(user)
+    if parsed:
+        refs = [sid for sid in parsed.source_signal_ids if sid in allowed] or signal_ids
+        update = {
+            "draft": {
+                "caption": parsed.caption,
+                "hashtags": parsed.hashtags,
+                "cta": parsed.cta,
+            },
+            "source_signal_ids": refs,
+            "need_image": bool(
+                parsed.need_image
+                or wants_image_change(user)
+                or image_still_pending(payload)
+            ),
+            "grounding_ok": True,
+        }
+    else:
+        draft = dict(payload.get("draft") or {})
+        note = feedback or user
+        caption = draft.get("caption") or "（修訂草稿）"
+        if note:
+            caption = f"{caption}\n\n（修訂：{note[:200]}）"
+        draft["caption"] = caption
+        update = {
+            "draft": draft,
+            "need_image": bool(
+                wants_image_change(user) or image_still_pending(payload)
+            ),
+            "grounding_ok": True,
+        }
+    if fmt:
+        update["image_format"] = fmt
+        update["need_image"] = True
+    draft = update["draft"]
+    reply = json.dumps(
+        {"drafted": True, "caption": draft.get("caption")}, ensure_ascii=False
+    )
+    return DraftWriteResult(reply=reply, state_update=update)
+
+
+async def _run_execute(
+    runner: Any,
+    user_prompt: str,
+    log_tag: str,
+) -> Any:
+    """Execute-harness seam with provider-error → parse-miss equivalence."""
+    try:
+        return await runner(user_prompt)
+    except LlmProviderError:
+        logger.exception("%s provider error — falling back", log_tag)
+        return None

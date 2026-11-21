@@ -290,3 +290,49 @@ def compose_generation_prompt(plan: dict[str, Any]) -> str:
     if avoid_s:
         parts.append(f"Avoid: {avoid_s}")
     return " ".join(parts).strip()
+
+
+_IMAGE_WORDS = ("圖", "图片", "圖片", "image", "photo", "visual", "封面", "畫面", "背景")
+_DIRECTION_CUES = ("唔要", "不要", "改成", "換成", "改做", "instead of", "change to")
+# Caption-only edits must not force a new image (ADR 0036).
+_COPY_ONLY = (
+    "caption",
+    "文案",
+    "hashtag",
+    "cta",
+    "短",
+    "長",
+    "語氣",
+    "抽水",
+    "tone",
+    "搞笑",
+    "認真",
+)
+
+
+def wants_image_change(text: str) -> bool:
+    """True when the user is changing the picture, not only the words.
+
+    「唔要黃色雨傘，改成藍色天空」 is a direction change even without 圖.
+    「改成短啲」 stays caption-only.
+    """
+    lower = text.lower()
+    if any(k.lower() in lower for k in _IMAGE_WORDS):
+        return True
+    if image_format_from_text(text):
+        return True
+    if any(k in text or k in lower for k in _DIRECTION_CUES):
+        return not any(k in lower for k in _COPY_ONLY)
+    return False
+
+
+def image_still_pending(state: dict[str, Any]) -> bool:
+    """An image was already demanded for this version and never generated.
+
+    ``EditOut.need_image`` only means "this edit changes the picture" — a
+    reviewer-retry caption edit must not silently drop the image pipeline
+    ``executor_post`` already owed the draft. The ``hold_image_park`` revise
+    (ADR 0036) decides from the edit alone: a caption-only answer keeps the
+    locked plan via ``hold_locked_plan``.
+    """
+    return bool(state.get("need_image")) and not state.get("hold_image_park")
