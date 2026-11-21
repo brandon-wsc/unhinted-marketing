@@ -635,6 +635,34 @@ async def run_typed_lc_agent(
         return parsed
 
 
+async def run_typed(
+    tier_key: str,
+    system: str,
+    user_prompt: str,
+    out_type: Any,
+    override: BaseChatModel | None,
+) -> Any | None:
+    """Typed inner call keyed by NODE_MODEL_TIERS; provider outage → parse miss."""
+    if override is not None:
+        chat, label = override, model_label(override)
+    else:
+        chat, label = live_lc_model(NODE_MODEL_TIERS[tier_key] or ModelTier.CHEAP)
+    try:
+        return await run_typed_lc_agent(
+            chat=chat,
+            label=label,
+            tier=NODE_MODEL_TIERS[tier_key],
+            system=system,
+            user_prompt=user_prompt,
+            tools=[],
+            out_type=out_type,
+            is_valid=lambda _parsed: True,
+            log_tag=tier_key,
+        )
+    except LlmProviderError:
+        return None
+
+
 async def stream_chat_reply(
     *,
     user_prompt: str,

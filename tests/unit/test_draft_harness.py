@@ -11,6 +11,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from internal.session import draft_harness as DH
+from internal.session import harness as H
 from internal.session.context import session_db
 from internal.session.state import MODE_AGENT
 from tests.unit.lc_fakes import _ScriptedChat, out_call
@@ -128,7 +129,7 @@ async def test_run_propose_angles_clarify_skips_brainstorm(
         typed_calls.append(tier_key)
         return None
 
-    monkeypatch.setattr(DH, "_run_typed", _counting)
+    monkeypatch.setattr(H, "run_typed", _counting)
     with session_db(AsyncMock()):
         result = await DH.run_propose_angles(_payload())
     assert result.ready is False

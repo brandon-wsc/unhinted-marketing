@@ -939,6 +939,8 @@ def _session_agent_payload(state: SessionState, user: str) -> str:
             "draft": state.get("draft") or {},
             "reviewer_feedback": state.get("reviewer_feedback"),
             "review_attempts": int(state.get("review_attempts") or 0),
+            "need_image": bool(state.get("need_image")),
+            "image_plan": state.get("image_plan"),
             "attachments": _chat_attachment_digests(state),
         },
         ensure_ascii=False,
@@ -971,6 +973,7 @@ def _draft_in_payload(state: SessionState, user: str) -> dict[str, Any]:
         "reviewer_feedback": state.get("reviewer_feedback"),
         "need_image": bool(state.get("need_image")),
         "hold_image_park": bool(state.get("hold_image_park")),
+        "image_plan": state.get("image_plan") or {},
         "primary_product": state.get("primary_product"),
         "related_products": state.get("related_products") or [],
         "company": _slim_company(state),
@@ -1025,39 +1028,52 @@ async def session_agent(state: SessionState) -> dict[str, Any]:
             reply = _llm_failure_reply(exc, chinese=chinese)
         except Exception:
             logger.exception("session_agent LLM stream failed")
-    # A draft written by draft_post/revise_draft always routes to
-    # grounding_check — an outer post-condition the model cannot hand off
-    # around. Handoff markers only apply when no draft was written.
+    out = _session_agent_out(state, deps, reply, chinese=chinese)
+    if llm_error:
+        out["error"] = llm_error
+    record_node_step("session_agent", dict(state), out)
+    return out
+
+
+def _session_agent_out(
+    state: SessionState, deps: Any, reply: str | None, *, chinese: bool
+) -> dict[str, Any]:
+    """Assemble the node result — deterministic post-conditions first.
+
+    A draft written this call routes to ``grounding_check``; an image plan
+    routes to the ``executor_image_gen`` park. Handoff markers only apply
+    when neither fired, so the model cannot route around the outer edges.
+    """
     drafted = bool((deps.write_out or {}).get("draft"))
-    nxt = "grounding_check" if drafted else deps.next
+    planned = bool((deps.image_out or {}).get("image_plan"))
+    if drafted:
+        nxt = "grounding_check"
+    elif planned:
+        nxt = "executor_image_gen"
+    else:
+        nxt = deps.next
     out: dict[str, Any] = {"agent_next": nxt}
-    if deps.research_out:
-        out.update(deps.research_out)
-    if deps.draft_out:
-        out.update(deps.draft_out)
-    if deps.write_out:
-        out.update(deps.write_out)
+    for slice_ in (deps.research_out, deps.draft_out, deps.write_out, deps.image_out):
+        if slice_:
+            out.update(slice_)
     if deps.next:
         out["intent"] = deps.intent
     if nxt:
         if reply:
             out["messages"] = _append_assistant(state, reply)
-    else:
-        if not reply:
-            reply = (
-                "我可以幫你睇香港熱話同草擬社交貼文。想開始嘅話，揀一條推薦問題，"
-                "或者直接講你想做咩內容。"
-                if chinese
-                else (
-                    "I can help with HK trends and draft social posts. "
-                    "Pick a recommended question or tell me what you want to create."
-                )
+        return out
+    if not reply:
+        reply = (
+            "我可以幫你睇香港熱話同草擬社交貼文。想開始嘅話，揀一條推薦問題，"
+            "或者直接講你想做咩內容。"
+            if chinese
+            else (
+                "I can help with HK trends and draft social posts. "
+                "Pick a recommended question or tell me what you want to create."
             )
-        out["messages"] = _append_assistant(state, reply)
-        out["mode"] = MODE_CHAT
-    if llm_error:
-        out["error"] = llm_error
-    record_node_step("session_agent", dict(state), out)
+        )
+    out["messages"] = _append_assistant(state, reply)
+    out["mode"] = MODE_CHAT
     return out
 
 

@@ -63,6 +63,8 @@ def _wire_entry_routing(g: StateGraph, main_agent: bool) -> None:
             {
                 "angle_gate": "angle_gate",
                 "grounding_check": "grounding_check",
+                "executor_image_gen": "executor_image_gen",
+                "persist_preview": "persist_preview",
                 "ack_confirm": "ack_confirm",
                 END: END,
             },
@@ -198,7 +200,9 @@ def build_session_graph(
         N.route_after_reviewer,
         {
             "edit_copy": "_reviewer_fail_bump",
-            "executor_image_plan": "executor_image_plan",
+            # ADR 0062: the plan hop re-enters the agent (plan_image tool);
+            # the vertex stays for the legacy topology.
+            "executor_image_plan": "session_agent" if main_agent else "executor_image_plan",
             "hold_locked_plan": "hold_locked_plan",
             "persist_preview": "persist_preview",
             "review_exhausted": "review_exhausted",

@@ -24,7 +24,7 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
-from internal.llm.router import LlmProviderError, ModelTier
+from internal.llm.router import LlmProviderError
 from internal.memory.knowledge_seed import ensure_default_personas
 from internal.memory.product_retrieve import (
     ProductHit,
@@ -52,7 +52,6 @@ from internal.session.image_format import (
 )
 from internal.session.io import BriefOut, TrendRank, offered_angles
 from internal.session.state import MODE_AGENT
-from internal.session.tiers import NODE_MODEL_TIERS
 from internal.session.voice import (
     audience_catalog_from_entities,
     pick_active_persona,
@@ -88,34 +87,6 @@ def _propose_error(code: str) -> ProposeAnglesResult:
     return ProposeAnglesResult(reply=json.dumps({"error": code}))
 
 
-async def _run_typed(
-    tier_key: str,
-    system: str,
-    user_prompt: str,
-    out_type: Any,
-    override: BaseChatModel | None,
-) -> Any | None:
-    """Typed inner call; provider outage degrades to a parse miss (None)."""
-    if override is not None:
-        chat, label = override, H.model_label(override)
-    else:
-        chat, label = H.live_lc_model(NODE_MODEL_TIERS[tier_key] or ModelTier.CHEAP)
-    try:
-        return await H.run_typed_lc_agent(
-            chat=chat,
-            label=label,
-            tier=NODE_MODEL_TIERS[tier_key],
-            system=system,
-            user_prompt=user_prompt,
-            tools=[],
-            out_type=out_type,
-            is_valid=lambda _parsed: True,
-            log_tag=tier_key,
-        )
-    except LlmProviderError:
-        return None
-
-
 async def _load_context(
     db: Any, payload: dict[str, Any], update: dict[str, Any]
 ) -> dict[str, Any]:
@@ -149,7 +120,7 @@ async def _rank_trends(
     if prior:
         signals_payload = prior[:20]
         ranked_ids = [s["signal_id"] for s in signals_payload if s.get("signal_id")][:8]
-        parsed: TrendRank | None = await _run_typed(
+        parsed: TrendRank | None = await H.run_typed(
             "trend_searcher",
             prompts.TREND_SEARCH,
             json.dumps(
@@ -191,7 +162,7 @@ async def _rank_trends(
         update["trend_notes"] = ""
         return
 
-    parsed = await _run_typed(
+    parsed = await H.run_typed(
         "trend_searcher",
         prompts.TREND_SEARCH,
         json.dumps(
@@ -367,7 +338,7 @@ async def run_propose_angles(payload: dict[str, Any]) -> ProposeAnglesResult:
         "agent_notes": payload.get("agent_notes"),
         "image_format": payload.get("image_format"),
     }
-    parsed: BriefOut | None = await _run_typed(
+    parsed: BriefOut | None = await H.run_typed(
         "brainstormer",
         prompts.BRAINSTORM,
         json.dumps(brief_payload, ensure_ascii=False),

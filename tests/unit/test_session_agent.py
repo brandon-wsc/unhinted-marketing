@@ -416,14 +416,126 @@ def test_graph_topology_switch() -> None:
         ("edit_copy", "grounding_check"),
         ("executor_post", "grounding_check"),
         ("_reviewer_fail_bump", "edit_copy"),
+        ("executor_image_plan", "executor_image_gen"),
+        ("reviewer", "executor_image_plan"),
     ):
         assert gone in legacy
         assert gone not in agent
     # Agent-owned draft legs: drafts enter grounding inline; reviewer retries
-    # re-enter the agent, not the edit_copy vertex.
+    # and the image-plan hop re-enter the agent, not legacy vertices.
     assert ("session_agent", "grounding_check") in agent
+    assert ("session_agent", "executor_image_gen") in agent
+    assert ("session_agent", "persist_preview") in agent
     assert ("_reviewer_fail_bump", "session_agent") in agent
+    assert ("reviewer", "session_agent") in agent
     # Shared downstream topology untouched in both variants.
     for edges in (legacy, agent):
         assert ("grounding_check", "reviewer") in edges
         assert ("executor_image_gen", "persist_preview") in edges
+        assert ("hold_locked_plan", "executor_image_gen") in edges
+
+
+def _plan_call() -> AIMessage:
+    return _tool_call("plan_image", {}, "i1")
+
+
+def _to_preview_call() -> AIMessage:
+    return _tool_call("handoff", {"intent": "to_preview"}, "tp1")
+
+
+@pytest.mark.asyncio
+async def test_agent_plan_image_routes_to_gen_park(monkeypatch) -> None:
+    """need_image hop → plan_image writes the plan; node parks at gen."""
+    from internal.session import image_harness as IH
+
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    seen: list[dict] = []
+
+    async def fake_plan(payload: dict) -> IH.PlanImageResult:
+        seen.append(payload)
+        return IH.PlanImageResult(
+            reply=json.dumps({"planned": True, "format": "single"}),
+            state_update={
+                "image_plan": {"format": "single", "prompt": "p"},
+                "image_format": "single",
+            },
+        )
+
+    monkeypatch.setattr(IH, "run_plan_image", fake_plan)
+    SA.set_agent_model_override(_scripted(_plan_call(), ""))
+    out = await N.session_agent(
+        _base_state(
+            mode=MODE_PREVIEW,
+            draft={"caption": "cap"},
+            need_image=True,
+        )
+    )
+    assert seen and seen[0]["draft"]["caption"] == "cap"
+    assert out["agent_next"] == "executor_image_gen"
+    assert out["image_plan"]["prompt"] == "p"
+
+
+@pytest.mark.asyncio
+async def test_agent_to_preview_skips_image(monkeypatch) -> None:
+    """Model decides no image → persist_preview + need_image cleared."""
+    monkeypatch.setattr(N, "has_llm_credentials", lambda: True)
+    SA.set_agent_model_override(_scripted(_to_preview_call(), ""))
+    out = await N.session_agent(
+        _base_state(mode=MODE_PREVIEW, draft={"caption": "cap"}, need_image=True)
+    )
+    assert out["agent_next"] == "persist_preview"
+    assert out["need_image"] is False
+
+
+@pytest.mark.asyncio
+async def test_plan_image_refuses_unreviewed_draft(monkeypatch) -> None:
+    """A draft written this call must pass review before image planning."""
+    from internal.session import image_harness as IH
+
+    called = False
+
+    async def fake_plan(payload: dict) -> IH.PlanImageResult:
+        nonlocal called
+        called = True
+        return IH.PlanImageResult(reply="{}")
+
+    monkeypatch.setattr(IH, "run_plan_image", fake_plan)
+    deps = SA.SessionAgentDeps(
+        draft_in={"need_image": True, "draft": {"caption": "old"}},
+        write_out={"draft": {"caption": "new"}},
+    )
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "plan_image")
+    out = await tool.ainvoke({})
+    assert "draft_changed" in out
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_plan_image_requires_need_image_flag() -> None:
+    deps = SA.SessionAgentDeps(
+        draft_in={"need_image": False, "draft": {"caption": "x"}}
+    )
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "plan_image")
+    out = await tool.ainvoke({})
+    assert "no_image_needed" in out
+
+
+@pytest.mark.asyncio
+async def test_to_preview_requires_need_image() -> None:
+    deps = SA.SessionAgentDeps(draft_in={"need_image": False})
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "handoff")
+    out = await tool.ainvoke({"intent": "to_preview"})
+    assert "error" in out
+    assert deps.next is None
+
+
+@pytest.mark.asyncio
+async def test_to_preview_refuses_while_image_parked() -> None:
+    """Parked awaiting card can never be dropped — the model must re-plan."""
+    deps = SA.SessionAgentDeps(
+        draft_in={"need_image": True, "hold_image_park": True}
+    )
+    tool = next(t for t in SA.session_agent_tools(deps) if t.name == "handoff")
+    out = await tool.ainvoke({"intent": "to_preview"})
+    assert "park" in out
+    assert deps.next is None

@@ -122,6 +122,7 @@ Two ways to answer a message:
    - chosen_angle set → the user already picked an angle at the park: call draft_post now, do not propose again.
    - angle_feedback set → the user rejected the offered angles at the pick park: call propose_angles again (it reads prior_brief + feedback), then hand off start once a fresh brief exists.
    - Revise the existing draft (see has_draft / draft): call revise_draft — never hand off for edits. If the change needs fresh facts, call research first.
+   - need_image set → the outer reviewer approved the draft and an image was requested: call plan_image to write the script+plan (the pipeline parks for the user's Discard | Execute decision — you never render or publish). If the draft genuinely needs no image, handoff(intent="to_preview") instead.
    - handoff(intent="confirm_intent") — user is trying to confirm, approve, or publish. NEVER confirm or publish yourself; Confirm is a button in the UI. If has_draft is false or the user just asks about status, reply directly instead.
 Decide once per step: reply OR one tool action — keep any text around tool calls to one short transitional line; the pipeline produces the real output.
 propose_angles may return {"clarify": true, "candidates": [...]} when the product is ambiguous — ask the user which product briefly, then call it again next turn.

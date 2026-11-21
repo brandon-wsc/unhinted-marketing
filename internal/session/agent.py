@@ -2,11 +2,11 @@
 
 The agent answers chat directly, researches inline via the ``research`` tool,
 prepares drafts via ``propose_angles``, writes them via ``draft_post``, and
-edits them via ``revise_draft`` (DraftOut/EditOut sub-agents). ``handoff``
-only records ``deps.intent`` / ``deps.next`` — outer conditional edges do the
-routing, so the angle park, grounding, reviewer cap, persist, and confirm
-keep their current owners. ``plan_image`` lands in a later step;
-publish-class names are never registered.
+edits them via ``revise_draft``, and scripts images via ``plan_image``
+(DraftOut/EditOut/ImagePlanOut sub-calls). ``handoff`` only records
+``deps.intent`` / ``deps.next`` — outer conditional edges do the routing, so
+the angle park, image Execute park, grounding, reviewer cap, persist, and
+confirm keep their current owners. Publish-class names are never registered.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from langchain_core.tools import tool
 from internal.llm.router import ModelTier, resolve_model
 from internal.session import draft_harness as DH
 from internal.session import harness as H
+from internal.session import image_harness as IH
 from internal.session import prompts
 from internal.session import research_harness as RH
 from internal.session.events import session_event_bus
@@ -39,8 +40,11 @@ logger = logging.getLogger(__name__)
 INTENT_VERTICES = {
     "start": "angle_gate",
     "confirm_intent": "ack_confirm",
+    "to_preview": "persist_preview",
 }
-HANDOFF_VERTICES = frozenset({*INTENT_VERTICES.values(), "grounding_check"})
+HANDOFF_VERTICES = frozenset(
+    {*INTENT_VERTICES.values(), "grounding_check", "executor_image_gen"}
+)
 
 _model_override: BaseChatModel | None = None
 
@@ -68,6 +72,9 @@ class SessionAgentDeps(H.ChatDeps):
     # draft_post / revise_draft write here; the node merges it and routes the
     # turn into grounding_check — an outer edge, not an agent decision.
     write_out: dict[str, Any] | None = None
+    # plan_image writes image_plan here → node routes to the executor_image_gen
+    # park; handoff("to_preview") writes {"need_image": False} for a skip.
+    image_out: dict[str, Any] | None = None
 
 
 def set_agent_model_override(model: BaseChatModel | None) -> None:
@@ -98,21 +105,29 @@ def handoff_tool(deps: SessionAgentDeps):
 
     @tool
     async def handoff(
-        intent: Literal["start", "confirm_intent"],
+        intent: Literal["start", "confirm_intent", "to_preview"],
     ) -> str:
         """Hand control back to the session pipeline for an action the agent must not do inline.
 
         ``intent``: "start" = angles are ready and the user must pick one at
         the angle park (requires a propose_angles call first);
         "confirm_intent" = user is trying to confirm or publish (never
-        confirm yourself — Confirm is a UI button). Edits never hand off —
-        call revise_draft instead.
+        confirm yourself — Confirm is a UI button); "to_preview" = finish by
+        persisting the preview, only valid when the pipeline flagged
+        need_image and you decide the draft genuinely needs no image. Edits
+        never hand off — call revise_draft instead.
         """
         if intent == "start":
             if not deps.draft_ready:
                 return "error: call propose_angles before handoff — the pipeline needs its brief"
             if not offered_angles((deps.draft_out or {}).get("brief")):
                 return "error: brief has no angles to pick — call draft_post directly"
+        if intent == "to_preview":
+            if deps.draft_in.get("hold_image_park"):
+                return "error: image park is awaiting — call plan_image to write the new plan"
+            if not deps.draft_in.get("need_image"):
+                return "error: nothing awaiting a preview — reply or use a draft tool"
+            deps.image_out = {"need_image": False}
         deps.intent = intent
         deps.next = INTENT_VERTICES[intent]
         return f"handoff:{deps.next}"
@@ -225,6 +240,35 @@ def revise_draft_tool(deps: SessionAgentDeps):
     return revise_draft
 
 
+def plan_image_tool(deps: SessionAgentDeps):
+    """Build the ``plan_image`` tool — ImagePlanOut inner call (ADR 0062)."""
+
+    @tool
+    async def plan_image() -> str:
+        """Write the image script+plan for a draft the reviewer approved.
+
+        Callable only when the pipeline flagged need_image — the outer
+        reviewer gates image work. The written plan parks at Execute (a human
+        picks Discard | Execute) before any generation; you never render or
+        publish. If the draft genuinely needs no image, handoff to_preview
+        instead. Refuses when a draft was written this call — it must pass
+        review first.
+        """
+        if (deps.write_out or {}).get("draft"):
+            return "error: draft_changed — the new draft must pass review first"
+        ctx = {**deps.draft_in, **(deps.draft_out or {})}
+        if not ctx.get("need_image"):
+            return "error: no_image_needed — the pipeline did not flag this draft"
+        if not ctx.get("draft"):
+            return "error: no_draft — nothing to plan an image for"
+        await _emit_tool_progress(deps, "plan_image", "executor_image_plan")
+        result = await IH.run_plan_image(ctx)
+        deps.image_out = result.state_update
+        return result.reply
+
+    return plan_image
+
+
 def session_agent_tools(deps: SessionAgentDeps, extra_tools: Sequence[Any] = ()) -> list[Any]:
     """LangChain tools on the main agent — publish-class names never registered."""
     return H.with_extra_tools(
@@ -235,6 +279,7 @@ def session_agent_tools(deps: SessionAgentDeps, extra_tools: Sequence[Any] = ())
             propose_angles_tool(deps),
             draft_post_tool(deps),
             revise_draft_tool(deps),
+            plan_image_tool(deps),
             handoff_tool(deps),
         ],
         extra_tools,
@@ -264,6 +309,7 @@ async def stream_session_agent(
             propose_angles_tool(deps),
             draft_post_tool(deps),
             revise_draft_tool(deps),
+            plan_image_tool(deps),
             handoff_tool(deps),
             *extra_tools,
         ],
