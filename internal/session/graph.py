@@ -61,7 +61,8 @@ def _wire_entry_routing(g: StateGraph, main_agent: bool) -> None:
             "session_agent",
             N.route_after_session_agent,
             {
-                "load_context": "load_context",
+                "angle_gate": "angle_gate",
+                "executor_post": "executor_post",
                 "edit_copy": "edit_copy",
                 "ack_confirm": "ack_confirm",
                 END: END,
@@ -78,6 +79,29 @@ def _wire_entry_routing(g: StateGraph, main_agent: bool) -> None:
             "edit_copy": "edit_copy",
             "ack_confirm": "ack_confirm",
             "chat": "chat",
+        },
+    )
+
+
+def _wire_angle_gate(g: StateGraph, main_agent: bool) -> None:
+    """Angle-park exit — pick drafts; feedback re-briefs (legacy vertex or agent)."""
+    if main_agent:
+        # ADR 0062 — feedback re-enters the agent to re-plan angles.
+        g.add_conditional_edges(
+            "angle_gate",
+            N.route_after_angle_gate_agent,
+            {
+                "executor_post": "executor_post",
+                "session_agent": "session_agent",
+            },
+        )
+        return
+    g.add_conditional_edges(
+        "angle_gate",
+        N.route_after_angle_gate,
+        {
+            "executor_post": "executor_post",
+            "brainstormer": "brainstormer",
         },
     )
 
@@ -171,14 +195,7 @@ def build_session_graph(
             "executor_post": "executor_post",
         },
     )
-    g.add_conditional_edges(
-        "angle_gate",
-        N.route_after_angle_gate,
-        {
-            "executor_post": "executor_post",
-            "brainstormer": "brainstormer",
-        },
-    )
+    _wire_angle_gate(g, main_agent)
     g.add_edge("executor_post", "grounding_check")
     g.add_edge("grounding_check", "reviewer")
     g.add_edge("edit_copy", "grounding_check")

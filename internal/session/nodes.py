@@ -84,6 +84,7 @@ from internal.session.io import (
     ResearchFlags,
     ReviewOut,
     TrendRank,
+    offered_angles,
     omit_nulls,
 )
 from internal.session.state import MODE_AGENT, MODE_CHAT, MODE_PREVIEW, SessionState
@@ -241,11 +242,6 @@ def _image_still_pending(state: SessionState | dict[str, Any]) -> bool:
     locked plan via ``hold_locked_plan``.
     """
     return bool(state.get("need_image")) and not state.get("hold_image_park")
-
-
-def offered_angles(brief: dict[str, Any] | None) -> list[str]:
-    """Non-empty angle strings from a brief — the ADR 0028 pick options."""
-    return [a for a in ((brief or {}).get("angles") or []) if isinstance(a, str) and a.strip()]
 
 
 def offered_personas(catalog: list[dict[str, Any]] | None) -> list[dict[str, str]]:
@@ -981,10 +977,32 @@ def _session_agent_payload(state: SessionState, user: str) -> str:
             "product_clarify": bool(state.get("product_clarify")),
             "product_candidates": (state.get("product_candidates") or [])[:3],
             "primary_product": state.get("primary_product"),
+            "offered_angles": offered_angles(state.get("brief")),
+            "chosen_angle": state.get("chosen_angle"),
+            "angle_feedback": state.get("angle_feedback"),
             "attachments": _chat_attachment_digests(state),
         },
         ensure_ascii=False,
     )
+
+
+def _draft_in_payload(state: SessionState, user: str) -> dict[str, Any]:
+    """Context payload for the agent's ``propose_angles`` tool."""
+    return {
+        "user_request": user,
+        "company_id": state.get("company_id"),
+        "user_id": state.get("user_id"),
+        "research": state.get("research") or {},
+        "research_signals": (state.get("research_signals") or [])[:20],
+        "source_signal_ids": state.get("source_signal_ids") or [],
+        "signals_trusted": _signals_trusted(state),
+        "handoff_signal_ids": state.get("handoff_signal_ids") or [],
+        "prior_brief": state.get("brief") or {},
+        "angle_feedback": state.get("angle_feedback"),
+        "image_format": recommended_image_format(state),
+        "chosen_image_format": state.get("chosen_image_format"),
+        "current_image_format": state.get("image_format"),
+    }
 
 
 def _research_in_payload(state: SessionState, user: str) -> dict[str, Any]:
@@ -1014,8 +1032,10 @@ async def session_agent(state: SessionState) -> dict[str, Any]:
     deps = SA.SessionAgentDeps(
         company_id=company_id,
         user_id=user_id,
+        session_id=_thread_uuid(state),
         research_allowed=bool(state.get("research_rule_pass")),
         research_in=_research_in_payload(state, user),
+        draft_in=_draft_in_payload(state, user),
     )
     reply: str | None = None
     llm_error: str | None = None
@@ -1035,6 +1055,8 @@ async def session_agent(state: SessionState) -> dict[str, Any]:
     out: dict[str, Any] = {"agent_next": deps.next}
     if deps.research_out:
         out.update(deps.research_out)
+    if deps.draft_out:
+        out.update(deps.draft_out)
     if deps.next:
         out["intent"] = deps.intent
         if reply:
@@ -1680,9 +1702,13 @@ def route_after_session_agent(state: SessionState) -> str:
     Whitelist only — an unknown marker never routes. The research gate moved
     inside the ``research`` tool itself (``research_allowed`` mirrors
     ``research_rule_pass``), so a disallowed search fails closed and the agent
-    answers or hands off without fresh signals.
+    answers or hands off without fresh signals. A ``start`` handoff lands on
+    the angle park, except a 0-angle brief which drafts immediately (the
+    ``route_after_brainstormer`` rule, unchanged).
     """
     nxt = str(state.get("agent_next") or "")
+    if nxt == "angle_gate" and not offered_angles(state.get("brief")):
+        nxt = "executor_post"
     return nxt if nxt in SA.HANDOFF_VERTICES else END
 
 
@@ -1711,6 +1737,13 @@ def route_after_angle_gate(state: SessionState) -> str:
     if str(state.get("chosen_angle") or "").strip():
         return "executor_post"
     return "brainstormer"
+
+
+def route_after_angle_gate_agent(state: SessionState) -> str:
+    """ADR 0062: pick → draft; free-text feedback → the agent re-plans angles."""
+    if str(state.get("chosen_angle") or "").strip():
+        return "executor_post"
+    return "session_agent"
 
 
 def route_after_research(state: SessionState) -> str:
