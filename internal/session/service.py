@@ -988,6 +988,16 @@ async def run_session_turn(
             user_content=user_content,
             message_dicts=message_dicts,
         )
+        if hold_image_park and parked_node != IMAGE_PARK_NODE:
+            # ADR 0036: a typed send while image-parked must end back on the
+            # Discard | Execute park. Legacy re-parks deterministically via
+            # reviewer → hold_locked_plan; the agent topology can legitimately
+            # exit elsewhere (inline reply, ack_confirm), so the service —
+            # which owns the park — re-seats the interrupt rather than
+            # trusting the model to re-park.
+            await _repark_graph(db, session, "image")
+            still_interrupted = True
+            parked_node = IMAGE_PARK_NODE
         return await _persist_after_invoke(
             db,
             session,

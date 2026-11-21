@@ -60,6 +60,141 @@ async def test_run_session_turn_image_park_starts_regret_revise() -> None:
 
 
 @pytest.mark.asyncio
+async def test_revise_turn_reparks_when_agent_ends_unparked() -> None:
+    """ADR 0036: a typed send while image-parked must end on Discard | Execute.
+
+    The agent topology can legitimately exit elsewhere (inline reply,
+    ack_confirm), so the service — which owns the park — re-seats the
+    executor_image_gen interrupt instead of trusting the model to re-park.
+    """
+    session = _session(awaiting=True)
+    session.state["draft"] = {"caption": "hi", "hashtags": [], "cta": ""}
+    session.state["image_plan"] = {"prompt": "x"}
+    db = AsyncMock()
+    user_msg = SimpleNamespace(
+        id=uuid.uuid4(), role="user", content="cd", metadata_={}
+    )
+    persist_kwargs: dict = {}
+
+    async def fake_persist(_db, _sess, **kwargs):
+        persist_kwargs.update(kwargs)
+        return {"interrupted": kwargs["still_interrupted"]}
+
+    with (
+        patch(
+            "internal.session.service.repos.add_session_message",
+            AsyncMock(return_value=user_msg),
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[user_msg]),
+        ),
+        patch(
+            "internal.session.service._invoke_graph",
+            AsyncMock(return_value=({}, False, None, None, [], 5)),
+        ),
+        patch("internal.session.service._persist_after_invoke", fake_persist),
+        patch(
+            "internal.session.service._repark_graph",
+            AsyncMock(),
+        ) as repark,
+    ):
+        result = await run_session_turn(
+            db,
+            session,
+            user_content="cd",
+            skip_park_check=True,
+            hold_image_park=True,
+        )
+
+    repark.assert_awaited_once()
+    assert repark.await_args.args[2] == "image"
+    assert persist_kwargs["still_interrupted"] is True
+    assert persist_kwargs["parked_node"] == "executor_image_gen"
+    assert result["interrupted"] is True
+
+
+@pytest.mark.asyncio
+async def test_revise_turn_skips_repark_when_graph_parked() -> None:
+    """A turn that already ended on executor_image_gen needs no re-seat."""
+    session = _session(awaiting=True)
+    session.state["draft"] = {"caption": "hi", "hashtags": [], "cta": ""}
+    session.state["image_plan"] = {"prompt": "x"}
+    db = AsyncMock()
+    user_msg = SimpleNamespace(
+        id=uuid.uuid4(), role="user", content="改成藍色", metadata_={}
+    )
+
+    with (
+        patch(
+            "internal.session.service.repos.add_session_message",
+            AsyncMock(return_value=user_msg),
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[user_msg]),
+        ),
+        patch(
+            "internal.session.service._invoke_graph",
+            AsyncMock(return_value=({}, True, "executor_image_gen", None, [], 5)),
+        ),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": True}),
+        ),
+        patch(
+            "internal.session.service._repark_graph",
+            AsyncMock(),
+        ) as repark,
+    ):
+        await run_session_turn(
+            db,
+            session,
+            user_content="改成藍色",
+            skip_park_check=True,
+            hold_image_park=True,
+        )
+
+    repark.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_normal_turn_unparked_never_reparks() -> None:
+    """hold_image_park is the only trigger — a plain chat END stays END."""
+    session = _session()
+    db = AsyncMock()
+    user_msg = SimpleNamespace(
+        id=uuid.uuid4(), role="user", content="hi", metadata_={}
+    )
+
+    with (
+        patch(
+            "internal.session.service.repos.add_session_message",
+            AsyncMock(return_value=user_msg),
+        ),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[user_msg]),
+        ),
+        patch(
+            "internal.session.service._invoke_graph",
+            AsyncMock(return_value=({}, False, None, None, [], 5)),
+        ),
+        patch(
+            "internal.session.service._persist_after_invoke",
+            AsyncMock(return_value={"interrupted": False}),
+        ),
+        patch(
+            "internal.session.service._repark_graph",
+            AsyncMock(),
+        ) as repark,
+    ):
+        await run_session_turn(db, session, user_content="hi")
+
+    repark.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_run_session_turn_rejects_unknown_park() -> None:
     session = _session()
     db = AsyncMock()
