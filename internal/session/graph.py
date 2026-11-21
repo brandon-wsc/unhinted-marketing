@@ -49,6 +49,20 @@ async def _wrap_reviewer_fail(state: SessionState) -> dict[str, Any]:
     return N.bump_review_attempt(state)
 
 
+def _wire_fast_rules(g: StateGraph, main_agent: bool) -> None:
+    """Post-gate routing — ADR 0062 confirm intercept vs plain recap edge."""
+    if main_agent:
+        # Confirm-adjacent wording is intercepted deterministically before
+        # the agent (ack_confirm); it never reaches model discretion.
+        g.add_conditional_edges(
+            "fast_rule_checker",
+            N.route_after_fast_rules,
+            {"ack_confirm": "ack_confirm", "thread_recap": "thread_recap"},
+        )
+        return
+    g.add_edge("fast_rule_checker", "thread_recap")
+
+
 def _wire_entry_routing(g: StateGraph, main_agent: bool) -> None:
     """Post-recap routing — legacy ``route_intent`` pipeline vs ADR 0062 agent.
 
@@ -156,7 +170,7 @@ def build_session_graph(
     g.add_node("_reviewer_fail_bump", _wrap_reviewer_fail)
 
     g.add_edge(START, "fast_rule_checker")
-    g.add_edge("fast_rule_checker", "thread_recap")
+    _wire_fast_rules(g, main_agent)
     _wire_entry_routing(g, main_agent)
     g.add_edge("query_generator", "research_ingest")
     g.add_conditional_edges(

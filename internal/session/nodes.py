@@ -403,7 +403,7 @@ def _should_research(state: SessionState) -> bool:
 @agent_progress("fast_rule_checker")
 async def fast_rule_checker(state: SessionState) -> dict[str, Any]:
     text = _last_user_text(state)
-    from internal.session.fast_rules import research_pass_for_route
+    from internal.session.fast_rules import confirm_adjacent, research_pass_for_route
     from internal.session.semantic_gate import classify_semantic_route
 
     route = await asyncio.to_thread(classify_semantic_route, text)
@@ -413,7 +413,15 @@ async def fast_rule_checker(state: SessionState) -> dict[str, Any]:
             **(state.get("research") or {}),
             "semantic_route": route,
         },
+        # ADR 0062 — pre-agent confirm intercept; only the agent topology's
+        # conditional edge reads this (legacy routes confirm via route_intent).
+        "confirm_intent": confirm_adjacent(text, state.get("mode", MODE_CHAT)),
     }
+
+
+def route_after_fast_rules(state: SessionState) -> str:
+    """ADR 0062: deterministic confirm intercept — ack_confirm before the agent."""
+    return "ack_confirm" if state.get("confirm_intent") else "thread_recap"
 
 
 # ADR 0057 — rolling recap of messages older than the raw window.

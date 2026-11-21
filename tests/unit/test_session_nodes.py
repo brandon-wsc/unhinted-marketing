@@ -94,6 +94,28 @@ async def test_fast_rule_checker(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert out["research_rule_pass"] is False
     assert out["research"]["semantic_route"] == "chitchat"
+    assert out["confirm_intent"] is False
+
+
+@pytest.mark.asyncio
+async def test_fast_rule_checker_confirm_intercept(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 0062 — PREVIEW confirm-adjacent wording flagged before the agent."""
+    monkeypatch.setattr(
+        "internal.session.semantic_gate.classify_semantic_route",
+        lambda _t: "chitchat",
+    )
+    out = await N.fast_rule_checker(
+        _base_state(
+            mode="PREVIEW",
+            messages=[{"role": "user", "content": "可以出"}],
+        )
+    )
+    assert out["confirm_intent"] is True
+    # Mode-gated: the same wording in CHAT is not an intercept.
+    out = await N.fast_rule_checker(
+        _base_state(messages=[{"role": "user", "content": "可以出"}])
+    )
+    assert out["confirm_intent"] is False
 
 
 @pytest.mark.asyncio

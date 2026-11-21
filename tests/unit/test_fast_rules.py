@@ -1,7 +1,11 @@
 """Unit tests for ADR 0009 fast research rules (+ mocked semantic gate)."""
 
 from internal.session import fast_rules
-from internal.session.fast_rules import normalize_search_query, research_rule_pass
+from internal.session.fast_rules import (
+    confirm_adjacent,
+    normalize_search_query,
+    research_rule_pass,
+)
 
 
 def test_research_rule_skips_greeting(monkeypatch) -> None:
@@ -159,3 +163,22 @@ def test_intent_route_nested_nulls() -> None:
     assert parsed.research.need_facts is True
     assert parsed.research.entity_surface == ""
     assert parsed.research.product_surface == ""
+
+
+def test_confirm_adjacent_preview_mode() -> None:
+    assert confirm_adjacent("可以出", "PREVIEW") is True
+    assert confirm_adjacent("發佈啦", "PREVIEW") is True
+    assert confirm_adjacent("搞掂未？", "PREVIEW") is True
+    assert confirm_adjacent("please publish", "PREVIEW") is True
+
+
+def test_confirm_adjacent_mode_gated() -> None:
+    """Same wording outside PREVIEW is ordinary chat — not an intercept."""
+    assert confirm_adjacent("可以出", "CHAT") is False
+    assert confirm_adjacent("可以出", "AGENT") is False
+    assert confirm_adjacent("發佈", "CHAT") is False
+
+
+def test_confirm_adjacent_plain_chat() -> None:
+    assert confirm_adjacent("幫我改下 caption", "PREVIEW") is False
+    assert confirm_adjacent("你好", "PREVIEW") is False

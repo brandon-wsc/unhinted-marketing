@@ -368,6 +368,17 @@ async def test_revise_draft_requires_draft() -> None:
     assert "no_draft" in out
 
 
+def test_route_after_fast_rules_confirm_intercept() -> None:
+    """ADR 0062 — confirm flag short-circuits to ack_confirm before the agent."""
+    assert N.route_after_fast_rules(_base_state(confirm_intent=True)) == (
+        "ack_confirm"
+    )
+    assert N.route_after_fast_rules(_base_state(confirm_intent=False)) == (
+        "thread_recap"
+    )
+    assert N.route_after_fast_rules(_base_state()) == "thread_recap"
+
+
 def test_route_after_session_agent_whitelist() -> None:
     """Unknown / migrated-away markers never route — fail closed to END."""
     for marker in (
@@ -421,6 +432,11 @@ def test_graph_topology_switch() -> None:
     ):
         assert gone in legacy
         assert gone not in agent
+    # Confirm intercept only exists in the agent topology.
+    assert ("fast_rule_checker", "ack_confirm") in agent
+    assert ("fast_rule_checker", "ack_confirm") not in legacy
+    for edges in (legacy, agent):
+        assert ("fast_rule_checker", "thread_recap") in edges
     # Agent-owned draft legs: drafts enter grounding inline; reviewer retries
     # and the image-plan hop re-enter the agent, not legacy vertices.
     assert ("session_agent", "grounding_check") in agent
