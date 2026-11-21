@@ -60,6 +60,46 @@ async def test_run_session_turn_image_park_starts_regret_revise() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("main_agent", [False, True])
+async def test_repark_at_image_interrupt_seats_executor_image_gen(
+    main_agent: bool,
+) -> None:
+    """ADR 0036 / 0062: the image-park re-seat must hold on both topologies.
+
+    ``aupdate_state(as_node="executor_image_plan")`` schedules
+    ``executor_image_gen``, which ``interrupt_before`` pauses on. The guard in
+    ``run_session_turn`` depends on this actually re-parking the graph — a
+    mocked unit test cannot prove the wiring, so drive the real compiled
+    graph on a MemorySaver.
+    """
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from internal.session.graph import build_session_graph
+    from internal.session.service import _repark_graph_at_image_interrupt
+
+    session = _session(awaiting=True)
+    session.state["draft"] = {"caption": "hi", "hashtags": [], "cta": ""}
+    session.state["image_plan"] = {"prompt": "chair at office desk"}
+    graph = build_session_graph(checkpointer=MemorySaver(), main_agent=main_agent)
+    db = AsyncMock()
+    config = {"configurable": {"thread_id": str(session.id)}}
+
+    with (
+        patch("internal.session.service.get_session_graph", return_value=graph),
+        patch(
+            "internal.session.service.repos.list_session_messages",
+            AsyncMock(return_value=[]),
+        ),
+    ):
+        await _repark_graph_at_image_interrupt(db, session)
+        snapshot = await graph.aget_state(config)
+
+    assert snapshot.next == ("executor_image_gen",)
+    assert snapshot.values["image_plan"] == {"prompt": "chair at office desk"}
+    assert snapshot.values["need_image"] is True
+
+
+@pytest.mark.asyncio
 async def test_revise_turn_reparks_when_agent_ends_unparked() -> None:
     """ADR 0036: a typed send while image-parked must end on Discard | Execute.
 
