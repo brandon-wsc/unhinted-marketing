@@ -81,3 +81,12 @@ CVE-2026-115563
 CVE-2026-116684
 CVE-2026-116685
 CVE-2026-116686
+
+# wcmatch 8.5.2 — fixed in 11.2, currently uninstallable: every semgrep
+# release ≤1.186.0 (the newest) requires wcmatch~=8.3, so the lock cannot
+# bump. The advisory is a polynomial ReDoS needing an attacker-controlled
+# file name matched against a developer-controlled multi-star pattern;
+# semgrep is CI-only tooling (requirements-ci.txt) that scans our own
+# source tree with trusted rule packs, so neither side of the match is
+# attacker-controlled. Remove once a semgrep release allows wcmatch>=11.2.
+CVE-2026-132276
