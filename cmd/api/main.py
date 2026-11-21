@@ -62,6 +62,9 @@ async def lifespan(app: FastAPI):
         try:
             await ensure_instance_settings_seeded(db)
         except Exception:
+            # audit-allow(ERR-03): startup seeding/migration is best-effort —
+            # the three handlers here log and continue so optional init work
+            # cannot keep the API from serving.
             logging.getLogger(__name__).warning("instance settings seed failed", exc_info=True)
         try:
             await ensure_storage_config_seeded(db)

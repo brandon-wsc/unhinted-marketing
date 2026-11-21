@@ -1036,6 +1036,8 @@ async def session_agent(state: SessionState) -> dict[str, Any]:
             llm_error = exc.message
             reply = _llm_failure_reply(exc, chinese=chinese)
         except Exception:
+            # audit-allow(ERR-03): same contract as _chat_stream — an unexpected
+            # failure degrades to the generic fallback reply, never a half-run turn.
             logger.exception("session_agent LLM stream failed")
     out = _session_agent_out(state, deps, reply, chinese=chinese)
     if llm_error:
